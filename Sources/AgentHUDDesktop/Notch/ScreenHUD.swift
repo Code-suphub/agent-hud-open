@@ -726,6 +726,7 @@ final class ScreenHUD {
         root.failedListedSessionID = failedListedSessionID
         root.sessionEvents = alerts.sessionEvents
         root.logoQueue = logoQueue
+        root.botLogos = settings.settings.botLogos
         root.edge = geometry.edge
         // The mode decides the silhouette, not whether there are marks to draw.
         root.hidesSilhouette = geometry.mode == .logos

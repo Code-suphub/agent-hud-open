@@ -72,6 +72,26 @@ enum LogoImages {
         return context.makeImage()
     }
 
+    /// A picture that is not one of the baked marks — a bot's frame — given the same hairline, so it sits on
+    /// a wallpaper the way the marks around it do. The result is `thickness` pixels larger on every edge.
+    static func outlined(_ image: CGImage, thickness: Int) -> CGImage? {
+        let outline = CGFloat(max(0, thickness))
+        let canvas = image.width + thickness * 2
+        guard thickness > 0, image.width == image.height, let context = CGContext(
+            data: nil, width: canvas, height: canvas, bitsPerComponent: 8, bytesPerRow: canvas * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        let rect = CGRect(x: outline, y: outline, width: CGFloat(image.width), height: CGFloat(image.height))
+        if let ring = ring(mark: image, rect: rect, thickness: outline, canvas: canvas) {
+            context.saveGState()
+            context.setAlpha(Self.outlineOpacity)
+            context.draw(ring, in: CGRect(x: 0, y: 0, width: CGFloat(canvas), height: CGFloat(canvas)))
+            context.restoreGState()
+        }
+        context.draw(image, in: rect)
+        return context.makeImage()
+    }
+
     /// How dark the finished outline is. Enough to separate a white mark from a pale wallpaper, not enough
     /// to read as a border drawn around it.
     private static let outlineOpacity: CGFloat = 0.5

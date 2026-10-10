@@ -4,6 +4,8 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Agent logos turn into small bots. In Dynamic Dock a working agent's logo morphs into a body with its own outline and colours and two eyes that follow the pointer; a permission reminder shows the bot asking, and a reply reminder shows it smiling. Display settings has a Bot logos switch, on by default; Reduce Motion keeps the logos.
+- Host API: `Settings.botLogos` controls the bots. `LogoQueueConfig.bots` carries it to a logo queue.
 - Grok subscription windows remain visible as N/A when usage is unavailable, retaining their reset time without inventing a percentage, forecast or alert. An explicit unavailable reading replaces a previous numeric value.
 - Grok accounts show prepaid balances and on-demand spending amounts, including known zero-dollar values. Confirmed CLI/Bot accounts can supplement native subscription readings with wallet data; each reading keeps its own observation time.
 - Healthy Grok Bot cache provenance and its reading time appear in an information tooltip rather than a permanent notice.

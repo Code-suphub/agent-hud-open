@@ -12,6 +12,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 | Notch mode | The island: the physical notch on a Mac that has one, or a bar standing in for it on a display that does not |
 | Dynamic Dock | A queue of marks — the watched vendors and any run in the last day — along a screen edge with no shape behind them |
 | Glow | Colour drawn from the enabled windows' levels — a rim around the island, a backdrop falling inward behind the dock |
+| Bot | What a mark turns into while its agent is in flight: a small body in the mark's own outline and colour, with two eyes |
 | Placement | What one display shows and where: mode, edge, position along the edge, logo size, logo spacing, whether the marks are drawn |
 
 ## Rules
@@ -30,9 +31,20 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - The enabled, non-API-billed agents first, in the order they are watched in, then any vendor that ran in the last day without a window on that list, most recently used first.
 - Watched vendors appear before their first reading; vendors shown only for recent activity leave a day after their last turn and never appear with Live status off.
 - Shared artwork appears once: Claude windows share one mark, as do Codex and ChatGPT.
-- Marks bob while a session is live, including one blocked on the user, using the same liveness as the panel.
+- A mark turns into its bot while a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. With `botLogos` off, or for a mark that has no bot, it bobs instead.
 - A dock with nothing to show keeps a minimal entry at its saved position without drawing a logo.
 - Marks retain their artwork with a hairline outline; single-colour marks are white, and status colour appears in the glow.
+
+### Bots
+
+- Every bundled mark has a bot. Its body takes the mark's outline and colours: Claude twelve even heads, Pi a square on two legs under a flat hat, Grok a ball with a ring round its waist, CodeBuddy and WorkBuddy an upright cat. GitHub Copilot keeps its artwork and only its eyes move.
+- The logo turns into the bot in half a second: the outline relaxes, the artwork fades into the mark's colours and the eyes open. The eyes are small, stay upright and follow the pointer, sliding across the body as on a ball.
+- A working bot breathes at the glow's working period and does one small thing at random every one to three seconds: a glance, a double blink, a squint, a tilt, a hop, a wiggle, or a turn of its body.
+- A permission reminder shows the asking bot: one hop, then raised by 12%, a knock every 2.6 seconds, eyes wide and straight at the user.
+- A reply reminder shows the bot smiling for about a second, then looking at the pointer.
+- A reminder keeps its bot for as long as it is shown; a dock's mark returns to its logo.
+- Bots are stepped 30 times a second by one timer that runs only while a bot is out. A bot's picture is drawn again only when its eyes or outline have visibly changed; breathing, hopping and leaning are layer transforms.
+- Reduce Motion, or `botLogos` off, leaves every mark its logo.
 
 ### Hovering and events
 
@@ -95,6 +107,7 @@ DeepSeek Harness questions can be answered on the HUD when its web host exposes 
 | `screenGlow[…].gridPitch` / `gridDensity` | 4–12 pt between cells / 50–150% of a cell filled | 10 pt / 100% |
 | `screenGlow[…].range` / `blur` | 0–36 pt reach / 0–36 pt feather, for the blurred style | 14 pt / 8 pt |
 | `screenGlow[…].brightness` / `breathAmplitude` | 20–100% / how deep the breath dips | 90% / 60% |
+| `botLogos` | Marks turn into bots while their agents work, ask or have just replied | `true` |
 | `requiresOptionToOpen` | Hovering alone leaves the panel closed | `false` |
 | `clientHooks` | Keep client handlers and native approval observation enabled | `true` |
 | `approvalWaitMinutes` | 1, 3, 5, 10, 30 or 60 minutes a permission request waits for an answer | 10 |
@@ -111,6 +124,7 @@ Supported approval hooks are installed for detected clients at startup, alongsid
 | One HUD per screen, and what they share | `Sources/AgentHUDDesktop/Notch/ScreenHUD.swift`, `ScreenIdentity.swift`, `Notch/Island/IslandController.swift` |
 | Where a HUD sits on its screen | `Sources/AgentHUDDesktop/Notch/NotchGeometry.swift` |
 | The marks and their motion | `Sources/AgentHUDDesktop/Notch/Island/LogoQueueView.swift`, `LogoImages.swift` |
+| What each mark becomes, how a bot moves and how it is drawn | `Sources/AgentHUDDesktop/Bots/BotSpec.swift`, `BotForm.swift`, `BotMotion.swift`, `BotRenderer.swift`, `BotActor.swift` |
 | Glow geometry, falloff, colours and frames | `Sources/AgentHUDDesktop/Notch/Glow/GlowGeometry.swift`, `GlowMatrix.swift`, `GlowMotion.swift`, `GlowGradient.swift`, `GlowWindowController.swift`, `GlowFrameRenderer.swift`, `GlowAnimator.swift` |
 | Collapsed shape, panel and events | `Sources/AgentHUDDesktop/Notch/Island/IslandRootView.swift`, `IslandWindowController.swift` |
 | Requests waiting, and the channel they wait on | `Sources/AgentHUDCore/Hooks/Permission/PermissionRequests.swift`, `PermissionRequest.swift`, `PermissionHooks.swift`, `PermissionHookClient.swift`; `Sources/AgentHUDCore/System/UnixSocketListener.swift`, `UnixSocket.swift` |

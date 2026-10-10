@@ -46,10 +46,16 @@ final class SettingsTests: XCTestCase {
             $0.glowOutwardOnly = false
             $0.showIslandQuota = false; $0.showIslandTokens = false
             $0.showIslandSessions = false
+            $0.botLogos = false
             $0.openImmediatelyAtTop = true
         }
         let data = try JSONEncoder().encode(original)
         XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: data), original)
+    }
+
+    func testSettingsSavedBeforeBotLogosKeepThemOn() throws {
+        let saved = try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))
+        XCTAssertTrue(saved.botLogos)
     }
 
     func testGlowSizeBoundsWhenDecodingSettings() throws {

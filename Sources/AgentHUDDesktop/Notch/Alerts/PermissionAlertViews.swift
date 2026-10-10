@@ -43,7 +43,7 @@ struct PermissionAlertCompactView: View {
     var body: some View {
         HStack(spacing: 0) {
             HStack(spacing: 8) {
-                AgentLogo(vendor: request.vendor, size: 17)
+                BotMark(vendor: request.vendor, size: 17, phase: .asking)
                 Text(request.project ?? request.vendor)
                     .font(.ui(13, .semibold)).lineLimit(1).minimumScaleFactor(0.78)
             }.frame(width: IslandController.alertWingWidth, alignment: .leading)

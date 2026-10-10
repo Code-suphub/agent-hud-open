@@ -21,7 +21,7 @@ struct IslandAlertCompactView: View {
             Button(action: onOpen) {
                 HStack(spacing: 0) {
                     HStack(spacing: 8) {
-                        AgentLogo(vendor: event.agentVendor, size: 17)
+                        BotMark(vendor: event.agentVendor, size: 17, phase: .done)
                         Text(event.agentVendor).font(.ui(13, .semibold)).lineLimit(1)
                     }.frame(width: IslandController.alertWingWidth, alignment: .leading)
                     Color.clear.frame(width: cameraWidth)
@@ -63,7 +63,7 @@ struct IslandAlertDetailView: View {
         case .completion(let event):
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 10) {
-                    AgentLogo(vendor: event.agentVendor, size: 24)
+                    BotMark(vendor: event.agentVendor, size: 24, phase: .done)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(event.agentVendor).font(.ui(13, .semibold))
                         Text(event.model).font(.ui(10)).foregroundStyle(.white.opacity(0.45))
