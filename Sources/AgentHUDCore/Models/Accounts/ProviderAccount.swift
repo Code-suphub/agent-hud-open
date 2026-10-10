@@ -54,7 +54,7 @@ public struct ProviderAccount: Hashable, Codable, Sendable, Identifiable {
 }
 
 /// One account as seen from one client home. A provider's list in `UsageReport.accounts` is authoritative:
-/// accounts it no longer reports stay as last readings until they have not been seen for the history retention.
+/// accounts it no longer reports retire from the quota inventory; recorded sessions and tokens keep their own history.
 public struct AccountObservation: Hashable, Codable, Sendable, Identifiable {
     public let account: ProviderAccount
     /// `ClientHome.key` of the directory the client was read from; empty for the client's default home.
@@ -65,7 +65,7 @@ public struct AccountObservation: Hashable, Codable, Sendable, Identifiable {
     public let label: String?
     public let plan: String?
     public let observedAt: Date
-    /// The client is currently signed in to this account. Other accounts show their last reading only.
+    /// The client is currently signed in to this account. Former accounts in older saved reports are not displayed.
     public let isCurrent: Bool
     /// The reason of `readingIssue`, written beside it for readers of the notice text; an observation saved without a
     /// typed issue counts it as a failed read.
@@ -177,6 +177,6 @@ public extension UsageReport {
     func isCurrent(_ agent: AgentDescriptor) -> Bool {
         guard let id = agent.account?.id, let observations = accounts?[agent.account!.provider] else { return true }
         let matches = observations.filter { $0.account.id == id }
-        return matches.isEmpty || matches.contains(where: \.isCurrent)
+        return matches.contains(where: \.isCurrent)
     }
 }

@@ -136,7 +136,7 @@ public struct ReportView: Sendable {
     // MARK: Quota
 
     /// Whether a row is present, the one rule of the panel, the menu, Settings and the report kept across passes: a provider
-    /// reported it within the retention period, its account is in its provider's inventory, and its plan pool is active.
+    /// reported it within the retention period, its account is current in its provider's inventory, and its plan pool is active.
     /// What a report does not say counts as present: rows it keeps no sighting times for, a provider without an inventory, a
     /// pool its provider's inventory does not cover; without a report every row is. A row without an account is no longer
     /// present once its provider identifies accounts.
@@ -155,7 +155,7 @@ public struct ReportView: Sendable {
         }
         guard let inventory = accounts?[agent.account?.provider ?? agent.vendor] else { return true }
         guard let account = agent.account else { return inventory.isEmpty }
-        return inventory.contains { $0.account.id == account.id }
+        return inventory.contains { $0.account.id == account.id && $0.isCurrent }
     }
 
     /// Each glow segment's level, in glow order.

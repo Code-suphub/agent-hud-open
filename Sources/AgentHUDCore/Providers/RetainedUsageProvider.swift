@@ -174,16 +174,19 @@ extension UsageReport {
         return merged
     }
 
-    /// A provider's reported list replaces its current accounts; accounts it no longer reports become last readings.
+    /// A provider's reported list replaces its accounts. A client home whose identity read failed keeps its last current
+    /// account until it can confirm a replacement or sign-out; former accounts are never restored.
     /// A provider that did not report this poll keeps its previous inventory unchanged, and a forgotten provider has none.
     private func mergedAccounts(from previous: UsageReport, retiredPoolIDs: Set<String>, cutoff: Date) -> [String: [AccountObservation]]? {
         guard accounts != nil || previous.accounts != nil || forgottenAccountProviders != nil else { return nil }
         var merged = previous.accounts ?? [:]
         for (provider, current) in accounts ?? [:] {
-            let ids = Set(current.map(\.id)), aliases = Set(current.flatMap { $0.aliases ?? [] })
+            let current = current.filter(\.isCurrent)
+            let homes = Set(current.map(\.home)), aliases = Set(current.flatMap { $0.aliases ?? [] })
             merged[provider] = current + (previous.accounts?[provider] ?? []).filter {
-                !ids.contains($0.id) && !aliases.contains($0.account.id)
-            }.map { $0.with(isCurrent: false) }
+                $0.isCurrent && !homes.contains($0.home) && !aliases.contains($0.account.id)
+                    && !vendorStatus(ClientHome.sourceKey(provider: provider, home: $0.home)).isNormal
+            }
         }
         for provider in forgottenAccountProviders ?? [] {
             merged[provider] = []

@@ -132,7 +132,7 @@ final class GrokBotQuotaTests: XCTestCase {
         }
     }
 
-    func testExpiredCacheFailsAndSignOutMakesRetainedAccountHistorical() async throws {
+    func testExpiredCacheFailsAndConfirmedSignOutRetiresAccountAndQuota() async throws {
         let f = try fixture()
         try writeQuota(f)
         let provider = AdditionalUsageProvider(source: .grok, readQuota: {
@@ -150,8 +150,9 @@ final class GrokBotQuotaTests: XCTestCase {
         try f.writeAccount(nil)
         await retained.refreshAccountUsage(historyHours: 24)
         let signedOut = try await retained.fetchUsage(agents: first.discoveredAgents, historyHours: 24)
-        XCTAssertEqual(signedOut.accounts?["Grok"]?.first?.isCurrent, false)
-        XCTAssertEqual(signedOut.snapshots.first?.updatedAt, first.snapshots.first?.updatedAt)
+        XCTAssertEqual(signedOut.accounts?["Grok"], [])
+        XCTAssertTrue(signedOut.snapshots.isEmpty)
+        XCTAssertTrue(signedOut.discoveredAgents.isEmpty)
     }
 
     func testQuotaFailureAndLocalNoticeStaySeparate() async throws {
