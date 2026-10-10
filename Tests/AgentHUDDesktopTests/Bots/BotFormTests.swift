@@ -64,9 +64,10 @@ final class BotFormTests: XCTestCase {
         motion.set(.working, at: 0)
         motion.step(to: 0); motion.step(to: 1)
         let image = try XCTUnwrap(BotRenderer.image(form, motion: motion, side: 40))
-        let outlined = try XCTUnwrap(LogoImages.outlined(image, thickness: 1))
+        let outlined = try XCTUnwrap(BotRenderer.image(form, motion: motion, side: 40, outline: 1))
         XCTAssertEqual(outlined.width, image.width + 2)
-        XCTAssertGreaterThan(Self.coverage(of: outlined), Self.coverage(of: image) * 0.9)
+        // The hairline adds a ring of pixels round the bot and takes none away.
+        XCTAssertGreaterThan(Self.coverage(of: outlined, above: 20), Self.coverage(of: image, above: 20))
     }
 
     func testALookOnlyChangesWhenTheBotVisiblyDoes() {
@@ -80,13 +81,13 @@ final class BotFormTests: XCTestCase {
     }
 
     /// Share of pixels that are not transparent.
-    private static func coverage(of image: CGImage) -> Double {
+    private static func coverage(of image: CGImage, above floor: UInt8 = 40) -> Double {
         guard let context = BotForm.bitmap(image.width) else { return 0 }
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.width))
         guard let data = context.data else { return 0 }
         let bytes = data.assumingMemoryBound(to: UInt8.self), count = image.width * image.width
         var solid = 0
-        for index in 0..<count where bytes[index * 4 + 3] > 40 { solid += 1 }
+        for index in 0..<count where bytes[index * 4 + 3] > floor { solid += 1 }
         return Double(solid) / Double(count)
     }
 }

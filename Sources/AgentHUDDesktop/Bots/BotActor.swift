@@ -70,8 +70,7 @@ final class BotActor {
         let look = BotRenderer.look(of: motion)
         if look != shown, side > 0 {
             shown = look
-            let image = BotRenderer.image(form, motion: motion, side: side * scale)
-            layer.contents = outline > 0 ? image.flatMap { LogoImages.outlined($0, thickness: outline) } ?? image : image
+            layer.contents = BotRenderer.image(form, motion: motion, side: side * scale, outline: outline)
         }
         layer.setAffineTransform(Self.transform(motion.pose, side: side, yRunsDown: yRunsDown))
         return true

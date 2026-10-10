@@ -90,10 +90,10 @@ final class LogoQueueLayerView: NSView {
     private static let travel: CGFloat = 0.14
     private static let stagger = 0.13
 
-    private var marks: [CALayer] = []
+    private(set) var marks: [CALayer] = []
     /// One per mark, for the marks that have a bot. A bot's layer sits over its mark and takes its place
     /// while the bot is out; the mark comes back when the bot has settled into the logo again.
-    private var actors: [BotActor?] = []
+    private(set) var actors: [BotActor?] = []
     /// How far the baked outline overflows a mark, in points, so the layout leaves room for exactly that.
     private var bleed: CGFloat = 1
     private var applied: (config: LogoQueueConfig, light: Bool, scale: CGFloat, animates: Bool, previews: Bool)?
@@ -232,7 +232,7 @@ final class LogoQueueLayerView: NSView {
     }
 
     /// One frame for every bot in the queue. Returns false when all of them are back to being logos.
-    private func stepBots(to now: TimeInterval) -> Bool {
+    func stepBots(to now: TimeInterval) -> Bool {
         guard let window else { return false }
         let pointer = NSEvent.mouseLocation, runsDown = layer?.isGeometryFlipped ?? false
         var moving = false

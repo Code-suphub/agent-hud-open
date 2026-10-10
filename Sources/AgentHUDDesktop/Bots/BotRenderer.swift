@@ -1,3 +1,4 @@
+import Accelerate
 import AppKit
 import AgentHUDCore
 import CoreGraphics
@@ -31,12 +32,16 @@ enum BotRenderer {
     private static let box = CGRect(x: 0, y: 0, width: 1, height: 1)
 
     /// One frame, `side` pixels to the mark's side, with `margin` of room on every edge.
-    static func image(_ form: BotForm, motion: BotMotion, side: CGFloat) -> CGImage? {
-        let extent = Int((side * (1 + 2 * margin)).rounded(.up))
-        guard extent > 0, let context = BotForm.bitmap(extent) else { return nil }
+    ///
+    /// - outline: pixels of dark hairline round the bot, for a bot that sits on a wallpaper beside the logo
+    ///   queue's outlined marks. The picture grows by that much on every edge.
+    static func image(_ form: BotForm, motion: BotMotion, side: CGFloat, outline: Int = 0) -> CGImage? {
+        let inner = Int((side * (1 + 2 * margin)).rounded(.up)), extent = inner + outline * 2
+        guard inner > 0, let context = BotForm.bitmap(extent) else { return nil }
+        context.saveGState()
         // From here one unit is the mark's side, measured from its top left with y running down.
-        let unit = CGFloat(extent) / (1 + 2 * margin)
-        context.translateBy(x: 0, y: CGFloat(extent))
+        let unit = CGFloat(inner) / (1 + 2 * margin)
+        context.translateBy(x: CGFloat(outline), y: CGFloat(extent - outline))
         context.scaleBy(x: unit, y: -unit)
         context.translateBy(x: margin, y: margin)
         context.interpolationQuality = .high
@@ -47,7 +52,43 @@ enum BotRenderer {
         } else {
             body(form, motion: motion, on: context)
         }
+        context.restoreGState()
+        if outline > 0 { hairline(on: context, extent: extent, reach: outline) }
         return context.makeImage()
+    }
+
+    /// Darkens the pixels just outside the bot, the way the queue's marks are outlined: the silhouette spread
+    /// by `reach`, hardened so a soft edge still gives a crisp line, and drawn behind the bot at half strength.
+    ///
+    /// The marks build theirs once, from masks. A bot is drawn again whenever it blinks, so its hairline comes
+    /// from the picture's own alpha instead, spread by Accelerate, which costs a fraction of drawing the bot.
+    private static func hairline(on context: CGContext, extent: Int, reach: Int) {
+        guard let data = context.data else { return }
+        let count = extent * extent, size = vImagePixelCount(extent), none = vImage_Flags(kvImageNoFlags)
+        let alpha = UnsafeMutablePointer<UInt8>.allocate(capacity: count), spread = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        defer { alpha.deallocate(); spread.deallocate() }
+        var picture = vImage_Buffer(data: data, height: size, width: size, rowBytes: context.bytesPerRow)
+        var own = vImage_Buffer(data: alpha, height: size, width: size, rowBytes: extent)
+        var ring = vImage_Buffer(data: spread, height: size, width: size, rowBytes: extent)
+        let side = 2 * reach + 1, flat = [UInt8](repeating: 0, count: side * side)
+        guard vImageExtractChannel_ARGB8888(&picture, &own, 3, none) == kvImageNoError,
+              vImageDilate_Planar8(&own, &ring, 0, 0, flat, vImagePixelCount(side), vImagePixelCount(side), none) == kvImageNoError
+        else { return }
+        let harder = (0..<256).map { UInt8(min(255, $0 * 3)) }
+        vImageTableLookUp_Planar8(&ring, &ring, harder, none)
+        guard let provider = CGDataProvider(data: Data(bytes: spread, count: count) as CFData),
+              let mask = CGImage(width: extent, height: extent, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: extent,
+                                 space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                                 provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+        else { return }
+        let whole = CGRect(x: 0, y: 0, width: extent, height: extent)
+        context.saveGState()
+        context.setBlendMode(.destinationOver)
+        context.setAlpha(LogoImages.outlineOpacity)
+        context.clip(to: whole, mask: mask)
+        context.setFillColor(.black)
+        context.fill(whole)
+        context.restoreGState()
     }
 
     // MARK: The morph
