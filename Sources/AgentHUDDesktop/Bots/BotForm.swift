@@ -28,9 +28,14 @@ final class BotForm {
     static func form(for vendor: String) -> BotForm? {
         let key = AgentArtwork.markKey(vendor)
         if let hit = cache[key] { return hit }
-        let form = BotSpec.spec(for: vendor).flatMap { BotForm(vendor: vendor, spec: $0) }
+        let form = read(vendor)
         cache[key] = form
         return form
+    }
+
+    /// Reads a mark afresh, without the cache.
+    static func read(_ vendor: String) -> BotForm? {
+        BotSpec.spec(for: vendor).flatMap { BotForm(vendor: vendor, spec: $0) }
     }
 
     private init?(vendor: String, spec: BotSpec) {
@@ -94,17 +99,19 @@ final class BotForm {
 
     /// How far the opaque pixels reach from `center`, per degree, as a share of the side.
     private static func reach(alphaOf pixels: [UInt8], from center: CGPoint) -> [CGFloat] {
-        let side = CGFloat(grain)
-        return (0..<samples).map { index in
-            let angle = CGFloat(index) * 2 * .pi / CGFloat(samples), dx = cos(angle), dy = sin(angle)
-            var last: CGFloat = 0, distance: CGFloat = 0
-            while distance < side * 1.5 {
-                let x = Int((center.x * side + dx * distance).rounded()), y = Int((center.y * side + dy * distance).rounded())
-                if x < 0 || y < 0 || x >= grain || y >= grain { break }
-                if pixels[(y * grain + x) * 4 + 3] > 127 { last = distance }
-                distance += 0.5
+        let side = Double(grain), startX = Double(center.x) * side, startY = Double(center.y) * side
+        return pixels.withUnsafeBufferPointer { bytes in
+            (0..<samples).map { index in
+                let angle = Double(index) * 2 * .pi / Double(samples), dx = cos(angle), dy = sin(angle)
+                var last = 0, distance = 0
+                while distance < grain * 3 / 2 {
+                    let x = Int((startX + dx * Double(distance)).rounded()), y = Int((startY + dy * Double(distance)).rounded())
+                    if x < 0 || y < 0 || x >= grain || y >= grain { break }
+                    if bytes[(y * grain + x) * 4 + 3] > 127 { last = distance }
+                    distance += 1
+                }
+                return max(0.02, CGFloat(last) / CGFloat(grain))
             }
-            return max(0.02, last / side)
         }
     }
 
@@ -220,59 +227,95 @@ final class BotForm {
     // MARK: Colour
 
     /// The mark's colours spread into a field a quarter-side wider than the mark, so a body cut from it
-    /// carries each colour where the mark had it, with nothing transparent inside.
+    /// carries each colour where the mark had it, with nothing transparent inside. A mark drawn in one colour
+    /// gives a single pixel of it.
     private static func colorField(_ pixels: [UInt8], skipping holes: [CGRect]) -> CGImage? {
         let side = 60, margin = 10, inner = side - 2 * margin, count = side * side
-        var known = [Bool](repeating: false, count: count)
-        var colour = [Float](repeating: 0, count: count * 3)
-        for y in 0..<inner {
-            for x in 0..<inner {
-                let row = Int((Double(y) + 0.5) * Double(grain) / Double(inner)), column = Int((Double(x) + 0.5) * Double(grain) / Double(inner))
-                let source = (row * grain + column) * 4
-                let alpha = Float(pixels[source + 3])
-                let place = CGPoint(x: (CGFloat(x) + 0.5) / CGFloat(inner), y: (CGFloat(y) + 0.5) / CGFloat(inner))
-                guard alpha > 200, !holes.contains(where: { $0.contains(place) }) else { continue }
-                let index = (y + margin) * side + x + margin
-                known[index] = true
-                for channel in 0..<3 { colour[index * 3 + channel] = Float(pixels[source + channel]) / alpha * 255 }
-            }
-        }
-        guard known.contains(true) else { return nil }
-        func around(_ index: Int, _ visit: (Int) -> Void) {
-            let x = index % side, y = index / side
-            for dy in -1...1 {
-                for dx in -1...1 where x + dx >= 0 && y + dy >= 0 && x + dx < side && y + dy < side {
-                    visit((y + dy) * side + x + dx)
+        let colour = UnsafeMutablePointer<Float>.allocate(capacity: count * 3)
+        let other = UnsafeMutablePointer<Float>.allocate(capacity: count * 3)
+        let known = UnsafeMutablePointer<Bool>.allocate(capacity: count), filled = UnsafeMutablePointer<Bool>.allocate(capacity: count)
+        defer { colour.deallocate(); other.deallocate(); known.deallocate(); filled.deallocate() }
+        colour.initialize(repeating: 0, count: count * 3)
+        known.initialize(repeating: false, count: count)
+
+        var low: (Float, Float, Float) = (255, 255, 255), high: (Float, Float, Float) = (0, 0, 0), sum: (Float, Float, Float) = (0, 0, 0)
+        var seen: Float = 0
+        pixels.withUnsafeBufferPointer { bytes in
+            for y in 0..<inner {
+                for x in 0..<inner {
+                    let row = Int((Double(y) + 0.5) * Double(grain) / Double(inner)), column = Int((Double(x) + 0.5) * Double(grain) / Double(inner))
+                    let source = (row * grain + column) * 4, alpha = Float(bytes[source + 3])
+                    if alpha <= 200 { continue }
+                    let place = CGPoint(x: (CGFloat(x) + 0.5) / CGFloat(inner), y: (CGFloat(y) + 0.5) / CGFloat(inner))
+                    if !holes.isEmpty, holes.contains(where: { $0.contains(place) }) { continue }
+                    let index = (y + margin) * side + x + margin
+                    let red = Float(bytes[source]) / alpha * 255, green = Float(bytes[source + 1]) / alpha * 255, blue = Float(bytes[source + 2]) / alpha * 255
+                    colour[index * 3] = red; colour[index * 3 + 1] = green; colour[index * 3 + 2] = blue
+                    known[index] = true
+                    low = (min(low.0, red), min(low.1, green), min(low.2, blue))
+                    high = (max(high.0, red), max(high.1, green), max(high.2, blue))
+                    sum = (sum.0 + red, sum.1 + green, sum.2 + blue)
+                    seen += 1
                 }
             }
         }
-        // Colour grows outwards a ring at a time, each ring the average of what it touches.
-        for _ in 0..<(side * 2) {
-            var ring: [(Int, Float, Float, Float)] = []
-            for index in 0..<count where !known[index] {
-                var red: Float = 0, green: Float = 0, blue: Float = 0, hits: Float = 0
-                around(index) { other in
-                    guard known[other] else { return }
-                    red += colour[other * 3]; green += colour[other * 3 + 1]; blue += colour[other * 3 + 2]; hits += 1
-                }
-                if hits > 0 { ring.append((index, red / hits, green / hits, blue / hits)) }
-            }
-            if ring.isEmpty { break }
-            for (index, red, green, blue) in ring {
-                colour[index * 3] = red; colour[index * 3 + 1] = green; colour[index * 3 + 2] = blue
-                known[index] = true
-            }
+        guard seen > 0 else { return nil }
+        if high.0 - low.0 < 14, high.1 - low.1 < 14, high.2 - low.2 < 14 {
+            return swatch(sum.0 / seen, sum.1 / seen, sum.2 / seen)
         }
-        for _ in 0..<2 {
-            var next = colour
-            for index in 0..<count {
-                var red: Float = 0, green: Float = 0, blue: Float = 0, hits: Float = 0
-                around(index) { other in
-                    red += colour[other * 3]; green += colour[other * 3 + 1]; blue += colour[other * 3 + 2]; hits += 1
+
+        // Every empty cell takes the colour of the nearest painted one along its line, mixed by distance when
+        // it lies between two. Rows first; a row with no paint at all is then filled down its columns.
+        func spread(lines: Int, length: Int, at cell: (Int, Int) -> Int) {
+            filled.update(from: known, count: count)
+            for line in 0..<lines {
+                var before = -1
+                var position = 0
+                while position < length {
+                    if known[cell(line, position)] { before = position; position += 1; continue }
+                    var after = position
+                    while after < length, !known[cell(line, after)] { after += 1 }
+                    let hasAfter = after < length
+                    if before >= 0 || hasAfter {
+                        for empty in position..<after {
+                            let index = cell(line, empty)
+                            let share: Float = before < 0 ? 1 : !hasAfter ? 0 : Float(empty - before) / Float(after - before)
+                            let from = before < 0 ? cell(line, after) : cell(line, before)
+                            let to = hasAfter ? cell(line, after) : from
+                            for channel in 0..<3 {
+                                colour[index * 3 + channel] = colour[from * 3 + channel] * (1 - share) + colour[to * 3 + channel] * share
+                            }
+                            filled[index] = true
+                        }
+                    }
+                    position = after
                 }
-                next[index * 3] = red / hits; next[index * 3 + 1] = green / hits; next[index * 3 + 2] = blue / hits
             }
-            colour = next
+            known.update(from: filled, count: count)
+        }
+        spread(lines: side, length: side) { $0 * side + $1 }
+        spread(lines: side, length: side) { $1 * side + $0 }
+
+        // Soften it: three passes of a three-cell blur, across and then down.
+        for _ in 0..<3 {
+            for y in 0..<side {
+                for x in 0..<side {
+                    let left = max(0, x - 1), right = min(side - 1, x + 1)
+                    for channel in 0..<3 {
+                        other[(y * side + x) * 3 + channel] = (colour[(y * side + left) * 3 + channel] + colour[(y * side + x) * 3 + channel]
+                                                               + colour[(y * side + right) * 3 + channel]) / 3
+                    }
+                }
+            }
+            for y in 0..<side {
+                let up = max(0, y - 1), down = min(side - 1, y + 1)
+                for x in 0..<side {
+                    for channel in 0..<3 {
+                        colour[(y * side + x) * 3 + channel] = (other[(up * side + x) * 3 + channel] + other[(y * side + x) * 3 + channel]
+                                                                + other[(down * side + x) * 3 + channel]) / 3
+                    }
+                }
+            }
         }
         guard let context = bitmap(side), let data = context.data else { return nil }
         let out = data.assumingMemoryBound(to: UInt8.self)
@@ -280,6 +323,13 @@ final class BotForm {
             for channel in 0..<3 { out[index * 4 + channel] = UInt8(max(0, min(255, colour[index * 3 + channel]))) }
             out[index * 4 + 3] = 255
         }
+        return context.makeImage()
+    }
+
+    private static func swatch(_ red: Float, _ green: Float, _ blue: Float) -> CGImage? {
+        guard let context = bitmap(1) else { return nil }
+        context.setFillColor(CGColor(srgbRed: CGFloat(red / 255), green: CGFloat(green / 255), blue: CGFloat(blue / 255), alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
         return context.makeImage()
     }
 }

@@ -98,3 +98,21 @@ final class BotQueueTests: XCTestCase {
         XCTAssertLessThan(outlined, 0.004)
     }
 }
+
+@MainActor
+final class BotFormTimingTests: XCTestCase {
+    /// Reading a mark is paid once per vendor, on the main thread, the first time its bot is needed.
+    func testReadingAMarkIsQuick() throws {
+        var slowest: (String, TimeInterval) = ("", 0), total: TimeInterval = 0
+        for vendor in AgentArtwork.allVendors {
+            let began = CACurrentMediaTime()
+            XCTAssertNotNil(BotForm.read(vendor))
+            let took = CACurrentMediaTime() - began
+            total += took
+            if took > slowest.1 { slowest = (vendor, took) }
+        }
+        print(String(format: "reading a mark: %.1f ms on average, %.1f ms at worst (%@)",
+                     total / Double(AgentArtwork.allVendors.count) * 1000, slowest.1 * 1000, slowest.0))
+        XCTAssertLessThan(slowest.1, 0.25)
+    }
+}
