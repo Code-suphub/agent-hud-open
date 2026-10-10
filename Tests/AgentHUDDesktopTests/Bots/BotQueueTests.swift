@@ -1,6 +1,7 @@
 import AppKit
 import AgentHUDCore
 import QuartzCore
+import SwiftUI
 import XCTest
 @testable import AgentHUDDesktop
 
@@ -114,5 +115,48 @@ final class BotFormTimingTests: XCTestCase {
         print(String(format: "reading a mark: %.1f ms on average, %.1f ms at worst (%@)",
                      total / Double(AgentArtwork.allVendors.count) * 1000, slowest.1 * 1000, slowest.0))
         XCTAssertLessThan(slowest.1, 0.25)
+    }
+}
+
+@MainActor
+final class BotMarkTests: XCTestCase {
+    private func stage(in view: NSView) -> BotStageView? {
+        if let found = view as? BotStageView { return found }
+        for child in view.subviews { if let found = stage(in: child) { return found } }
+        return nil
+    }
+
+    private func hosted<V: View>(_ view: V) -> (NSHostingView<V>, NSWindow) {
+        let frame = CGRect(x: 0, y: 0, width: 60, height: 60)
+        let window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: view)
+        host.frame = frame
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        return (host, window)
+    }
+
+    /// The reminder cards' mark, through SwiftUI and the shared clock, the way the island shows it.
+    func testAReminderMarkTurnsIntoItsBotOnceItIsShown() throws {
+        // With Reduce Motion on, as on the build machines, the mark is rightly left a logo.
+        try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Reduce Motion keeps the logo")
+        let (host, window) = hosted(BotMark(vendor: "Claude", size: 17, phase: .asking).frame(width: 60, height: 60))
+        defer { window.close() }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+        let stage = try XCTUnwrap(stage(in: host), "the bot's layer view was never made")
+        let bot = try XCTUnwrap(stage.layer?.sublayers?.first)
+        XCTAssertFalse(bot.isHidden)
+        XCTAssertNotNil(bot.contents)
+        // Asking stays raised: the layer is scaled up from its resting size.
+        XCTAssertGreaterThan(bot.affineTransform().a, 1.05)
+        BotClock.shared.drop(stage)
+    }
+
+    func testWithBotsOffAReminderShowsThePlainLogo() {
+        let (host, window) = hosted(BotMark(vendor: "Claude", size: 17, phase: .asking).environment(\.botLogos, false))
+        defer { window.close() }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        XCTAssertNil(stage(in: host))
     }
 }
