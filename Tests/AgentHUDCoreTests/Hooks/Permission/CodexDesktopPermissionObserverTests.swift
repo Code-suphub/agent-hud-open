@@ -63,6 +63,36 @@ final class CodexDesktopPermissionObserverTests: XCTestCase {
         observer.stop()
     }
 
+    func testLongThreadRestsTenTimesItsReadAndKeepsItsCardMeanwhile() throws {
+        let queue = PermissionRequests(), observer = CodexDesktopPermissionObserver(requests: queue, client: .init())
+        let long = try pending(threadID: "long"), ids: Set = ["long", "short"]
+        XCTAssertEqual(observer.due(ids, at: 100), ids)
+        observer.reconcile(.init(pending: [long], observedThreadIDs: ids, readSeconds: ["long": 0.7, "short": 0.1]), at: 100)
+        XCTAssertEqual(observer.due(ids, at: 102), ["short"], "the next pass asks only the thread that answered quickly")
+        observer.reconcile(.init(pending: [], observedThreadIDs: ["short"], readSeconds: ["short": 0.1]), resting: ["long"], at: 102)
+        XCTAssertEqual(queue.pending, [long.request], "a thread that was not asked keeps its card")
+        XCTAssertEqual(observer.due(ids, at: 106), ["short"])
+        XCTAssertEqual(observer.due(ids, at: 107), ids)
+        observer.reconcile(.init(pending: [], observedThreadIDs: ids, readSeconds: ["long": 0.7, "short": 0.1]), at: 107)
+        XCTAssertTrue(queue.pending.isEmpty, "the next reading of the long thread withdraws what Desktop answered")
+        XCTAssertEqual(observer.due(["short"], at: 107.5), [])
+        XCTAssertEqual(observer.due(ids, at: 107.6), ["long"], "a thread that left the list starts without a rest")
+        observer.stop()
+    }
+
+    func testFailedReadingHidesItsCardThroughTheRestThatFollows() throws {
+        let queue = PermissionRequests(), observer = CodexDesktopPermissionObserver(requests: queue, client: .init())
+        let item = try pending()
+        observer.reconcile(.init(pending: [item], observedThreadIDs: [item.threadID], readSeconds: [item.threadID: 0.1]), at: 100)
+        observer.reconcile(.init(pending: [], observedThreadIDs: [], readSeconds: [item.threadID: 3]), at: 102)
+        XCTAssertTrue(queue.pending.isEmpty)
+        XCTAssertEqual(observer.due([item.threadID], at: 131), [])
+        observer.reconcile(.init(pending: [], observedThreadIDs: []), resting: [item.threadID], at: 104)
+        XCTAssertTrue(queue.pending.isEmpty, "a rest carries over what was shown, and a failed reading showed nothing")
+        XCTAssertEqual(observer.due([item.threadID], at: 132), [item.threadID])
+        observer.stop()
+    }
+
     func testOnlyLiveDesktopDestinationsIncludingChildrenAreObserved() {
         func session(_ id: String, live: Bool = true, target: Bool = true, children: [LiveSession]? = nil) -> LiveSession {
             .init(id: id, agentId: "codex", task: "Task", terminal: nil, startedAt: Date(),

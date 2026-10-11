@@ -41,15 +41,14 @@ Requires an Apple Silicon Mac running macOS 14 or later.
       <agenthudMinimumIOSVersion>1.5</agenthudMinimumIOSVersion>
     </item>
     <item>
-      <title>0.5.0</title>
-      <pubDate>Sun, 11 Oct 2026 17:37:28 +0800</pubDate>
-      <link>https://github.com/jazzenchen/agent-hud-open/releases/tag/v0.5.0</link>
-      <sparkle:version>482</sparkle:version>
-      <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+      <title>0.5.1</title>
+      <pubDate>Mon, 12 Oct 2026 03:24:57 +0800</pubDate>
+      <link>https://github.com/jazzenchen/agent-hud-open/releases/tag/v0.5.1</link>
+      <sparkle:version>483</sparkle:version>
+      <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-      <description sparkle:format="markdown">&lt;p&gt;&lt;strong&gt;Build 482&lt;/strong&gt;&lt;/p&gt;
-# Agent HUD 0.5.0
+      <description sparkle:format="markdown"># Agent HUD 0.5.1
 
 ## Compatibility
 
@@ -61,19 +60,18 @@ Requires an Apple Silicon Mac running macOS 14 or later.
 
 ## Changes
 
-- Adds Simple mode: a compact floating HUD on any screen edge, with quota rings, percentages, or both. Adjust its size and ring thickness in Display settings. Percentages use lighter Regular weight and stay in place as the panel opens.
-- Turns agent logos into animated bots while they work, ask for permission, or finish a reply. Their eyes follow the pointer, and idle logos occasionally visit as bots. Customize bot logos, dock logo size, and edge spacing; Reduce Motion keeps static logos.
-- Shows Codex Desktop Computer Use app-access requests on the HUD with the native Deny, Allow this conversation, and Always allow choices when available. Native answers and dismissals follow the original request; automatic engine review stays with Codex.
-- Displays unavailable Grok subscription quota as N/A while preserving known reset times. Shows prepaid balances and on-demand spending, including confirmed zero-dollar values, and keeps cache provenance in an information tooltip.
-- Refreshes signed-in accounts when Agents settings opens and offers Refresh accounts. Removes accounts a successful reading no longer reports, while retaining the last current identity during a failed reading.
-- Separates Grok CLI and Grok Bot execution clients while sharing quota for confirmed accounts. Uses native Bot quota readings with their original timestamps and recognizes personal SuperGrok accounts. Scheduled routine runs join their bot session; billing-only children keep their token accounting without cluttering session lists.
-- Groups sessions by Git project, including worktrees, and shows Codex child agents with their own task, workspace, state and token usage without recounting inherited history.
-- Prioritizes waiting and running work in the HUD, lists up to five recent sessions, and places them below Tokens. The token chart always shows the last 24 hours in 15-minute bars independently of Dashboard filters. Reply reminders have a close button that leaves permission requests unanswered.
-- Returns supported Grok sessions to their originating client and makes locally available Grok CLI, Grok Bot and Antigravity conversation text available on iPhone when sharing is enabled, preserving explicit gaps in cached Bot history.
-- Answers ZCode questions on the HUD and supports questions from compatible DeepSeek Harness web hosts. Codex hooks handle confirmed user review while leaving automatic or unknown reviewers unanswered.
-- Recovers cross-device publication after partial cloud-upload failures and keeps local-network readings consistent during refreshes. Caches recent conversation reads, resumes Codex transcripts incrementally, and avoids repeated record encoding during snapshot sorting.
+- Adds Separate agents for Simple and Dynamic modes, off by default in Display settings. Hovering an agent's logo shows a small card with that agent's quota, tokens and sessions beside it, and a click opens that agent's whole panel. Replies and permission requests open beside the agent that sent them while the other logos stay.
+- Grows a Simple panel itself into the usage panel on hover instead of fading a separate panel over it, and gives Simple its own Bot animation switch, off by default. Display settings lists the modes as Notch, Simple and Dynamic.
+- Opens permission and reply reminders as the agent's logo, which turns into its bot once the card has opened.
+- Shows Codex Desktop's mid-turn Question cards on the HUD, including questions with only a reply field. Answers go to the original turn; Skip leaves the question unanswered.
+- Notices a Codex turn that starts in a quiet session within five seconds instead of up to five minutes.
+- Picks the HUD up after a short drag or hold instead of on mouse down, keeps the closed hand for the whole drag, and outlines a Simple panel's own shape while it moves.
+- Uses less CPU while agents work: bots are stepped only as often as they move, local services are looked for every 10 seconds instead of every 2, and a collection pass no longer repeats work for records that did not change.
+- Reads quota and balance less often: every 2.5 to 3.5 minutes while a turn runs instead of every minute, and every 5 to 6 minutes between turns. Scheduled readings wait a random time of up to a minute, so Macs on accounts that reset together do not ask a service in the same second. The reading after a turn ends, and the one opening the panel asks for, are immediate as before.
+- Sends iCloud one batch every five minutes instead of every change, which ends the hours-long refusals some Macs ran into. Events, permission requests and prompt results still go at once, and an iPhone on the same network still follows every change.
+- Adds an Experimental settings page with one Remote Sessions switch for Claude Code and Codex: answer permission requests and continue a session from the iPhone. It needs Agent HUD for iPhone 1.6, which is not on the App Store yet. [Guide](https://agenthud.app/guides/remote-sessions).
 </description>
-      <enclosure url="https://github.com/jazzenchen/agent-hud-open/releases/download/v0.5.0/Agent-HUD-0.5.0-arm64.dmg" length="12965040" type="application/octet-stream" sparkle:edSignature="6JG+WVJQEI9vuipmGrohf6USfIGY1Xny6aM+iS2+M5uQP9XPROyWw5hRWH+bF5t4p9XtUa8FLG0hhwUYSSEhDQ==" />
+      <enclosure url="https://github.com/jazzenchen/agent-hud-open/releases/download/v0.5.1/Agent-HUD-0.5.1-arm64.dmg" length="13192373" type="application/octet-stream" sparkle:edSignature="qxot0zdf8xt5ejwKNVwrSX6Oh2oaZ5jJNUluhj+OPKMz1r7kfEPQRBTM7REHSse/J4YR1konPnQ3MJ+WvH6VCg==" />
       <agenthudMacOnly>false</agenthudMacOnly>
       <agenthudMinimumIOSVersion>1.5</agenthudMinimumIOSVersion>
     </item>

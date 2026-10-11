@@ -16,6 +16,9 @@ public struct CodexDesktopPermissions: Sendable {
         public let pending: [Pending]
         /// Only successfully read owners can establish that a previously visible request has disappeared.
         public let observedThreadIDs: Set<String>
+        /// How long each thread's read took, whether or not it succeeded. Desktop builds the thread's whole state for
+        /// every read, so a slow read is one to repeat less often.
+        public var readSeconds: [String: TimeInterval] = [:]
     }
 
     public enum Failure: Error, Equatable, Sendable {
@@ -45,13 +48,14 @@ public struct CodexDesktopPermissions: Sendable {
             for _ in 0..<min(4, threadIDs.count) {
                 if let threadID = remaining.next() { enqueue(threadID) }
             }
-            var found: [Pending] = [], observed = Set<String>()
+            var found: [Pending] = [], observed = Set<String>(), seconds: [String: TimeInterval] = [:]
             while let result = try await group.next() {
                 found += result.pending
                 observed.formUnion(result.observedThreadIDs)
+                seconds.merge(result.readSeconds) { max($0, $1) }
                 if let threadID = remaining.next() { enqueue(threadID) }
             }
-            return Snapshot(pending: found.sorted { $0.id < $1.id }, observedThreadIDs: observed)
+            return Snapshot(pending: found.sorted { $0.id < $1.id }, observedThreadIDs: observed, readSeconds: seconds)
         }
     }
 
@@ -68,8 +72,7 @@ public struct CodexDesktopPermissions: Sendable {
             do { owner = try Self.owner(connection, source: clientID, threadID: pending.threadID) }
             catch CodexDesktopIPC.Failure.rejected("no-client-found") { throw Failure.noLongerWaiting }
             guard owner == pending.ownerClientID else { throw Failure.noLongerWaiting }
-            let state = try Self.json(connection.conversationSnapshot(source: clientID, owner: owner,
-                                                                       threadID: pending.threadID))
+            let state = try connection.conversationState(source: clientID, owner: owner, threadID: pending.threadID)
             let current = try Self.pending(state, threadID: pending.threadID, ownerClientID: owner, now: clock())
             guard current.contains(where: { $0.id == pending.id && $0.wireRequest == pending.wireRequest }) else {
                 throw Failure.noLongerWaiting
@@ -141,18 +144,20 @@ public struct CodexDesktopPermissions: Sendable {
     private func read(threadID: String) throws -> Snapshot {
         try Task.checkCancellation()
         // A missing socket is a service failure. A missing or unreadable owner is unknown for that thread alone.
+        let started = ProcessInfo.processInfo.systemUptime
         let connection = try CodexDesktopIPC(path: socketPath, timeout: timeout)
         defer { connection.close() }
+        var seconds: [String: TimeInterval] { [threadID: ProcessInfo.processInfo.systemUptime - started] }
         do {
             let clientID = try Self.initialize(connection)
             let owner = try Self.owner(connection, source: clientID, threadID: threadID)
-            let state = try Self.json(connection.conversationSnapshot(source: clientID, owner: owner, threadID: threadID))
+            let state = try connection.conversationState(source: clientID, owner: owner, threadID: threadID)
             let requests = try Self.pending(state, threadID: threadID, ownerClientID: owner, now: clock())
             try Task.checkCancellation()
-            return Snapshot(pending: requests, observedThreadIDs: [threadID])
+            return Snapshot(pending: requests, observedThreadIDs: [threadID], readSeconds: seconds)
         } catch {
             try Task.checkCancellation()
-            return Snapshot(pending: [], observedThreadIDs: [])
+            return Snapshot(pending: [], observedThreadIDs: [], readSeconds: seconds)
         }
     }
 
