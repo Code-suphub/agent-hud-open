@@ -5,7 +5,7 @@ public struct DemoUsageProvider: UsageProvider {
     public init() {}
 
     public func fetchUsage(agents: [AgentDescriptor], historyHours: Int) async throws -> UsageReport {
-        let now = Date()
+        let now = DemoClock.now
         return Self.report(agents: agents, historyHours: historyHours, now: now)
     }
 

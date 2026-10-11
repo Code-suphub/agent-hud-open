@@ -105,7 +105,7 @@ final class UsageCollector {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 guard let self, let store = self.store else { return }
-                store.now = Date()
+                store.now = store.clock()
                 self.confirmQuiet(at: store.now)
             }
         }
@@ -179,8 +179,8 @@ final class UsageCollector {
     /// Returns how long to wait for the next signal that is known in advance; file changes wake the loop sooner.
     private func collect(force: Bool) async -> TimeInterval {
         guard let store, store.isAccessAllowed, !isCollecting else { return UsageRefresh.pollInterval }
-        if let pausedUntil = store.pausedUntil, pausedUntil > Date() {
-            return min(pausedUntil.timeIntervalSinceNow, UsageRefresh.accountInterval)
+        if let pausedUntil = store.pausedUntil, pausedUntil > store.clock() {
+            return min(pausedUntil.timeIntervalSince(store.clock()), UsageRefresh.accountInterval)
         }
         store.pausedUntil = nil
         isCollecting = true
@@ -387,7 +387,7 @@ final class UsageCollector {
             fetchedAt = date
             store.lastError = error.localizedDescription
         }
-        store.now = Date()
+        store.now = store.clock()
     }
 }
 

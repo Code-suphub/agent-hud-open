@@ -46,6 +46,7 @@ public final class DesktopApplication {
         self.additionalMenuItems = additionalMenuItems
         self.additionalHUDControls = additionalHUDControls
         self.onIslandEvents = onIslandEvents
+        islandEvents = IslandEventTracker(startedAt: store.clock())
         onboardingWindow = OnboardingWindowController(settings: settings, store: store,
             sources: options.demo ? { DemoData.sources } : { SourceDetector.detect() })
         onboardingWindow.onFinish = { [weak self] in
@@ -223,7 +224,7 @@ public final class DesktopApplication {
     /// A paused store or a failed refresh leaves the island silent; the baselines wait for the next good report.
     private func checkIslandEvents() {
         guard !store.isPaused, store.lastError == nil, let report = store.report else { return }
-        let now = Date()
+        let now = store.clock()
         let update = islandEvents.update(report: report, agents: settings.agents, now: now, settings: settings.settings)
         for alert in update.quotaAlerts { notch?.present(alert) }
         for grant in update.resetCreditGrants { notch?.present(.resetCredits(grant)) }

@@ -17,6 +17,8 @@ public struct DesktopLaunchOptions: Equatable {
     public var demo = false
     /// `--demo-script <name|file>`: play a timed scenario in the demo, a built-in one by name or a JSON file.
     public var demoScript: String?
+    /// `--demo-clock <ISO 8601 time>`: the moment the demo starts at, in place of now (`DemoClock`, which reads it).
+    public var demoClock: String?
     /// `--record <file.mov>`: record the HUD's own windows on the main display to a movie with a transparent
     /// background. `--record-seconds <n>` stops and quits after that long, `--record-fps <n>` sets the frame rate
     /// (60) and `--record-region <x,y,width,height>` limits the picture to part of the display, in points from
@@ -47,6 +49,9 @@ public struct DesktopLaunchOptions: Equatable {
             case "--demo-script":
                 options.demo = true
                 options.demoScript = iterator.next()
+            case "--demo-clock":
+                options.demo = true
+                options.demoClock = iterator.next()
             case "--record": options.recordPath = iterator.next()
             case "--record-seconds": options.recordSeconds = iterator.next().flatMap(Double.init)
             case "--record-fps": options.recordFPS = iterator.next().flatMap(Int.init)

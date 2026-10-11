@@ -17,9 +17,9 @@ public enum SnapshotRunner {
             settings.update { $0.language = language }
             L10n.setLanguage(language)
         }
-        let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
+        let store = demoStore(settings)
         store.sampleTurnCalls = { DemoData.turnCalls(session: $0.id, turn: $1) }
-        store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))
+        store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: DemoClock.now))
 
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -37,7 +37,7 @@ public enum SnapshotRunner {
         save("alert-resetCredits-inline", IslandScene(store: store, settings: settings, open: true, light: false, alert: grant), folder: folder, scheme: .dark)
 
         for vendor in ["Claude", "Codex", "DeepSeek"] {
-            let now = Date()
+            let now = DemoClock.now
             let completion = SessionCompletion(sessionID: "snapshot", vendor: vendor, turnID: "preview",
                 task: L10n.text("自动更新检查", "Automatic update checks"),
                 model: ["Claude": "Fable 5.1", "Codex": "gpt-6.1-sol"][vendor] ?? "deepseek-v4-flash", startedAt: now.addingTimeInterval(-83), completedAt: now,
@@ -85,7 +85,7 @@ public enum SnapshotRunner {
         let reply = IslandAlert.completion(SessionCompletion(
             sessionID: "snapshot", vendor: "Codex", turnID: "shared-panel",
             task: L10n.text("修复会话跳转", "Fix session navigation"), model: "gpt-6.1-sol",
-            startedAt: Date().addingTimeInterval(-60), completedAt: Date(),
+            startedAt: DemoClock.now.addingTimeInterval(-60), completedAt: DemoClock.now,
             message: L10n.text("标题返回 agent，token 数字打开会话用量。", "Titles return to the agent; token counts open session usage."),
             navigationTarget: .codexThread(id: "00000000-0000-0000-0000-000000000001")))
         let sessionEvents: [IslandAlert] = [.permission(waiting[0]), reply]
@@ -174,8 +174,8 @@ public enum SnapshotRunner {
         if let codex = settings.agents.first(where: { $0.vendor == "Codex" }) {
             let saved = settings.settings
             settings.update { $0.showIslandQuota = false; $0.showIslandTokens = false; $0.showIslandSessions = true }
-            let sessions = UsageStore(provider: DemoUsageProvider(), settings: settings)
-            let now = Date()
+            let sessions = demoStore(settings)
+            let now = DemoClock.now
             sessions.replace(report: UsageReport(generatedAt: now, snapshots: [], sessions: [
                 LiveSession(id: "snapshot-native", agentId: codex.id,
                             task: L10n.text("修复会话跳转", "Fix session navigation"), terminal: "app",
@@ -253,8 +253,8 @@ public enum SnapshotRunner {
         store.statsTab = .tokens
         let dashboardAgents = settings.agents
         settings.updateAgents { $0.filter { ["Claude", "Codex", "DeepSeek"].contains($0.vendor) } }
-        let dashboardStore = UsageStore(provider: DemoUsageProvider(), settings: settings)
-        let dashboardReport = DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date())
+        let dashboardStore = demoStore(settings)
+        let dashboardReport = DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: DemoClock.now)
         dashboardStore.replace(report: UsageReport(generatedAt: dashboardReport.generatedAt,
             snapshots: dashboardReport.snapshots, sessions: dashboardReport.sessions, consumers: dashboardReport.consumers,
             usage: dashboardReport.usage,
@@ -344,8 +344,8 @@ public enum SnapshotRunner {
             $0.showIslandTokens = false; $0.showIslandSessions = false
             $0.glowRange = Settings().glowRange; $0.glowBlur = Settings().glowBlur
         }
-        let resetNow = Date()
-        let loadingStore = UsageStore(provider: DemoUsageProvider(), settings: settings)
+        let resetNow = DemoClock.now
+        let loadingStore = demoStore(settings)
         save("island-loading-quota", IslandScene(store: loadingStore, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
         settings.update { $0.showResetCountdown = false }
         save("island-loading-no-reset", IslandScene(store: loadingStore, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
@@ -476,7 +476,7 @@ public enum SnapshotRunner {
             settings.update { $0 = preferences }
             if let originalReport { store.replace(report: originalReport) }
         }
-        let now = Date(), nativeAt = now.addingTimeInterval(-3600), walletAt = now.addingTimeInterval(-120)
+        let now = DemoClock.now, nativeAt = now.addingTimeInterval(-3600), walletAt = now.addingTimeInterval(-120)
         let account = ProviderAccount.identified(provider: "Grok", user: "snapshot-grok", workspace: nil)!
         let weekly = AgentDescriptor(id: account.windowID("grok"), vendor: "Grok", model: L10n.text("每周用量额度", "Weekly usage limit"),
             shortModel: WindowNames.Period.week.shortName, source: L10n.sourceAdditionalUsage, enabled: true, account: account)
@@ -530,7 +530,7 @@ public enum SnapshotRunner {
 
     /// Many recorded models: the folded filter, a model subset and the HUD's ten-label limit use the same full data.
     private static func saveTokenCharts(settings: SettingsStore, folder: URL) {
-        let now = Date()
+        let now = DemoClock.now
         let models = [
             ("Claude", "claude-opus-4-5"), ("Claude", "claude-sonnet-4-5"), ("Claude", "claude-haiku-4-5"),
             ("Codex", "gpt-5"), ("Codex", "gpt-5.4"), ("Codex", "gpt-5.5"), ("Codex", "gpt-5.6-sol"), ("Codex", "gpt-6.1-sol"),
@@ -546,7 +546,7 @@ public enum SnapshotRunner {
                         tokensIn: (consumers.count - index) * 18_000, tokensOut: (consumers.count - index) * 2000,
                         cacheReadTokens: (index + 1) * 5000)
         }
-        let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
+        let store = demoStore(settings)
         store.replace(report: UsageReport(generatedAt: now, snapshots: [], sessions: [], consumers: consumers, usage: usage))
         let picked = TokenModelFilter(consumerIDs: [consumers[0].id, consumers[12].id])
         for scheme in [ColorScheme.dark, .light] {
@@ -612,8 +612,8 @@ public enum SnapshotRunner {
             SourceStatus(id: $0.rawValue, name: $0.name, detail: $0.detail, state: .notDetected)
         }
         let sources = configuredSources + otherSources.filter { source in !configuredSources.contains { $0.id == source.id } }
-        store.replace(report: UsageReport(generatedAt: Date(), snapshots: [], sessions: [],
-            subscriptions: ["kimi-plan": "Allegretto"], billing: [DemoData.deepSeekBilling(now: Date())], services: [
+        store.replace(report: UsageReport(generatedAt: DemoClock.now, snapshots: [], sessions: [],
+            subscriptions: ["kimi-plan": "Allegretto"], billing: [DemoData.deepSeekBilling(now: DemoClock.now)], services: [
                 .init(client: "OpenCode", provider: "Anthropic", product: .api),
                 .init(client: "OpenCode", provider: "OpenAI", product: .api),
                 .init(client: "OpenCode", provider: "Kimi", product: .plan, accountID: "kimi-plan"),
@@ -639,7 +639,7 @@ public enum SnapshotRunner {
     }
 
     private static func saveAntigravitySettings(settings: SettingsStore, store: UsageStore, sources: [SourceStatus], folder: URL) {
-        let now = Date()
+        let now = DemoClock.now
         let current = ProviderAccount.identified(provider: "Antigravity", user: "work@example.com", workspace: nil)!
         let previous = ProviderAccount.identified(provider: "Antigravity", user: "personal@example.com", workspace: nil)!
         func row(_ account: ProviderAccount, _ key: String, _ short: String, _ name: String) -> AgentDescriptor {
@@ -730,6 +730,11 @@ public enum SnapshotRunner {
             let overflow = document.bounds.height - scroll.contentView.bounds.height
             print("snapshot adaptive \(abs(overflow) < 2 ? "PASS" : "FAILED"): content restored height=\(window.frame.height) overflow=\(overflow)")
         }
+    }
+
+    /// A store of sample data on the demo's clock, the one every report here is built on.
+    private static func demoStore(_ settings: SettingsStore) -> UsageStore {
+        UsageStore(provider: DemoUsageProvider(), settings: settings, clock: { DemoClock.now })
     }
 
     private static func save<V: View>(_ name: String, _ view: V, folder: URL, scheme: ColorScheme,

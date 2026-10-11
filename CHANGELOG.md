@@ -6,6 +6,8 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 - `--demo-script <name|file>` plays a timed scenario in the demo, so a recording shows the same events at the same moments in every take: sessions start and end, a permission request arrives and is taken back, a reply arrives, a window fills up, the panel opens. `showcase` is built in; a JSON file gives any other.
 - `--record <file.mov>` records the main display's HUD alone to a ProRes 4444 movie with a transparent background, with `--record-seconds`, `--record-fps` and `--record-region`. It draws from the HUD's own windows, so it needs no screen recording permission.
+- `--demo-clock <time>` starts the demo at a named moment, such as `2026-10-12T09:41`, and lets its time run on from there, so a take or a set of `--snapshot` stills shows the same dates and hours whenever it is made.
+- Host API: `UsageStore` takes a `clock` and reads the time from it; `UsageAssembly.store` gives a store without a ledger the demo's (`DemoClock`). `DesktopLaunchOptions` carries `demoClock`.
 - Host API: `DemoScript`, `DemoStage` and `DemoStageBox` let `DemoUsageProvider` report from a playing script; `PermissionRequests.showDemo` shows a chosen set of the demo's requests; `DesktopLaunchOptions` carries `demoScript` and the `record…` options.
 - Display settings lists the HUD modes as Notch, Simple, Dynamic; in Chinese, Simple is 简约 and Dynamic is 动态.
 - Simple has a Bot animation switch, off by default: a working agent's logo in the panel becomes its bot, and idle logos visit as bots now and then.

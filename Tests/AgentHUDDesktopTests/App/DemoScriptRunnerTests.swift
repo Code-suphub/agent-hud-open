@@ -98,4 +98,10 @@ final class DemoScriptRunnerTests: XCTestCase {
         XCTAssertEqual(options.demoScript, "showcase")
         XCTAssertNil(DesktopLaunchOptions.parse(["app", "--demo"]).demoScript)
     }
+
+    func testTheClockOptionTurnsTheDemoOn() {
+        let options = DesktopLaunchOptions.parse(["app", "--demo-clock", "2026-10-12T09:41"])
+        XCTAssertTrue(options.demo)
+        XCTAssertEqual(options.demoClock, "2026-10-12T09:41")
+    }
 }

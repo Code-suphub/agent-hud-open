@@ -20,8 +20,9 @@ final class DemoScriptRunner {
     private var startedAt: Date
     private var timer: Timer?
 
-    /// - now: when the script starts. The stage is set at once, so a report read before `start` already follows it.
-    init(script: DemoScript, effects: Effects, now: Date = Date()) {
+    /// - now: when the script starts, on the demo's clock like every time it is given. The stage is set at once, so a
+    ///   report read before `start` already follows it.
+    init(script: DemoScript, effects: Effects, now: Date = DemoClock.now) {
         self.script = script
         self.effects = effects
         startedAt = now
@@ -35,7 +36,8 @@ final class DemoScriptRunner {
         do {
             return DemoScriptRunner(script: try DemoScript.load(nameOrPath), effects: Effects(
                 refresh: { [weak store] in Task { await store?.refresh() } },
-                showRequests: { PermissionRequests.shared.showDemo($0) },
+                // A request's card counts the seconds it has waited on the wall clock.
+                showRequests: { PermissionRequests.shared.showDemo($0.map { ($0.id, DemoClock.wallTime(of: $0.at)) }) },
                 setPanel: { [weak island] open in open ? island?.forceOpen() : island?.forceCollapse() }
             ))
         } catch {
@@ -44,7 +46,7 @@ final class DemoScriptRunner {
         }
     }
 
-    func start(now: Date = Date()) {
+    func start(now: Date = DemoClock.now) {
         startedAt = now
         next = 0
         effects.showRequests(stage.requests)
@@ -99,7 +101,7 @@ final class DemoScriptRunner {
         let timer = Timer(timeInterval: max(0.01, wait), repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.schedule(after: self.advance(to: Date()))
+                self.schedule(after: self.advance(to: DemoClock.now))
             }
         }
         // Common modes, so the script keeps time while a menu is open or the HUD is being dragged.
