@@ -4,7 +4,11 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+## 0.5.0 — 2026-10-11
+
+- Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing. Version 1.5 is now available on the App Store; update the iPhone app before the Mac.
 - Simple is a third HUD mode beside Notch and Dynamic Dock: a small floating panel on any screen edge, with no glow behind it, showing each agent's most used quota window as a ring round its logo, a percentage beside it, or both. Display settings sets its size (16–40 pt), the ring's thickness (1–4 pt) and whether rings and numbers are shown. It drags to any edge like the dock.
+- Simple's percentages use Regular weight, and the figures keep their positions while the panel opens on every edge.
 - Choosing Dynamic Dock or Simple in Display settings for a display with a notch starts a HUD that was at top centre at the top left, where the notch does not cover it.
 - Host API: `HUDMode.simple` and `HUDMode.isDocked`; `ScreenPlacement.simpleSize`, `ringWidth`, `showsRings` and `showsNumbers`.
 - Idle agents' logos in Dynamic Dock become their bots for a few seconds now and then. Bots in the dock stay in place instead of bobbing, logos can be up to 36 pt, and Display settings has a Logo edge distance slider (0–20 pt).
@@ -17,6 +21,13 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 - Grok accounts show prepaid balances and on-demand spending amounts, including known zero-dollar values. Confirmed CLI/Bot accounts can supplement native subscription readings with wallet data; each reading keeps its own observation time.
 - Healthy Grok Bot cache provenance and its reading time appear in an information tooltip rather than a permanent notice.
 - Host API: `UsageSnapshot.remainingPct` is optional for an explicitly unavailable value, and `ReadingAssessment.hasValue` excludes it from numeric status and events. `AccountObservation.wallets` carries `AccountWallet` money readings; `sourceInfo` carries informational provenance. Older saved reports remain readable.
+- Agents settings refreshes signed-in accounts when opened and offers Refresh accounts. Accounts a successful reading no longer reports leave the current inventory; a failed identity reading keeps its last current account until a replacement or sign-out can be confirmed.
+- Scheduled Grok Bot routine runs join their bot's session, preserving their own native identities and token usage.
+- Since the previous stable release, 0.4.36: sessions group by Git project, including worktrees, and Codex child agents have their own task, workspace, status and usage without recounting inherited history. Grok CLI and Grok Bot have separate execution identities while confirmed accounts share quota; billing-only Bot children stay out of session lists without losing token accounting.
+- The HUD prioritizes waiting and running sessions, lists at most five recent sessions, and puts them below Tokens. Its token chart always covers the latest 24 hours in 15-minute bars, independently of Dashboard filters. Reply reminders have a close button that leaves waiting permissions unanswered.
+- Grok sessions return to their originating client when a destination is available. Locally available Grok CLI, Grok Bot and Antigravity conversation text is available to read-only conversation consumers, with cached Bot gaps kept explicit.
+- ZCode questions can be answered on the HUD, and compatible DeepSeek Harness web hosts expose questions through their local event API. Codex permission hooks answer only confirmed user review and leave automatic or unknown reviewers to Codex.
+- Host API since 0.4.36: `LiveSession.agentName`, `subagentSessions` and `usageKey`; `SessionProject`; client-specific `SessionSource.agentVendor` and optional `SessionCompletion.client`; `PermissionDecision.answer` and optional `PermissionQuestion.id` preserve session lineage, billing ownership and question identities.
 
 ## 0.4.39-beta.2 — 2026-10-09
 
