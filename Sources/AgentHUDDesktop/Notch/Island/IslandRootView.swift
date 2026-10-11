@@ -68,9 +68,60 @@ struct IslandRootView: View {
 
     private var detached: Bool { focusVendor != nil }
 
+    /// A card comes out of the dock and goes back into it: scaled from the side that faces the dock. The Simple
+    /// line on a side edge only lengthens, as the panel growing an arm would.
+    private func cardTransition(_ frame: CGRect, in bounds: CGSize, line: Bool) -> AnyTransition {
+        guard !reduceMotion, bounds.width > 0, bounds.height > 0 else { return .opacity }
+        let point: CGPoint = switch edge {
+        case .top: CGPoint(x: frame.midX, y: frame.minY)
+        case .bottom: CGPoint(x: frame.midX, y: frame.maxY)
+        case .left: CGPoint(x: frame.minX, y: frame.midY)
+        case .right: CGPoint(x: frame.maxX, y: frame.midY)
+        }
+        let anchor = UnitPoint(x: point.x / bounds.width, y: point.y / bounds.height)
+        let lengthens = line && !edge.isHorizontal
+        return .modifier(active: CardGrowth(x: lengthens ? 0.2 : 0.86, y: lengthens ? 1 : 0.86, opacity: 0, anchor: anchor),
+                         identity: CardGrowth(x: 1, y: 1, opacity: 1, anchor: anchor))
+    }
+
+    /// Where a detached card is and how round, as numbers SwiftUI interpolates itself: a card that moves to another
+    /// agent, or widens into the whole panel, passes through every size in between instead of jumping to the last.
+    private struct CardPlacement: ViewModifier, @preconcurrency Animatable {
+        var frame: CGRect
+        var radius: CGFloat
+        var outline: Double
+
+        var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>,
+                                           AnimatablePair<CGFloat, Double>> {
+            get { .init(.init(.init(frame.minX, frame.minY), .init(frame.width, frame.height)), .init(radius, outline)) }
+            set {
+                frame = CGRect(x: newValue.first.first.first, y: newValue.first.first.second,
+                               width: newValue.first.second.first, height: newValue.first.second.second)
+                radius = newValue.second.first
+                outline = newValue.second.second
+            }
+        }
+
+        func body(content: Content) -> some View {
+            let card = RoundedRectangle(cornerRadius: min(radius, min(frame.width, frame.height) / 2), style: .continuous)
+            content
+                .frame(width: max(0, frame.width), height: max(0, frame.height))
+                .clipShape(card)
+                .overlay { card.strokeBorder(.white.opacity(outline), lineWidth: 1) }
+                .position(x: frame.midX, y: frame.midY)
+        }
+    }
+
+    private struct CardGrowth: ViewModifier {
+        let x: CGFloat, y: CGFloat, opacity: Double, anchor: UnitPoint
+        func body(content: Content) -> some View {
+            content.scaleEffect(x: x, y: y, anchor: anchor).opacity(opacity)
+        }
+    }
+
     /// The card on show is the Simple panel's one-line peek.
     private var growsFromPanel: Bool {
-        isOpen && !pinned && alert == nil && peek?.style == .line && simpleMeter != nil
+        isOpen && !pinned && alert == nil && peek?.style == .line && simpleMeter != nil && !showsAlertDetails
     }
 
     /// The Simple panel's own shape inside the window: its strip without the margin on the parked side.
@@ -154,32 +205,39 @@ struct IslandRootView: View {
                     .mask(alignment: surfaceAlignment) { shape.frame(width: size.width, height: size.height) }
                 }
             ZStack(alignment: .topLeading) {
-                if detached {
-                    // Nothing interpolates: the card belongs to a mark, and appears beside it.
-                    if visible, let presentationFrame {
-                        let card = RoundedRectangle(cornerRadius: detachedRadius(height: presentationFrame.height), style: .continuous)
+                // The card's place in the view outlives the card: one that arrives with its own container has
+                // nothing to grow out of.
+                if separatesAgents, detached || !visible {
+                    // The card belongs to a mark: it grows out of the dock beside it, slides along the dock from
+                    // one agent to the next, and widens into the whole panel on a click.
+                    ZStack(alignment: .topLeading) {
+                    if visible, detached, let presentationFrame {
                         // The Simple line is the panel growing: the panel's own fill, no outline of its own, and
                         // nothing drawn where the panel already is, so the two never darken each other.
                         let grows = growsFromPanel
+                        let motion: Animation? = reduceMotion ? nil : IslandAnimation.curve
                         ZStack {
-                            card.fill(.black.opacity(grows ? SimpleMeterView.fillOpacity : 1))
+                            Color.black.opacity(grows ? SimpleMeterView.fillOpacity : 1)
                             content.environment(\.islandTyping, onTyping)
                         }
-                        .frame(width: presentationFrame.width, height: presentationFrame.height)
-                        .clipShape(card)
-                        .overlay { if !grows { card.strokeBorder(.white.opacity(0.14), lineWidth: 1) } }
-                        .position(x: presentationFrame.midX, y: presentationFrame.midY)
-                        .mask {
-                            if grows, let panel = simplePanelPath {
-                                Path { path in
-                                    path.addRect(CGRect(origin: .zero, size: bounds))
-                                    path.addPath(panel)
-                                }.fill(style: FillStyle(eoFill: true))
-                            } else {
-                                Rectangle()
-                            }
+                        .modifier(CardPlacement(frame: presentationFrame,
+                                                radius: detachedRadius(height: presentationFrame.height),
+                                                outline: grows ? 0 : 0.14))
+                        .animation(motion, value: presentationFrame)
+                        .transition(cardTransition(presentationFrame, in: bounds, line: grows).animation(motion ?? .easeOut(duration: 0.12)))
+                    }
+                    }
+                    .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
+                    .mask {
+                        // A full card never reaches the panel, so the cut can stay while a line is on its way out.
+                        if separatesAgents, let panel = simplePanelPath {
+                            Path { path in
+                                path.addRect(CGRect(origin: .zero, size: bounds))
+                                path.addPath(panel)
+                            }.fill(style: FillStyle(eoFill: true))
+                        } else {
+                            Rectangle()
                         }
-                        .transition(.opacity.animation(.easeOut(duration: 0.12)))
                     }
                 } else if let presentationFrame {
                     // The native canvas changes immediately. Only the card's size and its position

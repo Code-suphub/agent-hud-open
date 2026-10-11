@@ -40,6 +40,9 @@ final class ScreenHUD {
     /// On a dock that separates its agents, hovering only peeks; a click asks for the agent's whole panel,
     /// which lasts until the HUD closes.
     private var pinned = false
+    /// A separated dock's cards move inside a window that waits for them: it takes in the old place and the new one
+    /// at once, and shrinks to the new one when this fires.
+    private var cardSettle: Task<Void, Never>?
     /// One owner for the next surface's measurements and bitmaps, including opening and collapse.
     private var materialPreparation: MaterialPreparation? {
         didSet { oldValue?.task?.cancel() }
@@ -834,6 +837,8 @@ final class ScreenHUD {
         materialPreparation = nil
         modifierWatch?.invalidate()
         timer?.invalidate()
+        cardSettle?.cancel()
+        cardSettle = nil
         targetWindowFrame = nil
         geometryTransitionFrame = nil
         island.panel.orderOut(nil)
@@ -951,7 +956,10 @@ final class ScreenHUD {
         let previousGeometry = geometry
         geometry = resolveGeometry()
         // A changed edge replaces the coordinate system; it is a repositioning, not an expansion.
-        // A dock that separates its agents interpolates nothing either: its cards appear beside their marks.
+        // A separated dock's card moves on its own, inside a window that holds both ends of the move.
+        let cardMoves = !agentMarks.isEmpty && previewPlacement == nil && geometry.edge == previousGeometry.edge
+            && geometry.mode == previousGeometry.mode && geometry.screenFrame == previousGeometry.screenFrame
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let animated = animated && geometry.edge == previousGeometry.edge && agentMarks.isEmpty
             && geometry.mode == previousGeometry.mode && geometry.screenFrame == previousGeometry.screenFrame
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -1011,7 +1019,27 @@ final class ScreenHUD {
             geometryTransitionFrame = nil
         }
 
-        if !animated || targetWindowFrame != windowFrame {
+        if cardMoves {
+            if targetWindowFrame != windowFrame || cardSettle == nil {
+                let moved = targetWindowFrame != windowFrame
+                targetWindowFrame = windowFrame
+                // Moving the window re-bases what is drawn in it and stops a card in mid-move, so a window that
+                // already holds the new place is left alone until the card has arrived.
+                if !island.panel.frame.contains(windowFrame) { island.setFrame(island.panel.frame.union(windowFrame)) }
+                island.setVisibleSize(windowFrame.size)
+                if moved || island.panel.frame != windowFrame {
+                    cardSettle?.cancel()
+                    cardSettle = Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(IslandAnimation.duration + 0.05))
+                        guard !Task.isCancelled, let self else { return }
+                        self.cardSettle = nil
+                        if self.targetWindowFrame == windowFrame { self.island.setFrame(windowFrame) }
+                    }
+                }
+            }
+        } else if !animated || targetWindowFrame != windowFrame {
+            cardSettle?.cancel()
+            cardSettle = nil
             targetWindowFrame = windowFrame
             if animated {
                 // Every edge uses the same transition canvas. Card geometry supplies the parked anchor;
@@ -1069,7 +1097,7 @@ final class ScreenHUD {
             self.island.setFrame(target)
         }
         island.setRootView(root)
-        if geometryTransitionFrame == nil { island.setFrame(windowFrame) }
+        if geometryTransitionFrame == nil, cardSettle == nil { island.setFrame(windowFrame) }
         updateDragSurface()
         prepareOpening()
     }
