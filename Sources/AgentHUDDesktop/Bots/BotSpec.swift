@@ -62,6 +62,9 @@ struct BotSpec: Sendable {
         /// Rounded pieces in one colour laid on the body and kept to its outline, later ones over earlier:
         /// a fringe, a scarf. `round` 1 is a full capsule or ball, 0 a block.
         case soft([CGRect], RGBA, round: CGFloat)
+        /// Thin lines with round ends that stand behind the body, so only what clears its outline shows:
+        /// a pair of antennae.
+        case feelers([[CGPoint]], RGBA, width: CGFloat)
         /// Filled blocks, such as hair or a hat. `followsFace` rides with the eyes when the bot looks around.
         case blocks([CGRect], RGBA, followsFace: Bool)
         /// Pieces taken out of the silhouette.
@@ -154,13 +157,16 @@ struct BotSpec: Sendable {
                                         hair, round: 1)]),
         "ZCode": BotSpec(reach: 0.8, shape: .slant(width: 0.66, height: 0.64, skew: 0.2, round: 0.05)),
         "Qwen": BotSpec(radius: 0.37, shape: .outline(keep: 0.55, smooth: 7), spin: 7),
-        // A plain red ball with two round black eyes. The logo's cyan pupils are left out: on a face this
-        // small they stare.
-        "OpenClaw": BotSpec(reach: 0.7,
+        // A plain red ball with two round black eyes and the logo's pair of small antennae. The logo's cyan
+        // pupils are left out: on a face this small they stare.
+        "OpenClaw": BotSpec(center: CGPoint(x: 0.5, y: 0.54), reach: 0.7,
                             paint: .linear(from: CGPoint(x: 0.2, y: 0.1), to: CGPoint(x: 0.85, y: 0.95),
                                            stops: [RGBA(hex: 0xee4747), RGBA(hex: 0xc22e2e)]),
                             face: CGPoint(x: 0, y: 0.06), eye: Eye(height: 0.46, width: 0.46, spread: 0.46),
-                            eyeColor: RGBA(hex: 0x050810)),
+                            eyeColor: RGBA(hex: 0x050810),
+                            decor: [.feelers([[CGPoint(x: -0.24, y: -0.9), CGPoint(x: -0.34, y: -1.14), CGPoint(x: -0.54, y: -1.22)],
+                                              [CGPoint(x: 0.24, y: -0.9), CGPoint(x: 0.34, y: -1.14), CGPoint(x: 0.54, y: -1.22)]],
+                                             RGBA(hex: 0xea4a4a), width: 0.1)]),
         // The cat in each logo, sitting up straight and out of its tile: white head, the logo's coloured face.
         "CodeBuddy": cat(head: RGBA(hex: 0xffffff),
                          face: .linear(from: CGPoint(x: 0.2, y: 0.2), to: CGPoint(x: 0.85, y: 1),

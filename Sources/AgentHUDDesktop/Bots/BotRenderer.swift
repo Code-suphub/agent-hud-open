@@ -133,6 +133,22 @@ enum BotRenderer {
         let yaw = max(-1.15, min(1.15, face.look)) * turn, pitch = max(-1.15, min(1.15, face.lookY)) * turn
         let glance = CGPoint(x: sin(yaw) * radius * 0.72, y: sin(pitch) * radius * 0.62)
 
+        // Feelers go on before the body, which then covers where they start.
+        for item in spec.decor where dressed > 0 {
+            guard case .feelers(let lines, let paint, let width) = item else { continue }
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.scaleBy(x: radius, y: radius)
+            context.setAlpha(dressed)
+            context.setStrokeColor(color(paint))
+            context.setLineWidth(width)
+            context.setLineJoin(.round)
+            context.setLineCap(.round)
+            for line in lines { context.addLines(between: line) }
+            context.strokePath()
+            context.restoreGState()
+        }
+
         context.setAlpha(solid)
         context.saveGState()
         context.addPath(outline)
@@ -216,7 +232,7 @@ enum BotRenderer {
                 context.setLineCap(.round)
                 context.addLines(between: points)
                 context.strokePath()
-            case .soft:
+            case .soft, .feelers:
                 break
             }
             context.restoreGState()
