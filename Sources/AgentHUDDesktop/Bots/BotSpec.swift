@@ -154,12 +154,13 @@ struct BotSpec: Sendable {
                                         hair, round: 1)]),
         "ZCode": BotSpec(reach: 0.8, shape: .slant(width: 0.66, height: 0.64, skew: 0.2, round: 0.05)),
         "Qwen": BotSpec(radius: 0.37, shape: .outline(keep: 0.55, smooth: 7), spin: 7),
-        // A plain red ball; what it keeps of the logo is the red and the black eyes with cyan pupils.
+        // A plain red ball with two round black eyes. The logo's cyan pupils are left out: on a face this
+        // small they stare.
         "OpenClaw": BotSpec(reach: 0.7,
                             paint: .linear(from: CGPoint(x: 0.2, y: 0.1), to: CGPoint(x: 0.85, y: 0.95),
                                            stops: [RGBA(hex: 0xee4747), RGBA(hex: 0xc22e2e)]),
-                            face: CGPoint(x: 0, y: 0.06), eye: Eye(height: 0.62, width: 0.62, spread: 0.52),
-                            eyeColor: RGBA(hex: 0x050810), pupil: RGBA(hex: 0x00e5cc)),
+                            face: CGPoint(x: 0, y: 0.06), eye: Eye(height: 0.46, width: 0.46, spread: 0.46),
+                            eyeColor: RGBA(hex: 0x050810)),
         // The cat in each logo, sitting up straight and out of its tile: white head, the logo's coloured face.
         "CodeBuddy": cat(head: RGBA(hex: 0xffffff),
                          face: .linear(from: CGPoint(x: 0.2, y: 0.2), to: CGPoint(x: 0.85, y: 1),
