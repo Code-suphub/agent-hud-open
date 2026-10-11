@@ -15,6 +15,8 @@ final class HUDDragWindowController {
     var onBegin: ((CGPoint) -> Void)? { didSet { surface.onBegin = onBegin } }
     var onDrag: ((CGPoint) -> Void)? { didSet { surface.onDrag = onDrag } }
     var onEnd: (() -> Void)? { didSet { surface.onEnd = onEnd } }
+    /// A press let go before it became a pick-up: a plain click on the HUD.
+    var onClick: (() -> Void)? { didSet { surface.onClick = onClick } }
     var isDragging: Bool { surface.isDragging }
     var isPressed: Bool { surface.isPressed }
     /// The press has become a pick-up, by travel or by holding.
@@ -70,6 +72,7 @@ private final class HUDDragView: NSView {
     var onBegin: ((CGPoint) -> Void)?
     var onDrag: ((CGPoint) -> Void)?
     var onEnd: (() -> Void)?
+    var onClick: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -144,8 +147,8 @@ private final class HUDDragView: NSView {
     override func mouseUp(with event: NSEvent) {
         holdTimer?.invalidate()
         holdTimer = nil
+        let moved = isDragging, clicked = downAt != nil && !isArmed
         downAt = nil
-        let moved = isDragging
         isDragging = false
         isArmed = false
         updateOutline()
@@ -153,5 +156,6 @@ private final class HUDDragView: NSView {
         cursor.set()
         if moved { onEnd?() }
         onRelease?()
+        if clicked { onClick?() }
     }
 }

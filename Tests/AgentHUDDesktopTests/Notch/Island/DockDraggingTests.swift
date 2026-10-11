@@ -16,6 +16,8 @@ final class DockDraggingTests: XCTestCase {
         var presses = 0
         var releases = 0
         var ends = 0
+        var clicks = 0
+        drag.onClick = { clicks += 1 }
         var starts: [CGPoint] = []
         var movements: [CGPoint] = []
         drag.onPress = { presses += 1 }
@@ -61,6 +63,7 @@ final class DockDraggingTests: XCTestCase {
         XCTAssertEqual(releases, 2)
         XCTAssertEqual(starts.count, 1)
         XCTAssertEqual(ends, 1, "A click that never crosses the threshold must not commit a drag")
+        XCTAssertEqual(clicks, 1, "Only the press that never became a pick-up counts as a click")
         XCTAssertFalse(drag.isPressed)
         XCTAssertEqual(outline.opacity, 0)
     }

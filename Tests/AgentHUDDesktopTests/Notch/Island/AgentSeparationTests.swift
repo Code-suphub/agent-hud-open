@@ -42,24 +42,45 @@ final class AgentSeparationTests: XCTestCase {
     }
 
     @MainActor
-    func testAnAgentsCardIsCentredOnItsMarkAndKeptOnScreen() {
+    func testADetachedCardFloatsBesideItsMarkOnTheInnerSideAndStaysOnScreen() {
         let screen = CGRect(x: 0, y: 0, width: 1600, height: 900)
-        let strip = CGRect(x: 600, y: 868, width: 400, height: 32)
-        let top = NotchGeometry(screenFrame: screen, mode: .logos, edge: .top, hasNotch: false, rect: strip,
-                                cornerRadius: 10, backingScale: 2, menuBarHeight: 32)
-        XCTAssertEqual(top.expandedFrame(size: CGSize(width: 400, height: 200)).midX, 800)
-        XCTAssertEqual(top.expandedFrame(size: CGSize(width: 400, height: 200), around: 650).midX, 650)
-        XCTAssertEqual(top.expandedFrame(size: CGSize(width: 400, height: 200), around: 40).minX, 0)
-        let side = NotchGeometry(screenFrame: screen, mode: .simple, edge: .right, hasNotch: false,
-                                 rect: CGRect(x: 1568, y: 300, width: 32, height: 300),
-                                 cornerRadius: 10, backingScale: 2, menuBarHeight: 32)
-        let card = side.expandedFrame(size: CGSize(width: 400, height: 200), around: 560)
-        XCTAssertEqual(card.midY, 560)
-        XCTAssertEqual(card.maxX, 1600)
+        let size = CGSize(width: 200, height: 80)
+        let top = CGRect(x: 600, y: 868, width: 400, height: 32)
+        let below = ScreenHUD.detachedFrame(size: size, anchor: 650, strip: top, edge: .top, gap: 6, screen: screen)
+        XCTAssertEqual(below.midX, 650)
+        XCTAssertEqual(below.maxY, top.minY - 6, "Clear of the strip, not welded to the screen edge")
+        XCTAssertEqual(ScreenHUD.detachedFrame(size: size, anchor: 40, strip: top, edge: .top, gap: 6, screen: screen).minX, 0)
+        let above = ScreenHUD.detachedFrame(size: size, anchor: 650, strip: CGRect(x: 600, y: 0, width: 400, height: 32),
+                                            edge: .bottom, gap: 6, screen: screen)
+        XCTAssertEqual(above.minY, 38)
+        let right = CGRect(x: 1568, y: 300, width: 32, height: 300)
+        let beside = ScreenHUD.detachedFrame(size: size, anchor: 560, strip: right, edge: .right, gap: 6, screen: screen)
+        XCTAssertEqual(beside.midY, 560)
+        XCTAssertEqual(beside.maxX, right.minX - 6)
+        // The Simple line starts behind its panel.
+        let tucked = ScreenHUD.detachedFrame(size: size, anchor: 560, strip: right, edge: .right, gap: -16, screen: screen)
+        XCTAssertEqual(tucked.maxX, right.minX + 16)
+        let left = ScreenHUD.detachedFrame(size: size, anchor: 890, strip: CGRect(x: 0, y: 300, width: 32, height: 300),
+                                           edge: .left, gap: 6, screen: screen)
+        XCTAssertEqual(left.minX, 38)
+        XCTAssertEqual(left.maxY, 900)
     }
 
     @MainActor
-    func testHoveringAMarkOpensThatAgentsPanelAndAReminderKeepsTheMarks() throws {
+    func testThePeekIsSizedFromItsTextInBothStyles() {
+        let lines = [AgentPeek.Line(label: "5h", value: "62%", level: .ok), AgentPeek.Line(label: "Weekly", value: "18%", level: .ok)]
+        var peek = AgentPeek(vendor: "Claude", lines: lines, running: 2)
+        XCTAssertEqual(peek.size, CGSize(width: AgentPeek.bubbleWidth, height: 20 + 18 * 4), "Name, two windows, running count")
+        peek.style = .line
+        let line = peek.size
+        XCTAssertEqual(line.height, 26)
+        peek.tuck = 16
+        XCTAssertEqual(peek.size.width, line.width + 16, "The part behind the panel is extra, not taken from the text")
+        XCTAssertGreaterThan(AgentPeek(vendor: "Claude", lines: [], running: 0, style: .line).size.width, 40)
+    }
+
+    @MainActor
+    func testHoverPeeksAClickOpensTheWholeCardAndEventsKeepTheMarks() throws {
         _ = NSApplication.shared
         let screen = try XCTUnwrap(NSScreen.main)
         let key = ScreenIdentity.key(for: screen)
@@ -78,43 +99,55 @@ final class AgentSeparationTests: XCTestCase {
                                     mouseLocation: { pointer })
                 defer { hud.close() }
                 let strip = hud.geometry.rect
-                let run = edge.isHorizontal ? strip.width : strip.height
-                XCTAssertGreaterThan(run, 60, "\(mode) \(edge): the demo dock has several marks")
-
-                // Whole, until a mark is hovered.
-                hud.forceOpen()
-                let whole = try XCTUnwrap(hud.island.rootView.presentationFrame)
-                XCTAssertNil(hud.island.rootView.focusVendor)
-                hud.forceCollapse()
+                let name = "\(mode) \(edge)"
+                func card() throws -> CGRect {
+                    let local = try XCTUnwrap(hud.island.rootView.presentationFrame)
+                    let canvas = hud.island.panel.frame
+                    return CGRect(x: canvas.minX + local.minX, y: canvas.maxY - local.maxY, width: local.width, height: local.height)
+                }
 
                 // The first mark in reading order: left on a horizontal edge, top on a side.
                 pointer = edge.isHorizontal ? CGPoint(x: strip.minX + 6, y: strip.midY)
                                             : CGPoint(x: strip.midX, y: strip.maxY - 6)
                 hud.samplePointer()
                 hud.forceOpen()
-                let first = try XCTUnwrap(hud.island.rootView.focusVendor, "\(mode) \(edge)")
-                let card = try XCTUnwrap(hud.island.rootView.presentationFrame)
-                XCTAssertLessThan(card.width, whole.width, "\(mode) \(edge): one agent's panel is narrower than the whole")
-                XCTAssertTrue(hud.island.panel.frame.insetBy(dx: -1, dy: -1).contains(strip),
-                              "\(mode) \(edge): the other marks stay on the canvas")
+                let first = try XCTUnwrap(hud.island.rootView.focusVendor, name)
+                let peek = try XCTUnwrap(hud.island.rootView.peek, name)
+                XCTAssertEqual(peek.style, mode == .simple ? .line : .bubble, name)
+                XCTAssertFalse(hud.island.rootView.pinned)
+                XCTAssertEqual(try card().size, peek.size, name)
+                XCTAssertTrue(hud.island.panel.frame.insetBy(dx: -1, dy: -1).contains(strip), "\(name): the marks stay on the canvas")
+                if mode == .logos {
+                    XCTAssertFalse(try card().intersects(strip), "\(name): a bubble floats clear of the marks")
+                }
 
                 // Sliding to the far end of the strip changes agent without closing.
                 pointer = edge.isHorizontal ? CGPoint(x: strip.maxX - 6, y: strip.midY)
                                             : CGPoint(x: strip.midX, y: strip.minY + 6)
                 hud.samplePointer()
-                let last = try XCTUnwrap(hud.island.rootView.focusVendor)
-                XCTAssertNotEqual(first, last, "\(mode) \(edge)")
+                XCTAssertNotEqual(hud.island.rootView.focusVendor, first, name)
                 XCTAssertTrue(hud.island.rootView.isOpen)
+
+                // A click asks for the whole panel, which is bigger than any peek and still clear of the marks.
+                hud.pinAgent()
+                XCTAssertTrue(hud.island.rootView.pinned, name)
+                XCTAssertEqual(try card().width, IslandController.agentPanelWidth, name)
+                XCTAssertFalse(try card().intersects(strip), name)
+                XCTAssertTrue(screen.frame.insetBy(dx: -1, dy: -1).contains(try card()), name)
                 hud.forceCollapse()
+                XCTAssertFalse(hud.island.rootView.pinned, "\(name): closing forgets the click")
 
                 // A reminder from the first agent opens beside its mark and replaces nothing.
+                pointer = CGPoint(x: -10_000, y: -10_000)
+                hud.samplePointer()
                 hud.present(.completion(SessionCompletion(
                     sessionID: "separate", vendor: first, turnID: "reply", task: "New reply",
                     model: "test", startedAt: nil, completedAt: Date())))
                 XCTAssertEqual(hud.island.rootView.focusVendor.map(AgentArtwork.markKey), AgentArtwork.markKey(first))
                 XCTAssertNotNil(hud.island.rootView.alert)
-                XCTAssertTrue(hud.island.panel.frame.insetBy(dx: -1, dy: -1).contains(strip),
-                              "\(mode) \(edge): a reminder leaves the marks standing")
+                XCTAssertFalse(hud.island.rootView.isOpen, "\(name): a reply stays compact until it is clicked")
+                XCTAssertFalse(try card().intersects(strip), name)
+                XCTAssertTrue(hud.island.panel.frame.insetBy(dx: -1, dy: -1).contains(strip), "\(name): a reminder leaves the marks standing")
                 XCTAssertTrue(screen.frame.insetBy(dx: -1, dy: -1).contains(hud.island.panel.frame))
             }
         }
