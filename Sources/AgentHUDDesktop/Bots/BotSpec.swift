@@ -109,18 +109,23 @@ struct BotSpec: Sendable {
 
     static let table: [String: BotSpec] = [
         "Claude": BotSpec(radius: 0.375, reach: 0.9, shape: .star(points: 12, depth: 0.085, puff: 0.7), spin: 9),
-        "ChatGPT": BotSpec(radius: 0.37, shape: .outline(keep: 0.6, smooth: 7), spin: 7),
+        // The knot's own six lobes, deepened: a body that is nearly round turns without anyone seeing it turn.
+        "ChatGPT": BotSpec(radius: 0.37, shape: .outline(keep: 1.1, smooth: 5), spin: 7),
         // The arch gives a dome that runs from 0.05 to 0.77 down the mark, where a ball beside it runs from
         // 0.14 to 0.86. The finished bot settles by that difference, so its top and bottom line up with theirs.
         "Antigravity": BotSpec(reach: 0.75, shape: .outline(keep: 0.5, smooth: 16), face: CGPoint(x: 0, y: -0.2),
                                settle: 0.093),
-        "DeepSeek": BotSpec(),
+        // A ball like any other but for a whale's pale belly, which is what tells it from the plain balls.
+        "DeepSeek": BotSpec(face: CGPoint(x: 0, y: -0.14),
+                            decor: [.soft([rect(-0.86, 0.34, 0.86, 1.9)], RGBA(hex: 0xc9d4ff), round: 1)]),
         "Grok": BotSpec(radius: 0.33, reach: 0.55, face: CGPoint(x: 0, y: -0.3),
                         ring: Ring(radiusX: 1.5, radiusY: 0.32, drop: 0.3, tilt: -20, width: 0.14)),
+        // Grok's bot is a black ball with white eyes. A faint rim keeps the ball visible on the island's black.
         "Grok Bot": BotSpec(radius: 0.37,
-                            paint: .radial(center: CGPoint(x: 0.5, y: 0.36), inner: 0.05, outer: 0.72,
-                                           stops: [RGBA(hex: 0xf4f4f4), RGBA(hex: 0xd2d2d3), RGBA(hex: 0x9a9a9b)]),
-                            eye: Eye(height: 0.78, width: 0.3), eyeColor: RGBA(hex: 0x141416)),
+                            paint: .radial(center: CGPoint(x: 0.42, y: 0.34), inner: 0.02, outer: 0.7,
+                                           stops: [RGBA(hex: 0x4a4a52), RGBA(hex: 0x232327), RGBA(hex: 0x0f0f11)]),
+                            eye: Eye(height: 0.78, width: 0.3), eyeColor: RGBA(hex: 0xffffff),
+                            stroke: RGBA(hex: 0xffffff, alpha: 0.26)),
         // The logo's cut, as a notch in the edge it was taken from.
         "Cursor": BotSpec(radius: 0.41, reach: 0.7, shape: .polygon(sides: 6, rotation: -90, round: 0.07),
                           face: CGPoint(x: -0.12, y: 0.16),
