@@ -175,7 +175,7 @@ struct ScreenMetrics: Equatable {
     var islandRadius: CGFloat { notch == nil ? NotchGeometry.fallbackCornerRadius : NotchGeometry.notchCornerRadius }
 }
 
-/// A horizontal sample of the Dynamic Dock's marks and backdrop, independent of the selected screen edge.
+/// A horizontal sample of Dynamic mode's marks and backdrop, independent of the selected screen edge.
 /// The curtain uses the same flat lip as the real HUD, clipped back to the marks' run.
 struct LogoQueuePreview: View {
     let settings: SettingsStore

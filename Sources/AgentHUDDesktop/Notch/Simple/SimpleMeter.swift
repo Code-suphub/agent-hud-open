@@ -9,6 +9,8 @@ struct SimpleMeterItem: Identifiable, Equatable {
     let usedPct: Double?
     /// That window's level, which colours the ring and the number.
     let level: StatusLevel?
+    /// Any agent that shares this mark has a session running.
+    var isWorking = false
     var id: String { vendor }
 
     /// What the number says: whole percent used, or a dash before the first reading.
@@ -17,8 +19,11 @@ struct SimpleMeterItem: Identifiable, Equatable {
     /// One item per mark, in row order. Windows that share artwork share an item — two Claude windows are
     /// one Claude, Codex and ChatGPT one OpenAI — and it reports the most consumed of them. Only a reading
     /// that shows a level counts, the rule the menu bar's figure follows.
+    ///
+    /// - working: the vendors with a session running, as a logo queue is told them.
     @MainActor
-    static func items(rows: [AgentRow]) -> [SimpleMeterItem] {
+    static func items(rows: [AgentRow], working: [String] = []) -> [SimpleMeterItem] {
+        let busy = Set(working.map(AgentArtwork.markKey))
         var order: [String] = []
         var vendors: [String: String] = [:]
         var tightest: [String: (used: Double, level: StatusLevel)] = [:]
@@ -32,7 +37,10 @@ struct SimpleMeterItem: Identifiable, Equatable {
                   used > (tightest[key]?.used ?? -1) else { continue }
             tightest[key] = (used, level)
         }
-        return order.map { SimpleMeterItem(vendor: vendors[$0] ?? $0, usedPct: tightest[$0]?.used, level: tightest[$0]?.level) }
+        return order.map {
+            SimpleMeterItem(vendor: vendors[$0] ?? $0, usedPct: tightest[$0]?.used, level: tightest[$0]?.level,
+                            isWorking: busy.contains($0))
+        }
     }
 }
 
@@ -51,6 +59,8 @@ struct SimpleMeterConfig: Equatable {
     var ringWidth: CGFloat
     var showsRings: Bool
     var showsNumbers: Bool
+    /// Marks turn into bots while their agents work, as a logo queue's do.
+    var bots: Bool
 
     init(items: [SimpleMeterItem], placement: ScreenPlacement) {
         self.items = items
@@ -59,6 +69,7 @@ struct SimpleMeterConfig: Equatable {
         ringWidth = placement.ringWidth
         showsRings = placement.showsRings
         showsNumbers = placement.showsNumbers
+        bots = placement.simpleBots
     }
 
     /// Side of one mark: inside its ring, or a little larger when it stands alone.
@@ -95,6 +106,16 @@ struct SimpleMeterConfig: Equatable {
 
     private func cellWidth(label: CGFloat) -> CGFloat {
         mark + (showsNumbers ? labelSpacing + label : 0)
+    }
+
+    /// Each mark's centre along the panel, measured from its start: left on a horizontal edge, top on a side.
+    var markCentres: [(vendor: String, along: CGFloat)] {
+        var along = edge.isHorizontal ? insets.left : insets.top
+        return items.map { item in
+            let centre = along + mark / 2
+            along += (edge.isHorizontal ? cellWidth(label: labelWidth(item)) : mark) + itemGap
+            return (item.vendor, centre)
+        }
     }
 
     /// The panel itself.

@@ -54,6 +54,97 @@ struct IslandRootView: View {
     /// over whatever is behind them. Kept apart from `logoQueue`, which only says whether marks are drawn —
     /// hiding them leaves the backdrop alone and must not bring the black shape back.
     var hidesSilhouette = false
+    /// Set on a dock that separates its agents. The marks then stay where they are whatever the card does:
+    /// the Simple panel draws its own capsule instead of lending it to the card, and nothing replaces them.
+    var separatesAgents = false
+    /// The one agent the card is for right now: the hovered mark's, or the sender of the event on show.
+    /// Its card is detached: it floats beside the mark instead of growing out of the screen edge.
+    var focusVendor: String? = nil
+    /// What hovering shows of that agent before a click opens its whole panel.
+    var peek: AgentPeek? = nil
+    /// A click asked for the agent's whole panel.
+    var pinned = false
+    var onPin: () -> Void = {}
+    /// Where the detached card is on screen, which a change of the window around it leaves alone.
+    var cardScreenFrame: CGRect? = nil
+
+    private var detached: Bool { focusVendor != nil }
+
+    /// A card comes out of the dock and goes back into it: scaled from the side that faces the dock. The Simple
+    /// line on a side edge only lengthens, as the panel growing an arm would.
+    private func cardTransition(_ frame: CGRect, in bounds: CGSize, line: Bool) -> AnyTransition {
+        guard !reduceMotion, bounds.width > 0, bounds.height > 0 else { return .opacity }
+        let point: CGPoint = switch edge {
+        case .top: CGPoint(x: frame.midX, y: frame.minY)
+        case .bottom: CGPoint(x: frame.midX, y: frame.maxY)
+        case .left: CGPoint(x: frame.minX, y: frame.midY)
+        case .right: CGPoint(x: frame.maxX, y: frame.midY)
+        }
+        let anchor = UnitPoint(x: point.x / bounds.width, y: point.y / bounds.height)
+        let lengthens = line && !edge.isHorizontal
+        return .modifier(active: CardGrowth(x: lengthens ? 0.2 : 0.86, y: lengthens ? 1 : 0.86, opacity: 0, anchor: anchor),
+                         identity: CardGrowth(x: 1, y: 1, opacity: 1, anchor: anchor))
+    }
+
+    /// Where a detached card is and how round, as numbers SwiftUI interpolates itself: a card that moves to another
+    /// agent, or widens into the whole panel, passes through every size in between instead of jumping to the last.
+    private struct CardPlacement: ViewModifier, @preconcurrency Animatable {
+        var frame: CGRect
+        var radius: CGFloat
+        var outline: Double
+
+        var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>,
+                                           AnimatablePair<CGFloat, Double>> {
+            get { .init(.init(.init(frame.minX, frame.minY), .init(frame.width, frame.height)), .init(radius, outline)) }
+            set {
+                frame = CGRect(x: newValue.first.first.first, y: newValue.first.first.second,
+                               width: newValue.first.second.first, height: newValue.first.second.second)
+                radius = newValue.second.first
+                outline = newValue.second.second
+            }
+        }
+
+        func body(content: Content) -> some View {
+            let card = RoundedRectangle(cornerRadius: min(radius, min(frame.width, frame.height) / 2), style: .continuous)
+            content
+                .frame(width: max(0, frame.width), height: max(0, frame.height))
+                .clipShape(card)
+                .overlay { card.strokeBorder(.white.opacity(outline), lineWidth: 1) }
+                .position(x: frame.midX, y: frame.midY)
+        }
+    }
+
+    private struct CardGrowth: ViewModifier {
+        let x: CGFloat, y: CGFloat, opacity: Double, anchor: UnitPoint
+        func body(content: Content) -> some View {
+            content.scaleEffect(x: x, y: y, anchor: anchor).opacity(opacity)
+        }
+    }
+
+    /// The card on show is the Simple panel's one-line peek.
+    private var growsFromPanel: Bool {
+        isOpen && !pinned && alert == nil && peek?.style == .line && simpleMeter != nil && !showsAlertDetails
+    }
+
+    /// The Simple panel's own shape inside the window: its strip without the margin on the parked side.
+    private var simplePanelPath: Path? {
+        guard let simpleMeter, var panel = logoQueueFrame else { return nil }
+        let margin = SimpleMeterConfig.edgeMargin
+        switch edge {
+        case .top: panel.origin.y += margin; panel.size.height -= margin
+        case .bottom: panel.size.height -= margin
+        case .left: panel.origin.x += margin; panel.size.width -= margin
+        case .right: panel.size.width -= margin
+        }
+        return Path(roundedRect: panel, cornerRadius: simpleMeter.cornerRadius, style: .continuous)
+    }
+    static let detachedInsets = EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 18)
+
+    /// A full card keeps a card's corner; a peek or a compact reminder is as round as its height allows.
+    private func detachedRadius(height: CGFloat) -> CGFloat {
+        let wanted: CGFloat = isOpen && (pinned || showsAlertDetails) ? 22 : peek?.style == .bubble && alert == nil ? 14 : height
+        return min(wanted, height / 2)
+    }
     /// Where the queue's strip sits inside the window, in points down from its top edge, and how tall it is.
     /// The window's own top edge moves between the collapsed and the expanded frame; the marks must not.
     var logoQueueInset: CGFloat = 0
@@ -67,7 +158,8 @@ struct IslandRootView: View {
     static let expandedTopRadius: CGFloat = NotchGeometry.expandedTopRadius
     static let expandedBottomRadius: CGFloat = IslandController.expandedRadius
     static let dockCompactRowHeight: CGFloat = 32
-    static let dockCompactInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
+    /// The compact row already keeps `alertSidePadding` at each end, so the card adds none of its own.
+    static let dockCompactInsets = EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
 
     static var placeholder: IslandRootView {
         IslandRootView(store: nil, isOpen: false, collapsedSize: CGSize(width: 216, height: 32),
@@ -100,7 +192,7 @@ struct IslandRootView: View {
             // A collapsed logo queue is the marks alone: no silhouette behind them, so they read as agents
             // sitting on the desktop rather than as a bar. The silhouette comes back the moment the panel
             // opens or an event needs somewhere to be shown — but never because the marks were hidden.
-            let bare = hidesSilhouette && !visible && !floats
+            let bare = hidesSilhouette && !visible && (!floats || separatesAgents)
             let surface = ZStack(alignment: surfaceAlignment) {
                 // Keep one shape alive through collapse so it can shrink before becoming transparent.
                 shape.fill(.black.opacity(floats && !visible ? 0.82 : 1))
@@ -115,7 +207,43 @@ struct IslandRootView: View {
                     .mask(alignment: surfaceAlignment) { shape.frame(width: size.width, height: size.height) }
                 }
             ZStack(alignment: .topLeading) {
-                if let presentationFrame {
+                // The card's place in the view outlives the card: one that arrives with its own container has
+                // nothing to grow out of.
+                if separatesAgents, detached || !visible {
+                    // The card belongs to a mark: it grows out of the dock beside it, slides along the dock from
+                    // one agent to the next, and widens into the whole panel on a click.
+                    ZStack(alignment: .topLeading) {
+                    if visible, detached, let presentationFrame {
+                        // The Simple line is the panel growing: the panel's own fill, no outline of its own, and
+                        // nothing drawn where the panel already is, so the two never darken each other.
+                        let grows = growsFromPanel
+                        let motion: Animation? = reduceMotion ? nil : IslandAnimation.curve
+                        ZStack {
+                            Color.black.opacity(grows ? SimpleMeterView.fillOpacity : 1)
+                            content.environment(\.islandTyping, onTyping)
+                        }
+                        .modifier(CardPlacement(frame: presentationFrame,
+                                                radius: detachedRadius(height: presentationFrame.height),
+                                                outline: grows ? 0 : 0.14))
+                        // Keyed to the card's place on screen. Its place in the window also changes whenever the
+                        // window around it is resized, and that must never move the card.
+                        .animation(motion, value: cardScreenFrame)
+                        .transition(cardTransition(presentationFrame, in: bounds, line: grows).animation(motion ?? .easeOut(duration: 0.12)))
+                    }
+                    }
+                    .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
+                    .mask {
+                        // A full card never reaches the panel, so the cut can stay while a line is on its way out.
+                        if separatesAgents, let panel = simplePanelPath {
+                            Path { path in
+                                path.addRect(CGRect(origin: .zero, size: bounds))
+                                path.addPath(panel)
+                            }.fill(style: FillStyle(eoFill: true))
+                        } else {
+                            Rectangle()
+                        }
+                    }
+                } else if let presentationFrame {
                     // The native canvas changes immediately. Only the card's size and its position
                     // along the parked edge interpolate; the contact edge stays on that canvas.
                     let offset = (hidesSilhouette ? edge : .top).isHorizontal
@@ -137,7 +265,7 @@ struct IslandRootView: View {
                         .animation(geometryAnimation, value: size)
                         .frame(width: bounds.width, height: bounds.height, alignment: surfaceAlignment)
                 }
-                if let logoQueue, alert == nil {
+                if let logoQueue, alert == nil || focusVendor != nil {
                     if let logoQueueFrame {
                         LogoQueueView(config: logoQueue, light: lightBorder)
                             .frame(width: logoQueueFrame.width, height: logoQueueFrame.height)
@@ -152,9 +280,9 @@ struct IslandRootView: View {
                             .transaction { $0.animation = nil }
                     }
                 }
-                if let simpleMeter, alert == nil {
+                if let simpleMeter, alert == nil || focusVendor != nil {
                     let strip = logoQueueFrame ?? CGRect(x: 0, y: logoQueueInset, width: size.width, height: logoQueueHeight)
-                    SimpleMeterView(config: simpleMeter, onIsland: true)
+                    SimpleMeterView(config: simpleMeter, onIsland: !separatesAgents)
                         .frame(width: strip.width, height: strip.height)
                         .position(x: strip.midX, y: strip.midY)
                         .frame(width: bounds.width, height: bounds.height)
@@ -198,6 +326,11 @@ struct IslandRootView: View {
                 .background(GeometryReader { proxy in Color.clear.preference(key: PanelHeightKey.self, value: proxy.size.height) })
                 .onPreferenceChange(PanelHeightKey.self, perform: onContentHeight)
                 .transition(detailTransition)
+        } else if isOpen, detached, !pinned, let peek {
+            AgentPeekView(peek: peek)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onPin)
+                .id(peek.vendor)
         } else if isOpen, let store {
             HoverPanelView(store: store, onOpenStats: onOpenStats, onOpenSettings: onOpenSettings,
                            additionalHUDControls: additionalHUDControls,
@@ -208,8 +341,9 @@ struct IslandRootView: View {
                            onDecideAlert: onDecideAlert,
                            waitingRequests: waitingRequests,
                            insets: hidesSilhouette ? dockInsets : HoverPanelView.notchInsets,
-                           answeringSessionID: answeringSessionID, onAnswerSession: onAnswerSession)
-                .frame(width: IslandController.expandedWidth, alignment: .top)
+                           answeringSessionID: answeringSessionID, onAnswerSession: onAnswerSession,
+                           focusVendor: focusVendor)
+                .frame(width: detached ? IslandController.agentPanelWidth : IslandController.expandedWidth, alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
                 .onPreferenceChange(PanelHeightKey.self, perform: onContentHeight)
                 .transition(detailTransition)
@@ -219,7 +353,7 @@ struct IslandRootView: View {
                                        waitingRequests: waitingRequests)
                     .padding(Self.dockCompactInsets)
                     .frame(width: Self.dockCompactSize(edge: edge, collapsedSize: collapsedSize).width)
-                    .offset(floats ? liftCentring : .zero)
+                    .offset(floats && !detached ? liftCentring : .zero)
                     .id(alert.id)
                     .transition(detailTransition)
             } else {
@@ -255,7 +389,10 @@ struct IslandRootView: View {
                       height: dockCompactRowHeight + insets.top + insets.bottom)
     }
 
-    private var dockInsets: EdgeInsets { Self.dockInsets(edge: edge, collapsedSize: collapsedSize) }
+    /// A detached card covers no strip, so it needs none of a docked panel's clearance.
+    private var dockInsets: EdgeInsets {
+        detached ? Self.detachedInsets : Self.dockInsets(edge: edge, collapsedSize: collapsedSize)
+    }
 
     /// Simple mode's silhouette floats off its edge instead of flaring into it.
     private var floats: Bool { simpleMeter != nil }
@@ -276,7 +413,7 @@ struct IslandRootView: View {
     /// centred between those shoulders, and the reported natural height still describes only the core.
     private var panelPresentationHeight: CGFloat? {
         guard let height = presentationFrame?.height ?? presentationSize?.height else { return nil }
-        return hidesSilhouette && !edge.isHorizontal ? max(0, height - 2 * Self.expandedTopRadius) : height
+        return hidesSilhouette && !edge.isHorizontal && !detached ? max(0, height - 2 * Self.expandedTopRadius) : height
     }
 
     private var surfaceAlignment: Alignment {

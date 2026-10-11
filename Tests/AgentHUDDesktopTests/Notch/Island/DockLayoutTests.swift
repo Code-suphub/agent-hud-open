@@ -14,7 +14,7 @@ final class DockLayoutTests: XCTestCase {
         for edge in HUDEdge.allCases {
             let strip = edge.isHorizontal ? CGSize(width: 216, height: 32) : CGSize(width: 32, height: 400)
             let core = IslandRootView.dockCompactSize(edge: edge, collapsedSize: strip)
-            XCTAssertEqual(core, CGSize(width: 288, height: 48), "\(edge): events do not reserve the hidden logo strip")
+            XCTAssertEqual(core, CGSize(width: 256, height: 48), "\(edge): events do not reserve the hidden logo strip")
             XCTAssertEqual(IslandRootView.dockCompactSize(edge: edge, collapsedSize: CGSize(width: 80, height: 500)), core,
                            "Making the logo queue thicker or longer must not add empty space to a compact event")
             let size = CGSize(width: core.width + (edge.isHorizontal ? 32 : 0),

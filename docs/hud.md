@@ -2,7 +2,7 @@
 
 ## Overview
 
-Each display has its own HUD and settings. Notch mode uses the physical notch or a stand-in bar; Dynamic Dock places agent logos along any screen edge; Simple mode parks a small panel of rings and numbers on an edge. The glow forms a rim around the island or a backdrop behind the logos, and Simple mode has none.
+Each display has its own HUD and settings. Notch mode uses the physical notch or a stand-in bar; Dynamic mode places agent logos along any screen edge; Simple mode parks a small panel of rings and numbers on an edge. The glow forms a rim around the island or a backdrop behind the logos, and Simple mode has none.
 
 ## Model
 
@@ -10,7 +10,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 |---|---|
 | HUD | One display's presentation: a collapsed entry on a screen edge, the panel it opens into, and its glow |
 | Notch mode | The island: the physical notch on a Mac that has one, or a bar standing in for it on a display that does not |
-| Dynamic Dock | A queue of marks — the watched vendors and any run in the last day — along a screen edge with no shape behind them |
+| Dynamic mode | A queue of marks — the watched vendors and any run in the last day — along a screen edge with no shape behind them |
 | Simple mode | A small floating panel on a screen edge with no glow behind it: each agent's mark, with its most used window as a ring round the mark, a percentage beside it, or both |
 | Glow | Colour drawn from the enabled windows' levels — a rim around the island, a backdrop falling inward behind the dock |
 | Bot | What a mark turns into while its agent is in flight: a small body in the mark's own outline and colour, with two eyes |
@@ -20,11 +20,11 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 
 ### Placement
 
-- A display with a notch defaults to notch mode; a display without one defaults to Dynamic Dock, so no screen draws a bar pretending to have a notch.
+- A display with a notch defaults to notch mode; a display without one defaults to Dynamic mode, so no screen draws a bar pretending to have a notch.
 - Any mode can be chosen for any display; notch mode stays at the physical notch or the screen's top centre. Choosing a docked mode in settings for a display with a notch moves a HUD still at top centre to the top left, clear of the hardware.
 - A display keeps its own placement under its UUID; display settings can reset its position to top centre, or top left for a dock on a notched display, keeping its mode and logo settings.
 - The dock can sit anywhere along the top, right, bottom or left edge, running horizontally on the top and bottom and vertically on the sides; logo size is 12–36 pt, spacing is 0.1–0.6 of the logo, and the logos stand 0–20 pt in from the edge.
-- Drag a visible HUD directly to any edge; dragging a notch switches it to Dynamic Dock, and a Simple panel stays Simple. Its bounds appear while it is grabbed or dragged.
+- Drag a visible HUD directly to any edge; dragging a notch switches it to Dynamic mode, and a Simple panel stays Simple. Its bounds appear while it is grabbed or dragged.
 - The marks can be hidden, which leaves the backdrop alone, still where they would have been and as wide.
 
 ### What the queue shows
@@ -41,17 +41,19 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - Every bundled mark has a bot. Its body is a plain ball or the mark's own simple shape, in the mark's colours, with any feature drawn on the body: Claude twelve even heads, Pi a square on two legs under a flat hat, Grok a ball with a ring round its waist, Hermes a ball with a fringe, Qoder a ball in a green neck warmer, CodeBuddy and WorkBuddy an upright cat. GitHub Copilot keeps its artwork and only its eyes move.
 - The logo turns into the bot in half a second: the outline relaxes, the artwork fades into the mark's colours and the eyes open. The eyes are small, stay upright and follow the pointer, sliding across the body as on a ball.
 - A bot in the dock stays where its logo was: breathing changes its shape round a fixed centre, at the glow's working period. It does one small thing at random every one to three seconds: a glance, a double blink, a squint, a tilt, a stretch, a wiggle, or a turn of its body.
+- A reminder's mark opens as the agent's logo and turns into its bot 0.7 seconds later, once its card has opened; the phase it acts out begins then.
 - A permission reminder shows the asking bot: one hop, then raised by 12%, a knock every 2.6 seconds, eyes wide and straight at the user.
 - A reply reminder shows the bot smiling for about a second, then looking at the pointer.
 - A reminder keeps its bot for as long as it is shown; a dock's mark returns to its logo.
-- Bots are stepped 30 times a second by one timer, which runs for as long as a dock shows marks that have bots or a reminder shows one. A bot's picture is drawn again only when its eyes or outline have visibly changed, and an idle mark between visits is not drawn at all; breathing and leaning are layer transforms.
+- One timer steps every bot, as often as the liveliest of them needs: 30 times a second during a morph, an act, a blink or a hop, 15 while eyes follow the pointer, 10 while a bot only breathes, and not at all while every mark waits as its logo for its next visit. A bot's picture is drawn again only when its eyes or outline have visibly changed, in the colours of its display so the layer shows it without converting it; breathing and leaning are layer transforms.
 - Reduce Motion, or `botLogos` off, leaves every mark its logo.
 
 ### What the Simple panel shows
 
 - One item per mark, in row order, for the enabled windows that are not API-billed; windows that share artwork share an item.
 - An item reports its most used window among the readings that show a level, as the menu bar's figure does: a ring round the mark filled to that share, the whole percentage beside it, or both. Each can be switched off, and with both off the panel is the marks alone. A window with no reading shows an empty ring and a dash.
-- The ring and the number take that window's level colour. Nothing in the panel moves, and no glow is drawn behind it, collapsed or open.
+- The ring and the number take that window's level colour. No glow is drawn behind it, collapsed or open.
+- Nothing in the panel moves unless its Bot animation is switched on. A working agent's mark is then its bot and an idle one visits as a bot now and then, as in the dock. The switch is the panel's own and off to begin with; `botLogos` does not affect it, and Reduce Motion keeps the logos.
 - One length sizes the panel, 16–40 pt: the ring's diameter, with the mark and the number scaled from it. The ring's stroke is 1–4 pt.
 - It parks and drags like the dock, 3 pt in from its edge: a row on the top and bottom, a column on the sides with the numbers lined up on the right. Hovering grows the panel itself into the usage panel: the same frame, still 3 pt off its edge and rounded on every corner, enlarges inward round the figures, which keep their place, and shrinks back into the small panel on leaving. An event takes the figures' place in that frame while it shows.
 
@@ -109,13 +111,14 @@ DeepSeek Harness questions can be answered on the HUD when its web host exposes 
 
 | Setting | Values | Default |
 |---|---|---|
-| `screens[<display UUID>].mode` | `notch`, `logos` (Dynamic Dock), `simple` | By hardware: `notch` with a notch, `logos` without |
+| `screens[<display UUID>].mode` | `notch`, `logos` (Dynamic), `simple` | By hardware: `notch` with a notch, `logos` without |
 | `screens[…].edge` / `offset` | `top`, `right`, `bottom`, `left` / 0–1 along the edge | `top` / 0.5 |
 | `screens[…].logoSize` / `gapScale` | 12–36 pt / 0.1–0.6 of the logo | 20 pt / 0.4 |
 | `screens[…].logoEdgeDistance` | 0–20 pt from the visible logo, outline included, to its edge | 2 pt |
 | `screens[…].showsLogos` | Draw the marks, or the backdrop alone | `true` |
 | `screens[…].simpleSize` / `ringWidth` | 16–40 pt ring diameter / 1–4 pt ring stroke, in Simple mode | 22 pt / 1.5 pt |
 | `screens[…].showsRings` / `showsNumbers` | Draw the ring round each mark / write the percentage beside it | `true` / `true` |
+| `screens[…].simpleBots` | The Simple panel's marks turn into bots while their agents work, and visit as bots while idle | `false` |
 | `screenGlow[<display UUID>].style` | `blur`, `dots`, `ascii`, `blocks`, `braille`, `binary` | `blur` |
 | `screenGlow[…].effect` | `breathe`, `flow`, `scan`, `ripple`, `shimmer`, `boot` | `breathe` |
 | `screenGlow[…].breathSeconds` / `idleBreathSeconds` | 1–24 s, the period every effect plays at | 3 s / 7 s |
@@ -123,7 +126,7 @@ DeepSeek Harness questions can be answered on the HUD when its web host exposes 
 | `screenGlow[…].gridPitch` / `gridDensity` | 4–12 pt between cells / 50–150% of a cell filled | 10 pt / 100% |
 | `screenGlow[…].range` / `blur` | 0–36 pt reach / 0–36 pt feather, for the blurred style | 14 pt / 8 pt |
 | `screenGlow[…].brightness` / `breathAmplitude` | 20–100% / how deep the breath dips | 90% / 60% |
-| `botLogos` | Marks turn into bots while their agents work, ask or have just replied | `true` |
+| `botLogos` | Dock marks and reminders' marks turn into bots while their agents work, ask or have just replied | `true` |
 | `requiresOptionToOpen` | Hovering alone leaves the panel closed | `false` |
 | `clientHooks` | Keep client handlers and native approval observation enabled | `true` |
 | `approvalWaitMinutes` | 1, 3, 5, 10, 30 or 60 minutes a permission request waits for an answer | 10 |

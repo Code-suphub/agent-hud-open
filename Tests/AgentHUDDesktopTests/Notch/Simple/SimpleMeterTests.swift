@@ -25,6 +25,9 @@ final class SimpleMeterTests: XCTestCase {
         XCTAssertEqual(items.map(\.label), ["62%", "18%", "–"])
         XCTAssertEqual(items[0].level, view.rows.first { $0.id == "claude-week" }?.level)
         XCTAssertNil(items[2].level, "A window with no reading has no level to colour it")
+        XCTAssertEqual(items.map(\.isWorking), [false, false, false])
+        let busy = SimpleMeterItem.items(rows: view.rows, working: ["ChatGPT"])
+        XCTAssertEqual(busy.map(\.isWorking), [false, true, false], "Work under a shared mark is that mark's work")
     }
 
     func testPanelIsSizedFromItsOneLengthAndDropsWhatIsSwitchedOff() {
@@ -88,8 +91,10 @@ final class SimpleMeterTests: XCTestCase {
         let hud = ScreenHUD(key: key, screen: screen, store: store, settings: settings)
         defer { hud.close() }
 
-        let config = SimpleMeterConfig(items: SimpleMeterItem.items(rows: store.rows), placement: placement)
+        let working = store.queueVendors.filter(\.isWorking).map(\.vendor)
+        let config = SimpleMeterConfig(items: SimpleMeterItem.items(rows: store.rows, working: working), placement: placement)
         XCTAssertFalse(config.items.isEmpty)
+        XCTAssertTrue(config.items.contains(where: \.isWorking), "The demo has work in flight for the panel's bots to show")
         XCTAssertEqual(hud.geometry.mode, .simple)
         XCTAssertEqual(hud.geometry.edge, .right)
         XCTAssertEqual(hud.geometry.rect.maxX, screen.frame.maxX, accuracy: 0.001)
@@ -179,5 +184,28 @@ final class SimpleMeterTests: XCTestCase {
             assertBounds(IslandShape(topRadius: flare, bottomRadius: IslandRootView.expandedBottomRadius, edge: edge), in: card,
                          equal: card, "a flared silhouette reaches its edge and both ends of the card")
         }
+    }
+
+    @MainActor
+    func testAMarkWithNothingUnderItDrawsItsOwnLogoWhileItRests() throws {
+        let form = try XCTUnwrap(BotForm.form(for: "Claude"))
+        let queued = BotActor(form: form, staysBot: false, period: 3)
+        let alone = BotActor(form: form, staysBot: false, period: 3)
+        alone.restsHidden = false
+        for actor in [queued, alone] {
+            actor.resize(side: 12, scale: 2, outline: 0)
+            actor.set(.idle, at: 10)
+            _ = actor.step(to: 10, yRunsDown: true) { .zero }
+        }
+        XCTAssertTrue(queued.layer.isHidden, "a queue draws the resting logo itself")
+        XCTAssertFalse(alone.layer.isHidden)
+        XCTAssertNotNil(alone.layer.contents, "the Simple panel's resting mark is its logo, drawn by the actor")
+        let wait = try XCTUnwrap(alone.step(to: 10.05, yRunsDown: true) { .zero })
+        XCTAssertGreaterThan(wait, 15, "a visible resting mark still asks for no frame before its visit")
+    }
+
+    func testThePanelsBotsAreItsOwnSwitchAndOffToBeginWith() {
+        XCTAssertFalse(SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple)).bots)
+        XCTAssertTrue(SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple, simpleBots: true)).bots)
     }
 }

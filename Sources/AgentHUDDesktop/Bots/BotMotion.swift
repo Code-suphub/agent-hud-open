@@ -42,12 +42,30 @@ struct BotPose: Equatable, Sendable {
     }
 }
 
+/// How long a bot can go without a frame. Every frame it is drawn costs a picture or at least a move of its
+/// layer, so it asks for no more of them than its motion can show.
+enum BotPace {
+    /// A morph, an act, a blink or a hop.
+    static let lively: TimeInterval = 1.0 / 30
+    /// Eyes following the pointer.
+    static let following: TimeInterval = 1.0 / 15
+    /// Nothing but a breath and a slow turn, which move a fraction of a pixel in this long.
+    static let calm: TimeInterval = 1.0 / 10
+}
+
 /// One bot's state over time: how far the logo has turned into the bot, what its eyes are doing and how it
 /// sits. It is stepped with a clock and nothing else, so the same seed and the same times give the same bot.
 struct BotMotion: Sendable {
     private static let morphSeconds: TimeInterval = 0.5
+    /// The most time one step moves the bot by.
+    private static let longestStep: TimeInterval = 0.1
+    /// How long after a turn ended its mark rests as the logo again.
+    private static let doneSeconds: TimeInterval = 2.4
     /// An alert shows its bot for as long as the alert is up; a logo queue lets it settle back into the logo.
     var staysBot = false
+    /// Seconds a staying bot keeps its logo after it is first given a phase. A reminder's card is still opening
+    /// then, so the mark is read as the agent's logo before it turns into the bot. The phase begins on arrival.
+    var arrivesAfter: TimeInterval = 0
     /// Seconds for one breath of the body.
     var period: TimeInterval = 3
     /// Degrees per second the body turns under the face while awake.
@@ -63,6 +81,9 @@ struct BotMotion: Sendable {
     private(set) var turn: CGFloat = 0
     /// The piece a mark keeps above its body: how far it has hopped, and how big it is.
     private(set) var kept = (lift: CGFloat(0), scale: CGFloat(1))
+    /// Seconds from the last step until the bot next needs a frame: a frame's length while it moves, the time to
+    /// its next visit while it waits as its logo, and nothing once it rests as the logo for good.
+    private(set) var wait: TimeInterval? = BotPace.lively
 
     private var last: TimeInterval?
     private var leaving: BotPose?
@@ -70,6 +91,8 @@ struct BotMotion: Sendable {
     private var nextAct: TimeInterval = 0
     private var blinks: [TimeInterval] = [-1, -1]
     private var nextBlink: TimeInterval = 2
+    /// The eyes are still on their way to where they should look, or a lid is still moving.
+    private var following = false, blinking = false
     /// The next brief bot visit while idle, between longer stretches as the original logo.
     private var botInterval: Range<TimeInterval>?
     private var random: SplitMix
@@ -91,7 +114,7 @@ struct BotMotion: Sendable {
         guard morph == 0, !staysBot else { return false }
         switch phase {
         case .idle: return botInterval == nil && pose == BotPose()
-        case .done: return (last ?? 0) - since > 2.4
+        case .done: return (last ?? 0) - since > Self.doneSeconds
         case .working, .asking: return false
         }
     }
@@ -103,7 +126,7 @@ struct BotMotion: Sendable {
         }
         leaving = pose
         phase = next
-        since = now
+        since = now + (staysBot && morph == 0 ? max(0, arrivesAfter) : 0)
         if next == .working {
             nextAct = now + 0.9 + random.unit() * 1.2
         }
@@ -113,16 +136,20 @@ struct BotMotion: Sendable {
 
     /// Advances to `now`. `aim` is where the bot should look, as returned by `BotMotion.aim(from:to:)`.
     mutating func step(to now: TimeInterval, aim: CGPoint = .zero, hasFace: Bool = true) {
-        let dt = min(0.1, max(0, now - (last ?? now)))
+        // Time the clock slept through moves nothing: a bot woken for its visit starts from where it stopped.
+        let gap = max(0, now - (last ?? now))
+        let dt = gap > 2 * Self.longestStep ? 0 : min(Self.longestStep, gap)
         last = now
         let age = now - since
         if phase == .idle, !staysBot, let interval = botInterval, now >= interval.upperBound {
             scheduleBot(after: now + Self.morphSeconds)
         }
         let idleVisit = phase == .idle && botInterval?.contains(now) == true
-        let awake = phase == .working || idleVisit || phase == .asking || (phase == .done && age < 1.5)
+        // Before a staying bot arrives it is the logo at rest: no morph, no pose, no face.
+        let arrived = age >= 0
+        let awake = arrived && (phase == .working || idleVisit || phase == .asking || (phase == .done && age < 1.5))
 
-        let wanted: CGFloat = (awake || staysBot) && hasFace ? 1 : 0
+        let wanted: CGFloat = arrived && (awake || staysBot) && hasFace ? 1 : 0
         let stride = CGFloat(dt / Self.morphSeconds)
         morph = abs(wanted - morph) <= stride ? wanted : morph + (wanted > morph ? stride : -stride)
 
@@ -149,8 +176,8 @@ struct BotMotion: Sendable {
             else { turn += spin * CGFloat(dt) }
         }
 
-        pose = sitting(age: age, progress: progress, swell: swell)
-        if let leaving, age < 0.3 { pose = leaving.mixed(with: pose, Self.easeOut(CGFloat(age / 0.3))) }
+        pose = arrived ? sitting(age: age, progress: progress, swell: swell) : BotPose()
+        if let leaving, arrived, age < 0.3 { pose = leaving.mixed(with: pose, Self.easeOut(CGFloat(age / 0.3))) }
         if actsInPlace {
             // Keep the centre fixed, even when returning from an alert's raised pose. The original logo
             // is still while it is shown; breathing and turns arrive with the bot again.
@@ -162,8 +189,34 @@ struct BotMotion: Sendable {
             pose.x += 0.025 * face.look
         }
 
-        if !actsInPlace || morph > 0 { look(age: age, now: now, dt: dt, aim: aim, swell: swell) }
-        keep(age: age, now: now, dt: dt)
+        if arrived, !actsInPlace || morph > 0 { look(age: age, now: now, dt: dt, aim: aim, swell: swell) }
+        else { (following, blinking) = (false, false) }
+        if arrived { keep(age: age, now: now, dt: dt) }
+        wait = nextFrame(now: now, age: age, wanted: wanted)
+    }
+
+    private func nextFrame(now: TimeInterval, age: TimeInterval, wanted: CGFloat) -> TimeInterval? {
+        if isAtRest { return nil }
+        // A logo waiting to arrive shows nothing new until it does.
+        if age < 0 { return max(BotPace.lively, -age) }
+        if morph == 0, wanted == 0 {
+            // The logo is showing: nothing moves before an idle mark's next visit, or a finished turn's rest.
+            if phase == .idle, let visit = botInterval { return max(BotPace.lively, visit.lowerBound - now) }
+            if phase == .done { return max(BotPace.lively, since + Self.doneSeconds - now + 0.01) }
+            return BotPace.lively
+        }
+        if morph != wanted || act != nil || blinking || age < 0.3 { return BotPace.lively }
+        switch phase {
+        case .asking:
+            // The hop, then a knock every few seconds; between knocks only the kept piece pulses.
+            let knock = (age - 1.2).truncatingRemainder(dividingBy: 2.6)
+            return age < 1.2 || knock < 0.55 ? BotPace.lively : BotPace.following
+        case .done:
+            if age < 1.5 { return BotPace.lively }
+        case .working, .idle:
+            break
+        }
+        return following ? BotPace.following : BotPace.calm
     }
 
     /// Where a bot centred at `center` should look to face `target`, both in the same y-down coordinates.
@@ -291,6 +344,11 @@ struct BotMotion: Sendable {
             if blink >= 0, blink < 1 { lid *= 1 - CGFloat(sin(.pi * blink)) }
         }
         face.open += (lid - face.open) * CGFloat(1 - exp(-dt * 60))
+        // Finer than the steps a picture is drawn in, so the last frame of a move is the settled one.
+        blinking = abs(lid - face.open) > 0.01 || blinks.contains { now >= $0 && now - $0 < 0.17 }
+        following = abs(target.look - face.look) > 0.004 || abs(target.lookY - face.lookY) > 0.004
+            || abs(target.wide - face.wide) > 0.004 || abs(target.happy - face.happy) > 0.01
+            || abs(target.lean - face.lean) > 0.01
     }
 
     private mutating func keep(age: TimeInterval, now: TimeInterval, dt: TimeInterval) {

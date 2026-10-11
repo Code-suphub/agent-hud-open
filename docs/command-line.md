@@ -16,10 +16,33 @@ Launch options, read-only probes and adapter commands of the standalone applicat
 | `--show-onboarding` | Show the first-launch window even when onboarding is complete. |
 | `--reset-defaults` | Remove the application's stored preferences before starting. |
 | `--snapshot <dir>` | Render every screen at 2× to PNG files in `<dir>` from sample data, then quit; only a debug build renders, and a release build says so and quits. `AGENTHUD_SNAPSHOT_PREFIX=<name>` limits rendering to snapshots whose name starts with the prefix, for example `settings-`. |
+| `--demo-script <name\|file>` | Play a timed scenario in the demo, and turn the demo on. `showcase` is built in: two agents start work, Claude asks to edit a file and is answered, Claude replies, a window crosses nine tenths used, the panel opens and closes, Codex replies, then it starts over. Any other value is the path of a JSON file; see [Recording](#recording). |
+| `--demo-clock <time>` | Start the demo at this moment instead of now, and turn the demo on: an ISO 8601 date and time such as `2026-10-12T09:41`, local unless it names an offset (`Z`, `+08:00`), seconds optional. The demo's time runs on from there, so its dates, hours and "today" are the same whenever it is run. With `--snapshot` the stills are rendered at that moment. A value that does not read as a time is logged and the wall clock stays. |
+| `--record <file.mov>` | Record the main display's HUD, and nothing else on screen, to a ProRes 4444 movie with a transparent background. `--record-seconds <n>` finishes the file and quits after that long; without it the file is finished when the application quits. `--record-fps <n>` sets the frame rate (60). `--record-region <x,y,width,height>` records part of the display, in points from its top left. |
 
 `make demo` runs `--demo --show-settings`; `make snapshot` runs `--snapshot build/snapshots` (override the directory with `SNAPSHOT_DIR=…`).
 
 Only one Agent HUD runs at a time, whichever application built on these libraries it is. A launch while another copy runs shows an alert naming the application that runs and quits before it reads preferences, opens the ledger or touches a client's settings. The lock is `~/Library/Caches/app.agenthud/instance.lock`, released by the system when its holder quits or crashes; a lock that cannot be created lets the launch run. Snapshots, probes and adapter commands run beside the running copy, and so does `--demo`; a launch with `--reset-defaults` does not, since the preferences it removes may be in use.
+
+## Recording
+
+`--demo-script` and `--record` together give the same take every time: `--demo-script showcase --record ~/Movies/hud.mov --record-seconds 45`. Add `--demo-clock 2026-10-12T09:41` and the statistics window's dates and hours are the same too, whatever the hour of the take; the menu bar's own clock and a permission card's count of seconds waited stay on the wall clock.
+
+A script changes what the demo's own sources report, and the HUD reacts as it does to real ones; nothing is drawn by the script. Its JSON has `steps`, each with `at` in seconds from the start and `do`:
+
+| `do` | Fields | What happens |
+| --- | --- | --- |
+| `work` | `session` | A demo session (`s1` Claude Opus, `s2` Codex, `s3` Claude Sonnet, `s4` ChatGPT) starts running, so its mark is at work. |
+| `rest` | `session` | It stops with nothing to say. |
+| `reply` | `session`, optional `message` | Its turn ends, which raises the reply reminder; the message is the reply's last paragraph. |
+| `ask` | `request` | One of the demo's permission requests arrives: `demo-edit`, `demo-build`, `demo-ticket`, `demo-read`. |
+| `answer` | `request` | The client takes it back, as when it was answered in the client's own window. One answered on the HUD stays answered. |
+| `quota` | `agent`, `used` | A window (`claude-opus`, `claude-sonnet`, `chatgpt`, `codex`, …) now reads this percentage used. The quota alert follows the usual rule, so a window the forecast already warns about raises nothing new. |
+| `panel` | `open` | The usage panel opens or closes on the display the pointer is on. |
+
+Beside `steps`, `running` lists the sessions already at work when the script starts (none by default), `used` sets readings that differ from the demo's own, and `repeatAfter` is the pause in seconds before the script starts over; without it the script plays once.
+
+The recording is drawn in the application from the HUD's own windows as they are being shown, animations in flight included, so it needs no screen recording permission and no other window can appear in it. The picture has the display's pixel size, or the region's, and premultiplied alpha. A whole 2056 × 1329 pt display at 60 frames a second writes about 14 MB a second.
 
 ## Read-only probes
 
@@ -61,6 +84,8 @@ Normal start-up already runs `SessionObservers.configure(executable:enabled:)` f
 | One copy at a time | `Sources/AgentHUDCore/System/InstanceLock.swift`, `Sources/AgentHUDDesktop/App/SingleInstance.swift` |
 | Adapter commands and hook handlers | `Sources/AgentHUDCore/Hooks/HookEntry.swift` |
 | Probes | `Sources/AgentHUDCore/Store/UsageProbe.swift`, `Sources/AgentHUDOpenApp/main.swift` |
+| Demo script, stage and clock | `Sources/AgentHUDCore/Demo/DemoScript.swift`, `DemoStage.swift`, `DemoClock.swift`; `Sources/AgentHUDDesktop/App/DemoScriptRunner.swift` |
+| HUD recording | `Sources/AgentHUDDesktop/Recording/HUDRecorder.swift` |
 | Snapshot rendering | `Sources/AgentHUDDesktop/Debug/SnapshotRunner.swift` |
 | Real-window interaction tests | `Tests/AgentHUDDesktopTests/Notch/Island/IslandAnimationTests.swift`, `IslandHoverTests.swift`, `Settings/AgentSettingsInteractionTests.swift` |
 | Build script and targets | `scripts/build-app.sh`, `Makefile` |

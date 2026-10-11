@@ -3,7 +3,7 @@ import SwiftUI
 import AgentHUDCore
 
 /// Per-screen HUD placement: pick a display, then pick how it presents the HUD. Every display keeps its
-/// own setting, so a laptop can hold its island while the monitor beside it runs the Dynamic Dock — and a
+/// own setting, so a laptop can hold its island while the monitor beside it runs Dynamic mode — and a
 /// display with no notch stops pretending to have one.
 struct ScreensPane: View {
     let settings: SettingsStore
@@ -64,8 +64,13 @@ struct ScreensPane: View {
     private var previewMeter: SimpleMeterConfig {
         var sample = placement
         sample.edge = .top
-        let items = store.map { SimpleMeterItem.items(rows: $0.rows) } ?? []
-        return SimpleMeterConfig(items: items.isEmpty ? SimpleMeterItem.samples : items, placement: sample)
+        var items = store.map {
+            SimpleMeterItem.items(rows: $0.rows, working: $0.queueVendors.filter(\.isWorking).map(\.vendor))
+        } ?? []
+        if items.isEmpty { items = SimpleMeterItem.samples }
+        // The preview shows what the bot switch does even while nothing is running.
+        if sample.simpleBots, !items.contains(where: \.isWorking) { items[0].isWorking = true }
+        return SimpleMeterConfig(items: items, placement: sample)
     }
 
     var body: some View {
@@ -82,12 +87,12 @@ struct ScreensPane: View {
             SettingRow(label: L10n.text("HUD 形态", "HUD"), subtitle: subtitle) {
                 SegmentedPills(options: [
                     SegmentOption(value: HUDMode.notch, label: L10n.text("刘海", "Notch")),
-                    SegmentOption(value: HUDMode.logos, label: L10n.text("动态 Dock", "Dynamic Dock")),
-                    SegmentOption(value: HUDMode.simple, label: L10n.text("简洁", "Simple")),
+                    SegmentOption(value: HUDMode.simple, label: L10n.text("简约", "Simple")),
+                    SegmentOption(value: HUDMode.logos, label: L10n.text("动态", "Dynamic")),
                 ], selection: modeBinding, theme: theme)
             }
-            Text(L10n.text("直接拖动可见的 HUD。拖动刘海会切换为动态 Dock。",
-                           "Drag the visible HUD directly. Dragging the notch switches to Dynamic Dock."))
+            Text(L10n.text("直接拖动可见的 HUD。拖动刘海会切换为「动态」。",
+                           "Drag the visible HUD directly. Dragging the notch switches to Dynamic."))
                 .font(.ui(11)).foregroundStyle(theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -99,6 +104,15 @@ struct ScreensPane: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("hud-reset-position")
                     .disabled(current == nil)
+            }
+            if placement.mode.isDocked {
+                SettingsDivider(theme: theme)
+                SettingsToggleRow(
+                    label: L10n.text("按 agent 分开", "Separate agents"),
+                    subtitle: L10n.text("悬停某个标志只展开该 agent 的面板；请求和提醒从发出它的 agent 的标志旁展开，其他标志保持不动。",
+                                        "Hovering a mark opens that agent's own panel. Requests and reminders open beside the mark of the agent that sent them, and the other marks stay."),
+                    isOn: binding(\.separatesAgents)
+                )
             }
             if placement.mode == .logos {
                 let size = placement.logoSize
@@ -152,6 +166,13 @@ struct ScreensPane: View {
                     label: L10n.text("显示数字", "Show numbers"),
                     subtitle: L10n.text("在标志旁写出已用百分比。", "The percentage used, beside the mark."),
                     isOn: binding(\.showsNumbers)
+                )
+                SettingsDivider(theme: theme)
+                SettingsToggleRow(
+                    label: L10n.text("Bot 动画", "Bot animation"),
+                    subtitle: L10n.text("工作中的 agent，标志变成它的 Bot；空闲时偶尔变成 Bot 活动几秒。",
+                                        "A working agent's mark becomes its bot. Idle marks become bots for a few seconds now and then."),
+                    isOn: binding(\.simpleBots)
                 )
             }
         }

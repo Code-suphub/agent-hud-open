@@ -2,8 +2,26 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
-## Unreleased
+## 0.5.1 — 2026-10-12
 
+- Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.
+- Display settings has a Separate agents switch for Simple and Dynamic, off by default. Hovering an agent's logo shows a small card for that agent beside it, one line growing out of a Simple panel, and a click on the logo or the card opens that agent's whole panel. A reply opens as a pill beside its sender's logo and a permission request opens straight into its card, while the other logos stay. Cards grow out of the dock and slide from logo to logo; Reduce Motion keeps a plain fade.
+- A press picks the HUD up after 6 pt of travel or 0.3 s held still, and the dashed bounds appear at that moment instead of on mouse down. The closed hand stays for the whole drag, the dashes follow a Simple panel's rounded shape, and docked compact alerts keep 16 pt at each end instead of 32.
+- A turn that starts in a log its client keeps open, as Codex does, is noticed within five seconds instead of at the five-minute fallback read: the logs of the sessions active in the last day are looked at every five seconds.
+- Host API: `ScreenPlacement.separatesAgents`.
+- Quota and balance are read less often while work runs: every 150 to 210 s while one of a client's turns runs instead of every minute, and every 5 to 6 minutes while a session of its is live between turns instead of every three. For Claude Code that is 20 engine launches an hour during a turn instead of 60. A reading that follows an interval or a window's reset waits a random time of up to a minute, so copies of the application on accounts that reset together no longer ask the service in the same second; the reading after a turn ends, and the one opening the panel asks for, are taken at once as before.
+- Host API: `UsageRefresh.accountSpread`; `UsageProvider.accountChecks(since:spread:now:)` replaces `accountChecks(since:now:)`, and `runningAccountInterval` and `liveAccountInterval` are 150 s and 300 s.
+- `--demo-script <name|file>` plays a timed scenario in the demo, so a recording shows the same events at the same moments in every take: sessions start and end, a permission request arrives and is taken back, a reply arrives, a window fills up, the panel opens. `showcase` is built in; a JSON file gives any other.
+- `--record <file.mov>` records the main display's HUD alone to a ProRes 4444 movie with a transparent background, with `--record-seconds`, `--record-fps` and `--record-region`. It draws from the HUD's own windows, so it needs no screen recording permission.
+- `--demo-clock <time>` starts the demo at a named moment, such as `2026-10-12T09:41`, and lets its time run on from there, so a take or a set of `--snapshot` stills shows the same dates and hours whenever it is made.
+- Host API: `UsageStore` takes a `clock` and reads the time from it; `UsageAssembly.store` gives a store without a ledger the demo's (`DemoClock`). `DesktopLaunchOptions` carries `demoClock`.
+- Host API: `DemoScript`, `DemoStage` and `DemoStageBox` let `DemoUsageProvider` report from a playing script; `PermissionRequests.showDemo` shows a chosen set of the demo's requests; `DesktopLaunchOptions` carries `demoScript` and the `record…` options.
+- Display settings lists the HUD modes as Notch, Simple, Dynamic; in Chinese, Simple is 简约 and Dynamic is 动态.
+- Simple has a Bot animation switch, off by default: a working agent's logo in the panel becomes its bot, and idle logos visit as bots now and then.
+- A permission or reply reminder opens showing the agent's logo, which turns into its bot once the card has opened, instead of appearing as the bot at once.
+- Host API: `ScreenPlacement.simpleBots`; `BotMark.staysBot` and `BotActor.restsHidden` for a mark that follows its agent and draws its own resting logo; `BotMotion.arrivesAfter` holds a staying bot as its logo first.
+- `scripts/measure-process-cpu.py` converts the kernel's CPU ticks to seconds; on Apple silicon it reported figures 41.7 times too small.
+- Less CPU in the background. Bots are stepped only as often as their motion shows — 30 times a second for a morph, an act or a blink, 10 for a breath — and not at all while a dock's logos wait for their next visit; their frames are drawn in the display's colours, so showing one no longer converts it. The Antigravity approval and DeepSeek Harness question observers list this user's processes at most every 10 seconds instead of every 2, search the listing instead of taking every line apart, and look again at once when a service stops answering.
 - Codex Desktop's mid-turn Question cards appear on the HUD, including questions with only a reply field. Answers go to the original active turn; Skip leaves the question unanswered.
 - Host API: `PermissionRequest.NativeApproval.asynchronousQuestion(turnID:)` identifies native mid-turn questions; `CodexDesktopPermissions` reads and answers them alongside app approvals.
 - Hovering a Simple panel grows the panel itself into the usage panel and shrinks it back on leaving, instead of fading a separate panel in over it. Open, it keeps floating 3 pt off its edge with every corner rounded.
