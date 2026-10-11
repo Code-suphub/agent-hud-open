@@ -328,6 +328,7 @@ final class CodexDesktopPermissionsTests: XCTestCase, @unchecked Sendable {
         let client = CodexDesktopPermissions(dataDirectory: server.directory, timeout: 1)
         let snapshot = try await client.fetch(threadIDs: [threadID])
         XCTAssertEqual(snapshot.observedThreadIDs, [threadID])
+        XCTAssertEqual(Array(snapshot.readSeconds.keys), [threadID])
         let item = try XCTUnwrap(snapshot.pending.first)
         try await client.resolve(.allow, for: item)
         let answer = try XCTUnwrap(server.answers.first)
@@ -395,6 +396,7 @@ final class CodexDesktopPermissionsTests: XCTestCase, @unchecked Sendable {
         let malformed = try await client.fetch(threadIDs: [threadID])
         XCTAssertTrue(malformed.pending.isEmpty)
         XCTAssertTrue(malformed.observedThreadIDs.isEmpty)
+        XCTAssertEqual(Array(malformed.readSeconds.keys), [threadID], "a reading that failed still took its time")
         server.owner = nil
         let absent = try await client.fetch(threadIDs: [threadID])
         XCTAssertTrue(absent.observedThreadIDs.isEmpty)
