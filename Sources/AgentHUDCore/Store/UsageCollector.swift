@@ -60,6 +60,14 @@ final class UsageCollector {
     /// A failed read is tried again at this time.
     private var retryAt: Date?
     private var changes: FileChangeMonitor?
+    /// Each recent session log's modification time and size when it was last looked at. A client that keeps its log
+    /// open and appends to it, as Codex does, reaches the file watch late or not at all: a turn that started in a quiet
+    /// session went unseen until the fallback read. These few logs are therefore looked at on a schedule as well.
+    private var logSignatures: [String: String] = [:]
+    private var logsCheckedAt: Date?
+    /// How recently a session must have been active for its log to be looked at, and how many logs are.
+    static let logCheckRecency: TimeInterval = 24 * 3600
+    static let logCheckLimit = 64
     /// The provider's last report before the merge hook, numbered so a slower merge never replaces a newer one.
     private var local: (report: UsageReport, generation: Int)?
     private var generation = 0
@@ -241,6 +249,14 @@ final class UsageCollector {
                 needsFetch = true
             }
         }
+        if changes?.isWatching == true, logsCheckedAt.map({ date.timeIntervalSince($0) >= UsageRefresh.pollInterval }) ?? true {
+            logsCheckedAt = date
+            let grown = Self.changedLogs(recentLogs(at: date), known: &logSignatures)
+            if !grown.isEmpty {
+                await provider.fileChanges(grown)
+                signalled.formUnion(owners(of: grown))
+            }
+        }
         for source in polledSources where readAt[source].map({ date.timeIntervalSince($0) >= UsageRefresh.pollInterval }) ?? true {
             signalled.insert(source)
         }
@@ -248,6 +264,33 @@ final class UsageCollector {
             let since = readAt[source] ?? .distantPast
             if times.contains(where: { $0 > since && $0 <= date }) { signalled.insert(source) }
         }
+    }
+
+    /// The logs of the sessions most recently active, newest first: where a new turn is most likely to be written.
+    private func recentLogs(at date: Date) -> [String] {
+        let cutoff = date.addingTimeInterval(-Self.logCheckRecency)
+        let recent = (local?.report.sessions ?? []).compactMap { session -> (path: String, at: Date)? in
+            guard let path = session.transcriptPath else { return nil }
+            let at = session.lastActivityAt ?? session.endedAt ?? session.startedAt
+            return at >= cutoff ? (path, at) : nil
+        }
+        return recent.sorted { $0.at > $1.at }.prefix(Self.logCheckLimit).map(\.path)
+    }
+
+    /// The logs among `paths` whose modification time or size differs from what `known` holds, which then holds what
+    /// they are now. A log seen for the first time is only noted: the read that listed it has just read it.
+    static func changedLogs(_ paths: [String], known: inout [String: String]) -> Set<String> {
+        var changed: Set<String> = [], next: [String: String] = [:]
+        for path in paths {
+            // A new URL does not answer from values cached by an earlier look.
+            guard let values = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
+                  let modified = values.contentModificationDate, let size = values.fileSize else { continue }
+            let signature = "\(modified.timeIntervalSince1970):\(size)"
+            if let before = known[path], before != signature { changed.insert(path) }
+            next[path] = signature
+        }
+        known = next
+        return changed
     }
 
     /// Sources read on a schedule: those without directories, and every source while file changes cannot be watched.
@@ -305,6 +348,9 @@ final class UsageCollector {
         if store?.isIndexing == true { times.append((fetchedAt ?? now).addingTimeInterval(UsageRefresh.indexingInterval)) }
         if let retryAt { times.append(retryAt) }
         for source in polledSources { times.append((readAt[source] ?? now).addingTimeInterval(UsageRefresh.pollInterval)) }
+        if changes?.isWatching == true, !logSignatures.isEmpty {
+            times.append((logsCheckedAt ?? now).addingTimeInterval(UsageRefresh.pollInterval))
+        }
         for (_, dates) in await checks() { times += dates.filter { $0 > now } }
         let next = times.min() ?? now.addingTimeInterval(UsageRefresh.accountInterval)
         return max(0, next.timeIntervalSince(now))
