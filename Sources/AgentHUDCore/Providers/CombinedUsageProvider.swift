@@ -212,11 +212,12 @@ public struct CombinedUsageProvider: UsageProvider {
 
     /// Each vendor's next account reading comes from its last result: its quota moves while its own work runs. A vendor
     /// whose last read failed has no result to judge and keeps the account interval.
-    public func accountChecks(since: [String: Date], now: Date) async -> [String: Date] {
+    public func accountChecks(since: [String: Date], spread: [String: TimeInterval], now: Date) async -> [String: Date] {
         let reports = await results.reports()
         return vendors.reduce(into: [:]) { due, vendor in
             guard let last = since[vendor.vendor], let report = reports[vendor.vendor] else { return }
-            due[vendor.vendor] = report.accountCheck(since: last, now: now, seesLocalWork: vendor.provider.seesLocalWork)
+            due[vendor.vendor] = report.accountCheck(since: last, now: now, seesLocalWork: vendor.provider.seesLocalWork,
+                                                     spread: spread[vendor.vendor] ?? 0)
         }
     }
 

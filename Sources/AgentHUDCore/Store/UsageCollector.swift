@@ -43,6 +43,8 @@ final class UsageCollector {
     private var accountSteps: [(source: String, run: AccountRefreshStep)] = []
     /// When each source's account steps last ran; a source that has never run them is due at once.
     private var accountRunAt: [String: Date] = [:]
+    /// How long past its time each source's next scheduled reading waits, drawn when its steps last ran.
+    private var accountSpread: [String: TimeInterval] = [:]
     /// Consent to read GitHub Copilot's quota, and a look at the numbers, read accounts at once instead of when work moves them.
     private var sweptWithCopilotQuota: Bool?
     private var forcesAccounts = false
@@ -224,6 +226,7 @@ final class UsageCollector {
             repeat {
                 let step = accountSteps.removeFirst()
                 accountRunAt[step.source] = Date()
+                accountSpread[step.source] = .random(in: 0...UsageRefresh.accountSpread)
                 await step.run(hooks.historyHours())
                 if step.source.isEmpty { needsFetch = true } else { signalled.insert(step.source) }
             } while !accountSteps.isEmpty && !Task.isCancelled && Date().timeIntervalSince(stepsStarted) < UsageRefresh.accountStepBudget
@@ -318,14 +321,16 @@ final class UsageCollector {
         return owners
     }
 
-    /// When each source's account steps are next worth running: what the provider asks for, the account interval when
-    /// it names no time, and at once for a source that has never run them. No source runs twice within the request
-    /// spacing, so a provider that wants a reading sooner than it allows one is asked once the spacing has passed.
+    /// When each source's account steps are next worth running: what the provider asks for, the account interval and
+    /// the source's spread when it names no time, and at once for a source that has never run them. No source runs
+    /// twice within the request spacing, so a provider that wants a reading sooner than it allows one is asked once
+    /// the spacing has passed.
     private func accountDue(at now: Date) async -> [String: Date] {
-        let asked = await provider.accountChecks(since: accountRunAt, now: now)
+        let asked = await provider.accountChecks(since: accountRunAt, spread: accountSpread, now: now)
         return sources.reduce(into: [:]) { due, source in
             guard let last = accountRunAt[source.name] else { return due[source.name] = .distantPast }
-            due[source.name] = max(asked[source.name] ?? last.addingTimeInterval(UsageRefresh.accountInterval),
+            let interval = UsageRefresh.accountInterval + (accountSpread[source.name] ?? 0)
+            due[source.name] = max(asked[source.name] ?? last.addingTimeInterval(interval),
                                    last.addingTimeInterval(UsageRefresh.accountRequestSpacing))
         }
     }
@@ -410,27 +415,29 @@ extension UsageReport {
     /// When an account reading of this source is next worth taking, counted from `since`, when its steps last ran.
     /// A window moves only while work runs, so a running turn is read often, a session between turns slowly, and work
     /// that finished after the last reading once more. An idle source's windows change only when they reset, and a
-    /// source that cannot see this Mac's work keeps the account interval.
-    func accountCheck(since: Date, now: Date, seesLocalWork: Bool) -> Date {
+    /// source that cannot see this Mac's work keeps the account interval. A reading that follows an interval or a reset
+    /// waits `spread` past it; the one for work that just finished does not wait.
+    func accountCheck(since: Date, now: Date, seesLocalWork: Bool, spread: TimeInterval = 0) -> Date {
         // A deadline remains due until an account request has actually run at or after it.
         // Comparing with `now` loses the scheduled refresh as soon as the deadline arrives.
         let reset = snapshots.filter { snapshot in
             discoveredAgents.first(where: { $0.id == snapshot.agentId }).map(isCurrent) ?? true
         }.compactMap(\.resetAt).filter { $0 > since }.min()
+        func after(_ interval: TimeInterval) -> Date { since.addingTimeInterval(interval + spread) }
         let regular: Date
         let stale = now.addingTimeInterval(-UsageRefresh.activeTurnFreshness)
         if turns.contains(where: { $0.state == .running && RecordCoding.date($0.observedAtMs) > stale }) {
-            regular = since.addingTimeInterval(UsageRefresh.runningAccountInterval)
+            regular = after(UsageRefresh.runningAccountInterval)
         } else if sessions.contains(where: { $0.isLive(at: now) }) {
-            regular = since.addingTimeInterval(UsageRefresh.liveAccountInterval)
+            regular = after(UsageRefresh.liveAccountInterval)
         } else if !seesLocalWork {
-            regular = since.addingTimeInterval(UsageRefresh.accountInterval)
+            regular = after(UsageRefresh.accountInterval)
         } else if sessions.contains(where: { ($0.endedAt ?? .distantPast) > since }) {
             regular = now
         } else {
             regular = reset == nil || snapshots.contains(where: { ($0.resetAt ?? .distantFuture) <= since })
-                ? since.addingTimeInterval(UsageRefresh.accountInterval) : .distantFuture
+                ? after(UsageRefresh.accountInterval) : .distantFuture
         }
-        return min(regular, reset ?? .distantFuture)
+        return min(regular, reset?.addingTimeInterval(spread) ?? .distantFuture)
     }
 }

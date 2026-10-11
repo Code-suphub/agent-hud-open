@@ -26,8 +26,8 @@ public actor RetainedUsageProvider: UsageProvider {
     public nonisolated var sources: [UsageSource] { provider.sources }
     public func fileChanges(_ paths: Set<String>?) async { await provider.fileChanges(paths) }
     public func sourceChecks() async -> [String: [Date]] { await provider.sourceChecks() }
-    public func accountChecks(since: [String: Date], now: Date) async -> [String: Date] {
-        await provider.accountChecks(since: since, now: now)
+    public func accountChecks(since: [String: Date], spread: [String: TimeInterval], now: Date) async -> [String: Date] {
+        await provider.accountChecks(since: since, spread: spread, now: now)
     }
     public nonisolated var seesLocalWork: Bool { provider.seesLocalWork }
 

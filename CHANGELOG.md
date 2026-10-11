@@ -4,6 +4,8 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Quota and balance are read less often while work runs: every 150 to 210 s while one of a client's turns runs instead of every minute, and every 5 to 6 minutes while a session of its is live between turns instead of every three. For Claude Code that is 20 engine launches an hour during a turn instead of 60. A reading that follows an interval or a window's reset waits a random time of up to a minute, so copies of the application on accounts that reset together no longer ask the service in the same second; the reading after a turn ends, and the one opening the panel asks for, are taken at once as before.
+- Host API: `UsageRefresh.accountSpread`; `UsageProvider.accountChecks(since:spread:now:)` replaces `accountChecks(since:now:)`, and `runningAccountInterval` and `liveAccountInterval` are 150 s and 300 s.
 - `--demo-script <name|file>` plays a timed scenario in the demo, so a recording shows the same events at the same moments in every take: sessions start and end, a permission request arrives and is taken back, a reply arrives, a window fills up, the panel opens. `showcase` is built in; a JSON file gives any other.
 - `--record <file.mov>` records the main display's HUD alone to a ProRes 4444 movie with a transparent background, with `--record-seconds`, `--record-fps` and `--record-region`. It draws from the HUD's own windows, so it needs no screen recording permission.
 - `--demo-clock <time>` starts the demo at a named moment, such as `2026-10-12T09:41`, and lets its time run on from there, so a take or a set of `--snapshot` stills shows the same dates and hours whenever it is made.
