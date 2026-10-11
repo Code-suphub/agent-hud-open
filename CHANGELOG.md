@@ -2,8 +2,12 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
-## Unreleased
+## 0.5.2 — 2026-10-12
 
+- Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.
+- Codex Desktop's app approvals and Question cards appear for long threads too. Desktop answers each reading with the thread's whole history in one frame, and a frame past 8 MiB was dropped, so a long thread showed no card; frames up to 64 MiB are read.
+- Reading a Codex Desktop thread costs about a third of the CPU it did, and a long thread is read less often: after each reading a thread rests ten times as long as the reading took, so a thread with 33 MB of history is asked about every 8 s instead of every 2 s, which also spares Desktop building the answer. A resting thread keeps its cards.
+- Host API: `CodexDesktopIPC.conversationState(source:owner:threadID:)` gives a snapshot as a `JSONValue` parsed once from its frame; `CodexDesktopPermissions.Snapshot.readSeconds` says how long each thread's reading took.
 - The demo shows the sample the iPhone's demo shows, shaped like real data: Claude's and Codex's quota windows under an account each, a DeepSeek balance, nine sessions, a month of tokens, and current model names (Fable 5.1, Opus 5.5, Sonnet 5.5, gpt-6-astra, gpt-6.1-sol, deepseek-v4-pro). A demo script names a window by its key, such as `claude-session`, and its sessions run from `s1` to `s9`.
 - Host API: `DemoData` has `claudeAccount`, `codexAccount`, `claudeRows`, `codexRows`, `consumers`, `accounts(now:)`, `usage(now:)` and `snapshots(for:now:stage:)` in place of the two Codex accounts and the per-model quota table; `DemoSeries` and `SeededRandom` are gone.
 
