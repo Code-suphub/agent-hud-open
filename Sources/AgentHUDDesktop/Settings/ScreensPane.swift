@@ -7,6 +7,8 @@ import AgentHUDCore
 /// display with no notch stops pretending to have one.
 struct ScreensPane: View {
     let settings: SettingsStore
+    /// Where the Simple preview's figures come from; without it the preview shows sample ones.
+    var store: UsageStore? = nil
     let theme: Theme
 
     @Binding var selected: String
@@ -41,6 +43,31 @@ struct ScreensPane: View {
         )
     }
 
+    /// Choosing a docked mode on a display with a notch: a short strip at top centre would sit behind the
+    /// hardware, so one that has never been moved starts where Reset Position puts it.
+    private var modeBinding: Binding<HUDMode> {
+        Binding(
+            get: { placement.mode },
+            set: { mode in
+                guard let current else { return }
+                var next = placement
+                if next.mode == .notch, mode.isDocked, current.hasNotch, next.edge == .top, next.offset == 0.5 {
+                    next.offset = 0
+                }
+                next.mode = mode
+                settings.update { $0.screens[current.key] = next }
+            }
+        )
+    }
+
+    /// The panel as this screen's settings draw it, laid along the top edge whichever edge it is parked on.
+    private var previewMeter: SimpleMeterConfig {
+        var sample = placement
+        sample.edge = .top
+        let items = store.map { SimpleMeterItem.items(rows: $0.rows) } ?? []
+        return SimpleMeterConfig(items: items.isEmpty ? SimpleMeterItem.samples : items, placement: sample)
+    }
+
     var body: some View {
         SettingsSection(title: L10n.text("屏幕", "Screens"),
                         subtitle: L10n.text("每块屏幕单独设置。", "Set each display on its own."), theme: theme) {
@@ -56,7 +83,8 @@ struct ScreensPane: View {
                 SegmentedPills(options: [
                     SegmentOption(value: HUDMode.notch, label: L10n.text("刘海", "Notch")),
                     SegmentOption(value: HUDMode.logos, label: L10n.text("动态 Dock", "Dynamic Dock")),
-                ], selection: binding(\.mode), theme: theme)
+                    SegmentOption(value: HUDMode.simple, label: L10n.text("简洁", "Simple")),
+                ], selection: modeBinding, theme: theme)
             }
             Text(L10n.text("直接拖动可见的 HUD。拖动刘海会切换为动态 Dock。",
                            "Drag the visible HUD directly. Dragging the notch switches to Dynamic Dock."))
@@ -79,6 +107,9 @@ struct ScreensPane: View {
                 SliderRow(label: L10n.text("Logo 大小", "Logo size"), value: binding(\.logoSize),
                           range: ScreenPlacement.logoSizeRange, step: 1, format: points, theme: theme)
                 SettingsDivider(theme: theme)
+                SliderRow(label: L10n.text("Logo 离屏幕边缘", "Logo edge distance"), value: binding(\.logoEdgeDistance),
+                          range: ScreenPlacement.logoEdgeDistanceRange, step: 1, format: points, theme: theme)
+                SettingsDivider(theme: theme)
                 SliderRow(label: L10n.text("Logo 间距", "Logo spacing"), value: binding(\.gapScale),
                           range: ScreenPlacement.gapScaleRange, step: 0.05,
                           format: { points($0 * size) }, theme: theme)
@@ -90,6 +121,39 @@ struct ScreensPane: View {
                     isOn: binding(\.showsLogos)
                 )
             }
+            if placement.mode == .simple {
+                let preview = previewMeter
+                SettingsDivider(theme: theme)
+                SettingsPreview {
+                    Color.clear.frame(height: 84)
+                        .overlay {
+                            SimpleMeterView(config: preview)
+                                .frame(width: preview.stripSize.width, height: preview.stripSize.height)
+                        }
+                }
+                SliderRow(label: L10n.text("大小", "Size"), value: binding(\.simpleSize),
+                          range: ScreenPlacement.simpleSizeRange, step: 1,
+                          format: { String(format: "%.0f pt", $0) }, theme: theme)
+                SettingsDivider(theme: theme)
+                SettingsToggleRow(
+                    label: L10n.text("显示圆环", "Show rings"),
+                    subtitle: L10n.text("每个 agent 用得最多的额度窗口，画成套在标志外的圆环。",
+                                        "Each agent's most used quota window, as a ring round its mark."),
+                    isOn: binding(\.showsRings)
+                )
+                if placement.showsRings {
+                    SettingsDivider(theme: theme)
+                    SliderRow(label: L10n.text("圆环粗细", "Ring thickness"), value: binding(\.ringWidth),
+                              range: ScreenPlacement.ringWidthRange, step: 0.5,
+                              format: { String(format: "%.1f pt", $0) }, theme: theme)
+                }
+                SettingsDivider(theme: theme)
+                SettingsToggleRow(
+                    label: L10n.text("显示数字", "Show numbers"),
+                    subtitle: L10n.text("在标志旁写出已用百分比。", "The percentage used, beside the mark."),
+                    isOn: binding(\.showsNumbers)
+                )
+            }
         }
         .onAppear { refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
@@ -99,6 +163,9 @@ struct ScreensPane: View {
 
     private var subtitle: String {
         guard let current else { return "" }
+        if placement.mode == .simple {
+            return L10n.text("贴着屏幕边缘的悬浮面板，没有背景光晕。", "A floating panel on a screen edge, with no glow behind it.")
+        }
         if placement.mode == .logos {
             return L10n.text("贴着屏幕边缘停靠，向屏幕内展开。", "Dock on a screen edge and open inward.")
         }
@@ -113,7 +180,7 @@ struct ScreensPane: View {
         var next = placement
         next.edge = .top
         // A short queue at top centre can disappear behind the physical notch.
-        next.offset = current.hasNotch && next.mode == .logos ? 0 : 0.5
+        next.offset = current.hasNotch && next.mode.isDocked ? 0 : 0.5
         settings.update { $0.screens[current.key] = next }
     }
 

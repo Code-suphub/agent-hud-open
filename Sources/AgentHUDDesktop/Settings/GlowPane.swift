@@ -195,7 +195,7 @@ struct LogoQueuePreview: View {
     var body: some View {
         let items = marks ?? LogoQueueItem.queue(rows: store.queueVendors)
         let config = LogoQueueConfig(items: items, placement: samplePlacement, settings: settings.settings)
-        let strip = max(metrics.menuBar, config.logo)
+        let strip = config.stripThickness
         let margin = GlowWindowController.logoEdgeMargin(stripThickness: strip)
         // The lip is run past the marks by the same amount the real backdrop uses, so the preview's field
         // falls as steeply as the one on screen instead of by a number of its own.
@@ -222,7 +222,7 @@ struct LogoQueuePreview: View {
                     ], startPoint: .leading, endPoint: .trailing)
                 }
                 if placement.showsLogos {
-                    LogoQueueView(config: config, light: false, previewsMotion: true)
+                    LogoQueueView(config: config, light: false)
                         .frame(width: width, height: strip)
                 }
             }

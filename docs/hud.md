@@ -2,7 +2,7 @@
 
 ## Overview
 
-Each display has its own HUD and settings. Notch mode uses the physical notch or a stand-in bar; Dynamic Dock places agent logos along any screen edge. The glow forms a rim around the island or a backdrop behind the logos.
+Each display has its own HUD and settings. Notch mode uses the physical notch or a stand-in bar; Dynamic Dock places agent logos along any screen edge; Simple mode parks a small panel of rings and numbers on an edge. The glow forms a rim around the island or a backdrop behind the logos, and Simple mode has none.
 
 ## Model
 
@@ -11,19 +11,20 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 | HUD | One display's presentation: a collapsed entry on a screen edge, the panel it opens into, and its glow |
 | Notch mode | The island: the physical notch on a Mac that has one, or a bar standing in for it on a display that does not |
 | Dynamic Dock | A queue of marks — the watched vendors and any run in the last day — along a screen edge with no shape behind them |
+| Simple mode | A small floating panel on a screen edge with no glow behind it: each agent's mark, with its most used window as a ring round the mark, a percentage beside it, or both |
 | Glow | Colour drawn from the enabled windows' levels — a rim around the island, a backdrop falling inward behind the dock |
 | Bot | What a mark turns into while its agent is in flight: a small body in the mark's own outline and colour, with two eyes |
-| Placement | What one display shows and where: mode, edge, position along the edge, logo size, logo spacing, whether the marks are drawn |
+| Placement | What one display shows and where: mode, edge, position along the edge, logo size, logo spacing, whether the marks are drawn, and the Simple panel's size, ring stroke, rings and numbers |
 
 ## Rules
 
 ### Placement
 
 - A display with a notch defaults to notch mode; a display without one defaults to Dynamic Dock, so no screen draws a bar pretending to have a notch.
-- Either mode can be chosen for any display; notch mode stays at the physical notch or the screen's top centre.
+- Any mode can be chosen for any display; notch mode stays at the physical notch or the screen's top centre. Choosing a docked mode in settings for a display with a notch moves a HUD still at top centre to the top left, clear of the hardware.
 - A display keeps its own placement under its UUID; display settings can reset its position to top centre, or top left for a dock on a notched display, keeping its mode and logo settings.
-- The dock can sit anywhere along the top, right, bottom or left edge, running horizontally on the top and bottom and vertically on the sides; logo size is 12–24 pt and spacing is 0.1–0.6 of the logo.
-- Drag a visible HUD directly to any edge; dragging a notch switches it to Dynamic Dock. Its bounds appear while it is grabbed or dragged.
+- The dock can sit anywhere along the top, right, bottom or left edge, running horizontally on the top and bottom and vertically on the sides; logo size is 12–36 pt, spacing is 0.1–0.6 of the logo, and the logos stand 0–20 pt in from the edge.
+- Drag a visible HUD directly to any edge; dragging a notch switches it to Dynamic Dock, and a Simple panel stays Simple. Its bounds appear while it is grabbed or dragged.
 - The marks can be hidden, which leaves the backdrop alone, still where they would have been and as wide.
 
 ### What the queue shows
@@ -31,20 +32,28 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - The enabled, non-API-billed agents first, in the order they are watched in, then any vendor that ran in the last day without a window on that list, most recently used first.
 - Watched vendors appear before their first reading; vendors shown only for recent activity leave a day after their last turn and never appear with Live status off.
 - Shared artwork appears once: Claude windows share one mark, as do Codex and ChatGPT.
-- A mark turns into its bot while a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. With `botLogos` off, or for a mark that has no bot, it bobs instead.
+- A mark is its bot for as long as a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. An idle mark becomes its bot for three to five seconds every 20 to 35 seconds. With `botLogos` off, or for a mark that has no bot, a working mark bobs instead.
 - A dock with nothing to show keeps a minimal entry at its saved position without drawing a logo.
 - Marks retain their artwork with a hairline outline; single-colour marks are white, and status colour appears in the glow.
 
 ### Bots
 
-- Every bundled mark has a bot. Its body takes the mark's outline and colours: Claude twelve even heads, Pi a square on two legs under a flat hat, Grok a ball with a ring round its waist, CodeBuddy and WorkBuddy an upright cat. GitHub Copilot keeps its artwork and only its eyes move.
+- Every bundled mark has a bot. Its body is a plain ball or the mark's own simple shape, in the mark's colours, with any feature drawn on the body: Claude twelve even heads, Pi a square on two legs under a flat hat, Grok a ball with a ring round its waist, Hermes a ball with a fringe, Qoder a ball in a green neck warmer, CodeBuddy and WorkBuddy an upright cat. GitHub Copilot keeps its artwork and only its eyes move.
 - The logo turns into the bot in half a second: the outline relaxes, the artwork fades into the mark's colours and the eyes open. The eyes are small, stay upright and follow the pointer, sliding across the body as on a ball.
-- A working bot breathes at the glow's working period and does one small thing at random every one to three seconds: a glance, a double blink, a squint, a tilt, a hop, a wiggle, or a turn of its body.
+- A bot in the dock stays where its logo was: breathing changes its shape round a fixed centre, at the glow's working period. It does one small thing at random every one to three seconds: a glance, a double blink, a squint, a tilt, a stretch, a wiggle, or a turn of its body.
 - A permission reminder shows the asking bot: one hop, then raised by 12%, a knock every 2.6 seconds, eyes wide and straight at the user.
 - A reply reminder shows the bot smiling for about a second, then looking at the pointer.
 - A reminder keeps its bot for as long as it is shown; a dock's mark returns to its logo.
-- Bots are stepped 30 times a second by one timer that runs only while a bot is out. A bot's picture is drawn again only when its eyes or outline have visibly changed; breathing, hopping and leaning are layer transforms.
+- Bots are stepped 30 times a second by one timer, which runs for as long as a dock shows marks that have bots or a reminder shows one. A bot's picture is drawn again only when its eyes or outline have visibly changed, and an idle mark between visits is not drawn at all; breathing and leaning are layer transforms.
 - Reduce Motion, or `botLogos` off, leaves every mark its logo.
+
+### What the Simple panel shows
+
+- One item per mark, in row order, for the enabled windows that are not API-billed; windows that share artwork share an item.
+- An item reports its most used window among the readings that show a level, as the menu bar's figure does: a ring round the mark filled to that share, the whole percentage beside it, or both. Each can be switched off, and with both off the panel is the marks alone. A window with no reading shows an empty ring and a dash.
+- The ring and the number take that window's level colour. Nothing in the panel moves, and no glow is drawn behind it, collapsed or open.
+- One length sizes the panel, 16–40 pt: the ring's diameter, with the mark and the number scaled from it. The ring's stroke is 1–4 pt.
+- It parks and drags like the dock, 3 pt in from its edge: a row on the top and bottom, a column on the sides with the numbers lined up on the right. Hovering opens the usage panel inward with the figures still at the edge; an event takes their place while it shows.
 
 ### Hovering and events
 
@@ -64,6 +73,8 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - The token chart is a compact strip with the latest 24 hours in 96 quarter-hour bars, including the current quarter, and all token kinds. Dashboard range, bucket, model and token-kind controls do not change it; its legend, axis and peak mark belong to the statistics window. Height follows content up to the display's height minus 80 pt; overflow scrolls above fixed settings, statistics and host controls, clear of the notch and dock.
 
 ### Approvals
+
+Codex Desktop's Computer Use app-access prompts are read from the original Desktop owner's pending MCP elicitations over local IPC. They offer **Deny**, **Allow this conversation**, and **Always allow** only when Desktop advertises that scope. Before answering, the HUD confirms the same owner and exact request are still waiting. Answering in Desktop withdraws the card; leaving, expiry, and failed readings never answer it. Client hooks off stops observation and cancels answers still in preflight. Engine tool approvals continue through the permission hook and its reviewer check.
 
 Antigravity supplies waiting permissions through its running local service, without an execution hook. All services advertising local credentials are read; agy without them is excluded. Before sending allow-once or deny, the HUD rereads the exact interaction. Answers in Antigravity remove the card. Leaving or expiry keeps the native prompt unanswered and the card hidden until a complete reading confirms it ended. Client hooks off stops observation and cancels answers still in preflight.
 
@@ -85,7 +96,7 @@ DeepSeek Harness questions can be answered on the HUD when its web host exposes 
 
 ### The glow
 
-- Every display has its own glow: style, effect, speed, reach and density are set per screen, and a display with none of its own follows the default.
+- A display in Simple mode draws no glow, and its settings show no glow section. Every other display has its own glow: style, effect, speed, reach and density are set per screen, and a display with none of its own follows the default.
 - The falloff is two settings, both counted in rows: how many keep full strength, and how many the glow fades away over. The fade is Gaussian, so it leaves the solid rows level instead of dropping at once.
 - The effect plays at the working period while any agent runs and at the idle period otherwise; the glow never stops, it only slows down, so a resting HUD still reads as alive.
 - Every effect takes the period, not only breathing. Grid styles are dithered by each cell's place in the Bayer matrix, which keeps the average density and breaks up the stripes a distance-only level would produce.
@@ -96,10 +107,13 @@ DeepSeek Harness questions can be answered on the HUD when its web host exposes 
 
 | Setting | Values | Default |
 |---|---|---|
-| `screens[<display UUID>].mode` | `notch`, `logos` (Dynamic Dock) | By hardware: `notch` with a notch, `logos` without |
+| `screens[<display UUID>].mode` | `notch`, `logos` (Dynamic Dock), `simple` | By hardware: `notch` with a notch, `logos` without |
 | `screens[…].edge` / `offset` | `top`, `right`, `bottom`, `left` / 0–1 along the edge | `top` / 0.5 |
-| `screens[…].logoSize` / `gapScale` | 12–24 pt / 0.1–0.6 of the logo | 20 pt / 0.4 |
+| `screens[…].logoSize` / `gapScale` | 12–36 pt / 0.1–0.6 of the logo | 20 pt / 0.4 |
+| `screens[…].logoEdgeDistance` | 0–20 pt from the visible logo, outline included, to its edge | 2 pt |
 | `screens[…].showsLogos` | Draw the marks, or the backdrop alone | `true` |
+| `screens[…].simpleSize` / `ringWidth` | 16–40 pt ring diameter / 1–4 pt ring stroke, in Simple mode | 22 pt / 1.5 pt |
+| `screens[…].showsRings` / `showsNumbers` | Draw the ring round each mark / write the percentage beside it | `true` / `true` |
 | `screenGlow[<display UUID>].style` | `blur`, `dots`, `ascii`, `blocks`, `braille`, `binary` | `blur` |
 | `screenGlow[…].effect` | `breathe`, `flow`, `scan`, `ripple`, `shimmer`, `boot` | `breathe` |
 | `screenGlow[…].breathSeconds` / `idleBreathSeconds` | 1–24 s, the period every effect plays at | 3 s / 7 s |
@@ -124,11 +138,13 @@ Supported approval hooks are installed for detected clients at startup, alongsid
 | One HUD per screen, and what they share | `Sources/AgentHUDDesktop/Notch/ScreenHUD.swift`, `ScreenIdentity.swift`, `Notch/Island/IslandController.swift` |
 | Where a HUD sits on its screen | `Sources/AgentHUDDesktop/Notch/NotchGeometry.swift` |
 | The marks and their motion | `Sources/AgentHUDDesktop/Notch/Island/LogoQueueView.swift`, `LogoImages.swift` |
+| The Simple panel: its items, its sizes and its drawing | `Sources/AgentHUDDesktop/Notch/Simple/SimpleMeter.swift`, `SimpleMeterView.swift` |
 | What each mark becomes, how a bot moves and how it is drawn | `Sources/AgentHUDDesktop/Bots/BotSpec.swift`, `BotForm.swift`, `BotMotion.swift`, `BotRenderer.swift`, `BotActor.swift` |
 | Glow geometry, falloff, colours and frames | `Sources/AgentHUDDesktop/Notch/Glow/GlowGeometry.swift`, `GlowMatrix.swift`, `GlowMotion.swift`, `GlowGradient.swift`, `GlowWindowController.swift`, `GlowFrameRenderer.swift`, `GlowAnimator.swift` |
 | Collapsed shape, panel and events | `Sources/AgentHUDDesktop/Notch/Island/IslandRootView.swift`, `IslandWindowController.swift` |
 | Requests waiting, and the channel they wait on | `Sources/AgentHUDCore/Hooks/Permission/PermissionRequests.swift`, `PermissionRequest.swift`, `PermissionHooks.swift`, `PermissionHookClient.swift`; `Sources/AgentHUDCore/System/UnixSocketListener.swift`, `UnixSocket.swift` |
 | Native Antigravity approvals | `Sources/AgentHUDCore/Hooks/Permission/AntigravityPermissions.swift`, `AntigravityPermissionObserver.swift`; `Sources/AgentHUDCore/Providers/Antigravity/AntigravityService.swift` |
+| Native Codex Desktop Computer Use approvals | `Sources/AgentHUDCore/Providers/Codex/CodexDesktopPermissions.swift`, `CodexDesktopIPC.swift`; `Sources/AgentHUDCore/Hooks/Permission/CodexDesktopPermissionObserver.swift` |
 | DeepSeek Harness's questions | `Sources/AgentHUDCore/Hooks/Permission/DeepSeekQuestions.swift`, `DeepSeekQuestionObserver.swift` |
 | A call answered in Claude Code's own dialog | `Sources/AgentHUDCore/Hooks/Permission/PermissionTranscript.swift` |
 | The card, the queue and the answers | `Sources/AgentHUDDesktop/Notch/Alerts/PermissionAlertViews.swift`, `PermissionQuestionViews.swift`, `IslandAlert.swift`, `Notch/OverlayPanel.swift` |

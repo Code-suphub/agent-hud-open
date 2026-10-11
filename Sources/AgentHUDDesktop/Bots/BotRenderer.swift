@@ -47,8 +47,17 @@ enum BotRenderer {
         context.interpolationQuality = .high
 
         if let eyes = form.spec.ownEyes {
-            draw(form.stripped ?? form.artwork, in: box, on: context)
-            ownEyes(eyes, face: motion.face, on: context)
+            context.setAlpha(1 - motion.morph)
+            draw(form.artwork, in: box, on: context)
+            if motion.morph > 0 {
+                // Blend the complete eye animation as one picture: its drawing sets its own alpha.
+                context.setAlpha(motion.morph)
+                context.setBlendMode(.plusLighter)
+                context.beginTransparencyLayer(auxiliaryInfo: nil)
+                draw(form.stripped ?? form.artwork, in: box, on: context)
+                ownEyes(eyes, face: motion.face, on: context)
+                context.endTransparencyLayer()
+            }
         } else {
             body(form, motion: motion, on: context)
         }
@@ -123,6 +132,22 @@ enum BotRenderer {
         let face = motion.face, turn = spec.reach * 0.72
         let yaw = max(-1.15, min(1.15, face.look)) * turn, pitch = max(-1.15, min(1.15, face.lookY)) * turn
         let glance = CGPoint(x: sin(yaw) * radius * 0.72, y: sin(pitch) * radius * 0.62)
+
+        // Feelers go on before the body, which then covers where they start.
+        for item in spec.decor where dressed > 0 {
+            guard case .feelers(let lines, let paint, let width) = item else { continue }
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.scaleBy(x: radius, y: radius)
+            context.setAlpha(dressed)
+            context.setStrokeColor(color(paint))
+            context.setLineWidth(width)
+            context.setLineJoin(.round)
+            context.setLineCap(.round)
+            for line in lines { context.addLines(between: line) }
+            context.strokePath()
+            context.restoreGState()
+        }
 
         context.setAlpha(solid)
         context.saveGState()
@@ -207,7 +232,7 @@ enum BotRenderer {
                 context.setLineCap(.round)
                 context.addLines(between: points)
                 context.strokePath()
-            case .soft:
+            case .soft, .feelers:
                 break
             }
             context.restoreGState()

@@ -53,25 +53,70 @@ final class BotQueueTests: XCTestCase {
 
         view.apply(config: queue([("Claude", false), ("Cursor", false)]), light: false, scale: 2, animates: true)
         clock = run(view, from: clock.now, frames: 45)
-        XCTAssertFalse(clock.moving)
+        XCTAssertTrue(clock.moving, "Idle logos keep the clock for their occasional bot appearance")
         XCTAssertEqual(view.marks[0].opacity, 1)
         XCTAssertTrue(claude.layer.isHidden)
     }
 
-    func testWithBotsOffAWorkingMarkBobsAsBefore() {
+    func testWithBotsOffAWorkingMarkStaysStill() {
         let (view, window) = hosted()
         defer { BotClock.shared.drop(view); window.close() }
         view.apply(config: queue([("Claude", true)], bots: false), light: false, scale: 2, animates: true)
         XCTAssertNil(view.actors[0])
-        XCTAssertNotNil(view.marks[0].animation(forKey: "bob"))
+        XCTAssertNil(view.marks[0].animationKeys())
         XCTAssertFalse(view.stepBots(to: CACurrentMediaTime()))
+    }
+
+    func testAWorkingQueueKeepsItsBotThroughoutTheTurn() throws {
+        let (view, window) = hosted()
+        defer { BotClock.shared.drop(view); window.close() }
+        view.apply(config: queue([("Claude", true)]), light: false, scale: 2, animates: true)
+        let actor = try XCTUnwrap(view.actors[0])
+        let start = CACurrentMediaTime()
+        for frame in 1...1500 {
+            XCTAssertTrue(view.stepBots(to: start + Double(frame) / 30))
+            XCTAssertEqual(actor.phase, .working)
+            XCTAssertFalse(actor.layer.isHidden)
+            XCTAssertEqual(view.marks[0].opacity, 0)
+            XCTAssertEqual(actor.layer.affineTransform().tx, 0, accuracy: 0.0001)
+            XCTAssertEqual(actor.layer.affineTransform().ty, 0, accuracy: 0.0001)
+        }
+        XCTAssertNil(view.marks[0].animationKeys())
+    }
+
+    func testAnIdleQueueOccasionallyShowsItsBotThenReturnsToTheLogo() throws {
+        let (view, window) = hosted()
+        defer { BotClock.shared.drop(view); window.close() }
+        view.apply(config: queue([("Claude", false)]), light: false, scale: 2, animates: true)
+        let actor = try XCTUnwrap(view.actors[0])
+        let start = CACurrentMediaTime()
+        var sawBot = false, returnedToLogo = false, returnedToBot = false
+        for frame in 1...2700 {
+            XCTAssertTrue(view.stepBots(to: start + Double(frame) / 30),
+                          "The idle interval keeps the clock for the next bot appearance")
+            XCTAssertEqual(actor.phase, .idle)
+            if actor.layer.isHidden {
+                XCTAssertEqual(view.marks[0].opacity, 1)
+                if sawBot { returnedToLogo = true }
+            } else {
+                XCTAssertEqual(view.marks[0].opacity, 0)
+                sawBot = true
+                if returnedToLogo { returnedToBot = true }
+            }
+            if frame < 600 { XCTAssertTrue(actor.layer.isHidden, "Idle starts with a longer logo interval") }
+            XCTAssertEqual(actor.layer.affineTransform().tx, 0, accuracy: 0.0001)
+            XCTAssertEqual(actor.layer.affineTransform().ty, 0, accuracy: 0.0001)
+        }
+        XCTAssertTrue(sawBot)
+        XCTAssertTrue(returnedToLogo)
+        XCTAssertTrue(returnedToBot)
     }
 
     func testReduceMotionLeavesEveryMarkItsLogo() {
         let (view, window) = hosted()
         defer { BotClock.shared.drop(view); window.close() }
         view.apply(config: queue([("Claude", true)]), light: false, scale: 2, animates: false)
-        let clock = run(view, from: CACurrentMediaTime(), frames: 10)
+        let clock = run(view, from: CACurrentMediaTime(), frames: 2700)
         XCTAssertFalse(clock.moving)
         XCTAssertEqual(view.marks[0].opacity, 1)
         XCTAssertNil(view.marks[0].animation(forKey: "bob"))

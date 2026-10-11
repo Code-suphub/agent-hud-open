@@ -19,6 +19,7 @@ public final class DesktopApplication {
     private var observedClients: Set<String> = []
     private let antigravityApprovals = AntigravityPermissionObserver()
     private let deepseekQuestions = DeepSeekQuestionObserver()
+    private let codexDesktopApprovals = CodexDesktopPermissionObserver()
     private var notch: IslandController?
     private var statusItem: StatusItemController?
     private lazy var settingsWindow = SettingsWindowController(
@@ -111,13 +112,17 @@ public final class DesktopApplication {
             SessionObservers.configure(executable: executable, enabled: self.settings.settings.clientHooks)
             self.antigravityApprovals.setEnabled(self.settings.settings.clientHooks)
             self.deepseekQuestions.setEnabled(self.settings.settings.clientHooks)
+            self.codexDesktopApprovals.setEnabled(self.settings.settings.clientHooks)
         })
         // A client run for the first time creates its directory, and its observer goes in with the next report
         // rather than at the next launch.
         if !options.demo { observedClients = SessionObservers.observedClients() }
         trackChanges({ [weak self] in
             _ = self?.store.report
-        }, onChange: { [weak self] in self?.installObserversForNewClients() })
+        }, onChange: { [weak self] in
+            self?.installObserversForNewClients()
+            if let self { self.codexDesktopApprovals.updateSessions(self.store.report?.sessions ?? []) }
+        })
         trackChanges({ [weak self] in
             _ = self?.store.report
             _ = self?.settings.agents
@@ -131,6 +136,8 @@ public final class DesktopApplication {
         if !options.demo {
             antigravityApprovals.setEnabled(settings.settings.clientHooks)
             deepseekQuestions.setEnabled(settings.settings.clientHooks)
+            codexDesktopApprovals.updateSessions(store.report?.sessions ?? [])
+            codexDesktopApprovals.setEnabled(settings.settings.clientHooks)
         }
         store.start()
         if options.openPanel { notch.forceOpen() }
@@ -142,6 +149,7 @@ public final class DesktopApplication {
     public func stop() {
         antigravityApprovals.stop()
         deepseekQuestions.stop()
+        codexDesktopApprovals.stop()
         // Quitting must never leave a client waiting on an answer that is no longer coming.
         PermissionRequests.shared.stop()
         store.stop()

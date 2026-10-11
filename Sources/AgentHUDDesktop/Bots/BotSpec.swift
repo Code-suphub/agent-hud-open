@@ -62,6 +62,9 @@ struct BotSpec: Sendable {
         /// Rounded pieces in one colour laid on the body and kept to its outline, later ones over earlier:
         /// a fringe, a scarf. `round` 1 is a full capsule or ball, 0 a block.
         case soft([CGRect], RGBA, round: CGFloat)
+        /// Thin lines with round ends that stand behind the body, so only what clears its outline shows:
+        /// a pair of antennae.
+        case feelers([[CGPoint]], RGBA, width: CGFloat)
         /// Filled blocks, such as hair or a hat. `followsFace` rides with the eyes when the bot looks around.
         case blocks([CGRect], RGBA, followsFace: Bool)
         /// Pieces taken out of the silhouette.
@@ -120,12 +123,10 @@ struct BotSpec: Sendable {
                             decor: [.soft([rect(-0.86, 0.34, 0.86, 1.9)], RGBA(hex: 0xc9d4ff), round: 1)]),
         "Grok": BotSpec(radius: 0.33, reach: 0.55, face: CGPoint(x: 0, y: -0.3),
                         ring: Ring(radiusX: 1.5, radiusY: 0.32, drop: 0.3, tilt: -20, width: 0.14)),
-        // Grok's bot is a black ball with white eyes. A faint rim keeps the ball visible on the island's black.
-        "Grok Bot": BotSpec(radius: 0.37,
-                            paint: .radial(center: CGPoint(x: 0.42, y: 0.34), inner: 0.02, outer: 0.7,
-                                           stops: [RGBA(hex: 0x4a4a52), RGBA(hex: 0x232327), RGBA(hex: 0x0f0f11)]),
-                            eye: Eye(height: 0.78, width: 0.3), eyeColor: RGBA(hex: 0xffffff),
-                            stroke: RGBA(hex: 0xffffff, alpha: 0.26)),
+        // Grok's bot is one flat colour with eyes in the other: black on a light ground, white on a dark one.
+        // Bots are drawn on the island's black and over wallpapers in light ink, so this one is the white ball
+        // with dark eyes its own wordmark shows on black.
+        "Grok Bot": BotSpec(radius: 0.37, paint: .solid(RGBA(hex: 0xffffff)), eye: Eye(height: 0.78, width: 0.3)),
         // The logo's cut, as a notch in the edge it was taken from.
         "Cursor": BotSpec(radius: 0.41, reach: 0.7, shape: .polygon(sides: 6, rotation: -90, round: 0.07),
                           face: CGPoint(x: -0.12, y: 0.16),
@@ -138,17 +139,15 @@ struct BotSpec: Sendable {
                             decor: [.blocks([rect(-1.0, -1.06, 1.0, -0.56), rect(-1.0, -0.56, -0.62, -0.36),
                                              rect(-0.24, -0.56, 0.16, -0.42), rect(0.58, -0.56, 1.0, -0.3)],
                                             grey, followsFace: false),
-                                    .blocks([rect(-0.6, 0.36, -0.05, 0.6), rect(0.05, 0.36, 0.6, 0.6),
-                                             rect(-0.05, 0.47, 0.05, 0.6)], grey, followsFace: true)]),
+                                    .blocks([rect(-0.6, 0.36, 0.6, 0.6)], grey, followsFace: true)]),
         "Kimi": BotSpec(radius: 0.32, center: CGPoint(x: 0.41, y: 0.59), shape: .outline(keep: 0.3, smooth: 22),
                         keeps: CGRect(x: 0.78, y: 0.02, width: 0.215, height: 0.215)),
         "GLM": BotSpec(shape: .rect(width: 0.74, height: 0.74, round: 0.16), paint: .solid(RGBA(hex: 0x28282b)),
                        eyeColor: RGBA(hex: 0xffffff), stroke: RGBA(hex: 0xffffff)),
-        // Two legs under a flat hat: the silhouette reads as the letter.
-        "Pi": BotSpec(center: CGPoint(x: 0.5, y: 0.57), reach: 0.5, shape: .rect(width: 0.6, height: 0.6, round: 0.02),
-                      face: CGPoint(x: 0, y: -0.34), eye: Eye(height: 0.3, width: 0.3, round: 0),
-                      decor: [.blocks([rect(-1.22, -1.18, 1.22, -0.9)], RGBA(hex: 0xffffff), followsFace: false),
-                              .cut([rect(-0.22, 0.2, 0.22, 1.2)])]),
+        // The letter itself, in one piece: a wide bar that holds the face, standing on two legs.
+        "Pi": BotSpec(center: CGPoint(x: 0.5, y: 0.31), reach: 0.3, shape: .rect(width: 0.9, height: 0.29, round: 0.02),
+                      eye: Eye(height: 0.3, width: 0.3, round: 0),
+                      decor: [.blocks([rect(-0.8, 0.36, -0.3, 1.5), rect(0.3, 0.36, 0.8, 1.5)], RGBA(hex: 0xffffff), followsFace: false)]),
         // A plain white ball with a fringe: three locks over the forehead, kept to the ball's outline.
         "Hermes": BotSpec(radius: 0.35, reach: 0.5, paint: .solid(RGBA(hex: 0xf8f8f9)), face: CGPoint(x: 0, y: 0.24),
                           eye: Eye(height: 0.72, width: 0.3, spread: 0.44),
@@ -156,12 +155,16 @@ struct BotSpec: Sendable {
                                         hair, round: 1)]),
         "ZCode": BotSpec(reach: 0.8, shape: .slant(width: 0.66, height: 0.64, skew: 0.2, round: 0.05)),
         "Qwen": BotSpec(radius: 0.37, shape: .outline(keep: 0.55, smooth: 7), spin: 7),
-        // A plain red ball; what it keeps of the logo is the red and the black eyes with cyan pupils.
-        "OpenClaw": BotSpec(reach: 0.7,
+        // A plain red ball with two round black eyes and the logo's pair of small antennae. The logo's cyan
+        // pupils are left out: on a face this small they stare.
+        "OpenClaw": BotSpec(center: CGPoint(x: 0.5, y: 0.54), reach: 0.7,
                             paint: .linear(from: CGPoint(x: 0.2, y: 0.1), to: CGPoint(x: 0.85, y: 0.95),
                                            stops: [RGBA(hex: 0xee4747), RGBA(hex: 0xc22e2e)]),
-                            face: CGPoint(x: 0, y: 0.06), eye: Eye(height: 0.62, width: 0.62, spread: 0.52),
-                            eyeColor: RGBA(hex: 0x050810), pupil: RGBA(hex: 0x00e5cc)),
+                            face: CGPoint(x: 0, y: 0.06), eye: Eye(height: 0.46, width: 0.46, spread: 0.46),
+                            eyeColor: RGBA(hex: 0x050810),
+                            decor: [.feelers([[CGPoint(x: -0.24, y: -0.9), CGPoint(x: -0.34, y: -1.14), CGPoint(x: -0.54, y: -1.22)],
+                                              [CGPoint(x: 0.24, y: -0.9), CGPoint(x: 0.34, y: -1.14), CGPoint(x: 0.54, y: -1.22)]],
+                                             RGBA(hex: 0xea4a4a), width: 0.1)]),
         // The cat in each logo, sitting up straight and out of its tile: white head, the logo's coloured face.
         "CodeBuddy": cat(head: RGBA(hex: 0xffffff),
                          face: .linear(from: CGPoint(x: 0.2, y: 0.2), to: CGPoint(x: 0.85, y: 1),

@@ -2,17 +2,17 @@ import SwiftUI
 import AgentHUDCore
 
 /// One mark in the queue. The queue shows one mark per vendor, not per agent: two Claude windows are
-/// one Claude, and the mark bobs when any of them is working.
+/// one Claude, and the mark's bot wakes when any of them is working.
 struct LogoQueueItem: Identifiable, Equatable {
     let vendor: String
-    /// Any agent of this vendor has a running session: the mark bobs at the working period, not the idle one.
+    /// Any agent of this vendor has a running session.
     let isWorking: Bool
     var id: String { vendor }
 
     /// Collapses agents onto the mark they are drawn with, keeping the order they were watched in. Two
     /// Claude windows are one Claude; so are Codex and ChatGPT, which share OpenAI's artwork — a second
-    /// identical mark would take a place in the row and tell a glance nothing. Either of them running bobs
-    /// the mark they share.
+    /// identical mark would take a place in the row and tell a glance nothing. Either of them running wakes
+    /// the bot they share.
     @MainActor
     static func queue(rows: [(vendor: String, isWorking: Bool)]) -> [LogoQueueItem] {
         var order: [String] = []
@@ -36,41 +36,40 @@ struct LogoQueueConfig: Equatable {
     var edge: HUDEdge
     /// Side of one mark, in points.
     var logo: CGFloat
+    var edgeDistance: CGFloat
     var gap: CGFloat
     var workingSeconds: Double
-    /// A working agent's mark turns into its bot instead of bobbing.
+    /// Working agents stay bots; idle agents occasionally become bots for a few seconds.
     var bots: Bool
 
     init(items: [LogoQueueItem], placement: ScreenPlacement, settings: AgentHUDCore.Settings) {
         self.items = items
         edge = placement.edge
         logo = placement.logoSize
+        edgeDistance = placement.logoEdgeDistance
         gap = logo * placement.gapScale
         workingSeconds = settings.breathSeconds
         bots = settings.botLogos
     }
 
-    /// What the marks occupy.
+    /// The strip touches the screen edge; centring the marks within it keeps their edge at the requested distance.
+    var stripThickness: CGFloat { logo + edgeDistance * 2 }
+
+    /// The marks' run, with their screen-edge distance perpendicular to the run.
     var size: CGSize {
         guard !items.isEmpty else { return .zero }
         let run = logo * CGFloat(items.count) + gap * CGFloat(items.count - 1)
-        return edge.isHorizontal ? CGSize(width: run, height: logo) : CGSize(width: logo, height: run)
+        return edge.isHorizontal ? CGSize(width: run, height: stripThickness) : CGSize(width: stripThickness, height: run)
     }
 }
 
-/// The collapsed HUD on a screen in logo mode: every watched agent's own mark. Only the ones with work
-/// running move, so motion means exactly one thing and a glance finds the busy agent without reading
-/// anything. A working mark turns into its bot; with bots off, or for a mark that has none, it bobs. The marks keep their own artwork at full strength; status colour is carried by the glow behind
-/// them, not by the logos.
-///
-/// The marks are plain layers holding baked bitmaps, animated by Core Animation. Driving the bob from
-/// SwiftUI instead re-evaluates every mark on the main thread each frame, which on a full queue costs more
-/// than the glow it sits on.
+/// The collapsed HUD on a screen in logo mode: every watched agent's own mark. Working marks stay bots,
+/// idle marks occasionally turn into bots, and their centres stay fixed.
+/// Status colour is carried by the glow behind them.
 struct LogoQueueView: NSViewRepresentable {
     let config: LogoQueueConfig
     let light: Bool
-    /// Bobs every mark at full strength whether its agent is working or not, so a preview shows the motion
-    /// instead of whatever the agents happen to be doing while the settings are open.
+    /// Wakes every bot whether its agent is working or not, so the settings preview shows their motion.
     var previewsMotion = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -84,18 +83,16 @@ struct LogoQueueView: NSViewRepresentable {
     }
 }
 
-/// Lays the marks out along the edge and gives each one a repeating offset animation.
+/// Lays stationary marks out along the edge and follows their bots through the shared clock.
 final class LogoQueueLayerView: NSView {
-    /// How far a mark travels, as a share of its side, and the stagger that turns a row of bobs into a wave.
-    private static let travel: CGFloat = 0.14
-    private static let stagger = 0.13
-
     private(set) var marks: [CALayer] = []
     /// One per mark, for the marks that have a bot. A bot's layer sits over its mark and takes its place
     /// while the bot is out; the mark comes back when the bot has settled into the logo again.
     private(set) var actors: [BotActor?] = []
     /// How far the baked outline overflows a mark, in points, so the layout leaves room for exactly that.
     private var bleed: CGFloat = 1
+    /// Alpha bounds in each baked bitmap, including its outline, normalized with y running down.
+    private var visibleBounds: [CGRect] = []
     private var applied: (config: LogoQueueConfig, light: Bool, scale: CGFloat, animates: Bool, previews: Bool)?
 
     override init(frame frameRect: NSRect) {
@@ -144,12 +141,14 @@ final class LogoQueueLayerView: NSView {
         let outline = 1
         bleed = CGFloat(outline) / max(1, scale)
         // The queue sits on the wallpaper: the dark artwork variant is the one that reads there.
+        visibleBounds = []
         marks = config.items.map { item in
             let mark = CALayer()
             mark.contentsScale = scale
             mark.contentsGravity = .resizeAspect
-            mark.contents = LogoImages.image(LogoImages.Key(vendor: item.vendor, side: side,
-                                                            outline: outline, light: false))
+            let key = LogoImages.Key(vendor: item.vendor, side: side, outline: outline, light: false)
+            mark.contents = LogoImages.image(key)
+            visibleBounds.append(LogoImages.visibleBounds(key))
             layer?.addSublayer(mark)
             return mark
         }
@@ -174,9 +173,23 @@ final class LogoQueueLayerView: NSView {
         CATransaction.setDisableActions(true)
         for (index, mark) in marks.enumerated() {
             let along = lead + CGFloat(index) * step
-            let origin = config.edge.isHorizontal
+            var origin = config.edge.isHorizontal
                 ? CGPoint(x: along, y: (bounds.height - config.logo) / 2)
                 : CGPoint(x: (bounds.width - config.logo) / 2, y: along)
+            if index < visibleBounds.count, !visibleBounds[index].isEmpty {
+                let alpha = visibleBounds[index], side = config.logo + bleed * 2
+                let visible = CGRect(x: origin.x - bleed + alpha.minX * side,
+                                     y: origin.y - bleed + alpha.minY * side,
+                                     width: alpha.width * side, height: alpha.height * side)
+                // Assets carry different transparent padding. Shift only toward/away from the parked edge;
+                // the configured logo size and along-edge spacing continue to use the original artwork box.
+                switch config.edge {
+                case .top: origin.y += config.edgeDistance - visible.minY
+                case .bottom: origin.y += bounds.height - config.edgeDistance - visible.maxY
+                case .left: origin.x += config.edgeDistance - visible.minX
+                case .right: origin.x += bounds.width - config.edgeDistance - visible.maxX
+                }
+            }
             mark.frame = CGRect(x: origin.x - bleed, y: origin.y - bleed,
                                 width: config.logo + bleed * 2, height: config.logo + bleed * 2)
             if index < actors.count {
@@ -186,37 +199,13 @@ final class LogoQueueLayerView: NSView {
         CATransaction.commit()
     }
 
-    /// The bob is a translation, not a move to a second point: an absolute animation on `position` outlives
-    /// every relayout — it keeps driving the presentation from the coordinates it was built with, so a mark
-    /// sits where the old size put it however often the layout is redone.
     private func animate(config: LogoQueueConfig, animates: Bool, previewsMotion: Bool) {
-        let travel = config.logo * Self.travel
-        let axis = config.edge.inward
-        let vertical = axis.y != 0
-        var bobbing = 0
-        for (index, mark) in marks.enumerated() {
-            mark.removeAnimation(forKey: "bob")
+        let now = CACurrentMediaTime()
+        for index in marks.indices {
             let working = previewsMotion || (index < config.items.count && config.items[index].isWorking)
             if let actor = index < actors.count ? actors[index] : nil {
-                // The bot does the moving: it breathes, looks around and acts, and the mark under it stays put.
-                actor.set(animates && working ? .working : .idle, at: CACurrentMediaTime())
-                continue
+                actor.set(animates && working ? .working : .idle, at: now)
             }
-            guard animates, working else { continue }
-            let period = max(0.25, config.workingSeconds)
-            let animation = CABasicAnimation(keyPath: vertical ? "transform.translation.y" : "transform.translation.x")
-            animation.fromValue = 0
-            animation.toValue = travel * CGFloat(vertical ? axis.y : axis.x)
-            animation.duration = period / 2
-            animation.autoreverses = true
-            animation.repeatCount = .infinity
-            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            // A negative time offset starts each mark further into the cycle than the one before it. Counted
-            // over the bobbing marks alone, so the wave has no gaps where a resting agent sits.
-            animation.timeOffset = -Double(bobbing) * Self.stagger
-            bobbing += 1
-            animation.isRemovedOnCompletion = false
-            mark.add(animation, forKey: "bob")
         }
         followBots()
     }
@@ -231,8 +220,15 @@ final class LogoQueueLayerView: NSView {
         BotClock.shared.follow(self) { [weak self] now in self?.stepBots(to: now) ?? false }
     }
 
-    /// One frame for every bot in the queue. Returns false when all of them are back to being logos.
+    /// One frame for every bot in the queue. Idle logos keep the clock for their next bot appearance.
     func stepBots(to now: TimeInterval) -> Bool {
+        guard applied?.animates == true else {
+            for (index, actor) in actors.enumerated() {
+                actor?.layer.isHidden = true
+                marks[index].opacity = 1
+            }
+            return false
+        }
         guard let window else { return false }
         let pointer = NSEvent.mouseLocation, runsDown = layer?.isGeometryFlipped ?? false
         var moving = false
@@ -241,9 +237,9 @@ final class LogoQueueLayerView: NSView {
             let place = window.convertPoint(toScreen: convert(actor.layer.position, to: nil))
             // Screen coordinates run up; a bot's gaze is measured with y running down.
             let aim = BotMotion.aim(from: CGPoint(x: place.x, y: -place.y), to: CGPoint(x: pointer.x, y: -pointer.y))
-            let out = actor.step(to: now, aim: aim, yRunsDown: runsDown)
-            marks[index].opacity = out ? 0 : 1
-            moving = moving || out
+            let active = actor.step(to: now, aim: aim, yRunsDown: runsDown)
+            marks[index].opacity = actor.layer.isHidden ? 1 : 0
+            moving = moving || active
         }
         return moving
     }

@@ -376,7 +376,7 @@ private struct PermissionButtons: View {
                        fill: .clear, stroke: PermissionColor.allow.opacity(0.4),
                        foreground: PermissionColor.allow) { onDecide(.allowAlways(always)) }
             }
-            button(L10n.text("批准一次", "Allow once"), symbol: "checkmark", identifier: "island-permission-approve",
+            button(request.allowLabel, symbol: "checkmark", identifier: "island-permission-approve",
                    fill: PermissionColor.allow, stroke: .clear, foreground: .black) { onDecide(.allow) }
         }
     }
