@@ -141,11 +141,12 @@ struct NotchGeometry: Equatable {
     }
 
     /// Core of the expanded panel: anchored to the same edge, centred on the collapsed rect, growing inward.
-    func expandedFrame(size: CGSize) -> CGRect {
+    /// `around` centres it on another point along the edge instead — one agent's mark — in screen coordinates.
+    func expandedFrame(size: CGSize, around: CGFloat? = nil) -> CGRect {
         let width = min(size.width, screenFrame.width)
         let height = min(size.height, screenFrame.height)
-        let x = min(screenFrame.maxX - width, max(screenFrame.minX, centerX - width / 2))
-        let y = min(screenFrame.maxY - height, max(screenFrame.minY, rect.midY - height / 2))
+        let x = min(screenFrame.maxX - width, max(screenFrame.minX, (edge.isHorizontal ? around ?? centerX : centerX) - width / 2))
+        let y = min(screenFrame.maxY - height, max(screenFrame.minY, (edge.isHorizontal ? rect.midY : around ?? rect.midY) - height / 2))
         switch edge {
         case .top:
             return CGRect(x: x, y: screenFrame.maxY - height, width: width, height: height)

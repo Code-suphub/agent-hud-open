@@ -105,6 +105,15 @@ struct ScreensPane: View {
                     .accessibilityIdentifier("hud-reset-position")
                     .disabled(current == nil)
             }
+            if placement.mode.isDocked {
+                SettingsDivider(theme: theme)
+                SettingsToggleRow(
+                    label: L10n.text("按 agent 分开", "Separate agents"),
+                    subtitle: L10n.text("悬停某个标志只展开该 agent 的面板；请求和提醒从发出它的 agent 的标志旁展开，其他标志保持不动。",
+                                        "Hovering a mark opens that agent's own panel. Requests and reminders open beside the mark of the agent that sent them, and the other marks stay."),
+                    isOn: binding(\.separatesAgents)
+                )
+            }
             if placement.mode == .logos {
                 let size = placement.logoSize
                 let points: (Double) -> String = { String(format: L10n.text("%.0f pt", "%.0f pt"), $0) }

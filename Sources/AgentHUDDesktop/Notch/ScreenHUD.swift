@@ -71,6 +71,61 @@ final class ScreenHUD {
     private var previewPlacement: ScreenPlacement?
     /// The grip along the strip, kept when the queue turns onto another edge.
     private var dragGrabFraction: CGFloat = 0.5
+    /// The mark the pointer was last over, on a dock that separates its agents.
+    private var hoveredMark: String?
+
+    /// One agent's mark on the dock: the vendor it is drawn for, and its centre along the edge on screen.
+    struct AgentMark: Equatable {
+        let vendor: String
+        let anchor: CGFloat
+        var key: String { AgentArtwork.markKey(vendor) }
+    }
+
+    /// The marks an agent's own card can open from; none unless this dock separates its agents.
+    private var agentMarks: [AgentMark] {
+        guard placement.separatesAgents, geometry.mode.isDocked else { return [] }
+        let centres = simpleMeter?.markCentres ?? logoQueue?.markCentres ?? []
+        return Self.agentMarks(centres: centres, strip: geometry.rect, edge: geometry.edge)
+    }
+
+    /// Puts each mark's place along its strip on screen. A side strip is read top to bottom, while the
+    /// screen's own coordinates run upward.
+    static func agentMarks(centres: [(vendor: String, along: CGFloat)], strip: CGRect, edge: HUDEdge) -> [AgentMark] {
+        centres.map { AgentMark(vendor: $0.vendor, anchor: edge.isHorizontal ? strip.minX + $0.along : strip.maxY - $0.along) }
+    }
+
+    /// The mark nearest a pointer that is on the strip; nil while it is anywhere else.
+    static func mark(at point: CGPoint, among marks: [AgentMark], strip: CGRect, edge: HUDEdge) -> AgentMark? {
+        guard containsPointer(point, in: strip) else { return nil }
+        let along = edge.isHorizontal ? point.x : point.y
+        return marks.min { abs($0.anchor - along) < abs($1.anchor - along) }
+    }
+
+    /// The agent the card is for: the sender of the event on show, otherwise the hovered mark. Nil shows
+    /// the whole HUD, which is also what an event from an agent with no mark here gets.
+    private var focus: AgentMark? {
+        guard previewPlacement == nil else { return nil }
+        let marks = agentMarks
+        if let alert = activeAlert {
+            let key = AgentArtwork.markKey(alert.vendor)
+            return marks.first { $0.key == key }
+        }
+        return marks.first { $0.key == hoveredMark }
+    }
+
+    /// Sliding along the strip moves the open panel from one agent to the next.
+    private func followHoveredMark(_ point: CGPoint) {
+        guard let mark = Self.mark(at: point, among: agentMarks, strip: geometry.rect, edge: geometry.edge),
+              mark.key != hoveredMark else { return }
+        hoveredMark = mark.key
+        guard activeAlert == nil else { return }
+        if machine.isOpen {
+            materialPreparation = nil
+            apply(animated: true)
+        } else {
+            prepareOpening()
+        }
+    }
 
     /// Inputs that can change the natural layout while a hover is waiting, including token data that
     /// need not change the coordinator's quota rows or glow appearance.
@@ -91,6 +146,7 @@ final class ScreenHUD {
         let light: Bool
         let appearance: GlowAppearance
         let alertID: String?
+        let focus: AgentMark?
         let alertDetails: Bool
         let pendingIDs: [String]
         let sessionNavigationFailed: Bool
@@ -125,7 +181,7 @@ final class ScreenHUD {
                       bucketSize: store.tokenBucketSize, dimensions: store.tokenDimensions,
                       requests: PermissionRequests.shared.pending, geometry: geometry, light: systemIsLight,
                       appearance: store.glowAppearance(light: systemIsLight, on: key),
-                      alertID: activeAlert?.id, alertDetails: alerts.current?.inUsagePanel == false,
+                      alertID: activeAlert?.id, focus: focus, alertDetails: alerts.current?.inUsagePanel == false,
                       pendingIDs: alerts.pendingIDs,
                       sessionNavigationFailed: sessionNavigationFailed, failedListedSessionID: failedListedSessionID,
                       answeringSessionID: answeringSessionID,
@@ -204,7 +260,9 @@ final class ScreenHUD {
     /// animation. An event is the only thing on screen at that moment, so everything it draws is part of it — a
     /// reminder you cannot point at is a reminder you cannot answer.
     func samplePointer() {
-        pointer(inside: Self.containsPointer(mouseLocation(), in: hoverRegion))
+        let point = mouseLocation()
+        if previewPlacement == nil, !dragSurface.isPressed { followHoveredMark(point) }
+        pointer(inside: Self.containsPointer(point, in: hoverRegion))
     }
 
     /// CGRect.contains excludes its top and right edges. A pointer pinned to a display edge is still
@@ -760,6 +818,8 @@ final class ScreenHUD {
         root.sessionEvents = alerts.sessionEvents
         root.logoQueue = logoQueue
         root.simpleMeter = simpleMeter
+        root.separatesAgents = placement.separatesAgents && geometry.mode.isDocked
+        root.focusVendor = focus?.vendor
         root.botLogos = settings.settings.botLogos
         root.edge = geometry.edge
         // The mode decides the silhouette, not whether there are marks to draw.
@@ -862,7 +922,12 @@ final class ScreenHUD {
             alertHoverFloor = pointerInside ? max(alertHoverFloor, windowFrame.height) : 0
             let held = ScreenHUD.heldWindowHeight(card: windowFrame.height, floor: alertHoverFloor,
                                                   pointerInside: pointerInside)
-            if geometry.mode.isDocked {
+            if focus != nil {
+                // The canvas already spans the card and the marks; only the surface under the pointer grows.
+                windowFrame.origin.y -= held - windowFrame.height
+                windowFrame.size.height = held
+                windowFrame = windowFrame.intersection(geometry.screenFrame)
+            } else if geometry.mode.isDocked {
                 windowFrame = geometry.expandedFrame(size: CGSize(width: windowFrame.width, height: held))
             } else {
                 windowFrame.origin.y -= held - windowFrame.height
@@ -962,15 +1027,19 @@ final class ScreenHUD {
 
     private func surface(open: Bool, height: CGFloat) -> Surface {
         let expanded = (open || activeAlert != nil) && previewPlacement == nil
+        let focus = focus
         let compactSize = geometry.mode.isDocked
-            ? IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size)
+            ? IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size,
+                                             besideMarks: focus != nil)
             : CGSize(width: geometry.rect.width + 2 * (IslandController.alertWingWidth + IslandController.alertSidePadding),
                      height: max(38, geometry.rect.height))
         let size = open
             ? (alerts.current?.inUsagePanel == false
                 ? CGSize(width: activeAlert?.detailWidth ?? IslandController.alertDetailWidth,
                          height: height)
-                : CGSize(width: IslandController.expandedWidth, height: height))
+                : CGSize(width: focus == nil ? IslandController.expandedWidth
+                            : IslandRootView.agentPanelWidth(edge: geometry.edge, collapsedSize: geometry.rect.size),
+                         height: height))
             : compactSize
         // The shoulder curves widen the contact with the parked edge. Clamp their whole canvas, then
         // derive the card's core from it, so even a dock near a corner retains both curved shoulders.
@@ -980,12 +1049,13 @@ final class ScreenHUD {
                                     height: size.height + (horizontal ? 0 : flare * 2))
         let cardFrame = expanded
             ? (geometry.mode.isDocked
-                ? geometry.expandedFrame(size: dockWindowSize)
+                ? geometry.expandedFrame(size: dockWindowSize, around: focus?.anchor)
                 : geometry.expandedFrame(size: size).insetBy(dx: -flare, dy: 0))
             : geometry.islandFrame
         // A short card must not clip a longer queue. The extra canvas stays transparent and the card
         // retains its own screen position, including while a reminder's hover floor holds a taller window.
-        let windowFrame = open && geometry.mode.isDocked && activeAlert == nil
+        // An agent's own card leaves the other marks standing, so its canvas holds them whatever it shows.
+        let windowFrame = expanded && geometry.mode.isDocked && (open && activeAlert == nil || focus != nil)
             ? cardFrame.union(geometry.islandFrame).intersection(geometry.screenFrame)
             : cardFrame
         let islandFrame = expanded

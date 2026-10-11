@@ -54,6 +54,11 @@ struct IslandRootView: View {
     /// over whatever is behind them. Kept apart from `logoQueue`, which only says whether marks are drawn —
     /// hiding them leaves the backdrop alone and must not bring the black shape back.
     var hidesSilhouette = false
+    /// Set on a dock that separates its agents. The marks then stay where they are whatever the card does:
+    /// the Simple panel draws its own capsule instead of lending it to the card, and nothing replaces them.
+    var separatesAgents = false
+    /// The one agent the card is for right now: the hovered mark's, or the sender of the event on show.
+    var focusVendor: String? = nil
     /// Where the queue's strip sits inside the window, in points down from its top edge, and how tall it is.
     /// The window's own top edge moves between the collapsed and the expanded frame; the marks must not.
     var logoQueueInset: CGFloat = 0
@@ -101,7 +106,7 @@ struct IslandRootView: View {
             // A collapsed logo queue is the marks alone: no silhouette behind them, so they read as agents
             // sitting on the desktop rather than as a bar. The silhouette comes back the moment the panel
             // opens or an event needs somewhere to be shown — but never because the marks were hidden.
-            let bare = hidesSilhouette && !visible && !floats
+            let bare = hidesSilhouette && !visible && (!floats || separatesAgents)
             let surface = ZStack(alignment: surfaceAlignment) {
                 // Keep one shape alive through collapse so it can shrink before becoming transparent.
                 shape.fill(.black.opacity(floats && !visible ? 0.82 : 1))
@@ -138,7 +143,7 @@ struct IslandRootView: View {
                         .animation(geometryAnimation, value: size)
                         .frame(width: bounds.width, height: bounds.height, alignment: surfaceAlignment)
                 }
-                if let logoQueue, alert == nil {
+                if let logoQueue, alert == nil || focusVendor != nil {
                     if let logoQueueFrame {
                         LogoQueueView(config: logoQueue, light: lightBorder)
                             .frame(width: logoQueueFrame.width, height: logoQueueFrame.height)
@@ -153,9 +158,9 @@ struct IslandRootView: View {
                             .transaction { $0.animation = nil }
                     }
                 }
-                if let simpleMeter, alert == nil {
+                if let simpleMeter, alert == nil || focusVendor != nil {
                     let strip = logoQueueFrame ?? CGRect(x: 0, y: logoQueueInset, width: size.width, height: logoQueueHeight)
-                    SimpleMeterView(config: simpleMeter, onIsland: true)
+                    SimpleMeterView(config: simpleMeter, onIsland: !separatesAgents)
                         .frame(width: strip.width, height: strip.height)
                         .position(x: strip.midX, y: strip.midY)
                         .frame(width: bounds.width, height: bounds.height)
@@ -209,8 +214,10 @@ struct IslandRootView: View {
                            onDecideAlert: onDecideAlert,
                            waitingRequests: waitingRequests,
                            insets: hidesSilhouette ? dockInsets : HoverPanelView.notchInsets,
-                           answeringSessionID: answeringSessionID, onAnswerSession: onAnswerSession)
-                .frame(width: IslandController.expandedWidth, alignment: .top)
+                           answeringSessionID: answeringSessionID, onAnswerSession: onAnswerSession,
+                           focusVendor: focusVendor)
+                .frame(width: focusVendor == nil ? IslandController.expandedWidth
+                              : Self.agentPanelWidth(edge: edge, collapsedSize: collapsedSize), alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
                 .onPreferenceChange(PanelHeightKey.self, perform: onContentHeight)
                 .transition(detailTransition)
@@ -220,6 +227,8 @@ struct IslandRootView: View {
                                        waitingRequests: waitingRequests)
                     .padding(Self.dockCompactInsets)
                     .frame(width: Self.dockCompactSize(edge: edge, collapsedSize: collapsedSize).width)
+                    // Beside the marks rather than in their place, when they stay.
+                    .padding(focusVendor == nil ? EdgeInsets() : Self.stripClearance(edge: edge, collapsedSize: collapsedSize))
                     .offset(floats ? liftCentring : .zero)
                     .id(alert.id)
                     .transition(detailTransition)
@@ -245,6 +254,32 @@ struct IslandRootView: View {
         case .right: insets.trailing = strip + 12
         }
         return insets
+    }
+
+    /// The strip's thickness on the parked side: what a card leaves free when the marks stay on top of it.
+    static func stripClearance(edge: HUDEdge, collapsedSize: CGSize) -> EdgeInsets {
+        let strip = edge.isHorizontal ? collapsedSize.height : collapsedSize.width
+        switch edge {
+        case .top: return EdgeInsets(top: strip, leading: 0, bottom: 0, trailing: 0)
+        case .bottom: return EdgeInsets(top: 0, leading: 0, bottom: strip, trailing: 0)
+        case .left: return EdgeInsets(top: 0, leading: strip, bottom: 0, trailing: 0)
+        case .right: return EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: strip)
+        }
+    }
+
+    /// One agent's panel is narrower than the whole one. On a side edge the strip takes its thickness out of
+    /// the panel's width, so the panel is that much wider and its rows keep the room they are laid out for.
+    static func agentPanelWidth(edge: HUDEdge, collapsedSize: CGSize) -> CGFloat {
+        IslandController.agentPanelWidth + (edge.isHorizontal ? 0 : collapsedSize.width)
+    }
+
+    /// A compact event beside the marks it came from: the compact row and the strip it must not cover.
+    static func dockCompactSize(edge: HUDEdge, collapsedSize: CGSize, besideMarks: Bool) -> CGSize {
+        let core = dockCompactSize(edge: edge, collapsedSize: collapsedSize)
+        guard besideMarks else { return core }
+        let clearance = stripClearance(edge: edge, collapsedSize: collapsedSize)
+        return CGSize(width: core.width + clearance.leading + clearance.trailing,
+                      height: core.height + clearance.top + clearance.bottom)
     }
 
     static func dockCompactSize(edge: HUDEdge, collapsedSize: CGSize) -> CGSize {

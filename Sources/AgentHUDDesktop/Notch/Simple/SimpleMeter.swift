@@ -108,6 +108,16 @@ struct SimpleMeterConfig: Equatable {
         mark + (showsNumbers ? labelSpacing + label : 0)
     }
 
+    /// Each mark's centre along the panel, measured from its start: left on a horizontal edge, top on a side.
+    var markCentres: [(vendor: String, along: CGFloat)] {
+        var along = edge.isHorizontal ? insets.left : insets.top
+        return items.map { item in
+            let centre = along + mark / 2
+            along += (edge.isHorizontal ? cellWidth(label: labelWidth(item)) : mark) + itemGap
+            return (item.vendor, centre)
+        }
+    }
+
     /// The panel itself.
     var panelSize: CGSize {
         let insets = insets

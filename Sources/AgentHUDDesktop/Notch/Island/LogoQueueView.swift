@@ -61,6 +61,11 @@ struct LogoQueueConfig: Equatable {
         let run = logo * CGFloat(items.count) + gap * CGFloat(items.count - 1)
         return edge.isHorizontal ? CGSize(width: run, height: stripThickness) : CGSize(width: stripThickness, height: run)
     }
+
+    /// Each mark's centre along the run, measured from the run's start: left on a horizontal edge, top on a side.
+    var markCentres: [(vendor: String, along: CGFloat)] {
+        items.enumerated().map { ($1.vendor, CGFloat($0) * (logo + gap) + logo / 2) }
+    }
 }
 
 /// The collapsed HUD on a screen in logo mode: every watched agent's own mark. Working marks stay bots,

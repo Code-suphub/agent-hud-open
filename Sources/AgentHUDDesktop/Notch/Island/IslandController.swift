@@ -10,6 +10,8 @@ import SwiftUI
 @MainActor
 final class IslandController {
     static let expandedWidth: CGFloat = 540
+    /// One agent's own panel, on a dock that separates its agents.
+    static let agentPanelWidth: CGFloat = 440
     static let defaultPanelHeight: CGFloat = 326
     static let expandedRadius: CGFloat = 26
     static let alertWingWidth: CGFloat = 112
