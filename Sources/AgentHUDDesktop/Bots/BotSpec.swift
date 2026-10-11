@@ -110,10 +110,10 @@ struct BotSpec: Sendable {
     static let table: [String: BotSpec] = [
         "Claude": BotSpec(radius: 0.375, reach: 0.9, shape: .star(points: 12, depth: 0.085, puff: 0.7), spin: 9),
         "ChatGPT": BotSpec(radius: 0.37, shape: .outline(keep: 0.6, smooth: 7), spin: 7),
-        // The arch gives a dome that sits wholly in the upper part of the mark, so the finished bot settles
-        // down to stand level with the bots beside it.
+        // The arch gives a dome that runs from 0.05 to 0.77 down the mark, where a ball beside it runs from
+        // 0.14 to 0.86. The finished bot settles by that difference, so its top and bottom line up with theirs.
         "Antigravity": BotSpec(reach: 0.75, shape: .outline(keep: 0.5, smooth: 16), face: CGPoint(x: 0, y: -0.2),
-                               settle: 0.15),
+                               settle: 0.093),
         "DeepSeek": BotSpec(),
         "Grok": BotSpec(radius: 0.33, reach: 0.55, face: CGPoint(x: 0, y: -0.3),
                         ring: Ring(radiusX: 1.5, radiusY: 0.32, drop: 0.3, tilt: -20, width: 0.14)),
