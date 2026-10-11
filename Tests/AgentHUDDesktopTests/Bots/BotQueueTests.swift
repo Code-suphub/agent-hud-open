@@ -29,7 +29,7 @@ final class BotQueueTests: XCTestCase {
         var now = start, moving = false
         for _ in 0..<frames {
             now += 1.0 / 30
-            moving = view.stepBots(to: now)
+            moving = view.stepBots(to: now) != nil
         }
         return (now, moving)
     }
@@ -64,7 +64,7 @@ final class BotQueueTests: XCTestCase {
         view.apply(config: queue([("Claude", true)], bots: false), light: false, scale: 2, animates: true)
         XCTAssertNil(view.actors[0])
         XCTAssertNil(view.marks[0].animationKeys())
-        XCTAssertFalse(view.stepBots(to: CACurrentMediaTime()))
+        XCTAssertNil(view.stepBots(to: CACurrentMediaTime()))
     }
 
     func testAWorkingQueueKeepsItsBotThroughoutTheTurn() throws {
@@ -74,7 +74,7 @@ final class BotQueueTests: XCTestCase {
         let actor = try XCTUnwrap(view.actors[0])
         let start = CACurrentMediaTime()
         for frame in 1...1500 {
-            XCTAssertTrue(view.stepBots(to: start + Double(frame) / 30))
+            XCTAssertNotNil(view.stepBots(to: start + Double(frame) / 30))
             XCTAssertEqual(actor.phase, .working)
             XCTAssertFalse(actor.layer.isHidden)
             XCTAssertEqual(view.marks[0].opacity, 0)
@@ -92,8 +92,8 @@ final class BotQueueTests: XCTestCase {
         let start = CACurrentMediaTime()
         var sawBot = false, returnedToLogo = false, returnedToBot = false
         for frame in 1...2700 {
-            XCTAssertTrue(view.stepBots(to: start + Double(frame) / 30),
-                          "The idle interval keeps the clock for the next bot appearance")
+            XCTAssertNotNil(view.stepBots(to: start + Double(frame) / 30),
+                            "The idle interval keeps the clock for the next bot appearance")
             XCTAssertEqual(actor.phase, .idle)
             if actor.layer.isHidden {
                 XCTAssertEqual(view.marks[0].opacity, 1)
@@ -110,6 +110,45 @@ final class BotQueueTests: XCTestCase {
         XCTAssertTrue(sawBot)
         XCTAssertTrue(returnedToLogo)
         XCTAssertTrue(returnedToBot)
+    }
+
+    func testAnIdleQueueAsksForNoFrameBeforeItsNextVisit() throws {
+        let (view, window) = hosted()
+        defer { BotClock.shared.drop(view); window.close() }
+        view.apply(config: queue([("Claude", false), ("Cursor", false)]), light: false, scale: 2, animates: true)
+        let start = CACurrentMediaTime()
+        let wait = try XCTUnwrap(view.stepBots(to: start))
+        // Every mark is its logo and the soonest visit is at least twenty seconds away.
+        XCTAssertGreaterThan(wait, 15)
+        XCTAssertLessThan(wait, 36)
+        let claude = try XCTUnwrap(view.actors[0])
+        XCTAssertTrue(claude.layer.isHidden)
+        // A step before then is turned away without moving anything.
+        let later = try XCTUnwrap(view.stepBots(to: start + 5))
+        XCTAssertEqual(later, wait - 5, accuracy: 0.001)
+
+        // Work starting meanwhile is shown from the next frame, however long the mark meant to wait.
+        view.apply(config: queue([("Claude", true), ("Cursor", false)]), light: false, scale: 2, animates: true)
+        let working = try XCTUnwrap(view.stepBots(to: start + 6))
+        XCTAssertEqual(working, BotPace.lively, accuracy: 0.0001)
+    }
+
+    func testAWorkingBotThatOnlyBreathesIsSteppedAFewTimesASecond() throws {
+        let (view, window) = hosted()
+        defer { BotClock.shared.drop(view); window.close() }
+        view.apply(config: queue([("Cursor", true)]), light: false, scale: 2, animates: true)
+        let start = CACurrentMediaTime()
+        var waits: [TimeInterval] = [], now = start
+        // Thirty seconds of a turn, stepped exactly when the queue asks.
+        while now < start + 30 {
+            let wait = try XCTUnwrap(view.stepBots(to: now))
+            waits.append(wait)
+            now += wait
+        }
+        XCTAssertTrue(waits.allSatisfy { $0 >= BotPace.lively - 0.0001 && $0 <= BotPace.calm + 0.0001 })
+        XCTAssertTrue(waits.contains { abs($0 - BotPace.calm) < 0.0001 }, "between acts a breath needs few frames")
+        XCTAssertTrue(waits.contains { abs($0 - BotPace.lively) < 0.0001 }, "an act or a blink is drawn every frame")
+        XCTAssertLessThan(waits.count, 30 * 30 * 3 / 4, "a working bot needs well under thirty frames a second")
     }
 
     func testReduceMotionLeavesEveryMarkItsLogo() {

@@ -17,10 +17,17 @@ final class BotActor {
     let form: BotForm
     private var motion: BotMotion
     private var shown: BotRenderer.Look?
+    private var placed: CGAffineTransform?
+    /// When the bot next needs a frame, on the clock it is stepped with; nil once it rests as its logo.
+    private var due: TimeInterval? = 0
+    /// A timer rarely fires on the dot: a step this close to its time is on time.
+    private static let slack: TimeInterval = 0.004
     /// Side of the mark in points, the display's pixel scale, and the hairline outline in pixels.
     private var side: CGFloat = 0
     private var scale: CGFloat = 2
     private var outline = 0
+    /// The colours of the display the bot is on, once its view is in a window.
+    private var space: CGColorSpace?
 
     init(form: BotForm, staysBot: Bool, period: TimeInterval) {
         self.form = form
@@ -51,33 +58,54 @@ final class BotActor {
         layer.bounds = CGRect(x: 0, y: 0, width: extent, height: extent)
         layer.contentsScale = scale
         shown = nil
+        due = 0
     }
 
-    func set(_ phase: BotPhase, at now: TimeInterval) { motion.set(phase, at: now) }
+    /// Frames are drawn in the colours of the display they are shown on, which a layer shows as they are. Until a
+    /// display is known they are sRGB, and the layer converts each one.
+    func show(in space: CGColorSpace?) {
+        if let space, let current = self.space, CFEqual(space, current) { return }
+        if space == nil, self.space == nil { return }
+        self.space = space
+        shown = nil
+        due = 0
+    }
 
-    /// Advances to `now` and redraws if the bot looks different. An idle bot's logo interval hides the
-    /// layer while keeping the clock for its next appearance.
+    /// A phase is acted out from the next frame, however long the bot meant to wait.
+    func set(_ phase: BotPhase, at now: TimeInterval) {
+        motion.set(phase, at: now)
+        due = 0
+    }
+
+    /// Advances to `now` once the bot is due a frame, and redraws if it looks different. Returns the seconds
+    /// until it next needs one: a frame's length while it moves, the time to its next visit while an idle mark
+    /// waits as its logo with the layer hidden, and nil once it rests as the logo for good.
     ///
-    /// - aim: where to look, from `BotMotion.aim(from:to:)`.
     /// - yRunsDown: whether y grows downwards in the space this layer is laid out in.
-    func step(to now: TimeInterval, aim: CGPoint, yRunsDown: Bool) -> Bool {
-        motion.step(to: now, aim: aim)
-        guard !motion.isAtRest else {
-            layer.isHidden = true
-            return false
+    /// - aim: where to look, from `BotMotion.aim(from:to:)`. It is asked only while there are eyes to turn.
+    func step(to now: TimeInterval, yRunsDown: Bool, aim: () -> CGPoint) -> TimeInterval? {
+        guard let due else { return nil }
+        if now < due - Self.slack { return due - now }
+        motion.step(to: now, aim: motion.morph > 0 || motion.staysBot ? aim() : .zero)
+        let wait = motion.wait
+        self.due = wait.map { now + $0 }
+        // Setting a layer's property, even to what it already is, makes the frame's commit carry the layer.
+        if wait == nil || (motion.phase == .idle && !motion.staysBot && motion.morph == 0) {
+            if !layer.isHidden { layer.isHidden = true }
+            return wait
         }
-        if motion.phase == .idle, !motion.staysBot, motion.morph == 0 {
-            layer.isHidden = true
-            return true
-        }
-        layer.isHidden = false
+        if layer.isHidden { layer.isHidden = false }
         let look = BotRenderer.look(of: motion)
         if look != shown, side > 0 {
             shown = look
-            layer.contents = BotRenderer.image(form, motion: motion, side: side * scale, outline: outline)
+            layer.contents = BotRenderer.image(form, motion: motion, side: side * scale, outline: outline, space: space)
         }
-        layer.setAffineTransform(Self.transform(motion.pose, side: side, yRunsDown: yRunsDown))
-        return true
+        let transform = Self.transform(motion.pose, side: side, yRunsDown: yRunsDown)
+        if transform != placed {
+            placed = transform
+            layer.setAffineTransform(transform)
+        }
+        return wait
     }
 
     /// A pose is written with y running down and turns clockwise; the layer may be laid out either way up.
@@ -91,20 +119,27 @@ final class BotActor {
     }
 }
 
-/// One timer for every bot on screen. It runs only while some bot has something to act out.
+/// One timer for every bot on screen. Each follower says how long its bots can go without a frame and the
+/// timer fires at the soonest of those: every frame while something moves, a few times a second while bots only
+/// breathe, and not until the next visit while every mark rests as its logo.
 @MainActor
 final class BotClock {
     static let shared = BotClock()
-    static let framesPerSecond: Double = 30
+    static let frame: TimeInterval = BotPace.lively
 
     private var timer: Timer?
-    private var followers: [ObjectIdentifier: (TimeInterval) -> Bool] = [:]
+    private var followers: [ObjectIdentifier: (TimeInterval) -> TimeInterval?] = [:]
 
-    /// Calls `step` every frame until it returns false or `owner` is dropped.
-    func follow(_ owner: AnyObject, _ step: @escaping (TimeInterval) -> Bool) {
+    /// Calls `step` within a frame and then again after each wait it returns, until it returns nil or `owner` is
+    /// dropped. Following again brings the next call forward to now.
+    func follow(_ owner: AnyObject, _ step: @escaping (TimeInterval) -> TimeInterval?) {
         followers[ObjectIdentifier(owner)] = step
-        guard timer == nil else { return }
-        let timer = Timer(timeInterval: 1 / Self.framesPerSecond, repeats: true) { _ in
+        if let timer {
+            let now = Date()
+            if timer.fireDate > now { timer.fireDate = now }
+            return
+        }
+        let timer = Timer(timeInterval: Self.frame, repeats: true) { _ in
             MainActor.assumeIsolated { BotClock.shared.tick() }
         }
         timer.tolerance = 0.004
@@ -120,11 +155,16 @@ final class BotClock {
 
     private func tick() {
         let now = CACurrentMediaTime()
+        var soonest: TimeInterval?
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (owner, step) in followers where !step(now) { followers[owner] = nil }
+        for (owner, step) in followers {
+            if let wait = step(now) { soonest = min(soonest ?? wait, wait) } else { followers[owner] = nil }
+        }
         CATransaction.commit()
         stopIfIdle()
+        // The timer repeats a frame apart by itself; a longer wait moves its next firing.
+        if let soonest, soonest > Self.frame * 1.5 { timer?.fireDate = Date(timeIntervalSinceNow: soonest) }
     }
 
     private func stopIfIdle() {
@@ -193,6 +233,7 @@ final class BotStageView: NSView {
         }
         guard let actor else { return }
         actor.resize(side: size, scale: scale, outline: 0)
+        actor.show(in: window?.colorSpace?.cgColorSpace)
         actor.set(phase, at: CACurrentMediaTime())
         needsLayout = true
         follow()
@@ -208,20 +249,26 @@ final class BotStageView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { BotClock.shared.drop(self) } else { follow() }
+        if let window {
+            actor?.show(in: window.colorSpace?.cgColorSpace)
+            follow()
+        } else {
+            BotClock.shared.drop(self)
+        }
     }
 
     private func follow() {
         guard window != nil, actor != nil else { return }
-        BotClock.shared.follow(self) { [weak self] now in self?.step(to: now) ?? false }
+        BotClock.shared.follow(self) { [weak self] now in self?.step(to: now) }
     }
 
-    private func step(to now: TimeInterval) -> Bool {
-        guard let actor, let window else { return false }
-        let center = window.convertPoint(toScreen: convert(CGPoint(x: bounds.midX, y: bounds.midY), to: nil))
-        let pointer = NSEvent.mouseLocation
-        // Screen coordinates run up; a bot's gaze is measured with y running down.
-        let aim = BotMotion.aim(from: CGPoint(x: center.x, y: -center.y), to: CGPoint(x: pointer.x, y: -pointer.y))
-        return actor.step(to: now, aim: aim, yRunsDown: layer?.isGeometryFlipped ?? false)
+    private func step(to now: TimeInterval) -> TimeInterval? {
+        guard let actor, let window else { return nil }
+        return actor.step(to: now, yRunsDown: layer?.isGeometryFlipped ?? false) {
+            let center = window.convertPoint(toScreen: convert(CGPoint(x: bounds.midX, y: bounds.midY), to: nil))
+            let pointer = NSEvent.mouseLocation
+            // Screen coordinates run up; a bot's gaze is measured with y running down.
+            return BotMotion.aim(from: CGPoint(x: center.x, y: -center.y), to: CGPoint(x: pointer.x, y: -pointer.y))
+        }
     }
 }

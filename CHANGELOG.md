@@ -4,6 +4,7 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Less CPU in the background. Bots are stepped only as often as their motion shows — 30 times a second for a morph, an act or a blink, 10 for a breath — and not at all while a dock's logos wait for their next visit; their frames are drawn in the display's colours, so showing one no longer converts it. The Antigravity approval and DeepSeek Harness question observers list this user's processes at most every 10 seconds instead of every 2, search the listing instead of taking every line apart, and look again at once when a service stops answering.
 - Codex Desktop's mid-turn Question cards appear on the HUD, including questions with only a reply field. Answers go to the original active turn; Skip leaves the question unanswered.
 - Host API: `PermissionRequest.NativeApproval.asynchronousQuestion(turnID:)` identifies native mid-turn questions; `CodexDesktopPermissions` reads and answers them alongside app approvals.
 - Hovering a Simple panel grows the panel itself into the usage panel and shrinks it back on leaving, instead of fading a separate panel in over it. Open, it keeps floating 3 pt off its edge with every corner rounded.

@@ -31,13 +31,26 @@ enum BotRenderer {
     private static let ink = CGColor(srgbRed: 0.05, green: 0.05, blue: 0.06, alpha: 1)
     private static let box = CGRect(x: 0, y: 0, width: 1, height: 1)
 
+    /// A frame's bitmap, in the byte order and the colours of the display it is for. A layer given any other
+    /// picture draws it once more, through a colour conversion, before it can show it: for a bot that is drawn again
+    /// with every blink, that cost as much as drawing the bot.
+    private static func canvas(_ side: Int, space: CGColorSpace?) -> CGContext? {
+        let layout = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        if let space, space.model == .rgb,
+           let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+                                   space: space, bitmapInfo: layout) { return context }
+        return CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+                         space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: layout)
+    }
+
     /// One frame, `side` pixels to the mark's side, with `margin` of room on every edge.
     ///
     /// - outline: pixels of dark hairline round the bot, for a bot that sits on a wallpaper beside the logo
     ///   queue's outlined marks. The picture grows by that much on every edge.
-    static func image(_ form: BotForm, motion: BotMotion, side: CGFloat, outline: Int = 0) -> CGImage? {
+    /// - space: the colours of the display the frame is shown on; sRGB when it is not known.
+    static func image(_ form: BotForm, motion: BotMotion, side: CGFloat, outline: Int = 0, space: CGColorSpace? = nil) -> CGImage? {
         let inner = Int((side * (1 + 2 * margin)).rounded(.up)), extent = inner + outline * 2
-        guard inner > 0, let context = BotForm.bitmap(extent) else { return nil }
+        guard inner > 0, let context = canvas(extent, space: space) else { return nil }
         context.saveGState()
         // From here one unit is the mark's side, measured from its top left with y running down.
         let unit = CGFloat(inner) / (1 + 2 * margin)
@@ -80,6 +93,7 @@ enum BotRenderer {
         var own = vImage_Buffer(data: alpha, height: size, width: size, rowBytes: extent)
         var ring = vImage_Buffer(data: spread, height: size, width: size, rowBytes: extent)
         let side = 2 * reach + 1, flat = [UInt8](repeating: 0, count: side * side)
+        // A frame's pixels are blue, green, red, alpha in memory: alpha is the fourth byte.
         guard vImageExtractChannel_ARGB8888(&picture, &own, 3, none) == kvImageNoError,
               vImageDilate_Planar8(&own, &ring, 0, 0, flat, vImagePixelCount(side), vImagePixelCount(side), none) == kvImageNoError
         else { return }

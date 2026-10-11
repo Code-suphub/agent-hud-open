@@ -44,7 +44,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - A permission reminder shows the asking bot: one hop, then raised by 12%, a knock every 2.6 seconds, eyes wide and straight at the user.
 - A reply reminder shows the bot smiling for about a second, then looking at the pointer.
 - A reminder keeps its bot for as long as it is shown; a dock's mark returns to its logo.
-- Bots are stepped 30 times a second by one timer, which runs for as long as a dock shows marks that have bots or a reminder shows one. A bot's picture is drawn again only when its eyes or outline have visibly changed, and an idle mark between visits is not drawn at all; breathing and leaning are layer transforms.
+- One timer steps every bot, as often as the liveliest of them needs: 30 times a second during a morph, an act, a blink or a hop, 15 while eyes follow the pointer, 10 while a bot only breathes, and not at all while every mark waits as its logo for its next visit. A bot's picture is drawn again only when its eyes or outline have visibly changed, in the colours of its display so the layer shows it without converting it; breathing and leaning are layer transforms.
 - Reduce Motion, or `botLogos` off, leaves every mark its logo.
 
 ### What the Simple panel shows

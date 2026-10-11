@@ -21,6 +21,44 @@ final class BotMotionTests: XCTestCase {
         XCTAssertFalse(motion.isAtRest, "an initial idle phase still needs the clock for its first visit")
     }
 
+    func testAnIdleMarkAsksForNoFrameUntilItsVisitAndStartsItFromTheLogo() throws {
+        var motion = BotMotion(seed: 1)
+        motion.set(.idle, at: 100)
+        motion.step(to: 100)
+        let wait = try XCTUnwrap(motion.wait)
+        XCTAssertGreaterThanOrEqual(wait, 20)
+        XCTAssertLessThanOrEqual(wait, 35)
+        // Woken exactly then, after a sleep far longer than a frame: the morph begins, it does not jump ahead.
+        motion.step(to: 100 + wait)
+        XCTAssertEqual(motion.morph, 0)
+        XCTAssertEqual(motion.wait, BotPace.lively)
+        motion.step(to: 100 + wait + BotPace.lively)
+        XCTAssertEqual(motion.morph, CGFloat(BotPace.lively / 0.5), accuracy: 0.0001)
+        XCTAssertEqual(motion.wait, BotPace.lively)
+    }
+
+    func testAStillBotIsCalmAndItsEyesFollowAMovedPointerAtTheirOwnPace() {
+        // An alert's bot after its smile: no acts and no breath, only eyes that look where the pointer is.
+        var motion = BotMotion(seed: 1)
+        motion.staysBot = true
+        motion.set(.done, at: 0)
+        // Up to just before its first blink, two seconds in.
+        run(&motion, from: 0, for: 1.8)
+        XCTAssertEqual(motion.wait, BotPace.calm)
+        motion.step(to: 1.9, aim: CGPoint(x: 0.8, y: 0.3))
+        XCTAssertEqual(motion.wait, BotPace.following)
+    }
+
+    func testAMarkAtRestAsksForNothing() {
+        var motion = BotMotion(seed: 1)
+        motion.set(.working, at: 0)
+        run(&motion, from: 0, for: 1)
+        motion.set(.done, at: 1)
+        run(&motion, from: 1, for: 3)
+        XCTAssertTrue(motion.isAtRest)
+        XCTAssertNil(motion.wait)
+    }
+
     func testWorkTurnsTheLogoIntoItsBotInHalfASecond() {
         var motion = BotMotion(seed: 1)
         motion.set(.working, at: 0)

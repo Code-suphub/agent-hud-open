@@ -93,6 +93,9 @@ final class LogoQueueLayerView: NSView {
     private var bleed: CGFloat = 1
     /// Alpha bounds in each baked bitmap, including its outline, normalized with y running down.
     private var visibleBounds: [CGRect] = []
+    /// Where each bot sits on the screen, for its gaze, worked out once for a layout and a window frame.
+    private var places: [CGPoint?] = []
+    private var placedIn: CGRect?
     private var applied: (config: LogoQueueConfig, light: Bool, scale: CGFloat, animates: Bool, previews: Bool)?
 
     override init(frame frameRect: NSRect) {
@@ -128,6 +131,7 @@ final class LogoQueueLayerView: NSView {
             || applied?.config.bots != config.bots || applied?.config.workingSeconds != config.workingSeconds
         applied = (config, light, scale, animates, previewsMotion)
         if rebuild { build(config: config, light: light, scale: scale) }
+        matchDisplay()
         position(config: config)
         animate(config: config, animates: animates, previewsMotion: previewsMotion)
     }
@@ -197,6 +201,13 @@ final class LogoQueueLayerView: NSView {
             }
         }
         CATransaction.commit()
+        placedIn = nil
+    }
+
+    /// The bots draw their frames in the colours of the display this queue is on.
+    private func matchDisplay() {
+        let space = window?.colorSpace?.cgColorSpace
+        for actor in actors { actor?.show(in: space) }
     }
 
     private func animate(config: LogoQueueConfig, animates: Bool, previewsMotion: Bool) {
@@ -212,35 +223,47 @@ final class LogoQueueLayerView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { BotClock.shared.drop(self) } else { followBots() }
+        placedIn = nil
+        if window == nil { BotClock.shared.drop(self) } else { matchDisplay(); followBots() }
     }
 
     private func followBots() {
         guard window != nil, actors.contains(where: { $0 != nil }) else { return }
-        BotClock.shared.follow(self) { [weak self] now in self?.stepBots(to: now) ?? false }
+        BotClock.shared.follow(self) { [weak self] now in self?.stepBots(to: now) }
     }
 
-    /// One frame for every bot in the queue. Idle logos keep the clock for their next bot appearance.
-    func stepBots(to now: TimeInterval) -> Bool {
+    /// One frame for the bots in the queue that are due one. Returns the seconds until the soonest of them needs
+    /// the next: idle logos wait for their next bot appearance, and nil means no bot has anything left to show.
+    func stepBots(to now: TimeInterval) -> TimeInterval? {
         guard applied?.animates == true else {
             for (index, actor) in actors.enumerated() {
                 actor?.layer.isHidden = true
                 marks[index].opacity = 1
             }
-            return false
+            return nil
         }
-        guard let window else { return false }
-        let pointer = NSEvent.mouseLocation, runsDown = layer?.isGeometryFlipped ?? false
-        var moving = false
+        guard let window else { return nil }
+        let runsDown = layer?.isGeometryFlipped ?? false
+        if placedIn != window.frame || places.count != actors.count {
+            placedIn = window.frame
+            places = Array(repeating: nil, count: actors.count)
+        }
+        var pointer: CGPoint?, soonest: TimeInterval?
         for (index, actor) in actors.enumerated() {
             guard let actor, index < marks.count else { continue }
-            let place = window.convertPoint(toScreen: convert(actor.layer.position, to: nil))
-            // Screen coordinates run up; a bot's gaze is measured with y running down.
-            let aim = BotMotion.aim(from: CGPoint(x: place.x, y: -place.y), to: CGPoint(x: pointer.x, y: -pointer.y))
-            let active = actor.step(to: now, aim: aim, yRunsDown: runsDown)
-            marks[index].opacity = actor.layer.isHidden ? 1 : 0
-            moving = moving || active
+            let wait = actor.step(to: now, yRunsDown: runsDown) {
+                // The pointer is read once a frame, and only when some bot has eyes to turn.
+                let target = pointer ?? NSEvent.mouseLocation
+                pointer = target
+                let place = places[index] ?? window.convertPoint(toScreen: convert(actor.layer.position, to: nil))
+                places[index] = place
+                // Screen coordinates run up; a bot's gaze is measured with y running down.
+                return BotMotion.aim(from: CGPoint(x: place.x, y: -place.y), to: CGPoint(x: target.x, y: -target.y))
+            }
+            let opacity: Float = actor.layer.isHidden ? 1 : 0
+            if marks[index].opacity != opacity { marks[index].opacity = opacity }
+            if let wait { soonest = min(soonest ?? wait, wait) }
         }
-        return moving
+        return soonest
     }
 }
