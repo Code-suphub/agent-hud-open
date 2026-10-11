@@ -63,6 +63,8 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     public var showsRings: Bool
     /// Simple mode writes the percentage used beside each mark.
     public var showsNumbers: Bool
+    /// Simple mode turns a working agent's mark into its bot, and lets idle marks visit as bots.
+    public var simpleBots: Bool
 
     public init(
         mode: HUDMode = .logos,
@@ -75,7 +77,8 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         simpleSize: Double = 22,
         ringWidth: Double = 1.5,
         showsRings: Bool = true,
-        showsNumbers: Bool = true
+        showsNumbers: Bool = true,
+        simpleBots: Bool = false
     ) {
         self.mode = mode
         self.edge = edge
@@ -88,6 +91,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         self.ringWidth = Self.clamp(ringWidth, to: Self.ringWidthRange)
         self.showsRings = showsRings
         self.showsNumbers = showsNumbers
+        self.simpleBots = simpleBots
     }
 
     /// A display's starting point: a notched screen keeps its island, anything else shows the queue.
@@ -101,7 +105,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case mode, edge, offset, logoSize, logoEdgeDistance, gapScale, showsLogos
-        case simpleSize, ringWidth, showsRings, showsNumbers
+        case simpleSize, ringWidth, showsRings, showsNumbers, simpleBots
     }
 
     public init(from decoder: Decoder) throws {
@@ -118,7 +122,8 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
             simpleSize: try c.decodeIfPresent(Double.self, forKey: .simpleSize) ?? d.simpleSize,
             ringWidth: try c.decodeIfPresent(Double.self, forKey: .ringWidth) ?? d.ringWidth,
             showsRings: try c.decodeIfPresent(Bool.self, forKey: .showsRings) ?? d.showsRings,
-            showsNumbers: try c.decodeIfPresent(Bool.self, forKey: .showsNumbers) ?? d.showsNumbers
+            showsNumbers: try c.decodeIfPresent(Bool.self, forKey: .showsNumbers) ?? d.showsNumbers,
+            simpleBots: try c.decodeIfPresent(Bool.self, forKey: .simpleBots) ?? d.simpleBots
         )
     }
 }

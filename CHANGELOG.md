@@ -4,6 +4,10 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Display settings lists the HUD modes as Notch, Simple, Dynamic Dock; in Chinese, Simple is 简约.
+- Simple has a Bot animation switch, off by default: a working agent's logo in the panel becomes its bot, and idle logos visit as bots now and then.
+- A permission or reply reminder opens showing the agent's logo, which turns into its bot once the card has opened, instead of appearing as the bot at once.
+- Host API: `ScreenPlacement.simpleBots`; `BotMark.staysBot` and `BotActor.restsHidden` for a mark that follows its agent and draws its own resting logo; `BotMotion.arrivesAfter` holds a staying bot as its logo first.
 - `scripts/measure-process-cpu.py` converts the kernel's CPU ticks to seconds; on Apple silicon it reported figures 41.7 times too small.
 - Less CPU in the background. Bots are stepped only as often as their motion shows — 30 times a second for a morph, an act or a blink, 10 for a breath — and not at all while a dock's logos wait for their next visit; their frames are drawn in the display's colours, so showing one no longer converts it. The Antigravity approval and DeepSeek Harness question observers list this user's processes at most every 10 seconds instead of every 2, search the listing instead of taking every line apart, and look again at once when a service stops answering.
 - Codex Desktop's mid-turn Question cards appear on the HUD, including questions with only a reply field. Answers go to the original active turn; Skip leaves the question unanswered.

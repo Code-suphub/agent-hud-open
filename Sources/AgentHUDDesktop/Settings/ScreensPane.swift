@@ -64,8 +64,13 @@ struct ScreensPane: View {
     private var previewMeter: SimpleMeterConfig {
         var sample = placement
         sample.edge = .top
-        let items = store.map { SimpleMeterItem.items(rows: $0.rows) } ?? []
-        return SimpleMeterConfig(items: items.isEmpty ? SimpleMeterItem.samples : items, placement: sample)
+        var items = store.map {
+            SimpleMeterItem.items(rows: $0.rows, working: $0.queueVendors.filter(\.isWorking).map(\.vendor))
+        } ?? []
+        if items.isEmpty { items = SimpleMeterItem.samples }
+        // The preview shows what the bot switch does even while nothing is running.
+        if sample.simpleBots, !items.contains(where: \.isWorking) { items[0].isWorking = true }
+        return SimpleMeterConfig(items: items, placement: sample)
     }
 
     var body: some View {
@@ -82,8 +87,8 @@ struct ScreensPane: View {
             SettingRow(label: L10n.text("HUD 形态", "HUD"), subtitle: subtitle) {
                 SegmentedPills(options: [
                     SegmentOption(value: HUDMode.notch, label: L10n.text("刘海", "Notch")),
+                    SegmentOption(value: HUDMode.simple, label: L10n.text("简约", "Simple")),
                     SegmentOption(value: HUDMode.logos, label: L10n.text("动态 Dock", "Dynamic Dock")),
-                    SegmentOption(value: HUDMode.simple, label: L10n.text("简洁", "Simple")),
                 ], selection: modeBinding, theme: theme)
             }
             Text(L10n.text("直接拖动可见的 HUD。拖动刘海会切换为动态 Dock。",
@@ -152,6 +157,13 @@ struct ScreensPane: View {
                     label: L10n.text("显示数字", "Show numbers"),
                     subtitle: L10n.text("在标志旁写出已用百分比。", "The percentage used, beside the mark."),
                     isOn: binding(\.showsNumbers)
+                )
+                SettingsDivider(theme: theme)
+                SettingsToggleRow(
+                    label: L10n.text("Bot 动画", "Bot animation"),
+                    subtitle: L10n.text("工作中的 agent，标志变成它的 Bot；空闲时偶尔变成 Bot 活动几秒。",
+                                        "A working agent's mark becomes its bot. Idle marks become bots for a few seconds now and then."),
+                    isOn: binding(\.simpleBots)
                 )
             }
         }

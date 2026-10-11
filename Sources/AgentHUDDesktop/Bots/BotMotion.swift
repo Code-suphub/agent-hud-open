@@ -63,6 +63,9 @@ struct BotMotion: Sendable {
     private static let doneSeconds: TimeInterval = 2.4
     /// An alert shows its bot for as long as the alert is up; a logo queue lets it settle back into the logo.
     var staysBot = false
+    /// Seconds a staying bot keeps its logo after it is first given a phase. A reminder's card is still opening
+    /// then, so the mark is read as the agent's logo before it turns into the bot. The phase begins on arrival.
+    var arrivesAfter: TimeInterval = 0
     /// Seconds for one breath of the body.
     var period: TimeInterval = 3
     /// Degrees per second the body turns under the face while awake.
@@ -123,7 +126,7 @@ struct BotMotion: Sendable {
         }
         leaving = pose
         phase = next
-        since = now
+        since = now + (staysBot && morph == 0 ? max(0, arrivesAfter) : 0)
         if next == .working {
             nextAct = now + 0.9 + random.unit() * 1.2
         }
@@ -142,9 +145,11 @@ struct BotMotion: Sendable {
             scheduleBot(after: now + Self.morphSeconds)
         }
         let idleVisit = phase == .idle && botInterval?.contains(now) == true
-        let awake = phase == .working || idleVisit || phase == .asking || (phase == .done && age < 1.5)
+        // Before a staying bot arrives it is the logo at rest: no morph, no pose, no face.
+        let arrived = age >= 0
+        let awake = arrived && (phase == .working || idleVisit || phase == .asking || (phase == .done && age < 1.5))
 
-        let wanted: CGFloat = (awake || staysBot) && hasFace ? 1 : 0
+        let wanted: CGFloat = arrived && (awake || staysBot) && hasFace ? 1 : 0
         let stride = CGFloat(dt / Self.morphSeconds)
         morph = abs(wanted - morph) <= stride ? wanted : morph + (wanted > morph ? stride : -stride)
 
@@ -171,8 +176,8 @@ struct BotMotion: Sendable {
             else { turn += spin * CGFloat(dt) }
         }
 
-        pose = sitting(age: age, progress: progress, swell: swell)
-        if let leaving, age < 0.3 { pose = leaving.mixed(with: pose, Self.easeOut(CGFloat(age / 0.3))) }
+        pose = arrived ? sitting(age: age, progress: progress, swell: swell) : BotPose()
+        if let leaving, arrived, age < 0.3 { pose = leaving.mixed(with: pose, Self.easeOut(CGFloat(age / 0.3))) }
         if actsInPlace {
             // Keep the centre fixed, even when returning from an alert's raised pose. The original logo
             // is still while it is shown; breathing and turns arrive with the bot again.
@@ -184,14 +189,16 @@ struct BotMotion: Sendable {
             pose.x += 0.025 * face.look
         }
 
-        if !actsInPlace || morph > 0 { look(age: age, now: now, dt: dt, aim: aim, swell: swell) }
+        if arrived, !actsInPlace || morph > 0 { look(age: age, now: now, dt: dt, aim: aim, swell: swell) }
         else { (following, blinking) = (false, false) }
-        keep(age: age, now: now, dt: dt)
+        if arrived { keep(age: age, now: now, dt: dt) }
         wait = nextFrame(now: now, age: age, wanted: wanted)
     }
 
     private func nextFrame(now: TimeInterval, age: TimeInterval, wanted: CGFloat) -> TimeInterval? {
         if isAtRest { return nil }
+        // A logo waiting to arrive shows nothing new until it does.
+        if age < 0 { return max(BotPace.lively, -age) }
         if morph == 0, wanted == 0 {
             // The logo is showing: nothing moves before an idle mark's next visit, or a finished turn's rest.
             if phase == .idle, let visit = botInterval { return max(BotPace.lively, visit.lowerBound - now) }

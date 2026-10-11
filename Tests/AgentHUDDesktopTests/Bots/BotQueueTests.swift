@@ -222,16 +222,18 @@ final class BotMarkTests: XCTestCase {
     }
 
     /// The reminder cards' mark, through SwiftUI and the shared clock, the way the island shows it.
-    func testAReminderMarkTurnsIntoItsBotOnceItIsShown() throws {
+    func testAReminderMarkOpensAsItsLogoAndTurnsIntoItsBotOnceItsCardHasOpened() throws {
         // With Reduce Motion on, as on the build machines, the mark is rightly left a logo.
         try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Reduce Motion keeps the logo")
         let (host, window) = hosted(BotMark(vendor: "Claude", size: 17, phase: .asking).frame(width: 60, height: 60))
         defer { window.close() }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+        RunLoop.main.run(until: Date().addingTimeInterval(BotMark.arrival - 0.3))
         let stage = try XCTUnwrap(stage(in: host), "the bot's layer view was never made")
         let bot = try XCTUnwrap(stage.layer?.sublayers?.first)
         XCTAssertFalse(bot.isHidden)
-        XCTAssertNotNil(bot.contents)
+        XCTAssertNotNil(bot.contents, "the logo is drawn while the card opens")
+        XCTAssertEqual(bot.affineTransform().a, 1, accuracy: 0.001, "the logo waits at rest; it does not hop")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3 + 0.7))
         // Asking stays raised: the layer is scaled up from its resting size.
         XCTAssertGreaterThan(bot.affineTransform().a, 1.05)
         BotClock.shared.drop(stage)

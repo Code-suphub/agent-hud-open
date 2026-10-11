@@ -677,7 +677,9 @@ final class ScreenHUD {
     }
 
     /// The agents with a quota row, each with its tightest window.
-    private var meterItems: [SimpleMeterItem] { SimpleMeterItem.items(rows: store.rows) }
+    private var meterItems: [SimpleMeterItem] {
+        SimpleMeterItem.items(rows: store.rows, working: store.queueVendors.filter(\.isWorking).map(\.vendor))
+    }
 
     private var simpleMeter: SimpleMeterConfig? {
         guard geometry.mode == .simple else { return nil }

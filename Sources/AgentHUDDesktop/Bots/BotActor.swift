@@ -28,11 +28,16 @@ final class BotActor {
     private var outline = 0
     /// The colours of the display the bot is on, once its view is in a window.
     private var space: CGColorSpace?
+    /// A queue's bot hides while its mark rests as the logo, because the queue draws that logo itself. A bot
+    /// with nothing under it keeps its layer and draws the logo there.
+    var restsHidden = true
 
-    init(form: BotForm, staysBot: Bool, period: TimeInterval) {
+    /// - arrivesAfter: seconds a staying bot keeps its logo before it turns into the bot.
+    init(form: BotForm, staysBot: Bool, period: TimeInterval, arrivesAfter: TimeInterval = 0) {
         self.form = form
         motion = BotMotion()
         motion.staysBot = staysBot
+        motion.arrivesAfter = arrivesAfter
         motion.period = max(0.5, period)
         motion.spin = form.spec.spin
         layer.contentsGravity = .resize
@@ -90,7 +95,7 @@ final class BotActor {
         let wait = motion.wait
         self.due = wait.map { now + $0 }
         // Setting a layer's property, even to what it already is, makes the frame's commit carry the layer.
-        if wait == nil || (motion.phase == .idle && !motion.staysBot && motion.morph == 0) {
+        if restsHidden, wait == nil || (motion.phase == .idle && !motion.staysBot && motion.morph == 0) {
             if !layer.isHidden { layer.isHidden = true }
             return wait
         }
@@ -174,19 +179,25 @@ final class BotClock {
     }
 }
 
-/// An agent's mark that is its bot for as long as it is shown: asking on a request, smiling on a reply.
+/// An agent's mark that turns into its bot. On a reminder it opens as the logo, becomes the bot once the card
+/// has opened and stays it for as long as it is shown: asking on a request, smiling on a reply. A mark that
+/// follows its agent instead is the bot while the agent works and the logo while it rests, as in a logo queue.
 ///
 /// With bots switched off, or motion reduced, it is the plain logo.
 struct BotMark: View {
+    /// How long a reminder's mark stays the logo: the card's own opening, and a moment to read the logo in.
+    static let arrival: TimeInterval = IslandAnimation.duration + 0.3
+
     let vendor: String
     var size: CGFloat = 17
     let phase: BotPhase
+    var staysBot = true
     @Environment(\.botLogos) private var botLogos
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if botLogos, !reduceMotion, BotForm.form(for: vendor) != nil {
-            BotStage(vendor: vendor, size: size, phase: phase)
+            BotStage(vendor: vendor, size: size, phase: phase, staysBot: staysBot)
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
         } else {
@@ -199,12 +210,13 @@ private struct BotStage: NSViewRepresentable {
     let vendor: String
     let size: CGFloat
     let phase: BotPhase
+    let staysBot: Bool
     @Environment(\.displayScale) private var displayScale
 
     func makeNSView(context: Context) -> BotStageView { BotStageView() }
 
     func updateNSView(_ view: BotStageView, context: Context) {
-        view.show(vendor: vendor, size: size, scale: displayScale, phase: phase)
+        view.show(vendor: vendor, size: size, scale: displayScale, phase: phase, staysBot: staysBot)
     }
 
     static func dismantleNSView(_ view: BotStageView, coordinator: ()) { BotClock.shared.drop(view) }
@@ -214,6 +226,7 @@ private struct BotStage: NSViewRepresentable {
 final class BotStageView: NSView {
     private var actor: BotActor?
     private var vendor = ""
+    private var staysBot = true
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -224,11 +237,17 @@ final class BotStageView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    func show(vendor: String, size: CGFloat, scale: CGFloat, phase: BotPhase) {
-        if vendor != self.vendor || actor == nil {
+    func show(vendor: String, size: CGFloat, scale: CGFloat, phase: BotPhase, staysBot: Bool = true) {
+        if vendor != self.vendor || staysBot != self.staysBot || actor == nil {
             self.vendor = vendor
+            self.staysBot = staysBot
             actor?.layer.removeFromSuperlayer()
-            actor = BotForm.form(for: vendor).map { BotActor(form: $0, staysBot: true, period: 3) }
+            actor = BotForm.form(for: vendor).map {
+                let actor = BotActor(form: $0, staysBot: staysBot, period: 3, arrivesAfter: staysBot ? BotMark.arrival : 0)
+                // Nothing else draws this mark, so the actor draws its logo too.
+                actor.restsHidden = false
+                return actor
+            }
             if let actor { layer?.addSublayer(actor.layer) }
         }
         guard let actor else { return }

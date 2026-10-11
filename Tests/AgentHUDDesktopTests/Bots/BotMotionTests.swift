@@ -290,4 +290,40 @@ final class BotMotionTests: XCTestCase {
         XCTAssertEqual(up.ty, 4, accuracy: 0.001)
         XCTAssertEqual(down.b, -up.b, accuracy: 0.001)
     }
+
+    func testAReminderOpensAsItsLogoAndTurnsIntoItsBotOnceItArrives() throws {
+        var motion = BotMotion(seed: 1)
+        motion.staysBot = true
+        motion.arrivesAfter = 0.7
+        motion.set(.asking, at: 100)
+        motion.step(to: 100)
+        XCTAssertEqual(motion.morph, 0)
+        XCTAssertEqual(motion.pose, BotPose(), "the logo does not hop")
+        XCTAssertEqual(try XCTUnwrap(motion.wait), 0.7, accuracy: 0.001, "nothing changes until it arrives")
+        run(&motion, from: 100, for: 0.66)
+        XCTAssertEqual(motion.morph, 0, "still the logo while its card opens")
+        XCTAssertEqual(motion.pose, BotPose())
+        XCTAssertFalse(motion.isAtRest)
+
+        run(&motion, from: 100.7, for: 0.2)
+        XCTAssertGreaterThan(motion.morph, 0)
+        XCTAssertLessThan(motion.morph, 1)
+        XCTAssertLessThan(motion.pose.y, 0, "the hop begins with the bot, not before it")
+        run(&motion, from: 100.9 + 1.0 / 30, for: 0.5)
+        XCTAssertEqual(motion.morph, 1)
+    }
+
+    func testOnlyAStayingBotWithAHoldWaitsAsItsLogo() {
+        var staying = BotMotion(seed: 1)
+        staying.staysBot = true
+        staying.set(.done, at: 50)
+        run(&staying, from: 50, for: 0.2)
+        XCTAssertGreaterThan(staying.morph, 0, "with no hold a staying bot starts at once")
+
+        var queued = BotMotion(seed: 1)
+        queued.arrivesAfter = 0.7
+        queued.set(.working, at: 50)
+        run(&queued, from: 50, for: 0.2)
+        XCTAssertGreaterThan(queued.morph, 0, "a mark that follows its agent is never held")
+    }
 }
