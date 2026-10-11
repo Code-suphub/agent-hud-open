@@ -4,6 +4,8 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Codex Desktop Computer Use app-access requests appear on the HUD, with Deny, Allow this conversation, and Always allow when offered by Desktop. Native answers and dismissals follow the original request; engine approvals keep their existing hook reviewer policy.
+- Host API: `CodexDesktopIPC` provides the shared Desktop owner transport; `CodexDesktopPermissions` reads and answers native app requests. `PermissionRequest.nativeApproval` carries the advertised scopes and `allowLabel` names their conversation choice.
 - Agent logos turn into small bots. In Dynamic Dock a working agent's logo morphs into a body with its own outline and colours and two eyes that follow the pointer; a permission reminder shows the bot asking, and a reply reminder shows it smiling. Display settings has a Bot logos switch, on by default; Reduce Motion keeps the logos.
 - Host API: `Settings.botLogos` controls the bots. `LogoQueueConfig.bots` carries it to a logo queue.
 - Grok subscription windows remain visible as N/A when usage is unavailable, retaining their reset time without inventing a percentage, forecast or alert. An explicit unavailable reading replaces a previous numeric value.

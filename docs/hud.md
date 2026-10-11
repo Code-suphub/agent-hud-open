@@ -65,6 +65,8 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 
 ### Approvals
 
+Codex Desktop's Computer Use app-access prompts are read from the original Desktop owner's pending MCP elicitations over local IPC. They offer **Deny**, **Allow this conversation**, and **Always allow** only when Desktop advertises that scope. Before answering, the HUD confirms the same owner and exact request are still waiting. Answering in Desktop withdraws the card; leaving, expiry, and failed readings never answer it. Client hooks off stops observation and cancels answers still in preflight. Engine tool approvals continue through the permission hook and its reviewer check.
+
 Antigravity supplies waiting permissions through its running local service, without an execution hook. All services advertising local credentials are read; agy without them is excluded. Before sending allow-once or deny, the HUD rereads the exact interaction. Answers in Antigravity remove the card. Leaving or expiry keeps the native prompt unanswered and the card hidden until a complete reading confirms it ended. Client hooks off stops observation and cancels answers still in preflight.
 
 DeepSeek Harness questions can be answered on the HUD when its web host exposes the compatible question interface. The HUD confirms the host before reading its loopback event stream; hosts using a different interface keep questions in Harness. No hook is installed and nothing is written to Harness's files. Pending questions replay when the connection returns, answers keep each question's original id, and a question settled in Harness leaves the HUD. Plan reviews and questions with supporting detail stay in Harness so their full content can be read. Leaving or expiry keeps the question open there and hidden on the HUD, including across a temporary connection loss. Client hooks off stops the reading. See [the supported interface](providers.md#deepseek-harness).
@@ -129,6 +131,7 @@ Supported approval hooks are installed for detected clients at startup, alongsid
 | Collapsed shape, panel and events | `Sources/AgentHUDDesktop/Notch/Island/IslandRootView.swift`, `IslandWindowController.swift` |
 | Requests waiting, and the channel they wait on | `Sources/AgentHUDCore/Hooks/Permission/PermissionRequests.swift`, `PermissionRequest.swift`, `PermissionHooks.swift`, `PermissionHookClient.swift`; `Sources/AgentHUDCore/System/UnixSocketListener.swift`, `UnixSocket.swift` |
 | Native Antigravity approvals | `Sources/AgentHUDCore/Hooks/Permission/AntigravityPermissions.swift`, `AntigravityPermissionObserver.swift`; `Sources/AgentHUDCore/Providers/Antigravity/AntigravityService.swift` |
+| Native Codex Desktop Computer Use approvals | `Sources/AgentHUDCore/Providers/Codex/CodexDesktopPermissions.swift`, `CodexDesktopIPC.swift`; `Sources/AgentHUDCore/Hooks/Permission/CodexDesktopPermissionObserver.swift` |
 | DeepSeek Harness's questions | `Sources/AgentHUDCore/Hooks/Permission/DeepSeekQuestions.swift`, `DeepSeekQuestionObserver.swift` |
 | A call answered in Claude Code's own dialog | `Sources/AgentHUDCore/Hooks/Permission/PermissionTranscript.swift` |
 | The card, the queue and the answers | `Sources/AgentHUDDesktop/Notch/Alerts/PermissionAlertViews.swift`, `PermissionQuestionViews.swift`, `IslandAlert.swift`, `Notch/OverlayPanel.swift` |

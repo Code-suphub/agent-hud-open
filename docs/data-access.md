@@ -46,6 +46,7 @@ Per-client fields, endpoints and stored data: [providers](providers.md). Token c
 - Pi's extension and OpenCode's plugin run inside those clients and write only metadata records of their turns — session and turn identity, workspace, the session's title, model, provider and times — beside the client's own data; they make no request and upload nothing ([observers](session-lifecycle.md#observers)).
 
 - Antigravity approvals are read from its already-running local service, without changing its permission settings or installing a tool-execution hook. Only the user's explicit allow-once or deny sends an interaction answer to that same service; credentials and waiting tool inputs stay in memory. Client hooks off stops the observer.
+- Codex Desktop Computer Use app approvals are read from the original thread owner's pending requests through `$CODEX_HOME/ipc/ipc.sock`. Snapshots are inspected in memory and never stored. Only an explicit HUD decision sends the native elicitation response, after checking that the same owner and request still wait; conversation and persistent scopes come from the request itself. Client hooks off stops observation. These requests are independent of the engine approval hook and its reviewer policy.
 - DeepSeek Harness's questions are read from its web host's loopback event stream and answered back on 127.0.0.1; only the answers the user gives on the HUD are sent, and nothing is written to Harness's files. Client hooks off stops the reading.
 
 ## Related
