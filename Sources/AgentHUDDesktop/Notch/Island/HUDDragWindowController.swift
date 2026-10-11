@@ -2,8 +2,9 @@ import AppKit
 import AgentHUDCore
 import QuartzCore
 
-/// A grab surface over the visible HUD. Its bounds appear only when grabbed or dragged.
-/// This surface owns the mouse gesture.
+/// A grab surface over the visible HUD. This surface owns the mouse gesture: a press picks the HUD up once
+/// it has travelled `HUDDragView.travel` points or been held still for `holdDelay`, and only then do its
+/// dashed bounds appear. A click that does neither is left alone.
 @MainActor
 final class HUDDragWindowController {
     let panel: OverlayPanel
@@ -16,8 +17,11 @@ final class HUDDragWindowController {
     var onEnd: (() -> Void)? { didSet { surface.onEnd = onEnd } }
     var isDragging: Bool { surface.isDragging }
     var isPressed: Bool { surface.isPressed }
+    /// The press has become a pick-up, by travel or by holding.
+    var isArmed: Bool { surface.isArmed }
 
-    init() {
+    init(holdDelay: TimeInterval = 0.3) {
+        surface.holdDelay = holdDelay
         panel = OverlayPanel(frame: .zero,
                              level: NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 3),
                              acceptsMouse: true)
@@ -27,24 +31,38 @@ final class HUDDragWindowController {
         surface.setAccessibilityLabel(L10n.text("拖动 HUD", "Move HUD"))
     }
 
-    func show(frame: CGRect, outlined: Bool = true) {
+    /// `outline` is the dashed shape in screen coordinates, for a HUD whose drawn panel is smaller than its grab
+    /// surface; without one the dashes follow the surface itself.
+    func show(frame: CGRect, outlined: Bool = true, outline: (rect: CGRect, radius: CGFloat)? = nil) {
         panel.setFrame(frame, display: false)
         surface.frame = CGRect(origin: .zero, size: frame.size)
         surface.isOutlined = outlined
+        surface.outlineShape = outline.map { ($0.rect.offsetBy(dx: -frame.minX, dy: -frame.minY), $0.radius) }
         surface.updateOutline()
         panel.orderFrontRegardless()
     }
 
     func hide() { panel.orderOut(nil) }
+
+    /// The dashed path as drawn, in the surface's own coordinates.
+    var outlineBounds: CGRect { surface.outlineBounds }
 }
 
 @MainActor
 private final class HUDDragView: NSView {
+    /// How far a press has to travel before it moves the HUD rather than clicking it.
+    static let travel: CGFloat = 6
+
     private let outline = CAShapeLayer()
     private var downAt: CGPoint?
+    private var holdTimer: Timer?
     private(set) var isDragging = false
+    private(set) var isArmed = false
     var isPressed: Bool { downAt != nil }
     var isOutlined = false
+    var holdDelay: TimeInterval = 0.3
+    var outlineShape: (rect: CGRect, radius: CGFloat)?
+    var outlineBounds: CGRect { outline.path?.boundingBoxOfPath ?? .zero }
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
     var onBegin: ((CGPoint) -> Void)?
@@ -70,9 +88,11 @@ private final class HUDDragView: NSView {
     func updateOutline() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        outline.opacity = isOutlined || isPressed ? 1 : 0
+        outline.opacity = isOutlined || isArmed ? 1 : 0
         outline.frame = bounds
-        outline.path = CGPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), cornerWidth: 7, cornerHeight: 7, transform: nil)
+        let rect = outlineShape?.rect ?? bounds.insetBy(dx: 2, dy: 2)
+        let radius = max(0, min(outlineShape?.radius ?? 7, min(rect.width, rect.height) / 2))
+        outline.path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
         CATransaction.commit()
     }
 
@@ -83,8 +103,22 @@ private final class HUDDragView: NSView {
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
         downAt = window.convertPoint(toScreen: event.locationInWindow)
-        updateOutline()
         onPress?()
+        holdTimer?.invalidate()
+        let timer = Timer(timeInterval: holdDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.arm() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        holdTimer = timer
+    }
+
+    /// The press is now a pick-up: the bounds show, and any further movement moves the HUD.
+    private func arm() {
+        holdTimer?.invalidate()
+        holdTimer = nil
+        guard isPressed, !isArmed else { return }
+        isArmed = true
+        updateOutline()
         NSCursor.closedHand.set()
     }
 
@@ -92,7 +126,8 @@ private final class HUDDragView: NSView {
         guard let downAt, let window else { return }
         let point = window.convertPoint(toScreen: event.locationInWindow)
         if !isDragging {
-            guard hypot(point.x - downAt.x, point.y - downAt.y) >= 3 else { return }
+            guard isArmed || hypot(point.x - downAt.x, point.y - downAt.y) >= Self.travel else { return }
+            arm()
             isDragging = true
             onBegin?(downAt)
         }
@@ -100,9 +135,12 @@ private final class HUDDragView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        holdTimer?.invalidate()
+        holdTimer = nil
         downAt = nil
         let moved = isDragging
         isDragging = false
+        isArmed = false
         updateOutline()
         NSCursor.openHand.set()
         if moved { onEnd?() }

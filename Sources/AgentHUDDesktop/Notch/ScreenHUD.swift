@@ -585,12 +585,31 @@ final class ScreenHUD {
             dragSurface.hide()
             return
         }
-        dragSurface.show(frame: Self.dragSurfaceFrame(for: geometry),
-                         outlined: previewPlacement != nil || dragSurface.isPressed)
+        let outline = simpleMeter.map { Self.dragOutline(for: geometry, panelRadius: $0.cornerRadius) }
+        dragSurface.show(frame: Self.dragSurfaceFrame(for: geometry, outline: outline?.rect),
+                         outlined: previewPlacement != nil || dragSurface.isArmed, outline: outline)
+    }
+
+    /// Clear space between the Simple panel and the dashes drawn around it.
+    private static let outlineGap: CGFloat = 2
+
+    /// The Simple panel's own shape, a little larger: its strip without the edge margin, with the panel's corner.
+    static func dragOutline(for geometry: NotchGeometry, panelRadius: CGFloat) -> (rect: CGRect, radius: CGFloat) {
+        var panel = geometry.rect
+        let margin = SimpleMeterConfig.edgeMargin
+        switch geometry.edge {
+        case .top: panel.size.height -= margin
+        case .bottom: panel.origin.y += margin; panel.size.height -= margin
+        case .left: panel.origin.x += margin; panel.size.width -= margin
+        case .right: panel.size.width -= margin
+        }
+        return (panel.insetBy(dx: -outlineGap, dy: -outlineGap), panelRadius + outlineGap)
     }
 
     /// The dashed bounds leave room at both ends of the queue without moving its marks or backdrop.
-    static func dragSurfaceFrame(for geometry: NotchGeometry) -> CGRect {
+    /// A panel with an outline of its own is grabbed by that outline, with room for its stroke.
+    static func dragSurfaceFrame(for geometry: NotchGeometry, outline: CGRect? = nil) -> CGRect {
+        if let outline { return outline.insetBy(dx: -2, dy: -2).intersection(geometry.screenFrame) }
         var frame = geometry.rect.insetBy(dx: geometry.edge.isHorizontal ? -8 : 0,
                                          dy: geometry.edge.isHorizontal ? 0 : -8)
         // The physical notch cannot be clicked. A little space beneath it makes its move surface reachable.

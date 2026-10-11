@@ -67,7 +67,8 @@ struct IslandRootView: View {
     static let expandedTopRadius: CGFloat = NotchGeometry.expandedTopRadius
     static let expandedBottomRadius: CGFloat = IslandController.expandedRadius
     static let dockCompactRowHeight: CGFloat = 32
-    static let dockCompactInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
+    /// The compact row already keeps `alertSidePadding` at each end, so the card adds none of its own.
+    static let dockCompactInsets = EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
 
     static var placeholder: IslandRootView {
         IslandRootView(store: nil, isOpen: false, collapsedSize: CGSize(width: 216, height: 32),
