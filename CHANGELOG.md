@@ -2,8 +2,13 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
-## Unreleased
+## 0.5.1 — 2026-10-12
 
+- Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.
+- Display settings has a Separate agents switch for Simple and Dynamic, off by default. Hovering an agent's logo shows a small card for that agent beside it, one line growing out of a Simple panel, and a click on the logo or the card opens that agent's whole panel. A reply opens as a pill beside its sender's logo and a permission request opens straight into its card, while the other logos stay. Cards grow out of the dock and slide from logo to logo; Reduce Motion keeps a plain fade.
+- A press picks the HUD up after 6 pt of travel or 0.3 s held still, and the dashed bounds appear at that moment instead of on mouse down. The closed hand stays for the whole drag, the dashes follow a Simple panel's rounded shape, and docked compact alerts keep 16 pt at each end instead of 32.
+- A turn that starts in a log its client keeps open, as Codex does, is noticed within five seconds instead of at the five-minute fallback read: the logs of the sessions active in the last day are looked at every five seconds.
+- Host API: `ScreenPlacement.separatesAgents`.
 - Quota and balance are read less often while work runs: every 150 to 210 s while one of a client's turns runs instead of every minute, and every 5 to 6 minutes while a session of its is live between turns instead of every three. For Claude Code that is 20 engine launches an hour during a turn instead of 60. A reading that follows an interval or a window's reset waits a random time of up to a minute, so copies of the application on accounts that reset together no longer ask the service in the same second; the reading after a turn ends, and the one opening the panel asks for, are taken at once as before.
 - Host API: `UsageRefresh.accountSpread`; `UsageProvider.accountChecks(since:spread:now:)` replaces `accountChecks(since:now:)`, and `runningAccountInterval` and `liveAccountInterval` are 150 s and 300 s.
 - `--demo-script <name|file>` plays a timed scenario in the demo, so a recording shows the same events at the same moments in every take: sessions start and end, a permission request arrives and is taken back, a reply arrives, a window fills up, the panel opens. `showcase` is built in; a JSON file gives any other.
