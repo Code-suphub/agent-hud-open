@@ -71,7 +71,7 @@ struct SimpleMeterConfig: Equatable {
     /// Between two agents along the panel.
     var itemGap: CGFloat { (size * (showsNumbers || !edge.isHorizontal ? 0.45 : 0.32)).rounded() }
 
-    private var font: NSFont { .monospacedDigitSystemFont(ofSize: fontSize, weight: .medium) }
+    private var font: NSFont { .monospacedDigitSystemFont(ofSize: fontSize, weight: .regular) }
 
     /// Width of one number as drawn, whole points up.
     func labelWidth(_ item: SimpleMeterItem) -> CGFloat {

@@ -49,7 +49,7 @@ struct SimpleMeterView: View {
             .frame(width: config.mark, height: config.mark)
             if config.showsNumbers {
                 Text(item.label)
-                    .font(.tabular(config.fontSize, .medium))
+                    .font(.tabular(config.fontSize, .regular))
                     .foregroundStyle(tint)
                     .lineLimit(1)
                     .fixedSize()
