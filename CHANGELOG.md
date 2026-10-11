@@ -4,7 +4,7 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
-- Display settings lists the HUD modes as Notch, Simple, Dynamic Dock; in Chinese, Simple is 简约.
+- Display settings lists the HUD modes as Notch, Simple, Dynamic; in Chinese, Simple is 简约 and Dynamic is 动态.
 - Simple has a Bot animation switch, off by default: a working agent's logo in the panel becomes its bot, and idle logos visit as bots now and then.
 - A permission or reply reminder opens showing the agent's logo, which turns into its bot once the card has opened, instead of appearing as the bot at once.
 - Host API: `ScreenPlacement.simpleBots`; `BotMark.staysBot` and `BotActor.restsHidden` for a mark that follows its agent and draws its own resting logo; `BotMotion.arrivesAfter` holds a staying bot as its logo first.

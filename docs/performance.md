@@ -74,7 +74,7 @@ grouped by the application's own functions, shows which part is paying; a mean a
 
 ## 2026-10-11 local validation
 
-Dynamic Dock, collapsed, on an Apple silicon Mac while a Claude Code session wrote its log; 20-second samples of the
+Dynamic mode, collapsed, on an Apple silicon Mac while a Claude Code session wrote its log; 20-second samples of the
 release build before and an optimised build after, in milliseconds of CPU per 15 seconds sampled.
 
 | Part | Before | After |

@@ -3,7 +3,7 @@ import SwiftUI
 import AgentHUDCore
 
 /// Per-screen HUD placement: pick a display, then pick how it presents the HUD. Every display keeps its
-/// own setting, so a laptop can hold its island while the monitor beside it runs the Dynamic Dock — and a
+/// own setting, so a laptop can hold its island while the monitor beside it runs Dynamic mode — and a
 /// display with no notch stops pretending to have one.
 struct ScreensPane: View {
     let settings: SettingsStore
@@ -88,11 +88,11 @@ struct ScreensPane: View {
                 SegmentedPills(options: [
                     SegmentOption(value: HUDMode.notch, label: L10n.text("刘海", "Notch")),
                     SegmentOption(value: HUDMode.simple, label: L10n.text("简约", "Simple")),
-                    SegmentOption(value: HUDMode.logos, label: L10n.text("动态 Dock", "Dynamic Dock")),
+                    SegmentOption(value: HUDMode.logos, label: L10n.text("动态", "Dynamic")),
                 ], selection: modeBinding, theme: theme)
             }
-            Text(L10n.text("直接拖动可见的 HUD。拖动刘海会切换为动态 Dock。",
-                           "Drag the visible HUD directly. Dragging the notch switches to Dynamic Dock."))
+            Text(L10n.text("直接拖动可见的 HUD。拖动刘海会切换为「动态」。",
+                           "Drag the visible HUD directly. Dragging the notch switches to Dynamic."))
                 .font(.ui(11)).foregroundStyle(theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)

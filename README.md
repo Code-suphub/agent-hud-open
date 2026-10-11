@@ -2,7 +2,7 @@
 <p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 <p align="center">
   <strong>Your agents, at a glance.</strong><br>
-  Activity, quotas, tokens and sessions in your Mac notch or Dynamic Dock.
+  Activity, quotas, tokens and sessions in your Mac notch or in Dynamic mode.
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@ Agent HUD Open is the macOS core and standalone source edition of [Agent HUD](ht
 
 | Stay in the flow | Know your usage | Follow your sessions |
 | --- | --- | --- |
-| Hover over the notch for a quick overview. On any display, drag Dynamic Dock to one of its four edges. | Check plan quotas, reset times, burn rates and API balances. Explore tokens by model, token kind and time. | Browse and search sessions by client and project. Git repositories and their worktrees share one project group. |
+| Hover over the notch for a quick overview. On any display, drag the Dynamic HUD to one of its four edges. | Check plan quotas, reset times, burn rates and API balances. Explore tokens by model, token kind and time. | Browse and search sessions by client and project. Git repositories and their worktrees share one project group. |
 | Get turn-completion reminders, quota warnings and reset alerts. Answer supported approvals and questions directly in the HUD. | The HUD always shows the past 24 hours of tokens in 15-minute bars, followed by up to five recent or active sessions. | Open per-turn usage, context and cache details, including identified Codex subagents. Return to a supported client's conversation or existing terminal pane. |
 
 Choose visible agents and accounts, per-display placement, and a soft glow or halftone, ASCII, block, Braille or binary effects. Press **⌘⌥H** to toggle the glow.

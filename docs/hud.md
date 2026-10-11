@@ -2,7 +2,7 @@
 
 ## Overview
 
-Each display has its own HUD and settings. Notch mode uses the physical notch or a stand-in bar; Dynamic Dock places agent logos along any screen edge; Simple mode parks a small panel of rings and numbers on an edge. The glow forms a rim around the island or a backdrop behind the logos, and Simple mode has none.
+Each display has its own HUD and settings. Notch mode uses the physical notch or a stand-in bar; Dynamic mode places agent logos along any screen edge; Simple mode parks a small panel of rings and numbers on an edge. The glow forms a rim around the island or a backdrop behind the logos, and Simple mode has none.
 
 ## Model
 
@@ -10,7 +10,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 |---|---|
 | HUD | One display's presentation: a collapsed entry on a screen edge, the panel it opens into, and its glow |
 | Notch mode | The island: the physical notch on a Mac that has one, or a bar standing in for it on a display that does not |
-| Dynamic Dock | A queue of marks — the watched vendors and any run in the last day — along a screen edge with no shape behind them |
+| Dynamic mode | A queue of marks — the watched vendors and any run in the last day — along a screen edge with no shape behind them |
 | Simple mode | A small floating panel on a screen edge with no glow behind it: each agent's mark, with its most used window as a ring round the mark, a percentage beside it, or both |
 | Glow | Colour drawn from the enabled windows' levels — a rim around the island, a backdrop falling inward behind the dock |
 | Bot | What a mark turns into while its agent is in flight: a small body in the mark's own outline and colour, with two eyes |
@@ -20,11 +20,11 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 
 ### Placement
 
-- A display with a notch defaults to notch mode; a display without one defaults to Dynamic Dock, so no screen draws a bar pretending to have a notch.
+- A display with a notch defaults to notch mode; a display without one defaults to Dynamic mode, so no screen draws a bar pretending to have a notch.
 - Any mode can be chosen for any display; notch mode stays at the physical notch or the screen's top centre. Choosing a docked mode in settings for a display with a notch moves a HUD still at top centre to the top left, clear of the hardware.
 - A display keeps its own placement under its UUID; display settings can reset its position to top centre, or top left for a dock on a notched display, keeping its mode and logo settings.
 - The dock can sit anywhere along the top, right, bottom or left edge, running horizontally on the top and bottom and vertically on the sides; logo size is 12–36 pt, spacing is 0.1–0.6 of the logo, and the logos stand 0–20 pt in from the edge.
-- Drag a visible HUD directly to any edge; dragging a notch switches it to Dynamic Dock, and a Simple panel stays Simple. Its bounds appear while it is grabbed or dragged.
+- Drag a visible HUD directly to any edge; dragging a notch switches it to Dynamic mode, and a Simple panel stays Simple. Its bounds appear while it is grabbed or dragged.
 - The marks can be hidden, which leaves the backdrop alone, still where they would have been and as wide.
 
 ### What the queue shows
@@ -111,7 +111,7 @@ DeepSeek Harness questions can be answered on the HUD when its web host exposes 
 
 | Setting | Values | Default |
 |---|---|---|
-| `screens[<display UUID>].mode` | `notch`, `logos` (Dynamic Dock), `simple` | By hardware: `notch` with a notch, `logos` without |
+| `screens[<display UUID>].mode` | `notch`, `logos` (Dynamic), `simple` | By hardware: `notch` with a notch, `logos` without |
 | `screens[…].edge` / `offset` | `top`, `right`, `bottom`, `left` / 0–1 along the edge | `top` / 0.5 |
 | `screens[…].logoSize` / `gapScale` | 12–36 pt / 0.1–0.6 of the logo | 20 pt / 0.4 |
 | `screens[…].logoEdgeDistance` | 0–20 pt from the visible logo, outline included, to its edge | 2 pt |
