@@ -18,6 +18,10 @@ struct BotSpec: Sendable {
         case polygon(sides: Int, rotation: CGFloat, round: CGFloat)
         case rect(width: CGFloat, height: CGFloat, round: CGFloat)
         case slant(width: CGFloat, height: CGFloat, skew: CGFloat, round: CGFloat)
+        /// A rounded block with a band round its lower part that stands out from it on both sides, as a
+        /// neck warmer does. `collarTop` is where the band starts, measured down from the centre; `collarOut`
+        /// is how far it stands out.
+        case collared(width: CGFloat, height: CGFloat, round: CGFloat, collarTop: CGFloat, collarOut: CGFloat)
         /// A wide head with two ears.
         case cat
         /// A dome of hair that falls straight and flicks out at the ends.
@@ -153,7 +157,11 @@ struct BotSpec: Sendable {
         "WorkBuddy": cat(head: RGBA(hex: 0xeafaf6),
                          face: .linear(from: CGPoint(x: 0.5, y: 0.55), to: CGPoint(x: 0.5, y: 1),
                                        stops: [RGBA(hex: 0x00cd8c), RGBA(hex: 0x7dd76d)])),
-        "Qoder": BotSpec(reach: 0.8, shape: .rect(width: 0.62, height: 0.74, round: 0.24)),
+        // The logo's green, worn as a neck warmer on a white body: the band stands out a little at the sides.
+        "Qoder": BotSpec(reach: 0.6,
+                         shape: .collared(width: 0.6, height: 0.74, round: 0.24, collarTop: 0.12, collarOut: 0.04),
+                         paint: .solid(RGBA(hex: 0xf8f8f8)), face: CGPoint(x: 0, y: -0.3),
+                         patch: Patch(box: rect(-1.2, 0.12 / 0.36, 1.2, 1.5), round: 0, paint: .solid(RGBA(hex: 0x28d858)))),
         // Already a bot: it keeps its helmet and goggles, and its two eyes come alive where they are drawn.
         "GitHub Copilot": BotSpec(ownEyes: [rect(0.355, 0.570, 0.434, 0.723), rect(0.562, 0.570, 0.645, 0.723)]),
     ]
