@@ -6,8 +6,8 @@ import AgentHUDCore
 /// or both. Nothing moves; the ring and the number take the window's level colour.
 struct SimpleMeterView: View {
     let config: SimpleMeterConfig
-    /// The usage panel has opened behind the figures. Its black shape is their ground now, so the panel's
-    /// own fill and hairline step aside instead of drawing a capsule on a card.
+    /// The island draws the panel behind the figures, so that the same frame can grow into the usage panel.
+    /// Left off, the view draws its own fill and hairline, as a preview with no island does.
     var onIsland = false
 
     var body: some View {

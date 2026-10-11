@@ -53,7 +53,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - An item reports its most used window among the readings that show a level, as the menu bar's figure does: a ring round the mark filled to that share, the whole percentage beside it, or both. Each can be switched off, and with both off the panel is the marks alone. A window with no reading shows an empty ring and a dash.
 - The ring and the number take that window's level colour. Nothing in the panel moves, and no glow is drawn behind it, collapsed or open.
 - One length sizes the panel, 16–40 pt: the ring's diameter, with the mark and the number scaled from it. The ring's stroke is 1–4 pt.
-- It parks and drags like the dock, 3 pt in from its edge: a row on the top and bottom, a column on the sides with the numbers lined up on the right. Hovering opens the usage panel inward with the figures still at the edge; an event takes their place while it shows.
+- It parks and drags like the dock, 3 pt in from its edge: a row on the top and bottom, a column on the sides with the numbers lined up on the right. Hovering grows the panel itself into the usage panel: the same frame, still 3 pt off its edge and rounded on every corner, enlarges inward round the figures, which keep their place, and shrinks back into the small panel on leaving. An event takes the figures' place in that frame while it shows.
 
 ### Hovering and events
 

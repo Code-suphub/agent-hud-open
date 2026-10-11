@@ -4,6 +4,9 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Hovering a Simple panel grows the panel itself into the usage panel and shrinks it back on leaving, instead of fading a separate panel in over it. Open, it keeps floating 3 pt off its edge with every corner rounded.
+- Host API: `IslandShape.lift` draws the silhouette floating off its edge instead of flaring into it.
+
 ## 0.5.0 — 2026-10-11
 
 - Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing. Version 1.5 is now available on the App Store; update the iPhone app before the Mac.

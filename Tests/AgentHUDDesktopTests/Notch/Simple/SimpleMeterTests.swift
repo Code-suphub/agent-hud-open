@@ -147,4 +147,36 @@ final class SimpleMeterTests: XCTestCase {
             XCTAssertNil(hud.glow.glowLayer.contents, "\(edge): an open Simple HUD draws no glow either")
         }
     }
+
+    func testFloatingSilhouetteIsThePanelCollapsedAndTheCardsCoreOpenOnEveryEdge() {
+        let margin = SimpleMeterConfig.edgeMargin, flare = IslandRootView.expandedTopRadius
+        for edge in HUDEdge.allCases {
+            // SwiftUI coordinates, y down: what a floating silhouette leaves clear on its edge side and at its ends.
+            func inset(_ rect: CGRect, ends: CGFloat) -> CGRect {
+                switch edge {
+                case .top: return CGRect(x: rect.minX + ends, y: rect.minY + margin, width: rect.width - 2 * ends, height: rect.height - margin)
+                case .bottom: return CGRect(x: rect.minX + ends, y: rect.minY, width: rect.width - 2 * ends, height: rect.height - margin)
+                case .left: return CGRect(x: rect.minX + margin, y: rect.minY + ends, width: rect.width - margin, height: rect.height - 2 * ends)
+                case .right: return CGRect(x: rect.minX, y: rect.minY + ends, width: rect.width - margin, height: rect.height - 2 * ends)
+                }
+            }
+            func assertBounds(_ shape: IslandShape, in rect: CGRect, equal expected: CGRect, _ message: String) {
+                let bounds = shape.path(in: rect).boundingRect
+                for (got, want) in [(bounds.minX, expected.minX), (bounds.minY, expected.minY), (bounds.maxX, expected.maxX), (bounds.maxY, expected.maxY)] {
+                    XCTAssertEqual(got, want, accuracy: 0.01, "\(edge): \(message)")
+                }
+            }
+            let config = SimpleMeterConfig(items: SimpleMeterItem.samples, placement: ScreenPlacement(mode: .simple, edge: edge))
+            let strip = CGRect(origin: .zero, size: config.stripSize)
+            assertBounds(IslandShape(topRadius: 0, bottomRadius: config.cornerRadius, edge: edge, lift: margin), in: strip,
+                         equal: inset(strip, ends: 0), "collapsed, the silhouette is the panel inside its strip")
+            XCTAssertEqual(inset(strip, ends: 0).size, config.panelSize, "\(edge)")
+
+            let card = edge.isHorizontal ? CGRect(x: 0, y: 0, width: 572, height: 400) : CGRect(x: 0, y: 0, width: 540, height: 432)
+            assertBounds(IslandShape(topRadius: flare, bottomRadius: IslandRootView.expandedBottomRadius, edge: edge, lift: margin), in: card,
+                         equal: inset(card, ends: flare), "open, it fills the card's core and still floats")
+            assertBounds(IslandShape(topRadius: flare, bottomRadius: IslandRootView.expandedBottomRadius, edge: edge), in: card,
+                         equal: card, "a flared silhouette reaches its edge and both ends of the card")
+        }
+    }
 }
