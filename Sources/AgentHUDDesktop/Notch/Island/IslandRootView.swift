@@ -45,7 +45,8 @@ struct IslandRootView: View {
     /// Set on a screen in logo mode: the marks ride on top of the silhouette, collapsed or open, so hovering
     /// never makes the agents disappear.
     var logoQueue: LogoQueueConfig? = nil
-    /// Set on a screen in Simple mode: the panel of rings and numbers, which takes the queue's place.
+    /// Set on a screen in Simple mode: the panel of rings and numbers, which takes the queue's place. Its
+    /// silhouette floats, and is the panel itself while collapsed.
     var simpleMeter: SimpleMeterConfig? = nil
     /// Whether marks on this island turn into bots; carried to the alerts through the environment.
     var botLogos = true
@@ -83,7 +84,15 @@ struct IslandRootView: View {
             let bounds = proxy.size
             let visible = isOpen || alert != nil
             let size = visible ? (presentationFrame?.size ?? presentationSize ?? bounds) : collapsedSize
-            let shape = IslandShape(
+            // Simple mode has one floating frame. Collapsed it is the capsule the figures sit in; opening
+            // enlarges that same frame into the panel, so nothing fades in over it and nothing is swapped.
+            let shape = simpleMeter.map { meter in
+                IslandShape(
+                    topRadius: visible ? Self.expandedTopRadius : 0,
+                    bottomRadius: isOpen ? Self.expandedBottomRadius : (alert == nil ? meter.cornerRadius : 16),
+                    edge: edge, lift: SimpleMeterConfig.edgeMargin
+                )
+            } ?? IslandShape(
                 topRadius: isOpen ? Self.expandedTopRadius : collapsedTopRadius,
                 bottomRadius: isOpen ? Self.expandedBottomRadius : max(collapsedBottomRadius, alert == nil ? 0 : 14),
                 edge: edge
@@ -91,12 +100,13 @@ struct IslandRootView: View {
             // A collapsed logo queue is the marks alone: no silhouette behind them, so they read as agents
             // sitting on the desktop rather than as a bar. The silhouette comes back the moment the panel
             // opens or an event needs somewhere to be shown — but never because the marks were hidden.
-            let bare = hidesSilhouette && !visible
+            let bare = hidesSilhouette && !visible && !floats
             let surface = ZStack(alignment: surfaceAlignment) {
                 // Keep one shape alive through collapse so it can shrink before becoming transparent.
-                shape.fill(.black)
+                shape.fill(.black.opacity(floats && !visible ? 0.82 : 1))
                     .overlay {
-                        if lightBorder && alert == nil { shape.stroke(.white.opacity(0.18), lineWidth: 1) }
+                        if floats { shape.stroke(.white.opacity(0.14), lineWidth: 1) }
+                        else if lightBorder && alert == nil { shape.stroke(.white.opacity(0.18), lineWidth: 1) }
                     }
                     .frame(width: size.width, height: size.height)
                     .opacity(bare ? 0 : 1)
@@ -144,7 +154,7 @@ struct IslandRootView: View {
                 }
                 if let simpleMeter, alert == nil {
                     let strip = logoQueueFrame ?? CGRect(x: 0, y: logoQueueInset, width: size.width, height: logoQueueHeight)
-                    SimpleMeterView(config: simpleMeter, onIsland: visible)
+                    SimpleMeterView(config: simpleMeter, onIsland: true)
                         .frame(width: strip.width, height: strip.height)
                         .position(x: strip.midX, y: strip.midY)
                         .frame(width: bounds.width, height: bounds.height)
@@ -209,6 +219,7 @@ struct IslandRootView: View {
                                        waitingRequests: waitingRequests)
                     .padding(Self.dockCompactInsets)
                     .frame(width: Self.dockCompactSize(edge: edge, collapsedSize: collapsedSize).width)
+                    .offset(floats ? liftCentring : .zero)
                     .id(alert.id)
                     .transition(detailTransition)
             } else {
@@ -245,6 +256,21 @@ struct IslandRootView: View {
     }
 
     private var dockInsets: EdgeInsets { Self.dockInsets(edge: edge, collapsedSize: collapsedSize) }
+
+    /// Simple mode's silhouette floats off its edge instead of flaring into it.
+    private var floats: Bool { simpleMeter != nil }
+
+    /// A floating silhouette gives up `edgeMargin` on its edge side; a row centred in the card moves half of
+    /// that inward to sit centred in what is left.
+    private var liftCentring: CGSize {
+        let half = SimpleMeterConfig.edgeMargin / 2
+        switch edge {
+        case .top: return CGSize(width: 0, height: half)
+        case .bottom: return CGSize(width: 0, height: -half)
+        case .left: return CGSize(width: half, height: 0)
+        case .right: return CGSize(width: -half, height: 0)
+        }
+    }
 
     /// Side flares live above and below the content core. The fixed-height usage panel stays upright,
     /// centred between those shoulders, and the reported natural height still describes only the core.
