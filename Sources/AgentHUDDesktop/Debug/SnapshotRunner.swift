@@ -12,11 +12,10 @@ public enum SnapshotRunner {
         // Independent demo stores so snapshots always show the design's data, whatever the user configured.
         let defaults = UserDefaults(suiteName: "app.agenthud.open.snapshot")!
         defaults.removePersistentDomain(forName: "app.agenthud.open.snapshot")
+        // The language first: Codex's windows are worded in it when the sample's rows are made.
+        if let language { L10n.setLanguage(language) }
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
-        if let language = language {
-            settings.update { $0.language = language }
-            L10n.setLanguage(language)
-        }
+        if let language { settings.update { $0.language = language } }
         let store = demoStore(settings)
         store.sampleTurnCalls = { DemoData.turnCalls(session: $0.id, turn: $1) }
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: DemoClock.now))
@@ -255,14 +254,7 @@ public enum SnapshotRunner {
         settings.updateAgents { $0.filter { ["Claude", "Codex", "DeepSeek"].contains($0.vendor) } }
         let dashboardStore = demoStore(settings)
         let dashboardReport = DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: DemoClock.now)
-        dashboardStore.replace(report: UsageReport(generatedAt: dashboardReport.generatedAt,
-            snapshots: dashboardReport.snapshots, sessions: dashboardReport.sessions, consumers: dashboardReport.consumers,
-            usage: dashboardReport.usage,
-            insightsByAgent: Dictionary(uniqueKeysWithValues: dashboardReport.snapshots.map { ($0.agentId, DemoData.insights(now: dashboardReport.generatedAt)) }),
-            subscriptions: dashboardReport.subscriptions,
-            billing: [DemoData.deepSeekBilling(now: dashboardReport.generatedAt)],
-            sessionUsage: dashboardReport.sessionUsage, periods: dashboardReport.periods))
-        // DeepSeek is off in Settings; picking it shows an API account's card.
+        dashboardStore.replace(report: dashboardReport)
         dashboardStore.pickedAgents = ["Claude", "Codex", "DeepSeek"]
         save("stats-dashboard-dark", StatsView(store: dashboardStore).frame(width: 960, height: 900), folder: folder, scheme: .dark)
         save("stats-dashboard-light", StatsView(store: dashboardStore).frame(width: 760, height: 700), folder: folder, scheme: .light)
@@ -279,10 +271,10 @@ public enum SnapshotRunner {
         save("stats-all-tokens-light", StatsView(store: store, scrollable: false).frame(width: 760), folder: folder, scheme: .light)
         store.tokenDimensions = .fresh
         let heatmapModels: [(String, String, Int)] = [
-            ("Claude", "Fable 5.1", 2_480_112), ("Claude", "Opus 5", 1_150_320),
-            ("Claude", "Opus 4.8", 824_521), ("Claude", "Fable 5", 390_064),
-            ("Codex", "codex-auto-review", 72_150), ("Codex", "gpt-5.5", 10_890),
-            ("Codex", "gpt-5.6-sol", 940), ("Codex", "gpt-6-astra", 310),
+            ("Claude", "Fable 5.1", 2_480_112), ("Claude", "Opus 5.5", 1_150_320),
+            ("Claude", "Sonnet 5.5", 824_521), ("Claude", "Haiku 4.5", 390_064),
+            ("Codex", "codex-auto-review", 72_150), ("Codex", "gpt-6-astra", 10_890),
+            ("Codex", "gpt-6.1-sol", 940), ("Codex", "gpt-6-luna", 310),
             ("DeepSeek", "deepseek-v4-flash", 1),
         ]
         let heatmapConsumers = heatmapModels.map { AgentDescriptor(id: $0.1, vendor: $0.0, model: $0.1, source: "Snapshot", enabled: true) }
@@ -532,10 +524,10 @@ public enum SnapshotRunner {
     private static func saveTokenCharts(settings: SettingsStore, folder: URL) {
         let now = DemoClock.now
         let models = [
-            ("Claude", "claude-opus-4-5"), ("Claude", "claude-sonnet-4-5"), ("Claude", "claude-haiku-4-5"),
-            ("Codex", "gpt-5"), ("Codex", "gpt-5.4"), ("Codex", "gpt-5.5"), ("Codex", "gpt-5.6-sol"), ("Codex", "gpt-6.1-sol"),
-            ("Antigravity", "gemini-2.5-pro"), ("Cursor", "composer-1"), ("OpenCode", "muse-spark-1.3-contributor"),
-            ("Pi", "gpt-5"), ("DeepSeek", "deepseek-v4-flash"),
+            ("Claude", "claude-opus-5-5"), ("Claude", "claude-sonnet-5-5"), ("Claude", "claude-haiku-4-5"),
+            ("Codex", "gpt-6-luna"), ("Codex", "gpt-6-sol"), ("Codex", "gpt-6-astra"), ("Codex", "gpt-5.6-sol"), ("Codex", "gpt-6.1-sol"),
+            ("Antigravity", "gemini-3.8-flash"), ("Cursor", "composer-1"), ("OpenCode", "muse-spark-1.3-contributor"),
+            ("Pi", "gpt-6.1-sol"), ("DeepSeek", "deepseek-v4-flash"),
         ]
         let consumers = models.map { vendor, model in
             let id = vendor.lowercased() + "-model:" + model

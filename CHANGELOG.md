@@ -2,6 +2,11 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
+## Unreleased
+
+- The demo shows the sample the iPhone's demo shows, shaped like real data: Claude's and Codex's quota windows under an account each, a DeepSeek balance, nine sessions, a month of tokens, and current model names (Fable 5.1, Opus 5.5, Sonnet 5.5, gpt-6-astra, gpt-6.1-sol, deepseek-v4-pro). A demo script names a window by its key, such as `claude-session`, and its sessions run from `s1` to `s9`.
+- Host API: `DemoData` has `claudeAccount`, `codexAccount`, `claudeRows`, `codexRows`, `consumers`, `accounts(now:)`, `usage(now:)` and `snapshots(for:now:stage:)` in place of the two Codex accounts and the per-model quota table; `DemoSeries` and `SeededRandom` are gone.
+
 ## 0.5.1 — 2026-10-12
 
 - Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.

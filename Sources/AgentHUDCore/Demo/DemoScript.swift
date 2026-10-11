@@ -16,17 +16,19 @@ public struct DemoScript: Codable, Equatable, Sendable {
     }
 
     public enum Action: Equatable, Sendable {
-        /// A demo session starts running: `s1` to `s4`.
+        /// A demo session starts running: `s1` to `s9` (`DemoData.plans`).
         case work(session: String)
         /// It stops with nothing to say.
         case rest(session: String)
         /// Its turn ends with a reply, which raises the reply reminder.
         case reply(session: String, message: String?)
-        /// One of the demo's permission requests arrives: `demo-edit`, `demo-build`, `demo-ticket`, `demo-read`.
+        /// One of the demo's permission requests arrives: `demo-tests`, `demo-edit`, `demo-build`, `demo-ticket`, `demo-read`.
         case ask(request: String)
         /// The client takes it back, as when it was answered in the client's own window.
         case answer(request: String)
-        /// A window's reading changes to this percentage used. Crossing a threshold raises the quota alert.
+        /// A window's reading changes to this percentage used. Crossing a threshold raises the quota alert. `agent` is
+        /// the window's key (`claude-session`, `claude-weekly`, `claude-weekly-fable`, `codex`, `codex:spark:primary`) or
+        /// the id of another vendor's row (`cursor`).
         case quota(agent: String, used: Double)
         /// The usage panel opens or closes, as hovering does.
         case panel(open: Bool)
@@ -34,7 +36,7 @@ public struct DemoScript: Codable, Equatable, Sendable {
 
     /// The sessions already running when the script starts.
     public var running: [String]
-    /// Readings that differ from the demo's own at the start, as percentages used by agent id.
+    /// Readings that differ from the demo's own at the start, as percentages used by window key.
     public var used: [String: Double]
     public var steps: [Step]
     /// Seconds after the last step before the script starts over. Without it the script plays once.
@@ -77,23 +79,23 @@ public struct DemoScript: Codable, Equatable, Sendable {
         return try JSONDecoder().decode(DemoScript.self, from: Data(contentsOf: url))
     }
 
-    /// Three quarters of a minute that show each kind of event once: two agents start work, Claude asks to edit a
-    /// file and is answered, Claude replies, Claude's Opus window crosses nine tenths, the panel opens and closes,
+    /// Three quarters of a minute that show each kind of event once: two agents start work, Claude asks to run the
+    /// tests and is answered, Claude replies, Claude's session window crosses nine tenths, the panel opens and closes,
     /// Codex replies; then it starts over. The window that crosses is one the demo's forecast does not already warn
     /// about, or the crossing would raise nothing.
     public static let showcase = DemoScript(
         steps: [
             Step(at: 2, .work(session: "s1")),
             Step(at: 4.5, .work(session: "s2")),
-            Step(at: 8, .ask(request: "demo-edit")),
-            Step(at: 14, .answer(request: "demo-edit")),
+            Step(at: 8, .ask(request: "demo-tests")),
+            Step(at: 14, .answer(request: "demo-tests")),
             Step(at: 17, .reply(session: "s1", message: nil)),
-            Step(at: 24, .quota(agent: "claude-opus", used: 91)),
+            Step(at: 24, .quota(agent: "claude-session", used: 91)),
             Step(at: 31, .panel(open: true)),
             Step(at: 36, .panel(open: false)),
             Step(at: 39, .reply(session: "s2", message: L10n.text(
-                "接口已经加上分页，旧客户端不带参数时仍返回前 50 条。",
-                "The endpoints now paginate; old clients that send no parameters still get the first 50 rows."))),
+                "沙盒收据的校验已经补上，生产环境的购买流程没有变化。",
+                "Sandbox receipts are validated now; purchases in production go through as before."))),
         ],
         repeatAfter: 6
     )

@@ -42,7 +42,7 @@ final class DemoScriptTests: XCTestCase {
     }
 
     func testTheStageDecidesWhichDemoSessionsRunAndWhatAWindowReads() {
-        var stage = DemoStage(script: DemoScript(used: ["claude-opus": 40], steps: []), now: now)
+        var stage = DemoStage(script: DemoScript(used: ["claude-session": 40], steps: []), now: now)
         let idle = DemoData.sessions(now: now, stage: stage)
         XCTAssertTrue(idle.allSatisfy { $0.endedAt != nil }, "A script that starts no session shows none running")
 
@@ -56,14 +56,18 @@ final class DemoScriptTests: XCTestCase {
         XCTAssertEqual(DemoData.sessions(now: now.addingTimeInterval(6), stage: stage).first { $0.id == "s1" }?.endedAt,
                        now.addingTimeInterval(5))
 
-        XCTAssertEqual(DemoData.snapshots(now: now, stage: stage).first { $0.agentId == "claude-opus" }?.remainingPct, 60)
+        func remaining(_ id: String, among rows: [AgentDescriptor]? = nil) -> Double? {
+            DemoData.snapshots(for: rows, now: now, stage: stage).first { $0.agentId == id }?.remainingPct
+        }
+        XCTAssertEqual(remaining(DemoData.claudeAccount.windowID("claude-session")), 60)
+        XCTAssertEqual(remaining(DemoData.claudeAccount.windowID("claude-weekly")), 21, "The other windows keep the sample's readings")
         XCTAssertTrue(stage.apply(.quota(agent: "codex", used: 91), at: now))
-        let accounts = DemoData.codexAccountSnapshots(now: now, stage: stage)
-        XCTAssertEqual(accounts.first { $0.agentId == DemoData.currentCodexAccount.windowID("codex") }?.remainingPct, 9)
-        XCTAssertEqual(accounts.first { $0.agentId == DemoData.previousCodexAccount.windowID("codex") }?.remainingPct, 100,
-                       "A reading for codex is the current account's")
+        XCTAssertEqual(remaining(DemoData.codexAccount.windowID("codex")), 9)
+        XCTAssertEqual(remaining(DemoData.codexAccount.windowID("codex:spark:primary")), 82, "A reading for codex is the plan window's alone")
+        XCTAssertTrue(stage.apply(.quota(agent: "cursor", used: 50), at: now))
+        XCTAssertEqual(remaining("cursor", among: DemoData.everyAgent), 50, "Another vendor's row is named by its id")
         XCTAssertEqual(DemoData.sessions(now: now).filter { $0.endedAt == nil }.map(\.id), ["s1", "s2"],
-                       "Without a stage the demo is what it was")
+                       "Without a stage the first two sessions run")
     }
 
     func testAReplyEndsTheSessionAndIsAnnouncedOnceEvenWhenTheScriptStartsOver() {
@@ -75,6 +79,7 @@ final class DemoScriptTests: XCTestCase {
         XCTAssertEqual(report.completions.map(\.sessionID), ["s2"])
         XCTAssertEqual(report.completions.first?.vendor, "Codex")
         XCTAssertEqual(report.completions.first?.message, "Paginated.")
+        XCTAssertEqual(report.completions.first?.model, "gpt-6-astra")
         XCTAssertEqual(report.completions.first?.completedAt, now.addingTimeInterval(2))
         XCTAssertNotNil(report.sessions.first { $0.id == "s2" }?.endedAt)
 
