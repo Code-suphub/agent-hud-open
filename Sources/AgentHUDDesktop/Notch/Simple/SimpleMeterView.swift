@@ -10,6 +10,8 @@ struct SimpleMeterView: View {
     /// The island draws the panel behind the figures, so that the same frame can grow into the usage panel.
     /// Left off, the view draws its own fill and hairline, as a preview with no island does.
     var onIsland = false
+    /// How dark the panel is; whatever grows out of it is filled the same.
+    static let fillOpacity = 0.82
 
     var body: some View {
         let panel = config.panelSize
@@ -24,7 +26,7 @@ struct SimpleMeterView: View {
         .padding(EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right))
         .frame(width: panel.width, height: panel.height, alignment: .leading)
         .background {
-            shape.fill(.black.opacity(0.82))
+            shape.fill(.black.opacity(Self.fillOpacity))
                 .overlay { shape.strokeBorder(.white.opacity(0.14), lineWidth: 1) }
                 .opacity(onIsland ? 0 : 1)
         }

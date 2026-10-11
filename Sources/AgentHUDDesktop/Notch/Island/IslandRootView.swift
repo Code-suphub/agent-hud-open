@@ -67,6 +67,24 @@ struct IslandRootView: View {
     var onPin: () -> Void = {}
 
     private var detached: Bool { focusVendor != nil }
+
+    /// The card on show is the Simple panel's one-line peek.
+    private var growsFromPanel: Bool {
+        isOpen && !pinned && alert == nil && peek?.style == .line && simpleMeter != nil
+    }
+
+    /// The Simple panel's own shape inside the window: its strip without the margin on the parked side.
+    private var simplePanelPath: Path? {
+        guard let simpleMeter, var panel = logoQueueFrame else { return nil }
+        let margin = SimpleMeterConfig.edgeMargin
+        switch edge {
+        case .top: panel.origin.y += margin; panel.size.height -= margin
+        case .bottom: panel.size.height -= margin
+        case .left: panel.origin.x += margin; panel.size.width -= margin
+        case .right: panel.size.width -= margin
+        }
+        return Path(roundedRect: panel, cornerRadius: simpleMeter.cornerRadius, style: .continuous)
+    }
     static let detachedInsets = EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 18)
 
     /// A full card keeps a card's corner; a peek or a compact reminder is as round as its height allows.
@@ -140,14 +158,27 @@ struct IslandRootView: View {
                     // Nothing interpolates: the card belongs to a mark, and appears beside it.
                     if visible, let presentationFrame {
                         let card = RoundedRectangle(cornerRadius: detachedRadius(height: presentationFrame.height), style: .continuous)
+                        // The Simple line is the panel growing: the panel's own fill, no outline of its own, and
+                        // nothing drawn where the panel already is, so the two never darken each other.
+                        let grows = growsFromPanel
                         ZStack {
-                            card.fill(.black)
+                            card.fill(.black.opacity(grows ? SimpleMeterView.fillOpacity : 1))
                             content.environment(\.islandTyping, onTyping)
                         }
                         .frame(width: presentationFrame.width, height: presentationFrame.height)
                         .clipShape(card)
-                        .overlay { card.strokeBorder(.white.opacity(0.14), lineWidth: 1) }
+                        .overlay { if !grows { card.strokeBorder(.white.opacity(0.14), lineWidth: 1) } }
                         .position(x: presentationFrame.midX, y: presentationFrame.midY)
+                        .mask {
+                            if grows, let panel = simplePanelPath {
+                                Path { path in
+                                    path.addRect(CGRect(origin: .zero, size: bounds))
+                                    path.addPath(panel)
+                                }.fill(style: FillStyle(eoFill: true))
+                            } else {
+                                Rectangle()
+                            }
+                        }
                         .transition(.opacity.animation(.easeOut(duration: 0.12)))
                     }
                 } else if let presentationFrame {
