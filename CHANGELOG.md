@@ -4,6 +4,8 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Codex Desktop's mid-turn Question cards appear on the HUD, including questions with only a reply field. Answers go to the original active turn; Skip leaves the question unanswered.
+- Host API: `PermissionRequest.NativeApproval.asynchronousQuestion(turnID:)` identifies native mid-turn questions; `CodexDesktopPermissions` reads and answers them alongside app approvals.
 - Hovering a Simple panel grows the panel itself into the usage panel and shrinks it back on leaving, instead of fading a separate panel in over it. Open, it keeps floating 3 pt off its edge with every corner rounded.
 - Host API: `IslandShape.lift` draws the silhouette floating off its edge instead of flaring into it.
 
