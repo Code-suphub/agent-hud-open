@@ -41,14 +41,14 @@ Requires an Apple Silicon Mac running macOS 14 or later.
       <agenthudMinimumIOSVersion>1.5</agenthudMinimumIOSVersion>
     </item>
     <item>
-      <title>0.5.1</title>
-      <pubDate>Mon, 12 Oct 2026 03:24:57 +0800</pubDate>
-      <link>https://github.com/jazzenchen/agent-hud-open/releases/tag/v0.5.1</link>
-      <sparkle:version>483</sparkle:version>
-      <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
+      <title>0.5.2</title>
+      <pubDate>Mon, 12 Oct 2026 04:01:39 +0800</pubDate>
+      <link>https://github.com/jazzenchen/agent-hud-open/releases/tag/v0.5.2</link>
+      <sparkle:version>484</sparkle:version>
+      <sparkle:shortVersionString>0.5.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-      <description sparkle:format="markdown"># Agent HUD 0.5.1
+      <description sparkle:format="markdown"># Agent HUD 0.5.2
 
 ## Compatibility
 
@@ -60,18 +60,10 @@ Requires an Apple Silicon Mac running macOS 14 or later.
 
 ## Changes
 
-- Adds Separate agents for Simple and Dynamic modes, off by default in Display settings. Hovering an agent's logo shows a small card with that agent's quota, tokens and sessions beside it, and a click opens that agent's whole panel. Replies and permission requests open beside the agent that sent them while the other logos stay.
-- Grows a Simple panel itself into the usage panel on hover instead of fading a separate panel over it, and gives Simple its own Bot animation switch, off by default. Display settings lists the modes as Notch, Simple and Dynamic.
-- Opens permission and reply reminders as the agent's logo, which turns into its bot once the card has opened.
-- Shows Codex Desktop's mid-turn Question cards on the HUD, including questions with only a reply field. Answers go to the original turn; Skip leaves the question unanswered.
-- Notices a Codex turn that starts in a quiet session within five seconds instead of up to five minutes.
-- Picks the HUD up after a short drag or hold instead of on mouse down, keeps the closed hand for the whole drag, and outlines a Simple panel's own shape while it moves.
-- Uses less CPU while agents work: bots are stepped only as often as they move, local services are looked for every 10 seconds instead of every 2, and a collection pass no longer repeats work for records that did not change.
-- Reads quota and balance less often: every 2.5 to 3.5 minutes while a turn runs instead of every minute, and every 5 to 6 minutes between turns. Scheduled readings wait a random time of up to a minute, so Macs on accounts that reset together do not ask a service in the same second. The reading after a turn ends, and the one opening the panel asks for, are immediate as before.
-- Sends iCloud one batch every five minutes instead of every change, which ends the hours-long refusals some Macs ran into. Events, permission requests and prompt results still go at once, and an iPhone on the same network still follows every change.
-- Adds an Experimental settings page with one Remote Sessions switch for Claude Code and Codex: answer permission requests and continue a session from the iPhone. It needs Agent HUD for iPhone 1.6, which is not on the App Store yet. [Guide](https://agenthud.app/guides/remote-sessions).
+- Shows Codex Desktop's app approvals and Question cards for long threads. Desktop sends a thread's whole history with every reading, and a reading over 8 MB was dropped, so a long thread showed no card and Remote Sessions could not continue it from the iPhone. Readings up to 64 MB are taken now.
+- Uses less CPU while a Codex Desktop turn runs: a reading costs about a third of what it did, and a long thread is read every several seconds instead of every two, which also spares Codex Desktop the work of answering. A thread keeps its cards between readings.
 </description>
-      <enclosure url="https://github.com/jazzenchen/agent-hud-open/releases/download/v0.5.1/Agent-HUD-0.5.1-arm64.dmg" length="13192373" type="application/octet-stream" sparkle:edSignature="qxot0zdf8xt5ejwKNVwrSX6Oh2oaZ5jJNUluhj+OPKMz1r7kfEPQRBTM7REHSse/J4YR1konPnQ3MJ+WvH6VCg==" />
+      <enclosure url="https://github.com/jazzenchen/agent-hud-open/releases/download/v0.5.2/Agent-HUD-0.5.2-arm64.dmg" length="13200817" type="application/octet-stream" sparkle:edSignature="z080qrDKbrmay6KUJaPNPFM/aDDyfjGoJ8JavL3SMzQry0mpKfU8BHfoILAuSqPwm+hDdR+OnUgmNaJI3ochBQ==" />
       <agenthudMacOnly>false</agenthudMacOnly>
       <agenthudMinimumIOSVersion>1.5</agenthudMinimumIOSVersion>
     </item>
