@@ -8,7 +8,7 @@ public struct DemoStage: Equatable, Sendable {
     public var running: [String: Date]
     /// Sessions the script has ended and when.
     public var ended: [String: Date] = [:]
-    /// Percentages used by agent id, where the script has changed a reading.
+    /// Percentages used by window key, where the script has changed a reading.
     public var used: [String: Double]
     public var completions: [SessionCompletion] = []
     /// Permission requests waiting and when each arrived, oldest first.
@@ -47,7 +47,7 @@ public struct DemoStage: Equatable, Sendable {
             ended[session] = now
             turns += 1
             guard let live = DemoData.sessions(now: now).first(where: { $0.id == session }),
-                  let agent = DemoData.agents.first(where: { $0.id == live.agentId }) else { return true }
+                  let agent = DemoData.consumers.first(where: { $0.id == live.agentId }) else { return true }
             completions.append(SessionCompletion(sessionID: session, vendor: agent.vendor, turnID: "demo-turn-\(turns)",
                                                  task: live.task, model: agent.model, startedAt: started ?? live.startedAt,
                                                  completedAt: now, message: message))

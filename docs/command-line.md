@@ -8,7 +8,7 @@ Launch options, read-only probes and adapter commands of the standalone applicat
 
 | Switch | Effect |
 | --- | --- |
-| `--demo` | Use the design's sample data (`DemoUsageProvider`, `DemoData.agents`) instead of installed clients. Preferences live in the separate `app.agenthud.open.demo` defaults domain, no report cache is written, and no adapters are installed. |
+| `--demo` | Use the sample data (`DemoUsageProvider`, `DemoData`) instead of installed clients; see [The sample](#the-sample). Preferences live in the separate `app.agenthud.open.demo` defaults domain, no report cache is written, and no adapters are installed. A demo saved with rows the sample no longer has starts over from the sample's rows and keeps its other preferences. |
 | `--lang zh\|en\|system` | Force the interface language for this launch (`zh`, `zh-hans` and `cn` select Simplified Chinese). The choice is saved to the preferences in use. |
 | `--show-settings` | Open the settings window after start. |
 | `--show-stats` | Open the statistics window after start. |
@@ -16,13 +16,27 @@ Launch options, read-only probes and adapter commands of the standalone applicat
 | `--show-onboarding` | Show the first-launch window even when onboarding is complete. |
 | `--reset-defaults` | Remove the application's stored preferences before starting. |
 | `--snapshot <dir>` | Render every screen at 2× to PNG files in `<dir>` from sample data, then quit; only a debug build renders, and a release build says so and quits. `AGENTHUD_SNAPSHOT_PREFIX=<name>` limits rendering to snapshots whose name starts with the prefix, for example `settings-`. |
-| `--demo-script <name\|file>` | Play a timed scenario in the demo, and turn the demo on. `showcase` is built in: two agents start work, Claude asks to edit a file and is answered, Claude replies, a window crosses nine tenths used, the panel opens and closes, Codex replies, then it starts over. Any other value is the path of a JSON file; see [Recording](#recording). |
+| `--demo-script <name\|file>` | Play a timed scenario in the demo, and turn the demo on. `showcase` is built in: two agents start work, Claude asks to run the tests and is answered, Claude replies, Claude's session window crosses nine tenths used, the panel opens and closes, Codex replies, then it starts over. Any other value is the path of a JSON file; see [Recording](#recording). |
 | `--demo-clock <time>` | Start the demo at this moment instead of now, and turn the demo on: an ISO 8601 date and time such as `2026-10-12T09:41`, local unless it names an offset (`Z`, `+08:00`), seconds optional. The demo's time runs on from there, so its dates, hours and "today" are the same whenever it is run. With `--snapshot` the stills are rendered at that moment. A value that does not read as a time is logged and the wall clock stays. |
 | `--record <file.mov>` | Record the main display's HUD, and nothing else on screen, to a ProRes 4444 movie with a transparent background. `--record-seconds <n>` finishes the file and quits after that long; without it the file is finished when the application quits. `--record-fps <n>` sets the frame rate (60). `--record-region <x,y,width,height>` records part of the display, in points from its top left. |
 
 `make demo` runs `--demo --show-settings`; `make snapshot` runs `--snapshot build/snapshots` (override the directory with `SNAPSHOT_DIR=…`).
 
 Only one Agent HUD runs at a time, whichever application built on these libraries it is. A launch while another copy runs shows an alert naming the application that runs and quits before it reads preferences, opens the ledger or touches a client's settings. The lock is `~/Library/Caches/app.agenthud/instance.lock`, released by the system when its holder quits or crashes; a lock that cannot be created lets the launch run. Snapshots, probes and adapter commands run beside the running copy, and so does `--demo`; a launch with `--reset-defaults` does not, since the preferences it removes may be in use.
+
+## The sample
+
+`--demo` shows one sample, the same one the iPhone and Watch apps show in their demo, so a Mac and a phone recorded side by side agree. It is shaped as the providers shape real data: quota windows that belong to an account, models as token consumers, sessions that name the model they spend on.
+
+| Part | What it holds |
+| --- | --- |
+| Claude, account Personal on Max | Current session 12% used, resets in 1 h 12 min; Weekly limit · All models 79%, resets in 5 days; Weekly limit · Fable 60% |
+| Codex, account Personal on Pro | Weekly limit 49%, resets in 6 days; GPT-5.3-Codex-Spark 5h limit 18% and weekly limit 24%; two earned resets |
+| DeepSeek | Balance ¥8.85, ¥0.01239 spent in the last day |
+| Sessions | `s1` Build the iOS dashboard (Fable 5.1, running), `s2` Review App Store sandbox support (gpt-6-astra, running), `s3` Refine settings and colors (Opus 5.5), `s4` Run the regression suite (gpt-6.1-sol), `s5` Update the documentation (Sonnet 5.5), `s6` Package the Mac release (Opus 5.5), `s7` Check the release scripts (gpt-6.1-sol), `s8` Review the API integration (deepseek-v4-pro), `s9` Draft the release notes (gpt-6.1-sol, a day ago) |
+| Tokens | 15 million a day before cache reads for thirty days, across Fable 5.1, Opus 5.5, Sonnet 5.5, codex-auto-review, gpt-6.1-sol and deepseek-v4-flash |
+
+The running demo adds a row and a reading for every other vendor the app has artwork for, so the HUD carries a full queue. A figure changed in `DemoData` is changed in the iPhone's `DemoFleet` too, and the other way round; `DemoDataTests` pins the figures both show.
 
 ## Recording
 
@@ -32,12 +46,12 @@ A script changes what the demo's own sources report, and the HUD reacts as it do
 
 | `do` | Fields | What happens |
 | --- | --- | --- |
-| `work` | `session` | A demo session (`s1` Claude Opus, `s2` Codex, `s3` Claude Sonnet, `s4` ChatGPT) starts running, so its mark is at work. |
+| `work` | `session` | A demo session, `s1` to `s9` (see [The sample](#the-sample)), starts running, so its mark is at work. |
 | `rest` | `session` | It stops with nothing to say. |
 | `reply` | `session`, optional `message` | Its turn ends, which raises the reply reminder; the message is the reply's last paragraph. |
-| `ask` | `request` | One of the demo's permission requests arrives: `demo-edit`, `demo-build`, `demo-ticket`, `demo-read`. |
+| `ask` | `request` | One of the demo's permission requests arrives: `demo-tests` (the test run the iPhone's demo asks about), `demo-edit`, `demo-build`, `demo-ticket`, `demo-read`. |
 | `answer` | `request` | The client takes it back, as when it was answered in the client's own window. One answered on the HUD stays answered. |
-| `quota` | `agent`, `used` | A window (`claude-opus`, `claude-sonnet`, `chatgpt`, `codex`, …) now reads this percentage used. The quota alert follows the usual rule, so a window the forecast already warns about raises nothing new. |
+| `quota` | `agent`, `used` | A window now reads this percentage used, named by its key: `claude-session`, `claude-weekly`, `claude-weekly-fable`, `codex`, `codex:spark:primary`, `codex:spark:secondary`, or another vendor's row by its id (`cursor`). The quota alert follows the usual rule, so a window the forecast already warns about raises nothing new. |
 | `panel` | `open` | The usage panel opens or closes on the display the pointer is on. |
 
 Beside `steps`, `running` lists the sessions already at work when the script starts (none by default), `used` sets readings that differ from the demo's own, and `repeatAfter` is the pause in seconds before the script starts over; without it the script plays once.
