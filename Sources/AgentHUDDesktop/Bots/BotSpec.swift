@@ -18,10 +18,6 @@ struct BotSpec: Sendable {
         case polygon(sides: Int, rotation: CGFloat, round: CGFloat)
         case rect(width: CGFloat, height: CGFloat, round: CGFloat)
         case slant(width: CGFloat, height: CGFloat, skew: CGFloat, round: CGFloat)
-        /// A rounded block with a band round its lower part that stands out from it on both sides, as a
-        /// neck warmer does. `collarTop` is where the band starts, measured down from the centre; `collarOut`
-        /// is how far it stands out.
-        case collared(width: CGFloat, height: CGFloat, round: CGFloat, collarTop: CGFloat, collarOut: CGFloat)
         /// A wide head with two ears.
         case cat
         /// A dome of hair that falls straight and flicks out at the ends.
@@ -42,6 +38,8 @@ struct BotSpec: Sendable {
         var width: CGFloat = 0.25
         /// 1 is a capsule, 0 a block.
         var round: CGFloat = 1
+        /// How far each eye sits from the middle of the face, as an angle round the body in radians.
+        var spread: CGFloat = 0.34
     }
 
     /// A second colour laid inside the body: the face panel of a head.
@@ -60,7 +58,17 @@ struct BotSpec: Sendable {
         var width: CGFloat
     }
 
+    /// Where a soft piece goes: under the body, on it and kept to its outline, over it, or over it and
+    /// riding with the eyes.
+    enum Layer: Sendable {
+        case behind, onBody, front, face
+    }
+
     enum Decor: Sendable {
+        /// Rounded pieces in one colour, `round` 1 being a full capsule or ball: mitts, feet, locks, a scarf.
+        case soft([CGRect], RGBA, round: CGFloat, layer: Layer)
+        /// A coloured line with round ends: an antenna.
+        case stroke([CGPoint], RGBA, width: CGFloat, layer: Layer)
         /// Filled blocks, such as hair or a hat. `followsFace` rides with the eyes when the bot looks around.
         case blocks([CGRect], RGBA, followsFace: Bool)
         /// Pieces taken out of the silhouette.
@@ -101,11 +109,16 @@ struct BotSpec: Sendable {
     }
 
     private static let grey = RGBA(hex: 0x4b4646)
+    private static let hair = RGBA(hex: 0xb7b6c2)
+    private static let claw = RGBA(hex: 0xea4a4a)
 
     static let table: [String: BotSpec] = [
         "Claude": BotSpec(radius: 0.375, reach: 0.9, shape: .star(points: 12, depth: 0.085, puff: 0.7), spin: 9),
         "ChatGPT": BotSpec(radius: 0.37, shape: .outline(keep: 0.6, smooth: 7), spin: 7),
-        "Antigravity": BotSpec(reach: 0.75, shape: .outline(keep: 0.5, smooth: 16), face: CGPoint(x: 0, y: -0.2)),
+        // The arch gives a dome, all of it above the point it grows from. That point sits low, so the dome ends
+        // up level with the bots beside it.
+        "Antigravity": BotSpec(center: CGPoint(x: 0.5, y: 0.66), reach: 0.75, shape: .outline(keep: 0.5, smooth: 16),
+                               face: CGPoint(x: 0, y: -0.42)),
         "DeepSeek": BotSpec(),
         "Grok": BotSpec(radius: 0.33, reach: 0.55, face: CGPoint(x: 0, y: -0.3),
                         ring: Ring(radiusX: 1.5, radiusY: 0.32, drop: 0.3, tilt: -20, width: 0.14)),
@@ -136,20 +149,29 @@ struct BotSpec: Sendable {
                       face: CGPoint(x: 0, y: -0.34), eye: Eye(height: 0.3, width: 0.3, round: 0),
                       decor: [.blocks([rect(-1.22, -1.18, 1.22, -0.9)], RGBA(hex: 0xffffff), followsFace: false),
                               .cut([rect(-0.22, 0.2, 0.22, 1.2)])]),
-        // The body is the hair; a line frames the face inside it under a strand fringe.
-        "Hermes": BotSpec(radius: 0.34, center: CGPoint(x: 0.5, y: 0.52), reach: 0.35, shape: .bob,
-                          face: CGPoint(x: 0, y: 0.3),
-                          decor: [.line([CGPoint(x: -0.6, y: 0.9), CGPoint(x: -0.6, y: -0.08),
-                                         CGPoint(x: -0.46, y: -0.3), CGPoint(x: -0.17, y: -0.13),
-                                         CGPoint(x: -0.02, y: -0.32), CGPoint(x: 0.24, y: -0.11),
-                                         CGPoint(x: 0.46, y: -0.3), CGPoint(x: 0.6, y: -0.08),
-                                         CGPoint(x: 0.6, y: 0.9)], width: 0.085)]),
+        // A round face under a bob: hair behind the head and down both sides, three locks of fringe, a bow.
+        "Hermes": BotSpec(radius: 0.3, center: CGPoint(x: 0.5, y: 0.58), reach: 0.45, paint: .solid(RGBA(hex: 0xf8f8f9)),
+                          face: CGPoint(x: 0, y: 0.3), eye: Eye(height: 0.72, width: 0.3, spread: 0.46),
+                          decor: [.soft([rect(-1.3, -1.42, 1.3, 0.5)], hair, round: 1, layer: .behind),
+                                  .soft([rect(-1.38, -0.3, -0.62, 1.12), rect(0.62, -0.3, 1.38, 1.12)], hair, round: 0.9, layer: .behind),
+                                  .soft([rect(-1.05, -1.2, -0.2, -0.2), rect(-0.42, -1.25, 0.42, -0.28), rect(0.2, -1.2, 1.05, -0.2)],
+                                        hair, round: 1, layer: .onBody),
+                                  .soft([rect(0.44, -1.52, 0.82, -1.2), rect(0.86, -1.36, 1.24, -1.04)], RGBA(hex: 0xffffff), round: 1, layer: .front),
+                                  .soft([rect(-0.74, 0.56, -0.42, 0.74), rect(0.42, 0.56, 0.74, 0.74)], RGBA(hex: 0xf6a9bb), round: 1, layer: .face)]),
         "ZCode": BotSpec(reach: 0.8, shape: .slant(width: 0.66, height: 0.64, skew: 0.2, round: 0.05)),
         "Qwen": BotSpec(radius: 0.37, shape: .outline(keep: 0.55, smooth: 7), spin: 7),
-        "OpenClaw": BotSpec(radius: 0.37, shape: .outline(keep: 0.3, smooth: 9),
-                            eye: Eye(height: 0.42, width: 0.42), eyeColor: RGBA(hex: 0x050810),
-                            pupil: RGBA(hex: 0x00e5cc),
-                            unpainted: [rect(0.29, 0.25, 0.44, 0.40), rect(0.56, 0.25, 0.71, 0.40)]),
+        // A round red body with what makes it a lobster kept small: two mitts, two antennae, two feet.
+        "OpenClaw": BotSpec(radius: 0.33, center: CGPoint(x: 0.5, y: 0.57), reach: 0.7,
+                            paint: .linear(from: CGPoint(x: 0.2, y: 0.1), to: CGPoint(x: 0.85, y: 0.95),
+                                           stops: [RGBA(hex: 0xee4747), RGBA(hex: 0xc22e2e)]),
+                            face: CGPoint(x: 0, y: 0.1), eye: Eye(height: 0.62, width: 0.62, spread: 0.52),
+                            eyeColor: RGBA(hex: 0x050810), pupil: RGBA(hex: 0x00e5cc),
+                            decor: [.stroke([CGPoint(x: -0.3, y: -0.86), CGPoint(x: -0.48, y: -1.2), CGPoint(x: -0.76, y: -1.32)],
+                                            claw, width: 0.11, layer: .behind),
+                                    .stroke([CGPoint(x: 0.3, y: -0.86), CGPoint(x: 0.48, y: -1.2), CGPoint(x: 0.76, y: -1.32)],
+                                            claw, width: 0.11, layer: .behind),
+                                    .soft([rect(-1.42, -0.3, -0.8, 0.34), rect(0.8, -0.3, 1.42, 0.34)], claw, round: 1, layer: .behind),
+                                    .soft([rect(-0.52, 0.8, -0.2, 1.14), rect(0.2, 0.8, 0.52, 1.14)], RGBA(hex: 0xb02828), round: 0.7, layer: .behind)]),
         // The cat in each logo, sitting up straight and out of its tile: white head, the logo's coloured face.
         "CodeBuddy": cat(head: RGBA(hex: 0xffffff),
                          face: .linear(from: CGPoint(x: 0.2, y: 0.2), to: CGPoint(x: 0.85, y: 1),
@@ -157,11 +179,13 @@ struct BotSpec: Sendable {
         "WorkBuddy": cat(head: RGBA(hex: 0xeafaf6),
                          face: .linear(from: CGPoint(x: 0.5, y: 0.55), to: CGPoint(x: 0.5, y: 1),
                                        stops: [RGBA(hex: 0x00cd8c), RGBA(hex: 0x7dd76d)])),
-        // The logo's green, worn as a neck warmer on a white body: the band stands out a little at the sides.
-        "Qoder": BotSpec(reach: 0.6,
-                         shape: .collared(width: 0.6, height: 0.74, round: 0.24, collarTop: 0.12, collarOut: 0.04),
-                         paint: .solid(RGBA(hex: 0xf8f8f8)), face: CGPoint(x: 0, y: -0.3),
-                         patch: Patch(box: rect(-1.2, 0.12 / 0.36, 1.2, 1.5), round: 0, paint: .solid(RGBA(hex: 0x28d858)))),
+        // A white ball wearing the logo's green as a thick neck warmer, wider than the ball and pulled up to
+        // just under the eyes, with a sliver of chin below.
+        "Qoder": BotSpec(radius: 0.34, reach: 0.55, paint: .solid(RGBA(hex: 0xf8f8f8)), face: CGPoint(x: 0, y: -0.32),
+                         eye: Eye(height: 0.7, width: 0.3, spread: 0.42),
+                         decor: [.soft([rect(-1.16, 0.16, 1.16, 0.92)], RGBA(hex: 0x28d858), round: 0.85, layer: .front),
+                                 .soft([rect(-0.9, 0.25, 0.9, 0.36)], RGBA(hex: 0x66ea8e), round: 1, layer: .front),
+                                 .soft([rect(-0.9, 0.72, 0.9, 0.83)], RGBA(hex: 0x1fbf4c), round: 1, layer: .front)]),
         // Already a bot: it keeps its helmet and goggles, and its two eyes come alive where they are drawn.
         "GitHub Copilot": BotSpec(ownEyes: [rect(0.355, 0.570, 0.434, 0.723), rect(0.562, 0.570, 0.645, 0.723)]),
     ]

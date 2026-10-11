@@ -160,18 +160,6 @@ final class BotForm {
             let corners = [CGPoint(x: center.x - w + lean, y: center.y - h), CGPoint(x: center.x + w + lean, y: center.y - h),
                            CGPoint(x: center.x + w - lean, y: center.y + h), CGPoint(x: center.x - w - lean, y: center.y + h)]
             return traced(from: center) { $0.addPath(rounded(corners, radius: round)); $0.fillPath() }
-        case .collared(let width, let height, let round, let collarTop, let collarOut):
-            let w = width / 2, h = height / 2, band = w + collarOut
-            let corners = [CGPoint(x: center.x - w, y: center.y - h), CGPoint(x: center.x + w, y: center.y - h),
-                           CGPoint(x: center.x + w, y: center.y + h), CGPoint(x: center.x - w, y: center.y + h)]
-            // The band is its own rounded block, laid over the lower part of the body and a little wider.
-            let collar = CGRect(x: center.x - band, y: center.y + collarTop, width: band * 2, height: h - collarTop + collarOut * 0.6)
-            return traced(from: center) { context in
-                context.addPath(rounded(corners, radius: round))
-                context.fillPath()
-                context.addPath(CGPath(roundedRect: collar, cornerWidth: collarOut * 2.2, cornerHeight: collarOut * 2.2, transform: nil))
-                context.fillPath()
-            }
         case .cat:
             return traced(from: center) { context in
                 context.fillEllipse(in: CGRect(x: center.x - 1.02 * radius, y: center.y + (0.1 - 0.88) * radius,
