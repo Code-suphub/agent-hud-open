@@ -104,4 +104,47 @@ final class SimpleMeterTests: XCTestCase {
         hud.apply(animated: false)
         XCTAssertLessThan(hud.geometry.rect.width, config.stripSize.width, "Switching the numbers off narrows the strip at once")
     }
+
+    @MainActor
+    func testEveryEdgeKeepsItsFiguresInPlaceWhileThePanelOpensInward() async throws {
+        _ = NSApplication.shared
+        let screen = try XCTUnwrap(NSScreen.main)
+        let key = ScreenIdentity.key(for: screen)
+        for edge in HUDEdge.allCases {
+            let domain = "app.agenthud.tests.simple-open.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+            defer { defaults.removePersistentDomain(forName: domain) }
+            let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
+            settings.update {
+                $0.screens[key] = ScreenPlacement(mode: .simple, edge: edge, offset: 0.4)
+                $0.collapseDelayMs = 5000
+            }
+            let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
+            store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))
+            let hud = ScreenHUD(key: key, screen: screen, store: store, settings: settings)
+            defer { hud.close() }
+            let strip = hud.geometry.rect
+
+            hud.forceOpen()
+            let root = hud.island.rootView, canvas = hud.island.panel.frame
+            func global(_ local: CGRect) -> CGRect {
+                CGRect(x: canvas.minX + local.minX, y: canvas.maxY - local.maxY, width: local.width, height: local.height)
+            }
+            XCTAssertTrue(root.isOpen, "\(edge)")
+            XCTAssertNotNil(root.simpleMeter, "\(edge): the figures stay on the open panel")
+            let figures = global(try XCTUnwrap(root.logoQueueFrame))
+            XCTAssertEqual(figures.minX, strip.minX, accuracy: 0.5, "\(edge): the figures keep their place on screen")
+            XCTAssertEqual(figures.minY, strip.minY, accuracy: 0.5, "\(edge)")
+            XCTAssertEqual(figures.size.width, strip.width, accuracy: 0.5, "\(edge)")
+            let card = global(try XCTUnwrap(root.presentationFrame))
+            XCTAssertGreaterThan(card.width * card.height, strip.width * strip.height, "\(edge): the panel has opened")
+            switch edge {
+            case .top: XCTAssertEqual(card.maxY, screen.frame.maxY, accuracy: 1)
+            case .bottom: XCTAssertEqual(card.minY, screen.frame.minY, accuracy: 1)
+            case .left: XCTAssertEqual(card.minX, screen.frame.minX, accuracy: 1)
+            case .right: XCTAssertEqual(card.maxX, screen.frame.maxX, accuracy: 1)
+            }
+            XCTAssertNil(hud.glow.glowLayer.contents, "\(edge): an open Simple HUD draws no glow either")
+        }
+    }
 }
