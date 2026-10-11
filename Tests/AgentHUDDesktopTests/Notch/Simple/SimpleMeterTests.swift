@@ -12,9 +12,9 @@ final class SimpleMeterTests: XCTestCase {
         }
         let agents = [agent("claude-5h", "Claude"), agent("codex-5h", "Codex"), agent("claude-week", "Claude"), agent("kimi", "Kimi")]
         let report = UsageReport(generatedAt: now, snapshots: [
-            .init(agentId: "claude-5h", remainingPct: 69, resetAt: now.addingTimeInterval(3600), windowDuration: 5 * 3600, updatedAt: now),
-            .init(agentId: "claude-week", remainingPct: 38, resetAt: now.addingTimeInterval(86400), windowDuration: 7 * 86400, updatedAt: now),
-            .init(agentId: "codex-5h", remainingPct: 82, resetAt: now.addingTimeInterval(3600), windowDuration: 5 * 3600, updatedAt: now),
+            .init(agentId: "claude-5h", remainingPct: 69, resetAt: now.addingTimeInterval(3600), windowDuration: 5.0 * 3600, updatedAt: now),
+            .init(agentId: "claude-week", remainingPct: 38, resetAt: now.addingTimeInterval(86400), windowDuration: 7.0 * 86400, updatedAt: now),
+            .init(agentId: "codex-5h", remainingPct: 82, resetAt: now.addingTimeInterval(3600), windowDuration: 5.0 * 3600, updatedAt: now),
         ], sessions: [])
         let view = ReportView(report: report, agents: agents, settings: Settings(), now: now)
 
