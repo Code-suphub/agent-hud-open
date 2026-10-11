@@ -19,6 +19,8 @@ final class HUDDragWindowController {
     var isPressed: Bool { surface.isPressed }
     /// The press has become a pick-up, by travel or by holding.
     var isArmed: Bool { surface.isArmed }
+    /// The cursor the surface asks for: an open hand at rest, a closed one while the HUD is picked up.
+    var cursor: NSCursor { surface.cursor }
 
     init(holdDelay: TimeInterval = 0.3) {
         surface.holdDelay = holdDelay
@@ -97,7 +99,10 @@ private final class HUDDragView: NSView {
     }
 
     override func layout() { super.layout(); updateOutline() }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+    /// The surface moves with the HUD, which rebuilds its cursor rects under the pointer on every step; the
+    /// rect has to carry the dragging cursor itself or the open hand comes straight back.
+    var cursor: NSCursor { isArmed ? .closedHand : .openHand }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
@@ -119,7 +124,8 @@ private final class HUDDragView: NSView {
         guard isPressed, !isArmed else { return }
         isArmed = true
         updateOutline()
-        NSCursor.closedHand.set()
+        window?.invalidateCursorRects(for: self)
+        cursor.set()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -132,6 +138,7 @@ private final class HUDDragView: NSView {
             onBegin?(downAt)
         }
         onDrag?(point)
+        cursor.set()
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -142,7 +149,8 @@ private final class HUDDragView: NSView {
         isDragging = false
         isArmed = false
         updateOutline()
-        NSCursor.openHand.set()
+        window?.invalidateCursorRects(for: self)
+        cursor.set()
         if moved { onEnd?() }
         onRelease?()
     }
