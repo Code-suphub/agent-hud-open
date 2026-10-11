@@ -148,7 +148,8 @@ final class SimpleMeterTests: XCTestCase {
         }
     }
 
-    func testFloatingSilhouetteIsThePanelCollapsedAndTheCardsCoreOpenOnEveryEdge() {
+    @MainActor
+    func testFloatingSilhouetteIsThePanelCollapsedAndTheCardsCoreOpenOnEveryEdge() async {
         let margin = SimpleMeterConfig.edgeMargin, flare = IslandRootView.expandedTopRadius
         for edge in HUDEdge.allCases {
             // SwiftUI coordinates, y down: what a floating silhouette leaves clear on its edge side and at its ends.
