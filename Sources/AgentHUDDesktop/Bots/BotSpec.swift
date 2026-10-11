@@ -139,17 +139,15 @@ struct BotSpec: Sendable {
                             decor: [.blocks([rect(-1.0, -1.06, 1.0, -0.56), rect(-1.0, -0.56, -0.62, -0.36),
                                              rect(-0.24, -0.56, 0.16, -0.42), rect(0.58, -0.56, 1.0, -0.3)],
                                             grey, followsFace: false),
-                                    .blocks([rect(-0.6, 0.36, -0.05, 0.6), rect(0.05, 0.36, 0.6, 0.6),
-                                             rect(-0.05, 0.47, 0.05, 0.6)], grey, followsFace: true)]),
+                                    .blocks([rect(-0.6, 0.36, 0.6, 0.6)], grey, followsFace: true)]),
         "Kimi": BotSpec(radius: 0.32, center: CGPoint(x: 0.41, y: 0.59), shape: .outline(keep: 0.3, smooth: 22),
                         keeps: CGRect(x: 0.78, y: 0.02, width: 0.215, height: 0.215)),
         "GLM": BotSpec(shape: .rect(width: 0.74, height: 0.74, round: 0.16), paint: .solid(RGBA(hex: 0x28282b)),
                        eyeColor: RGBA(hex: 0xffffff), stroke: RGBA(hex: 0xffffff)),
-        // Two legs under a flat hat: the silhouette reads as the letter.
-        "Pi": BotSpec(center: CGPoint(x: 0.5, y: 0.57), reach: 0.5, shape: .rect(width: 0.6, height: 0.6, round: 0.02),
-                      face: CGPoint(x: 0, y: -0.34), eye: Eye(height: 0.3, width: 0.3, round: 0),
-                      decor: [.blocks([rect(-1.22, -1.18, 1.22, -0.9)], RGBA(hex: 0xffffff), followsFace: false),
-                              .cut([rect(-0.22, 0.2, 0.22, 1.2)])]),
+        // The letter itself, in one piece: a wide bar that holds the face, standing on two legs.
+        "Pi": BotSpec(center: CGPoint(x: 0.5, y: 0.31), reach: 0.3, shape: .rect(width: 0.9, height: 0.29, round: 0.02),
+                      eye: Eye(height: 0.3, width: 0.3, round: 0),
+                      decor: [.blocks([rect(-0.8, 0.36, -0.3, 1.5), rect(0.3, 0.36, 0.8, 1.5)], RGBA(hex: 0xffffff), followsFace: false)]),
         // A plain white ball with a fringe: three locks over the forehead, kept to the ball's outline.
         "Hermes": BotSpec(radius: 0.35, reach: 0.5, paint: .solid(RGBA(hex: 0xf8f8f9)), face: CGPoint(x: 0, y: 0.24),
                           eye: Eye(height: 0.72, width: 0.3, spread: 0.44),
