@@ -120,12 +120,10 @@ struct BotSpec: Sendable {
                             decor: [.soft([rect(-0.86, 0.34, 0.86, 1.9)], RGBA(hex: 0xc9d4ff), round: 1)]),
         "Grok": BotSpec(radius: 0.33, reach: 0.55, face: CGPoint(x: 0, y: -0.3),
                         ring: Ring(radiusX: 1.5, radiusY: 0.32, drop: 0.3, tilt: -20, width: 0.14)),
-        // Grok's bot is a black ball with white eyes. A faint rim keeps the ball visible on the island's black.
-        "Grok Bot": BotSpec(radius: 0.37,
-                            paint: .radial(center: CGPoint(x: 0.42, y: 0.34), inner: 0.02, outer: 0.7,
-                                           stops: [RGBA(hex: 0x4a4a52), RGBA(hex: 0x232327), RGBA(hex: 0x0f0f11)]),
-                            eye: Eye(height: 0.78, width: 0.3), eyeColor: RGBA(hex: 0xffffff),
-                            stroke: RGBA(hex: 0xffffff, alpha: 0.26)),
+        // Grok's bot is a flat black ball with white eyes: no shading and no rim. The fill is a shade off the
+        // island's own black, which is all that keeps the ball itself in sight there.
+        "Grok Bot": BotSpec(radius: 0.37, paint: .solid(RGBA(hex: 0x242428)),
+                            eye: Eye(height: 0.78, width: 0.3), eyeColor: RGBA(hex: 0xffffff)),
         // The logo's cut, as a notch in the edge it was taken from.
         "Cursor": BotSpec(radius: 0.41, reach: 0.7, shape: .polygon(sides: 6, rotation: -90, round: 0.07),
                           face: CGPoint(x: -0.12, y: 0.16),
