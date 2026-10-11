@@ -87,12 +87,18 @@ final class HUDRecorderTests: XCTestCase {
         await withCheckedContinuation { done in recorder.finish { done.resume() } }
 
         XCTAssertGreaterThan(recorder.frames, 5)
-        let track = try await AVURLAsset(url: url).loadTracks(withMediaType: .video).first
-        let video = try XCTUnwrap(track)
-        let size = try await video.load(.naturalSize)
-        XCTAssertEqual(size, CGSize(width: 300 * screen.backingScaleFactor, height: 200 * screen.backingScaleFactor))
-        let formats = try await video.load(.formatDescriptions)
-        let format = try XCTUnwrap(formats.first)
-        XCTAssertEqual(CMFormatDescriptionGetMediaSubType(format), kCMVideoCodecType_AppleProRes4444, "The codec that keeps the alpha channel")
+        let video = try await videoFormat(of: url)
+        XCTAssertEqual(video.size, CGSize(width: 300 * screen.backingScaleFactor, height: 200 * screen.backingScaleFactor))
+        XCTAssertEqual(video.codec, kCMVideoCodecType_AppleProRes4444, "The codec that keeps the alpha channel")
     }
+}
+
+/// A movie's picture size and codec. The macOS 15 SDK's tracks are not Sendable, so they are read here, off the main
+/// actor the tests run on, and only the two values go back.
+private func videoFormat(of url: URL) async throws -> (size: CGSize, codec: FourCharCode) {
+    let track = try await AVURLAsset(url: url).loadTracks(withMediaType: .video).first
+    let video = try XCTUnwrap(track)
+    let size = try await video.load(.naturalSize)
+    let formats = try await video.load(.formatDescriptions)
+    return (size, CMFormatDescriptionGetMediaSubType(try XCTUnwrap(formats.first)))
 }
