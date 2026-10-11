@@ -339,6 +339,20 @@ final class CodexDesktopPermissionsTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(server.methods.filter { $0 == "thread-stream-following-changed" }.count, 4)
     }
 
+    func testLongThreadSnapshotIsReadWithItsRequest() async throws {
+        // Desktop sends a thread's whole history with its requests: 33 MB for one thread measured on 2026-10-12.
+        var long = try XCTUnwrap(state([wire()]).objectValue)
+        long["turns"] = .array([.object(["turnId": .string("earlier-turn"), "status": .string("completed"), "items": .array([
+            .object(["id": .string("output"), "type": .string("commandExecution"),
+                     "aggregatedOutput": .string(String(repeating: "x", count: 9 * 1024 * 1024))]),
+        ])])])
+        let server = try CodexPermissionsTestServer(state: .object(long))
+        defer { server.stop() }
+        let snapshot = try await CodexDesktopPermissions(dataDirectory: server.directory, timeout: 10).fetch(threadIDs: [threadID])
+        XCTAssertEqual(snapshot.observedThreadIDs, [threadID])
+        XCTAssertEqual(snapshot.pending.map(\.request.toolName), ["computer_use_app"])
+    }
+
     func testChangedRequestOrOwnerNeverReceivesAnAnswer() async throws {
         let server = try CodexPermissionsTestServer(state: state([wire()]))
         defer { server.stop() }

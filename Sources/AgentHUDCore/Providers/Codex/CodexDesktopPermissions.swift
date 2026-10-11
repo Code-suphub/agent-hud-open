@@ -68,8 +68,7 @@ public struct CodexDesktopPermissions: Sendable {
             do { owner = try Self.owner(connection, source: clientID, threadID: pending.threadID) }
             catch CodexDesktopIPC.Failure.rejected("no-client-found") { throw Failure.noLongerWaiting }
             guard owner == pending.ownerClientID else { throw Failure.noLongerWaiting }
-            let state = try Self.json(connection.conversationSnapshot(source: clientID, owner: owner,
-                                                                       threadID: pending.threadID))
+            let state = try connection.conversationState(source: clientID, owner: owner, threadID: pending.threadID)
             let current = try Self.pending(state, threadID: pending.threadID, ownerClientID: owner, now: clock())
             guard current.contains(where: { $0.id == pending.id && $0.wireRequest == pending.wireRequest }) else {
                 throw Failure.noLongerWaiting
@@ -146,7 +145,7 @@ public struct CodexDesktopPermissions: Sendable {
         do {
             let clientID = try Self.initialize(connection)
             let owner = try Self.owner(connection, source: clientID, threadID: threadID)
-            let state = try Self.json(connection.conversationSnapshot(source: clientID, owner: owner, threadID: threadID))
+            let state = try connection.conversationState(source: clientID, owner: owner, threadID: threadID)
             let requests = try Self.pending(state, threadID: threadID, ownerClientID: owner, now: clock())
             try Task.checkCancellation()
             return Snapshot(pending: requests, observedThreadIDs: [threadID])

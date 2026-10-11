@@ -1,3 +1,4 @@
+import AgentHUDSupport
 import Darwin
 import Foundation
 
@@ -12,7 +13,8 @@ public final class CodexDesktopIPC {
 
     private let descriptor: Int32
     private let deadline: TimeInterval
-    private let maximumFrame = 8 * 1024 * 1024
+    /// A snapshot carries the thread's whole history: tens of megabytes for a long thread.
+    private let maximumFrame = 64 * 1024 * 1024
 
     public init(path: String, timeout: TimeInterval) throws {
         deadline = ProcessInfo.processInfo.systemUptime + timeout
@@ -74,13 +76,8 @@ public final class CodexDesktopIPC {
     }
 
     public func conversationSnapshot(source: String, owner: String, threadID: String) throws -> [String: Any] {
-        func following(_ value: Bool) throws {
-            try send(["type": "broadcast", "method": "thread-stream-following-changed", "version": 1,
-                      "sourceClientId": source, "targetClientIds": [owner],
-                      "params": ["hostId": "local", "conversationId": threadID, "following": value]])
-        }
-        try following(true)
-        defer { try? following(false) }
+        try follow(true, source: source, owner: owner, threadID: threadID)
+        defer { try? follow(false, source: source, owner: owner, threadID: threadID) }
         while true {
             let message = try receive()
             if try answerDiscovery(message) { continue }
@@ -97,10 +94,41 @@ public final class CodexDesktopIPC {
         }
     }
 
+    /// The same snapshot, its frame parsed once. A reader that asks at every pass uses this one: building a Foundation
+    /// tree and converting it costs more than twice as much on a long thread.
+    public func conversationState(source: String, owner: String, threadID: String) throws -> JSONValue {
+        try follow(true, source: source, owner: owner, threadID: threadID)
+        defer { try? follow(false, source: source, owner: owner, threadID: threadID) }
+        while true {
+            let message = try JSONValue.parse(receiveFrame())
+            guard message.objectValue != nil else { throw Failure.protocolError }
+            if try answerDiscovery(type: message["type"].stringValue, requestID: message["requestId"].stringValue) { continue }
+            let params = message["params"], change = params["change"]
+            guard message["type"].stringValue == "broadcast",
+                  message["method"].stringValue == "thread-stream-state-changed",
+                  message["sourceClientId"].stringValue == owner,
+                  params["hostId"].stringValue == "local", params["conversationId"].stringValue == threadID else { continue }
+            guard message["version"] == .integer(11), change.objectValue != nil else { throw Failure.protocolError }
+            guard change["type"].stringValue == "snapshot" else { continue }
+            let state = change["conversationState"]
+            guard state.objectValue != nil else { throw Failure.protocolError }
+            return state
+        }
+    }
+
+    private func follow(_ value: Bool, source: String, owner: String, threadID: String) throws {
+        try send(["type": "broadcast", "method": "thread-stream-following-changed", "version": 1,
+                  "sourceClientId": source, "targetClientIds": [owner],
+                  "params": ["hostId": "local", "conversationId": threadID, "following": value]])
+    }
+
     private func answerDiscovery(_ message: [String: Any]) throws -> Bool {
-        guard message["type"] as? String == "client-discovery-request",
-              let id = message["requestId"] as? String else { return false }
-        try send(["type": "client-discovery-response", "requestId": id, "response": ["canHandle": false]])
+        try answerDiscovery(type: message["type"] as? String, requestID: message["requestId"] as? String)
+    }
+
+    private func answerDiscovery(type: String?, requestID: String?) throws -> Bool {
+        guard type == "client-discovery-request", let requestID else { return false }
+        try send(["type": "client-discovery-response", "requestId": requestID, "response": ["canHandle": false]])
         return true
     }
 
@@ -124,13 +152,17 @@ public final class CodexDesktopIPC {
     }
 
     private func receive() throws -> [String: Any] {
-        let header = try read(4)
-        let length = header.withUnsafeBytes { UInt32(littleEndian: $0.loadUnaligned(as: UInt32.self)) }
-        guard length > 0, length <= maximumFrame,
-              let message = try JSONSerialization.jsonObject(with: read(Int(length))) as? [String: Any] else {
+        guard let message = try JSONSerialization.jsonObject(with: receiveFrame()) as? [String: Any] else {
             throw Failure.protocolError
         }
         return message
+    }
+
+    private func receiveFrame() throws -> Data {
+        let header = try read(4)
+        let length = header.withUnsafeBytes { UInt32(littleEndian: $0.loadUnaligned(as: UInt32.self)) }
+        guard length > 0, length <= maximumFrame else { throw Failure.protocolError }
+        return try read(Int(length))
     }
 
     private func read(_ count: Int) throws -> Data {
