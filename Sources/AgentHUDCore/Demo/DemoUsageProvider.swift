@@ -9,7 +9,9 @@ public struct DemoUsageProvider: UsageProvider {
         return Self.report(agents: agents, historyHours: historyHours, now: now)
     }
 
-    public static func report(agents: [AgentDescriptor], historyHours: Int, now: Date) -> UsageReport {
+    /// - stage: what a playing script has set; the fixed demo without one.
+    public static func report(agents: [AgentDescriptor], historyHours: Int, now: Date,
+                              stage: DemoStage? = DemoStageBox.current) -> UsageReport {
         var seen: Set<String> = []
         let consumers = agents.compactMap { agent -> AgentDescriptor? in
             guard DemoData.quota[agent.windowKey] != nil, seen.insert(agent.windowKey).inserted else { return nil }
@@ -17,8 +19,9 @@ public struct DemoUsageProvider: UsageProvider {
         }
         let accountIDs = Set(agents.compactMap(\.account?.id))
         let accounts = DemoData.codexAccounts(now: now).filter { accountIDs.contains($0.account.id) }
-        let accountSnapshots = DemoData.codexAccountSnapshots(now: now).filter { snapshot in agents.contains { $0.id == snapshot.agentId } }
-        let snapshots = DemoData.snapshots(now: now).filter { accounts.isEmpty || $0.agentId != "codex" } + accountSnapshots
+        let accountSnapshots = DemoData.codexAccountSnapshots(now: now, stage: stage)
+            .filter { snapshot in agents.contains { $0.id == snapshot.agentId } }
+        let snapshots = DemoData.snapshots(now: now, stage: stage).filter { accounts.isEmpty || $0.agentId != "codex" } + accountSnapshots
         var consumerIdsByQuota = Dictionary(uniqueKeysWithValues: consumers.map { ($0.id, Set([$0.id])) })
         var insights = Dictionary(uniqueKeysWithValues: consumers.map { ($0.id, DemoData.insights(now: now)) })
         for snapshot in accountSnapshots {
@@ -56,7 +59,7 @@ public struct DemoUsageProvider: UsageProvider {
         return UsageReport(
             generatedAt: now,
             snapshots: snapshots,
-            sessions: DemoData.sessions(now: now),
+            sessions: DemoData.sessions(now: now, stage: stage),
             // The demo reports the rows it was given, as a provider reports the rows it read.
             discoveredAgents: agents,
             consumers: consumers,
@@ -65,6 +68,7 @@ public struct DemoUsageProvider: UsageProvider {
             subscriptions: ["Claude": "max_20x", "Codex": "prolite"],
             consumerIdsByQuota: consumerIdsByQuota,
             codexResetCredits: DemoData.codexResetCredits(now: now),
+            completions: stage?.completions ?? [],
             accounts: accounts.isEmpty ? nil : ["Codex": accounts],
             sessionUsage: DemoData.sessionUsage(now: now),
             periods: periods

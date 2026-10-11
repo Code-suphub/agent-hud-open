@@ -15,6 +15,10 @@ public final class DesktopApplication {
     private var islandEvents = IslandEventTracker()
     /// The requests already on the island, so a change to the waiting list says which ones arrived and which left.
     private var shownRequests: [String] = []
+    /// The scenario a demo launched with `--demo-script` is playing.
+    private var demoScript: DemoScriptRunner?
+    /// The movie a launch with `--record` is writing.
+    private var recorder: HUDRecorder?
     /// The clients whose observer directory existed at the last look, so one that appears later is noticed.
     private var observedClients: Set<String> = []
     private let antigravityApprovals = AntigravityPermissionObserver()
@@ -131,8 +135,12 @@ public final class DesktopApplication {
         // The channel is open whenever the app is: a client that asks while it is closed keeps its own prompt.
         trackChanges({ PermissionRequests.shared.pending.map(\.id) },
                        onChange: { [weak self] in self?.syncPermissionRequests() })
-        // Seeded after the island is listening, so the demo's requests arrive the way a client's would.
-        if options.demo { PermissionRequests.shared.seedDemo() } else { PermissionRequests.shared.start() }
+        // Seeded after the island is listening, so the demo's requests arrive the way a client's would. A script
+        // brings them in one at a time instead, and sets what the demo reports before the first report is read.
+        if let name = options.demoScript {
+            demoScript = DemoScriptRunner.load(name, store: store, island: notch)
+        }
+        if !options.demo { PermissionRequests.shared.start() } else if demoScript == nil { PermissionRequests.shared.seedDemo() }
         if !options.demo {
             antigravityApprovals.setEnabled(settings.settings.clientHooks)
             deepseekQuestions.setEnabled(settings.settings.clientHooks)
@@ -140,6 +148,8 @@ public final class DesktopApplication {
             codexDesktopApprovals.setEnabled(settings.settings.clientHooks)
         }
         store.start()
+        startRecording()
+        demoScript?.start()
         if options.openPanel { notch.forceOpen() }
         if store.isAccessAllowed, options.showOnboarding || !settings.hasCompletedOnboarding { showOnboarding() }
         if options.showSettings { showSettings() }
@@ -152,7 +162,26 @@ public final class DesktopApplication {
         codexDesktopApprovals.stop()
         // Quitting must never leave a client waiting on an answer that is no longer coming.
         PermissionRequests.shared.stop()
+        demoScript?.stop()
+        recorder?.finishAndWait()
         store.stop()
+    }
+
+    /// `--record`: the main display's HUD, from now until the time given or until the app quits.
+    private func startRecording() {
+        guard let path = options.recordPath, let screen = NSScreen.main else { return }
+        var recording = HUDRecorder.Options(url: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+        recording.seconds = options.recordSeconds
+        if let fps = options.recordFPS { recording.framesPerSecond = fps }
+        recording.region = options.recordRegion.flatMap(HUDRecorder.Options.region)
+        do {
+            let recorder = try HUDRecorder(options: recording, screen: screen) { [weak self] in self?.notch?.recordingSources ?? [] }
+            recorder.onFinish = { NSApp.terminate(nil) }
+            try recorder.start()
+            self.recorder = recorder
+        } catch {
+            NSLog("[AgentHUD] Recording to %@ could not start: %@", path, String(describing: error))
+        }
     }
 
     /// Mirrors the requests waiting for the user onto the island: a new one is shown, and one the client took back

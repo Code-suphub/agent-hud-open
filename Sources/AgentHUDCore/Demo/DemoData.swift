@@ -31,9 +31,12 @@ public enum DemoData {
         ]
     }
 
-    public static func codexAccountSnapshots(now: Date) -> [UsageSnapshot] {
+    /// - stage: a playing script's reading for `codex` is the current account's.
+    public static func codexAccountSnapshots(now: Date, stage: DemoStage? = nil) -> [UsageSnapshot] {
         codexAccounts(now: now).map { observation in
-            UsageSnapshot(agentId: observation.account.windowID("codex"), remainingPct: observation.isCurrent ? 58 : 100,
+            let scripted = observation.isCurrent ? stage?.used["codex"].map { 100 - $0 } : nil
+            return UsageSnapshot(agentId: observation.account.windowID("codex"),
+                          remainingPct: scripted ?? (observation.isCurrent ? 58 : 100),
                           resetAt: now.addingTimeInterval(4 * 86400), windowDuration: 7 * 86400, updatedAt: observation.observedAt)
         }
     }
@@ -84,12 +87,13 @@ public enum DemoData {
         "pi": (60, 3 * 3600, nil),
     ]
 
-    public static func snapshots(now: Date) -> [UsageSnapshot] {
+    /// - stage: a playing script's readings, which take the place of the fixed ones where it has set any.
+    public static func snapshots(now: Date, stage: DemoStage? = nil) -> [UsageSnapshot] {
         agents.compactMap { agent in
             guard let q = quota[agent.id] else { return nil }
             return UsageSnapshot(
                 agentId: agent.id,
-                remainingPct: q.remaining,
+                remainingPct: stage?.used[agent.id].map { 100 - $0 } ?? q.remaining,
                 weeklyRemainingPct: q.weekly,
                 resetAt: q.resetIn.map { now.addingTimeInterval($0) },
                 windowDuration: q.resetIn == nil ? nil : (agent.id == "antigravity" ? 24 : 5) * 3600,
@@ -118,8 +122,16 @@ public enum DemoData {
         )
     }
 
-    public static func sessions(now: Date) -> [LiveSession] {
+    /// - stage: a playing script decides which sessions run and when the others ended; without one the first two run.
+    public static func sessions(now: Date, stage: DemoStage? = nil) -> [LiveSession] {
         let usage = sessionUsage(now: now)
+        func span(_ id: String, _ started: TimeInterval, _ ended: TimeInterval?) -> (start: Date, end: Date?) {
+            guard let stage else { return (now.addingTimeInterval(started), ended.map { now.addingTimeInterval($0) }) }
+            if let since = stage.running[id] { return (since, nil) }
+            return (now.addingTimeInterval(started), stage.ended[id] ?? now.addingTimeInterval(ended ?? -51 * 60))
+        }
+        let t1 = span("s1", -27 * 60, nil), t2 = span("s2", -64 * 60, nil)
+        let t3 = span("s3", -140 * 60, -51 * 60), t4 = span("s4", -200 * 60, -120 * 60)
         /// The session's own counts: its breakdown without the sub-agent.
         func own(_ id: String) -> SessionUsage.Tokens {
             guard let usage = usage[id] else { return .init() }
@@ -130,17 +142,17 @@ public enum DemoData {
         let s1 = own("s1"), s2 = own("s2"), s3 = own("s3"), home = FileManager.default.homeDirectoryForCurrentUser.path
         return [
             LiveSession(id: "s1", agentId: "claude-opus", task: "fix auth bug in middleware", terminal: "api-gateway",
-                        startedAt: now.addingTimeInterval(-27 * 60), pctOfWindow: 6.2, tokensIn: s1.tokensIn, tokensOut: s1.tokensOut,
+                        startedAt: t1.start, endedAt: t1.end, pctOfWindow: 6.2, tokensIn: s1.tokensIn, tokensOut: s1.tokensOut,
                         cacheReadTokens: s1.cacheReadTokens, observedAt: now, workingDirectory: home + "/work/api-gateway"),
             LiveSession(id: "s2", agentId: "codex", task: "backend server endpoints", terminal: "billing-service",
-                        startedAt: now.addingTimeInterval(-64 * 60), pctOfWindow: 3.8, tokensIn: s2.tokensIn, tokensOut: s2.tokensOut,
+                        startedAt: t2.start, endedAt: t2.end, pctOfWindow: 3.8, tokensIn: s2.tokensIn, tokensOut: s2.tokensOut,
                         cacheReadTokens: s2.cacheReadTokens, observedAt: now, workingDirectory: home + "/work/api-gateway"),
             LiveSession(id: "s3", agentId: "claude-sonnet", task: "optimize db queries", terminal: "etl",
-                        startedAt: now.addingTimeInterval(-140 * 60), endedAt: now.addingTimeInterval(-51 * 60),
+                        startedAt: t3.start, endedAt: t3.end,
                         pctOfWindow: 2.1, tokensIn: s3.tokensIn, tokensOut: s3.tokensOut, cacheReadTokens: s3.cacheReadTokens,
                         workingDirectory: home + "/clients/api-gateway"),
             LiveSession(id: "s4", agentId: "chatgpt", task: L10n.text("桌面版 · 3 段对话", "Desktop · 3 conversations"), terminal: nil,
-                        startedAt: now.addingTimeInterval(-200 * 60), endedAt: now.addingTimeInterval(-120 * 60),
+                        startedAt: t4.start, endedAt: t4.end,
                         pctOfWindow: 4.5, tokensIn: 0, tokensOut: 0, observedAt: now),
         ]
     }
@@ -338,8 +350,15 @@ public enum DemoData {
     /// edit worth reading, one build, one ticket and one file. No client is waiting behind them, so answering one
     /// only takes it off the HUD.
     public static func permissionRequests(now: Date = Date()) -> [PermissionRequest] {
-        [
-            PermissionRequest(
+        [("demo-edit", -38.0), ("demo-build", -124), ("demo-ticket", -71), ("demo-read", -9)]
+            .compactMap { permissionRequest($0.0, at: now.addingTimeInterval($0.1)) }
+    }
+
+    /// One of the demo's requests by id, as asked at `at`.
+    public static func permissionRequest(_ id: String, at: Date) -> PermissionRequest? {
+        switch id {
+        case "demo-edit":
+            return PermissionRequest(
                 id: "demo-edit", source: .claude, sessionID: "demo-1", toolName: "Edit",
                 summary: "Avatar.tsx", detail: "~/Projects/acme-web/src/components/Avatar.tsx", cwd: "~/Projects/acme-web",
                 path: "~/Projects/acme-web/src/components/Avatar.tsx",
@@ -349,20 +368,25 @@ public enum DemoData {
                     "destination": .string("localSettings"),
                     "rules": .array([.object(["toolName": .string("Edit"), "ruleContent": .string("src/**")])]),
                 ])],
-                at: now.addingTimeInterval(-38)),
-            PermissionRequest(
+                at: at)
+        case "demo-build":
+            return PermissionRequest(
                 id: "demo-build", source: .codex, sessionID: "demo-2", toolName: "Bash",
                 summary: L10n.text("构建生产版本", "Build for production"), detail: "npm run build",
-                cwd: "~/Projects/acme-api", at: now.addingTimeInterval(-124)),
-            PermissionRequest(
+                cwd: "~/Projects/acme-api", at: at)
+        case "demo-ticket":
+            return PermissionRequest(
                 id: "demo-ticket", source: .codebuddy, sessionID: "demo-3",
                 toolName: "mcp__linear__create_issue", summary: "linear · create_issue",
                 detail: "team: Mobile\ntitle: Settings screen crashes when offline",
-                cwd: "~/Projects/acme-mobile", at: now.addingTimeInterval(-71)),
-            PermissionRequest(
+                cwd: "~/Projects/acme-mobile", at: at)
+        case "demo-read":
+            return PermissionRequest(
                 id: "demo-read", source: .claude, sessionID: "demo-4", toolName: "Read",
                 summary: "tsconfig.base.json", detail: "~/Projects/acme-shared/tsconfig.base.json", cwd: "~/Projects/acme-web",
-                path: "~/Projects/acme-shared/tsconfig.base.json", at: now.addingTimeInterval(-9)),
-        ]
+                path: "~/Projects/acme-shared/tsconfig.base.json", at: at)
+        default:
+            return nil
+        }
     }
 }
