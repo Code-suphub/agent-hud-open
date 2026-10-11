@@ -144,6 +144,12 @@ public enum SnapshotRunner {
             }
             settings.update { $0 = saved }
         }
+        // Every mark as its bot: midway through the morph, at work, asking, smiling, and resting in an alert.
+        save("bots-morph", BotSheetScene(phase: .working, seconds: 0.17), folder: folder, scheme: .dark)
+        save("bots-working", BotSheetScene(phase: .working), folder: folder, scheme: .dark)
+        save("bots-asking", BotSheetScene(phase: .asking), folder: folder, scheme: .dark)
+        save("bots-done", BotSheetScene(phase: .done, seconds: 0.9), folder: folder, scheme: .dark)
+        save("bots-resting", BotSheetScene(phase: .idle, seconds: 2), folder: folder, scheme: .dark)
         // The Display pane with this machine's screen put in logo mode, to check the preview against the HUD.
         if let main = NSScreen.main {
             let key = ScreenIdentity.key(for: main)

@@ -28,6 +28,14 @@ struct IslandPane: View {
                         tokenSample
                     }
                 }
+            SettingsSection(title: L10n.text("Logo", "Logos"), theme: theme) {
+                SettingsToggleRow(
+                    label: L10n.text("Bot 形象", "Bot logos"),
+                    subtitle: L10n.text("Agent 工作、等待批准或刚回复时，它的 Logo 变成一只会动的小 Bot。关掉后 Logo 保持原样。",
+                                        "While an agent works, waits for approval or has just replied, its logo turns into a small animated bot. Off, logos stay as they are."),
+                    isOn: settings.binding(\.botLogos)
+                )
+            }
             SettingsSection(title: L10n.text("悬停交互", "Hover behavior"), theme: theme) {
                 SettingsToggleRow(
                     label: L10n.text("按 Option 才展开", "Press Option to open"),

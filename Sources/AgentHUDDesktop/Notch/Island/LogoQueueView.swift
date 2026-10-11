@@ -38,6 +38,8 @@ struct LogoQueueConfig: Equatable {
     var logo: CGFloat
     var gap: CGFloat
     var workingSeconds: Double
+    /// A working agent's mark turns into its bot instead of bobbing.
+    var bots: Bool
 
     init(items: [LogoQueueItem], placement: ScreenPlacement, settings: AgentHUDCore.Settings) {
         self.items = items
@@ -45,6 +47,7 @@ struct LogoQueueConfig: Equatable {
         logo = placement.logoSize
         gap = logo * placement.gapScale
         workingSeconds = settings.breathSeconds
+        bots = settings.botLogos
     }
 
     /// What the marks occupy.
@@ -56,8 +59,8 @@ struct LogoQueueConfig: Equatable {
 }
 
 /// The collapsed HUD on a screen in logo mode: every watched agent's own mark. Only the ones with work
-/// running bob, so motion means exactly one thing and a glance finds the busy agent without reading
-/// anything. The marks keep their own artwork at full strength; status colour is carried by the glow behind
+/// running move, so motion means exactly one thing and a glance finds the busy agent without reading
+/// anything. A working mark turns into its bot; with bots off, or for a mark that has none, it bobs. The marks keep their own artwork at full strength; status colour is carried by the glow behind
 /// them, not by the logos.
 ///
 /// The marks are plain layers holding baked bitmaps, animated by Core Animation. Driving the bob from
@@ -87,7 +90,10 @@ final class LogoQueueLayerView: NSView {
     private static let travel: CGFloat = 0.14
     private static let stagger = 0.13
 
-    private var marks: [CALayer] = []
+    private(set) var marks: [CALayer] = []
+    /// One per mark, for the marks that have a bot. A bot's layer sits over its mark and takes its place
+    /// while the bot is out; the mark comes back when the bot has settled into the logo again.
+    private(set) var actors: [BotActor?] = []
     /// How far the baked outline overflows a mark, in points, so the layout leaves room for exactly that.
     private var bleed: CGFloat = 1
     private var applied: (config: LogoQueueConfig, light: Bool, scale: CGFloat, animates: Bool, previews: Bool)?
@@ -122,6 +128,7 @@ final class LogoQueueLayerView: NSView {
         let rebuild = applied?.config.items.map(\.id) != config.items.map(\.id)
             || applied?.light != light || applied?.scale != scale
             || applied?.config.logo != config.logo
+            || applied?.config.bots != config.bots || applied?.config.workingSeconds != config.workingSeconds
         applied = (config, light, scale, animates, previewsMotion)
         if rebuild { build(config: config, light: light, scale: scale) }
         position(config: config)
@@ -130,6 +137,7 @@ final class LogoQueueLayerView: NSView {
 
     private func build(config: LogoQueueConfig, light: Bool, scale: CGFloat) {
         marks.forEach { $0.removeFromSuperlayer() }
+        actors.forEach { $0?.layer.removeFromSuperlayer() }
         let side = Int((config.logo * scale).rounded())
         // One device pixel at any size: a hairline reads as the mark's own edge, anything thicker as a
         // border drawn around it.
@@ -144,6 +152,13 @@ final class LogoQueueLayerView: NSView {
                                                             outline: outline, light: false))
             layer?.addSublayer(mark)
             return mark
+        }
+        actors = config.items.map { item in
+            guard config.bots, let form = BotForm.form(for: item.vendor) else { return nil }
+            let actor = BotActor(form: form, staysBot: false, period: config.workingSeconds)
+            actor.resize(side: config.logo, scale: scale, outline: outline)
+            layer?.addSublayer(actor.layer)
+            return actor
         }
     }
 
@@ -164,6 +179,9 @@ final class LogoQueueLayerView: NSView {
                 : CGPoint(x: (bounds.width - config.logo) / 2, y: along)
             mark.frame = CGRect(x: origin.x - bleed, y: origin.y - bleed,
                                 width: config.logo + bleed * 2, height: config.logo + bleed * 2)
+            if index < actors.count {
+                actors[index]?.layer.position = CGPoint(x: origin.x + config.logo / 2, y: origin.y + config.logo / 2)
+            }
         }
         CATransaction.commit()
     }
@@ -179,6 +197,11 @@ final class LogoQueueLayerView: NSView {
         for (index, mark) in marks.enumerated() {
             mark.removeAnimation(forKey: "bob")
             let working = previewsMotion || (index < config.items.count && config.items[index].isWorking)
+            if let actor = index < actors.count ? actors[index] : nil {
+                // The bot does the moving: it breathes, looks around and acts, and the mark under it stays put.
+                actor.set(animates && working ? .working : .idle, at: CACurrentMediaTime())
+                continue
+            }
             guard animates, working else { continue }
             let period = max(0.25, config.workingSeconds)
             let animation = CABasicAnimation(keyPath: vertical ? "transform.translation.y" : "transform.translation.x")
@@ -195,5 +218,33 @@ final class LogoQueueLayerView: NSView {
             animation.isRemovedOnCompletion = false
             mark.add(animation, forKey: "bob")
         }
+        followBots()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { BotClock.shared.drop(self) } else { followBots() }
+    }
+
+    private func followBots() {
+        guard window != nil, actors.contains(where: { $0 != nil }) else { return }
+        BotClock.shared.follow(self) { [weak self] now in self?.stepBots(to: now) ?? false }
+    }
+
+    /// One frame for every bot in the queue. Returns false when all of them are back to being logos.
+    func stepBots(to now: TimeInterval) -> Bool {
+        guard let window else { return false }
+        let pointer = NSEvent.mouseLocation, runsDown = layer?.isGeometryFlipped ?? false
+        var moving = false
+        for (index, actor) in actors.enumerated() {
+            guard let actor, index < marks.count else { continue }
+            let place = window.convertPoint(toScreen: convert(actor.layer.position, to: nil))
+            // Screen coordinates run up; a bot's gaze is measured with y running down.
+            let aim = BotMotion.aim(from: CGPoint(x: place.x, y: -place.y), to: CGPoint(x: pointer.x, y: -pointer.y))
+            let out = actor.step(to: now, aim: aim, yRunsDown: runsDown)
+            marks[index].opacity = out ? 0 : 1
+            moving = moving || out
+        }
+        return moving
     }
 }

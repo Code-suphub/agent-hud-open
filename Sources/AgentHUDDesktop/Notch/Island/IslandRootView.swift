@@ -45,6 +45,8 @@ struct IslandRootView: View {
     /// Set on a screen in logo mode: the marks ride on top of the silhouette, collapsed or open, so hovering
     /// never makes the agents disappear.
     var logoQueue: LogoQueueConfig? = nil
+    /// Whether marks on this island turn into bots; carried to the alerts through the environment.
+    var botLogos = true
     /// Set on a screen whose HUD is a logo queue. Collapsed, such a HUD has no silhouette: it is the marks
     /// over whatever is behind them. Kept apart from `logoQueue`, which only says whether marks are drawn —
     /// hiding them leaves the backdrop alone and must not bring the black shape back.
@@ -71,6 +73,10 @@ struct IslandRootView: View {
     }
 
     var body: some View {
+        surfaces.environment(\.botLogos, botLogos)
+    }
+
+    private var surfaces: some View {
         GeometryReader { proxy in
             let bounds = proxy.size
             let visible = isOpen || alert != nil

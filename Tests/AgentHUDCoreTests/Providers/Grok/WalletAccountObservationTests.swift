@@ -34,7 +34,7 @@ final class WalletAccountObservationTests: XCTestCase {
         XCTAssertEqual(extraSamples.map(\.remainingPct), [100])
     }
 
-    func testWalletAndProvenanceSurviveReportCacheAndHistoricalAccountTransition() throws {
+    func testWalletAndProvenanceSurviveReportCacheUntilConfirmedSignOut() throws {
         let account = ProviderAccount.identified(provider: "Grok", user: "fixture", workspace: nil)!
         let observation = AccountObservation(account: account, client: "Grok Bot", observedAt: now,
             wallets: [AccountWallet(kind: .prepaid, balance: 0, observedAt: now.addingTimeInterval(-60)),
@@ -43,11 +43,8 @@ final class WalletAccountObservationTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(UsageReport.self, from: JSONEncoder().encode(previous.restartCopy)), previous)
         let signedOut = UsageReport(generatedAt: now.addingTimeInterval(60), snapshots: [], sessions: [], accounts: ["Grok": []])
             .retainingReadings(from: previous)
-        let historical = try XCTUnwrap(signedOut.observation(accountID: account.id))
-        XCTAssertFalse(historical.isCurrent)
-        XCTAssertEqual(historical.wallets, observation.wallets)
-        XCTAssertEqual(historical.sourceInfo, observation.sourceInfo)
-        XCTAssertEqual(historical.observedAt, now)
+        XCTAssertNil(signedOut.observation(accountID: account.id))
+        XCTAssertEqual(signedOut.accounts?["Grok"], [])
     }
 
     func testOlderAccountCacheRemainsReadableWithoutWalletsOrSourceInfo() throws {

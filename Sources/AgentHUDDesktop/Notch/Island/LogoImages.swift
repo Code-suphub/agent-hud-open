@@ -74,7 +74,7 @@ enum LogoImages {
 
     /// How dark the finished outline is. Enough to separate a white mark from a pale wallpaper, not enough
     /// to read as a border drawn around it.
-    private static let outlineOpacity: CGFloat = 0.5
+    static let outlineOpacity: CGFloat = 0.5
     /// Passes over the ring. Smearing an anti-aliased silhouette leaves a soft edge however thin the offset
     /// is; drawing it again drives the half-covered pixels to opaque, which is what makes the line crisp
     /// rather than a haze around the mark.
