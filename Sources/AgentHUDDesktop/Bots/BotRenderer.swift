@@ -102,6 +102,8 @@ enum BotRenderer {
             context.setAlpha(artwork)
             draw(form.artwork, in: box, on: context)
         }
+        // The logo stays where it is; the bot it turns into may settle a little above or below it.
+        context.translateBy(x: 0, y: spec.settle * eased)
         let outline = outline(form, eased: eased, turn: motion.turn)
 
         // A ring goes on in two passes: all of it first, so the body covers the far side; then the near side
@@ -116,12 +118,11 @@ enum BotRenderer {
             context.strokePath()
         }
 
-        // What the body wears arrives with the eyes; what sits under the body goes on before it.
+        // What the body wears arrives with the eyes.
         let dressed = max(0, min(1, (share - 0.45) / 0.45))
         let face = motion.face, turn = spec.reach * 0.72
         let yaw = max(-1.15, min(1.15, face.look)) * turn, pitch = max(-1.15, min(1.15, face.lookY)) * turn
         let glance = CGPoint(x: sin(yaw) * radius * 0.72, y: sin(pitch) * radius * 0.62)
-        if dressed > 0 { wear(.behind, spec, outline: outline, glance: glance, strength: dressed, on: context) }
 
         context.setAlpha(solid)
         context.saveGState()
@@ -177,7 +178,7 @@ enum BotRenderer {
         }
 
         guard dressed > 0 else { return }
-        wear(.onBody, spec, outline: outline, glance: glance, strength: dressed, on: context)
+        wear(spec, outline: outline, strength: dressed, on: context)
         for item in spec.decor {
             context.saveGState()
             var follows = false
@@ -206,54 +207,31 @@ enum BotRenderer {
                 context.setLineCap(.round)
                 context.addLines(between: points)
                 context.strokePath()
-            case .soft, .stroke:
+            case .soft:
                 break
             }
             context.restoreGState()
         }
-        wear(.front, spec, outline: outline, glance: glance, strength: dressed, on: context)
-        wear(.face, spec, outline: outline, glance: glance, strength: dressed, on: context)
         eyes(spec, face: face, yaw: yaw, pitch: pitch, awake: dressed, on: context)
     }
 
-    /// The soft pieces a body wears on one layer: mitts and hair under it, a fringe kept to its outline, a
-    /// scarf over it, a blush that rides with the eyes. Sizes are in body radii from the body's centre.
-    private static func wear(_ layer: BotSpec.Layer, _ spec: BotSpec, outline: CGPath, glance: CGPoint,
-                             strength: CGFloat, on context: CGContext) {
+    /// The soft pieces a body wears, kept to its outline: a fringe, a scarf. Sizes are in body radii from
+    /// the body's centre.
+    private static func wear(_ spec: BotSpec, outline: CGPath, strength: CGFloat, on context: CGContext) {
         for item in spec.decor {
-            let place: BotSpec.Layer
-            switch item {
-            case .soft(_, _, _, let at), .stroke(_, _, _, let at): place = at
-            default: continue
-            }
-            guard place == layer else { continue }
+            guard case .soft(let rects, let paint, let round) = item else { continue }
             context.saveGState()
-            if layer == .onBody {
-                context.addPath(outline)
-                context.clip()
-            }
-            context.translateBy(x: spec.center.x + (layer == .face ? glance.x : 0),
-                                y: spec.center.y + (layer == .face ? glance.y : 0))
+            context.addPath(outline)
+            context.clip()
+            context.translateBy(x: spec.center.x, y: spec.center.y)
             context.scaleBy(x: spec.radius, y: spec.radius)
             context.setAlpha(strength)
-            switch item {
-            case .soft(let rects, let paint, let round, _):
-                context.setFillColor(color(paint))
-                for rect in rects {
-                    let corner = min(rect.width, rect.height) / 2 * round
-                    context.addPath(CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil))
-                }
-                context.fillPath()
-            case .stroke(let points, let paint, let width, _):
-                context.setStrokeColor(color(paint))
-                context.setLineWidth(width)
-                context.setLineJoin(.round)
-                context.setLineCap(.round)
-                context.addLines(between: points)
-                context.strokePath()
-            default:
-                break
+            context.setFillColor(color(paint))
+            for rect in rects {
+                let corner = min(rect.width, rect.height) / 2 * round
+                context.addPath(CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil))
             }
+            context.fillPath()
             context.restoreGState()
         }
     }
