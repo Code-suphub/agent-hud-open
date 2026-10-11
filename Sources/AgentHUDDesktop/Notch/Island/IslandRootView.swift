@@ -65,6 +65,8 @@ struct IslandRootView: View {
     /// A click asked for the agent's whole panel.
     var pinned = false
     var onPin: () -> Void = {}
+    /// Where the detached card is on screen, which a change of the window around it leaves alone.
+    var cardScreenFrame: CGRect? = nil
 
     private var detached: Bool { focusVendor != nil }
 
@@ -223,7 +225,9 @@ struct IslandRootView: View {
                         .modifier(CardPlacement(frame: presentationFrame,
                                                 radius: detachedRadius(height: presentationFrame.height),
                                                 outline: grows ? 0 : 0.14))
-                        .animation(motion, value: presentationFrame)
+                        // Keyed to the card's place on screen. Its place in the window also changes whenever the
+                        // window around it is resized, and that must never move the card.
+                        .animation(motion, value: cardScreenFrame)
                         .transition(cardTransition(presentationFrame, in: bounds, line: grows).animation(motion ?? .easeOut(duration: 0.12)))
                     }
                     }

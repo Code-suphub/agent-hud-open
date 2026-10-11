@@ -153,6 +153,42 @@ final class AgentSeparationTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testASettledCardAndItsWindowAreLeftAloneByLaterPasses() throws {
+        _ = NSApplication.shared
+        let screen = try XCTUnwrap(NSScreen.main)
+        let key = ScreenIdentity.key(for: screen)
+        for (mode, edge, size) in [(HUDMode.simple, HUDEdge.right, 23.0), (.logos, .bottom, 21.0)] {
+            let domain = "app.agenthud.tests.settle.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+            defer { defaults.removePersistentDomain(forName: domain) }
+            let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.everyAgent)
+            settings.update { $0.screens[key] = ScreenPlacement(mode: mode, edge: edge, offset: 0.37, logoSize: size, simpleSize: size, showsNumbers: false, separatesAgents: true) }
+            let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
+            store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))
+            var pointer = CGPoint(x: -10_000, y: -10_000)
+            let hud = ScreenHUD(key: key, screen: screen, store: store, settings: settings, mouseLocation: { pointer })
+            defer { hud.close() }
+            let strip = hud.geometry.rect
+            // Marks sit on half points at these sizes; a card placed on one would be nudged by every pass.
+            for f in [0.13, 0.91] {
+                pointer = edge.isHorizontal ? CGPoint(x: strip.minX + strip.width * f, y: strip.midY) : CGPoint(x: strip.midX, y: strip.maxY - strip.height * f)
+                hud.samplePointer(); hud.forceOpen()
+                RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+                let settled = hud.island.panel.frame
+                let card = hud.island.rootView.presentationFrame
+                var frames: Set<String> = []
+                for _ in 0..<2 {
+                    hud.apply(animated: true)
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+                    frames.insert("\(hud.island.panel.frame)")
+                    XCTAssertEqual(hud.island.rootView.presentationFrame, card, "\(mode) \(edge) \(f)")
+                }
+                XCTAssertEqual(frames, ["\(settled)"], "\(mode) \(edge) \(f): later passes must leave the window alone")
+            }
+        }
+    }
+
     func testSeparationIsOffUnlessStoredAndSurvivesARoundTrip() throws {
         XCTAssertFalse(ScreenPlacement().separatesAgents)
         let old = try JSONDecoder().decode(ScreenPlacement.self, from: Data(#"{"mode":"simple","edge":"right"}"#.utf8))

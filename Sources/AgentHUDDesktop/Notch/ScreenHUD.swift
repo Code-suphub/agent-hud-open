@@ -157,9 +157,12 @@ final class ScreenHUD {
     /// A negative gap starts the card behind the strip.
     static func detachedFrame(size: CGSize, anchor: CGFloat, strip: CGRect, edge: HUDEdge, gap: CGFloat,
                               screen: CGRect) -> CGRect {
-        let width = min(size.width, screen.width), height = min(size.height, screen.height)
-        let x = min(screen.maxX - width, max(screen.minX, anchor - width / 2))
-        let y = min(screen.maxY - height, max(screen.minY, anchor - height / 2))
+        // Whole points throughout: a window cannot sit on half a point, and one asked to would be nudged back and
+        // forth by every later pass.
+        let width = min(size.width.rounded(.up), screen.width), height = min(size.height.rounded(.up), screen.height)
+        let x = min(screen.maxX - width, max(screen.minX, (anchor - width / 2).rounded()))
+        let y = min(screen.maxY - height, max(screen.minY, (anchor - height / 2).rounded()))
+        let gap = gap.rounded()
         switch edge {
         case .top: return CGRect(x: x, y: strip.minY - gap - height, width: width, height: height)
         case .bottom: return CGRect(x: x, y: strip.maxY + gap, width: width, height: height)
@@ -1084,6 +1087,7 @@ final class ScreenHUD {
             ? nil
             : { [weak self] _ in self?.samplePointer() }
         root.presentationSize = presentation
+        root.cardScreenFrame = surface.cardFrame
         root.presentationFrame = CGRect(x: surface.cardFrame.minX - canvas.minX,
                                         y: canvas.maxY - surface.cardFrame.maxY,
                                         width: surface.cardFrame.width, height: surface.cardFrame.height)
@@ -1119,7 +1123,7 @@ final class ScreenHUD {
         let cardFrame = Self.detachedFrame(size: size, anchor: focus.anchor, strip: geometry.rect, edge: geometry.edge,
                                            gap: showsPeek && peek.style == .line ? -peek.tuck : 6,
                                            screen: geometry.screenFrame)
-        let windowFrame = cardFrame.union(geometry.islandFrame).intersection(geometry.screenFrame)
+        let windowFrame = cardFrame.union(geometry.islandFrame).intersection(geometry.screenFrame).integral
         // The marks have not moved, so whatever glows behind them goes on doing so.
         let marks = surface(open: false, height: height, parked: true)
         return Surface(windowFrame: windowFrame, cardFrame: cardFrame, expanded: true, glowIsland: marks.glowIsland,
