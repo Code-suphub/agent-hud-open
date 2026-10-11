@@ -1,7 +1,7 @@
 import AgentHUDSupport
 import Foundation
 
-/// Computer Use app approvals belong to Desktop's original thread owner, independently of CLI permission hooks.
+/// Native app approvals and mid-turn questions belong to Desktop's original owner, independently of CLI hooks.
 public struct CodexDesktopPermissions: Sendable {
     public struct Pending: Sendable {
         public let request: PermissionRequest
@@ -75,15 +75,37 @@ public struct CodexDesktopPermissions: Sendable {
                 throw Failure.noLongerWaiting
             }
             try Task.checkCancellation()
-            let params: [String: Any] = [
-                "conversationId": pending.threadID,
-                "requestId": try Self.foundation(pending.requestID),
-                "response": try Self.foundation(response),
-            ]
+            let method: String
+            let params: [String: Any]
+            switch pending.request.nativeApproval {
+            case .computerUseApp:
+                method = Self.answerMethod
+                params = ["conversationId": pending.threadID,
+                          "requestId": try Self.foundation(pending.requestID),
+                          "response": try Self.foundation(response)]
+            case .asynchronousQuestion(let turnID):
+                guard try CodexDesktopQuestions.currentTurnID(state) == turnID,
+                      let text = response.stringValue else { throw Failure.noLongerWaiting }
+                method = Self.questionAnswerMethod
+                let messageID = UUID().uuidString.lowercased()
+                var context: [String: Any] = ["prompt": text, "turnTrigger": "send_user_message_async_question",
+                    "addedFiles": [], "fileAttachments": [], "ideContext": NSNull(), "imageAttachments": []]
+                var restore: [String: Any] = ["id": messageID, "text": text, "context": context,
+                                             "createdAt": clock().timeIntervalSince1970 * 1000]
+                if let cwd = state["cwd"].stringValue {
+                    context["workspaceRoots"] = [cwd]
+                    restore["context"] = context
+                    restore["cwd"] = cwd
+                }
+                params = ["conversationId": pending.threadID, "clientUserMessageId": messageID,
+                          "input": [["type": "text", "text": text, "text_elements": []]],
+                          "attachments": [], "restoreMessage": restore]
+            case nil: throw Failure.unsupportedDecision
+            }
             let reply: [String: Any]
             var wroteAnswer = false
             do {
-                reply = try connection.request(method: Self.answerMethod, version: 1, source: clientID,
+                reply = try connection.request(method: method, version: 1, source: clientID,
                     target: owner, params: params, didWrite: { wroteAnswer = true })
             } catch let error as CodexDesktopIPC.Failure {
                 if case .rejected(let reason) = error,
@@ -95,14 +117,25 @@ public struct CodexDesktopPermissions: Sendable {
             }
             let receipt = try Self.json(reply)
             guard receipt["handledByClientId"].stringValue == owner,
-                  receipt["result"]["method"].stringValue == Self.answerMethod,
-                  receipt["result"]["result"]["ok"] == .bool(true) else {
+                  receipt["result"]["method"].stringValue == method else {
                 throw CodexDesktopIPC.Failure.acceptanceUncertain
+            }
+            switch pending.request.nativeApproval {
+            case .computerUseApp:
+                guard receipt["result"]["result"]["ok"] == .bool(true) else {
+                    throw CodexDesktopIPC.Failure.acceptanceUncertain
+                }
+            case .asynchronousQuestion(let turnID):
+                guard receipt["result"]["result"]["result"]["turnId"].stringValue == turnID else {
+                    throw CodexDesktopIPC.Failure.acceptanceUncertain
+                }
+            case nil: throw Failure.unsupportedDecision
             }
         }
     }
 
     private static let answerMethod = "thread-follower-submit-mcp-server-elicitation-response"
+    private static let questionAnswerMethod = "thread-follower-steer-turn"
     private var socketPath: String { dataDirectory.appendingPathComponent("ipc/ipc.sock").path }
 
     private func read(threadID: String) throws -> Snapshot {
@@ -142,7 +175,7 @@ public struct CodexDesktopPermissions: Sendable {
 
     static func pending(_ state: JSONValue, threadID: String, ownerClientID: String, now: Date) throws -> [Pending] {
         guard let requests = state["requests"].arrayValue else { throw CodexDesktopIPC.Failure.protocolError }
-        return try requests.compactMap { wire -> Pending? in
+        let approvals = try requests.compactMap { wire -> Pending? in
             let params = wire["params"], metadata = params["_meta"]
             guard wire["method"].stringValue == "mcpServer/elicitation/request", wire["completed"].boolValue != true,
                   params["threadId"].stringValue == threadID, params["mode"].stringValue == "form",
@@ -177,9 +210,30 @@ public struct CodexDesktopPermissions: Sendable {
             return Pending(request: request, threadID: threadID, ownerClientID: ownerClientID,
                            wireRequest: wire, requestID: requestID)
         }
+        return try approvals + CodexDesktopQuestions.pending(state, threadID: threadID,
+                                                            ownerClientID: ownerClientID, now: now)
     }
 
     static func response(_ decision: PermissionDecision, for pending: Pending) throws -> JSONValue? {
+        if case .asynchronousQuestion = pending.request.nativeApproval {
+            switch decision {
+            case .leave: return nil
+            case .answer(let answers):
+                guard let question = pending.request.questions.first,
+                      answers.keys.allSatisfy({ $0 == question.answerKey }) else { throw Failure.unsupportedDecision }
+                guard let answer = answers[question.answerKey] else { return nil }
+                guard answer.selected.allSatisfy({ choice in question.options.contains(where: { $0.label == choice }) }) else {
+                    throw Failure.unsupportedDecision
+                }
+                let text = answer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { throw Failure.unsupportedDecision }
+                let value = JSONValue.array([.object(["questionItemId": pending.requestID,
+                    "question": .string(question.question), "answer": .string(text)])])
+                let encoded = String(decoding: try RecordCoding.encoder().encode(value), as: UTF8.self)
+                return .string("<send_user_message_question_reply>\n\(encoded)\n</send_user_message_question_reply>")
+            case .allow, .allowAlways, .deny: throw Failure.unsupportedDecision
+            }
+        }
         guard case .computerUseApp(let persist) = pending.request.nativeApproval else { throw Failure.unsupportedDecision }
         switch decision {
         case .leave: return nil

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Reads Desktop's actual Computer Use app approvals. Engine tool approvals continue through their hook.
+/// Reads Desktop's app approvals and unanswered mid-turn questions. Engine approvals continue through their hook.
 @MainActor
 public final class CodexDesktopPermissionObserver {
     private let requests: PermissionRequests

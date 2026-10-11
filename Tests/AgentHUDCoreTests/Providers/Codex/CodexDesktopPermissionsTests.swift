@@ -44,6 +44,193 @@ final class CodexDesktopPermissionsTests: XCTestCase, @unchecked Sendable {
         return .object(object)
     }
 
+    private func question(_ title: String = "What should I check next?", options: JSONValue = .null) -> JSONValue {
+        .object(["title": .string(title), "options": options])
+    }
+
+    private func questionState(_ questions: [JSONValue], extraItems: [JSONValue] = [], status: String = "inProgress",
+                               turnID: String = "native-turn", canonical: Bool = false,
+                               requests: [JSONValue] = []) -> JSONValue {
+        let turn = JSONValue.object([
+            "turnId": .string(turnID), "status": .string(status),
+            "items": .array([.object([
+                "id": .string("message"), "type": .string("agentMessage"), "text": .string("Please provide your input."),
+                "questions": .array(questions),
+            ])] + extraItems),
+        ])
+        var result: [String: JSONValue] = ["id": .string(threadID), "cwd": .string("/Users/me/project"), "requests": .array(requests)]
+        if canonical {
+            result["turns"] = .array([])
+            result["turnHistory"] = .object(["kind": .string("canonical"), "history": .object([
+                "generation": .integer(1), "isComplete": .bool(true),
+                "entitiesByKey": .object(["turn:\(turnID)": turn]),
+                "islands": .array([.object([
+                    "id": .string("live-history"),
+                    "entries": .array([.object(["key": .string("turn:\(turnID)"), "value": .string("turn:\(turnID)")])]),
+                    "olderBoundary": .object(["status": .string("exhausted")]),
+                    "newerBoundary": .object(["status": .string("exhausted")]),
+                ])]),
+            ])])
+        } else { result["turns"] = .array([turn]) }
+        return .object(result)
+    }
+
+    private func pendingQuestion(_ state: JSONValue? = nil) throws -> CodexDesktopPermissions.Pending {
+        try XCTUnwrap(CodexDesktopPermissions.pending(state ?? questionState([question()]), threadID: threadID,
+            ownerClientID: "desktop-owner", now: now).first(where: { $0.request.isQuestion }))
+    }
+
+    private func questionReply(answer: String = "ready", index: Int64 = 0,
+                               title: String = "What should I check next?", asArray: Bool = true) throws -> String {
+        let questionID = String(decoding: try RecordCoding.encoder().encode(JSONValue.array([
+            .string("request_user_input_async"), .string("message"), .integer(index),
+        ])), as: UTF8.self)
+        let payload = JSONValue.object(["questionItemId": .string(questionID), "question": .string(title), "answer": .string(answer)])
+        let encoded = try RecordCoding.encoder().encode(asArray ? JSONValue.array([payload]) : payload)
+        return "<send_user_message_question_reply>\n\(String(decoding: encoded, as: UTF8.self))\n</send_user_message_question_reply>"
+    }
+
+    private func replyItem(_ text: String, type: String = "steeringUserMessage", status: String? = "accepted") -> JSONValue {
+        var item: [String: JSONValue] = ["type": .string(type), "id": .string("external-answer")]
+        if let status { item["status"] = .string(status) }
+        item[type == "userMessage" ? "content" : "input"] = .array([.object(["type": .string("text"), "text": .string(text)])])
+        return .object(item)
+    }
+
+    func testActualAgentMessageQuestionsKeepFreeformAndNativeChoicesSeparately() throws {
+        let raw = [question(), question("Which checks?", options: .array([.string("Smoke"), .string("Full suite")]))]
+        let found = try CodexDesktopPermissions.pending(questionState(raw), threadID: threadID,
+            ownerClientID: "desktop-owner", now: now)
+        XCTAssertEqual(found.count, 2)
+        let freeform = try XCTUnwrap(found.first)
+        XCTAssertEqual(freeform.request.questions.count, 1)
+        XCTAssertTrue(freeform.request.questions[0].options.isEmpty)
+        XCTAssertEqual(freeform.request.questions[0].question, "What should I check next?")
+        XCTAssertEqual(freeform.requestID, .string("[\"request_user_input_async\",\"message\",0]"))
+        XCTAssertEqual(freeform.request.questions[0].answerKey, "[\"request_user_input_async\",\"message\",0]")
+        XCTAssertEqual(freeform.request.nativeApproval, .asynchronousQuestion(turnID: "native-turn"))
+        XCTAssertEqual(freeform.wireRequest, .object([
+            "turnId": .string("native-turn"), "sourceItemId": .string("message"), "questionIndex": .integer(0), "question": raw[0],
+        ]))
+        XCTAssertEqual(found[1].request.questions[0].options.map(\.label), ["Smoke", "Full suite"])
+        XCTAssertFalse(found[1].request.questions[0].multiSelect)
+        XCTAssertNotEqual(found[0].id, found[1].id)
+        XCTAssertNil(freeform.request.alwaysAllow)
+        XCTAssertEqual(freeform.request.cwd, "/Users/me/project")
+    }
+
+    func testCanonicalQuestionHistoryMatchesLegacyStateAndCoexistsWithAppApprovals() throws {
+        let legacy = try CodexDesktopPermissions.pending(questionState([question()], requests: [wire()]),
+            threadID: threadID, ownerClientID: "desktop-owner", now: now)
+        let canonical = try CodexDesktopPermissions.pending(questionState([question()], canonical: true, requests: [wire()]),
+            threadID: threadID, ownerClientID: "desktop-owner", now: now)
+        XCTAssertEqual(legacy.count, 2)
+        XCTAssertEqual(Set(legacy.map(\.id)), Set(canonical.map(\.id)))
+        XCTAssertEqual(canonical.filter { $0.request.isQuestion }.count, 1)
+        XCTAssertEqual(canonical.filter { $0.request.nativeApproval == .computerUseApp(persist: ["session", "always"]) }.count, 1)
+    }
+
+    func testOnlyAcceptedExternalQuestionRepliesHideTheCorrespondingQuestion() throws {
+        let questions = [question(), question("Which checks?", options: .array([.string("Smoke")]))]
+        for status in [nil, "pending", "rejected", "failed"] as [String?] {
+            let snapshot = questionState(questions, extraItems: [replyItem(try questionReply(), status: status)])
+            XCTAssertEqual(try CodexDesktopPermissions.pending(snapshot, threadID: threadID,
+                ownerClientID: "desktop-owner", now: now).count, 2, "An unaccepted steer is not an answer")
+        }
+        for item in [replyItem(try questionReply()), replyItem(try questionReply(asArray: false), type: "userMessage", status: nil)] {
+            let snapshot = questionState(questions, extraItems: [item])
+            let found = try CodexDesktopPermissions.pending(snapshot, threadID: threadID, ownerClientID: "desktop-owner", now: now)
+            XCTAssertEqual(found.count, 1)
+            XCTAssertEqual(found.first?.request.questions[0].question, "Which checks?")
+        }
+        let malformed = "<send_user_message_question_reply>\n{\"questionItemId\":\"[\\\"request_user_input_async\\\",\\\"message\\\",0]\",\"answer\":\"ready\"}\n</send_user_message_question_reply>"
+        XCTAssertEqual(try CodexDesktopPermissions.pending(questionState(questions, extraItems: [replyItem(malformed)]),
+            threadID: threadID, ownerClientID: "desktop-owner", now: now).count, 2)
+    }
+
+    func testQuestionAnswerUsesNativeEnvelopeAndSkipLeavesTheQuestionInDesktop() throws {
+        let item = try pendingQuestion()
+        let key = item.request.questions[0].answerKey
+        XCTAssertEqual(try CodexDesktopPermissions.response(.answer([key: .init(custom: "ready")]), for: item),
+                       .string(try questionReply()))
+        XCTAssertNil(try CodexDesktopPermissions.response(.answer([:]), for: item))
+        XCTAssertNil(try CodexDesktopPermissions.response(.leave, for: item))
+        XCTAssertThrowsError(try CodexDesktopPermissions.response(.allow, for: item))
+        XCTAssertThrowsError(try CodexDesktopPermissions.response(.deny, for: item))
+        XCTAssertThrowsError(try CodexDesktopPermissions.response(.allowAlways(.object(["persist": .string("always")])), for: item))
+        let choice = try pendingQuestion(questionState([question(options: .array([.string("Smoke"), .string("Full suite")]))]))
+        XCTAssertEqual(try CodexDesktopPermissions.response(.answer([choice.request.questions[0].answerKey: .init(selected: ["Smoke"])]), for: choice),
+                       .string(try questionReply(answer: "Smoke")))
+    }
+
+    func testQuestionAnswerSteersOnlyTheExistingOwnerAndPreservesTheCompleteEnvelope() async throws {
+        let server = try CodexPermissionsTestServer(state: questionState([question()], canonical: true))
+        defer { server.stop() }
+        let client = CodexDesktopPermissions(dataDirectory: server.directory, timeout: 1)
+        let snapshot = try await client.fetch(threadIDs: [threadID])
+        let item = try XCTUnwrap(snapshot.pending.first)
+        let answer = PermissionDecision.answer([item.request.questions[0].answerKey: .init(custom: "ready")])
+        try await client.resolve(answer, for: item)
+        let sent = try XCTUnwrap(server.answers.first)
+        XCTAssertEqual(sent["method"].stringValue, "thread-follower-steer-turn")
+        XCTAssertEqual(sent["version"], .integer(1))
+        XCTAssertEqual(sent["targetClientId"].stringValue, "desktop-owner")
+        XCTAssertEqual(sent["params"]["conversationId"].stringValue, threadID)
+        let input = try XCTUnwrap(sent["params"]["input"].arrayValue)
+        XCTAssertEqual(input.count, 1)
+        XCTAssertEqual(input[0]["type"].stringValue, "text")
+        XCTAssertEqual(input[0]["text"].stringValue, try questionReply())
+        XCTAssertEqual(input[0]["text_elements"], .array([]))
+        XCTAssertEqual(sent["params"]["restoreMessage"]["text"].stringValue, try questionReply())
+        XCTAssertTrue(server.methods.allSatisfy { $0 != "thread-follower-start-turn" })
+        let before = server.methods
+        try await client.resolve(.answer([:]), for: item)
+        XCTAssertEqual(server.methods, before, "Skip is a local HUD dismissal, not a steering input")
+    }
+
+    func testWithdrawnChangedCompletedOrReplacedTurnQuestionCannotBeAnswered() async throws {
+        let original = questionState([question()])
+        let server = try CodexPermissionsTestServer(state: original)
+        defer { server.stop() }
+        let client = CodexDesktopPermissions(dataDirectory: server.directory, timeout: 1)
+        let item = try pendingQuestion(original)
+        let decision = PermissionDecision.answer([item.request.questions[0].answerKey: .init(custom: "ready")])
+        let superseded = replacing(original, at: ["turns"], with: .array((original["turns"].arrayValue ?? []) + [
+            .object(["turnId": .string("later-turn"), "status": .string("completed"), "items": .array([])]),
+        ]))
+        XCTAssertEqual(try pendingQuestion(superseded).id, item.id,
+                       "The old question can remain displayed while Desktop's current steerable turn has changed")
+        for changed in [
+            questionState([question("Different question")]),
+            questionState([question()], status: "completed"),
+            questionState([question()], turnID: "replacement-turn"),
+            questionState([question()], extraItems: [replyItem(try questionReply())]),
+            questionState([]),
+            superseded,
+        ] {
+            server.state = changed
+            do { try await client.resolve(decision, for: item); XCTFail("Stale question cannot steer a turn") }
+            catch let error as CodexDesktopPermissions.Failure { XCTAssertEqual(error, .noLongerWaiting) }
+        }
+        server.state = original
+        server.owner = "replacement-owner"
+        do { try await client.resolve(decision, for: item); XCTFail("Question's original owner must still match") }
+        catch let error as CodexDesktopPermissions.Failure { XCTAssertEqual(error, .noLongerWaiting) }
+        XCTAssertTrue(server.answers.isEmpty)
+    }
+
+    func testBadQuestionTurnReceiptIsUncertainAndNeverAutomaticallyRetried() async throws {
+        let server = try CodexPermissionsTestServer(state: questionState([question()]), acknowledges: false)
+        defer { server.stop() }
+        let item = try pendingQuestion()
+        let answer = PermissionDecision.answer([item.request.questions[0].answerKey: .init(custom: "ready")])
+        do {
+            try await CodexDesktopPermissions(dataDirectory: server.directory, timeout: 1).resolve(answer, for: item)
+            XCTFail("A different acknowledged turn is not the user's question turn")
+        } catch let error as CodexDesktopIPC.Failure { XCTAssertEqual(error, .acceptanceUncertain) }
+        XCTAssertEqual(server.answers.count, 1)
+    }
+
     func testScreenshotRequestCarriesAppContextAndExactlyTheAdvertisedScopes() throws {
         let item = try pending()
         XCTAssertEqual(item.request.source, .codex)
@@ -244,7 +431,9 @@ private final class CodexPermissionsTestServer: @unchecked Sendable {
     }
     var methods: [String] { lock.withLock { received.compactMap { $0["method"].stringValue } } }
     var answers: [JSONValue] {
-        lock.withLock { received.filter { $0["method"].stringValue == "thread-follower-submit-mcp-server-elicitation-response" } }
+        lock.withLock { received.filter {
+            ["thread-follower-submit-mcp-server-elicitation-response", "thread-follower-steer-turn"].contains($0["method"].stringValue ?? "")
+        } }
     }
 
     init(state: JSONValue, acknowledges: Bool = true) throws {
@@ -326,6 +515,11 @@ private final class CodexPermissionsTestServer: @unchecked Sendable {
         case "thread-follower-submit-mcp-server-elicitation-response":
             reply["handledByClientId"] = owner.map(JSONValue.string) ?? .null
             reply["result"] = .object(["method": .string(method), "result": .object(["ok": .bool(acknowledges)])])
+        case "thread-follower-steer-turn":
+            reply["handledByClientId"] = owner.map(JSONValue.string) ?? .null
+            reply["result"] = .object(["method": .string(method), "result": .object([
+                "result": .object(["turnId": .string(acknowledges ? "native-turn" : "different-turn")]),
+            ])])
         default: throw FixtureFailure.protocolError
         }
         try send(peer, .object(reply))

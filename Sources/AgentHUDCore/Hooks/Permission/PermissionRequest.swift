@@ -5,9 +5,10 @@ import Foundation
 ///
 /// Answering resumes the client, and the client withdrawing the request takes it off the HUD. Nothing here is stored.
 public struct PermissionRequest: Identifiable, Equatable, Sendable {
-    /// Native approvals carry their own scopes rather than a tool-hook permission rule.
+    /// Native requests carry their own scopes or active turn rather than a tool-hook permission rule.
     public enum NativeApproval: Equatable, Sendable {
         case computerUseApp(persist: [String])
+        case asynchronousQuestion(turnID: String)
     }
 
     public let id: String
@@ -77,7 +78,8 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
 
     /// What kind of call this is, in one word, so a list of them can be read down the left edge.
     public var badge: String {
-        if nativeApproval != nil { return "APP" }
+        if isQuestion { return "ASK" }
+        if case .computerUseApp = nativeApproval { return "APP" }
         guard let toolName, !toolName.isEmpty else { return "TOOL" }
         if toolName.hasPrefix("mcp__") { return "MCP" }
         switch Self.kind(toolName) {
@@ -96,7 +98,8 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
     /// The mark a call is recognized by before its name is read. Only what the client's own tools are; an unknown
     /// tool gets the neutral one rather than a guess.
     public var symbol: String {
-        if nativeApproval != nil { return "desktopcomputer" }
+        if isQuestion { return "questionmark.bubble.fill" }
+        if case .computerUseApp = nativeApproval { return "desktopcomputer" }
         guard let toolName, !toolName.isEmpty else { return "questionmark.circle" }
         if toolName.hasPrefix("mcp__") { return "puzzlepiece.extension.fill" }
         switch Self.kind(toolName) {
