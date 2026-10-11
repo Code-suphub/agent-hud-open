@@ -34,4 +34,26 @@ final class ScreenPlacementTests: XCTestCase {
         store.update { $0.screens = placements }
         XCTAssertEqual(SettingsStore(defaults: defaults).settings.screens, placements)
     }
+
+    func testSimpleModeSettingsDecodeWithinTheirBoundsAndDefaultWhenAbsent() throws {
+        let saved = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
+            #"{"mode":"simple","edge":"left","simpleSize":100,"ringWidth":0.2,"showsRings":false}"#.utf8))
+        XCTAssertEqual(saved.mode, .simple)
+        XCTAssertEqual(saved.edge, .left)
+        XCTAssertEqual(saved.simpleSize, 40)
+        XCTAssertEqual(saved.ringWidth, 1)
+        XCTAssertFalse(saved.showsRings)
+        XCTAssertTrue(saved.showsNumbers)
+
+        let older = try JSONDecoder().decode(ScreenPlacement.self, from: Data(#"{"mode":"logos","logoSize":24}"#.utf8))
+        XCTAssertEqual(older.simpleSize, 22)
+        XCTAssertEqual(older.ringWidth, 1.5)
+        XCTAssertTrue(older.showsRings)
+        XCTAssertTrue(older.showsNumbers)
+        XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: JSONEncoder().encode(saved)), saved)
+    }
+
+    func testOnlyTheNotchIsNotDocked() {
+        XCTAssertEqual(HUDMode.allCases.filter(\.isDocked), [.logos, .simple])
+    }
 }

@@ -45,6 +45,8 @@ struct IslandRootView: View {
     /// Set on a screen in logo mode: the marks ride on top of the silhouette, collapsed or open, so hovering
     /// never makes the agents disappear.
     var logoQueue: LogoQueueConfig? = nil
+    /// Set on a screen in Simple mode: the panel of rings and numbers, which takes the queue's place.
+    var simpleMeter: SimpleMeterConfig? = nil
     /// Whether marks on this island turn into bots; carried to the alerts through the environment.
     var botLogos = true
     /// Set on a screen whose HUD is a logo queue. Collapsed, such a HUD has no silhouette: it is the marks
@@ -139,6 +141,14 @@ struct IslandRootView: View {
                             .frame(width: bounds.width, height: bounds.height, alignment: surfaceAlignment)
                             .transaction { $0.animation = nil }
                     }
+                }
+                if let simpleMeter, alert == nil {
+                    let strip = logoQueueFrame ?? CGRect(x: 0, y: logoQueueInset, width: size.width, height: logoQueueHeight)
+                    SimpleMeterView(config: simpleMeter, onIsland: visible)
+                        .frame(width: strip.width, height: strip.height)
+                        .position(x: strip.midX, y: strip.midY)
+                        .frame(width: bounds.width, height: bounds.height)
+                        .transaction { $0.animation = nil }
                 }
             }
             .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)

@@ -4,6 +4,9 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Simple is a third HUD mode beside Notch and Dynamic Dock: a small floating panel on any screen edge, with no glow behind it, showing each agent's most used quota window as a ring round its logo, a percentage beside it, or both. Display settings sets its size (16–40 pt), the ring's thickness (1–4 pt) and whether rings and numbers are shown. It drags to any edge like the dock.
+- Choosing Dynamic Dock or Simple in Display settings for a display with a notch starts a HUD that was at top centre at the top left, where the notch does not cover it.
+- Host API: `HUDMode.simple` and `HUDMode.isDocked`; `ScreenPlacement.simpleSize`, `ringWidth`, `showsRings` and `showsNumbers`.
 - Idle agents' logos in Dynamic Dock become their bots for a few seconds now and then. Bots in the dock stay in place instead of bobbing, logos can be up to 36 pt, and Display settings has a Logo edge distance slider (0–20 pt).
 - Host API: `ScreenPlacement.logoEdgeDistance` is the distance from the visible logo to its edge; `logoSizeRange` is 12...36.
 - Codex Desktop Computer Use app-access requests appear on the HUD, with Deny, Allow this conversation, and Always allow when offered by Desktop. Native answers and dismissals follow the original request; engine approvals keep their existing hook reviewer policy.

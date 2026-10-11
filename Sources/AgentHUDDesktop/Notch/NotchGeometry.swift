@@ -4,7 +4,8 @@ import AgentHUDCore
 /// Where the HUD sits on one screen, in global screen coordinates.
 ///
 /// In notch mode the collapsed rect is the physical notch, or a bar standing in for one on a display
-/// without. In logo mode it is the queue's strip, parked along an edge at the placement's offset.
+/// without. In a docked mode it is the strip the logo queue or the Simple panel takes, parked along an edge
+/// at the placement's offset.
 struct NotchGeometry: Equatable {
     let screenFrame: CGRect
     let mode: HUDMode
@@ -36,9 +37,9 @@ struct NotchGeometry: Equatable {
         let scale = screen?.backingScaleFactor ?? 2
         let notch = screen.flatMap { $0.safeAreaInsets.top > 0 ? notchRect(of: $0) : nil }
 
-        if placement.mode == .logos, let queue {
+        if placement.mode.isDocked, let queue {
             let rect = stripRect(queue: queue, frame: frame, placement: placement)
-            return NotchGeometry(screenFrame: frame, mode: .logos, edge: placement.edge, hasNotch: notch != nil,
+            return NotchGeometry(screenFrame: frame, mode: placement.mode, edge: placement.edge, hasNotch: notch != nil,
                                  rect: rect, cornerRadius: logoCornerRadius, backingScale: scale, menuBarHeight: menuBar)
         }
         if let notch {
@@ -110,7 +111,8 @@ struct NotchGeometry: Equatable {
         let readingCoordinate = edge.isHorizontal ? point.x - screenFrame.minX : screenFrame.maxY - point.y
         let origin = readingCoordinate - measuredRun * grabFraction
         var result = placement
-        result.mode = .logos
+        // Only the notch has to become something else to leave its place; a docked mode stays what it is.
+        if result.mode == .notch { result.mode = .logos }
         result.edge = edge
         result.offset = travel > 0 ? Double(min(1, max(0, origin / travel))) : 0.5
         return result
@@ -126,7 +128,7 @@ struct NotchGeometry: Equatable {
     /// every time the panel opens and closes. Past the screen's edge there is nothing to show anyway.
     var islandFrame: CGRect {
         let slack = Self.collapsedTopRadius
-        guard mode != .logos else {
+        guard !mode.isDocked else {
             let grown = rect.insetBy(dx: -slack, dy: -slack)
             switch edge {
             case .top: return CGRect(x: grown.minX, y: grown.minY, width: grown.width, height: grown.height - slack)

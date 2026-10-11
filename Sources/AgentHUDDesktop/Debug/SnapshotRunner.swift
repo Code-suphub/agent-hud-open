@@ -144,6 +144,8 @@ public enum SnapshotRunner {
             }
             settings.update { $0 = saved }
         }
+        // The Simple panel: rings and numbers on and off, at several sizes and strokes, along an edge and down a side.
+        save("simple-meter", SimpleMeterSheetScene(), folder: folder, scheme: .dark)
         // Every mark as its bot: midway through the morph, at work, asking, smiling, and resting in an alert.
         save("bots-morph", BotSheetScene(phase: .working, seconds: 0.17), folder: folder, scheme: .dark)
         save("bots-working", BotSheetScene(phase: .working), folder: folder, scheme: .dark)
@@ -157,6 +159,8 @@ public enum SnapshotRunner {
             settings.update { $0.glowStyle = .dots; $0.glowEffect = .breathe
                               $0.screens[key] = ScreenPlacement(mode: .logos) }
             save("settings-display-logos-dark", SettingsView(settings: settings, store: store, initialTab: .display).frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
+            settings.update { $0.screens[key] = ScreenPlacement(mode: .simple) }
+            save("simple-settings-display-dark", SettingsView(settings: settings, store: store, initialTab: .display).frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
             settings.update { $0.screens[key] = ScreenPlacement(mode: .logos, logoSize: 36) }
             save("settings-display-logos-large-dark", SettingsView(settings: settings, store: store, initialTab: .display).frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
             settings.update { $0.screens[key] = saved }

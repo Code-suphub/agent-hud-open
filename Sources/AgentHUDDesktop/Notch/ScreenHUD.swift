@@ -580,7 +580,7 @@ final class ScreenHUD {
     // MARK: Repositioning
 
     private func updateDragSurface() {
-        let visibleHUD = geometry.mode == .notch || logoQueue != nil
+        let visibleHUD = geometry.mode == .notch || logoQueue != nil || simpleMeter != nil
         guard !typing, visibleHUD || previewPlacement != nil || dragSurface.isPressed else {
             dragSurface.hide()
             return
@@ -621,7 +621,7 @@ final class ScreenHUD {
             dragGrabFraction = 0.5
         }
         previewPlacement = placement
-        previewPlacement?.mode = .logos
+        if previewPlacement?.mode == .notch { previewPlacement?.mode = .logos }
         timer?.invalidate()
         timer = nil
         targetWindowFrame = nil
@@ -634,9 +634,8 @@ final class ScreenHUD {
 
     func move(to point: CGPoint) {
         guard let current = previewPlacement else { return }
-        let config = LogoQueueConfig(items: queueItems, placement: current, settings: settings.settings)
         previewPlacement = NotchGeometry.dragPlacement(at: point, screenFrame: geometry.screenFrame,
-                                                       queue: queueSize(config), placement: current,
+                                                       queue: dockSize(for: current), placement: current,
                                                        grabFraction: dragGrabFraction)
         apply(animated: false)
     }
@@ -663,13 +662,26 @@ final class ScreenHUD {
         LogoQueueItem.queue(rows: store.queueVendors)
     }
 
-    /// Logo mode sizes the strip from the queue it has to hold.
+    /// A docked mode sizes its strip from what it has to hold.
     private func resolveGeometry() -> NotchGeometry {
         let screen = screen
         let placement = placement
-        guard placement.mode == .logos else { return NotchGeometry.detect(screen: screen, placement: placement) }
-        let config = LogoQueueConfig(items: queueItems, placement: placement, settings: settings.settings)
-        return NotchGeometry.detect(screen: screen, placement: placement, queue: queueSize(config))
+        guard placement.mode.isDocked else { return NotchGeometry.detect(screen: screen, placement: placement) }
+        return NotchGeometry.detect(screen: screen, placement: placement, queue: dockSize(for: placement))
+    }
+
+    /// What a docked HUD takes along its edge: the logo queue, or the Simple panel with its margin.
+    private func dockSize(for placement: ScreenPlacement) -> CGSize {
+        if placement.mode == .simple { return SimpleMeterConfig(items: meterItems, placement: placement).stripSize }
+        return queueSize(LogoQueueConfig(items: queueItems, placement: placement, settings: settings.settings))
+    }
+
+    /// The agents with a quota row, each with its tightest window.
+    private var meterItems: [SimpleMeterItem] { SimpleMeterItem.items(rows: store.rows) }
+
+    private var simpleMeter: SimpleMeterConfig? {
+        guard geometry.mode == .simple else { return nil }
+        return SimpleMeterConfig(items: meterItems, placement: placement)
     }
 
     private var logoQueue: LogoQueueConfig? {
@@ -697,8 +709,8 @@ final class ScreenHUD {
         var root = IslandRootView(
             store: store,
             isOpen: open,
-            collapsedSize: geometry.mode == .logos ? geometry.rect.size : geometry.islandFrame.size,
-            collapsedTopRadius: geometry.mode == .logos ? NotchGeometry.expandedTopRadius : NotchGeometry.collapsedTopRadius,
+            collapsedSize: geometry.mode.isDocked ? geometry.rect.size : geometry.islandFrame.size,
+            collapsedTopRadius: geometry.mode.isDocked ? NotchGeometry.expandedTopRadius : NotchGeometry.collapsedTopRadius,
             collapsedBottomRadius: geometry.cornerRadius,
             lightBorder: systemIsLight,
             onOpenStats: { [weak self] in self?.handOff { self?.onOpenStats?() } },
@@ -726,10 +738,11 @@ final class ScreenHUD {
         root.failedListedSessionID = failedListedSessionID
         root.sessionEvents = alerts.sessionEvents
         root.logoQueue = logoQueue
+        root.simpleMeter = simpleMeter
         root.botLogos = settings.settings.botLogos
         root.edge = geometry.edge
         // The mode decides the silhouette, not whether there are marks to draw.
-        root.hidesSilhouette = geometry.mode == .logos
+        root.hidesSilhouette = geometry.mode.isDocked
         return root
     }
 
@@ -828,7 +841,7 @@ final class ScreenHUD {
             alertHoverFloor = pointerInside ? max(alertHoverFloor, windowFrame.height) : 0
             let held = ScreenHUD.heldWindowHeight(card: windowFrame.height, floor: alertHoverFloor,
                                                   pointerInside: pointerInside)
-            if geometry.mode == .logos {
+            if geometry.mode.isDocked {
                 windowFrame = geometry.expandedFrame(size: CGSize(width: windowFrame.width, height: held))
             } else {
                 windowFrame.origin.y -= held - windowFrame.height
@@ -887,11 +900,11 @@ final class ScreenHUD {
         root.logoQueueFrame = CGRect(x: geometry.rect.minX - canvas.minX,
                                      y: canvas.maxY - geometry.rect.maxY,
                                      width: geometry.rect.width, height: geometry.rect.height)
-        updateClickThrough(geometry.mode == .logos && !expanded)
+        updateClickThrough(geometry.mode.isDocked && !expanded)
         // A tracking area can report an exit when the window or its hosting view resizes, even though the
         // pointer has not left the visible HUD. Both native events and the coordinator use screen geometry.
         // Collapsed logo queues pass clicks through, so their coordinator alone supplies the events.
-        island.onPointerChange = geometry.mode == .logos
+        island.onPointerChange = geometry.mode.isDocked
             ? nil
             : { [weak self] _ in self?.samplePointer() }
         root.presentationSize = presentation
@@ -928,7 +941,7 @@ final class ScreenHUD {
 
     private func surface(open: Bool, height: CGFloat) -> Surface {
         let expanded = (open || activeAlert != nil) && previewPlacement == nil
-        let compactSize = geometry.mode == .logos
+        let compactSize = geometry.mode.isDocked
             ? IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size)
             : CGSize(width: geometry.rect.width + 2 * (IslandController.alertWingWidth + IslandController.alertSidePadding),
                      height: max(38, geometry.rect.height))
@@ -940,22 +953,22 @@ final class ScreenHUD {
             : compactSize
         // The shoulder curves widen the contact with the parked edge. Clamp their whole canvas, then
         // derive the card's core from it, so even a dock near a corner retains both curved shoulders.
-        let flare = open || geometry.mode == .logos ? NotchGeometry.expandedTopRadius : NotchGeometry.collapsedTopRadius
+        let flare = open || geometry.mode.isDocked ? NotchGeometry.expandedTopRadius : NotchGeometry.collapsedTopRadius
         let horizontal = geometry.edge.isHorizontal
         let dockWindowSize = CGSize(width: size.width + (horizontal ? flare * 2 : 0),
                                     height: size.height + (horizontal ? 0 : flare * 2))
         let cardFrame = expanded
-            ? (geometry.mode == .logos
+            ? (geometry.mode.isDocked
                 ? geometry.expandedFrame(size: dockWindowSize)
                 : geometry.expandedFrame(size: size).insetBy(dx: -flare, dy: 0))
             : geometry.islandFrame
         // A short card must not clip a longer queue. The extra canvas stays transparent and the card
         // retains its own screen position, including while a reminder's hover floor holds a taller window.
-        let windowFrame = open && geometry.mode == .logos && activeAlert == nil
+        let windowFrame = open && geometry.mode.isDocked && activeAlert == nil
             ? cardFrame.union(geometry.islandFrame).intersection(geometry.screenFrame)
             : cardFrame
         let islandFrame = expanded
-            ? (geometry.mode == .logos
+            ? (geometry.mode.isDocked
                 ? cardFrame.insetBy(dx: horizontal ? flare : 0, dy: horizontal ? 0 : flare)
                 : geometry.expandedFrame(size: size))
             : geometry.rect
@@ -968,17 +981,18 @@ final class ScreenHUD {
         // exactly as wide as the marks: the shape is a flat lip at the screen's top edge, run wider than the
         // queue so every cell's nearest point is straight above it and the field falls vertically. The glow
         // panel then clips that field back to the queue's own column, cutting off the ends that would dip.
-        let backdrop = geometry.mode == .logos && !expanded
+        let parked = geometry.mode.isDocked && !expanded
+        let backdrop = parked && geometry.mode == .logos
         // Only a silhouette is worth rimming. A logo queue has none — its glow is the backdrop behind the
         // marks — so once the panel or an event has grown over the place that field belonged, it stops
         // rather than following the new shape around.
-        let drawsGlow = geometry.mode != .logos || backdrop
+        let drawsGlow = !geometry.mode.isDocked || backdrop
         let overhang = GlowWindowController.backdropOverhang(glowSettings)
         // The lip is a flat line on the screen's top edge, run wider than the queue: every cell's nearest
         // point is then straight above it, so the field falls vertically instead of curling in at the ends,
         // and the marks sit inside the field rather than below where it starts.
         let glowIsland: CGRect = {
-            guard backdrop else { return islandFrame }
+            guard parked else { return islandFrame }
             switch geometry.edge {
             case .top:
                 return CGRect(x: geometry.rect.minX - overhang, y: geometry.screenFrame.maxY,
@@ -994,7 +1008,7 @@ final class ScreenHUD {
                               width: 2, height: geometry.rect.height + overhang * 2)
             }
         }()
-        let glowRadius = backdrop ? 0 : radius
+        let glowRadius = parked ? 0 : radius
         let glowGeometry = glowSettings
             .geometry(islandWidth: geometry.edge.isHorizontal ? glowIsland.width : glowIsland.height,
                       islandHeight: geometry.edge.isHorizontal ? glowIsland.height : glowIsland.width,
