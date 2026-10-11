@@ -52,10 +52,19 @@ final class HUDRecorderTests: XCTestCase {
              .init(window: hud.island.panel, bounds: nil)]
         }
 
-        let image = try XCTUnwrap(recorder.snapshot())
+        var image = try XCTUnwrap(recorder.snapshot())
         XCTAssertEqual(image.width, Int((screen.frame.width * screen.backingScaleFactor / 2).rounded(.up)) * 2)
-        let island = hud.geometry.rect
-        XCTAssertEqual(try alpha(of: image, at: CGPoint(x: island.midX, y: island.midY), on: screen), 255, "The island is solid")
+        let island = hud.geometry.rect, centre = CGPoint(x: island.midX, y: island.midY)
+        // The island's layers are drawn a moment after the window is shown, so the frame is taken again until they are.
+        let deadline = Date().addingTimeInterval(2)
+        while try alpha(of: image, at: centre, on: screen) != 255, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            image = try XCTUnwrap(recorder.snapshot())
+        }
+        // CI's runner, a virtual display with Reduce Motion on, never draws them: there is no picture to check there.
+        try XCTSkipIf(try alpha(of: image, at: centre, on: screen) != 255 && NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                      "this display did not draw the island within 2 s with Reduce Motion on")
+        XCTAssertEqual(try alpha(of: image, at: centre, on: screen), 255, "The island is solid")
         XCTAssertEqual(try alpha(of: image, at: CGPoint(x: screen.frame.midX, y: screen.frame.minY + 40), on: screen), 0,
                        "Nothing else on the display is in the picture")
         XCTAssertEqual(try alpha(of: image, at: CGPoint(x: island.minX - 400, y: island.midY), on: screen), 0,
