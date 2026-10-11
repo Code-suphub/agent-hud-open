@@ -4,6 +4,8 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Idle agents' logos in Dynamic Dock become their bots for a few seconds now and then. Bots in the dock stay in place instead of bobbing, logos can be up to 36 pt, and Display settings has a Logo edge distance slider (0–20 pt).
+- Host API: `ScreenPlacement.logoEdgeDistance` is the distance from the visible logo to its edge; `logoSizeRange` is 12...36.
 - Codex Desktop Computer Use app-access requests appear on the HUD, with Deny, Allow this conversation, and Always allow when offered by Desktop. Native answers and dismissals follow the original request; engine approvals keep their existing hook reviewer policy.
 - Host API: `CodexDesktopIPC` provides the shared Desktop owner transport; `CodexDesktopPermissions` reads and answers native app requests. `PermissionRequest.nativeApproval` carries the advertised scopes and `allowLabel` names their conversation choice.
 - Agent logos turn into small bots. In Dynamic Dock a working agent's logo morphs into a body with its own outline and colours and two eyes that follow the pointer; a permission reminder shows the bot asking, and a reply reminder shows it smiling. Display settings has a Bot logos switch, on by default; Reduce Motion keeps the logos.

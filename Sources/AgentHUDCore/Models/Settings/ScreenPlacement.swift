@@ -29,11 +29,10 @@ public enum HUDEdge: String, Codable, Sendable, CaseIterable {
 /// different edges and size their logos differently. The glow style is not — it is the HUD's material,
 /// shared by every screen; what changes per screen is the shape it is drawn around.
 public struct ScreenPlacement: Hashable, Codable, Sendable {
-    /// Side of one mark in points. A share of the menu bar reads badly as a control, and the bar is not the
-    /// same height on every Mac — near 38pt on a notched one against 24 elsewhere — so a multiple of it gave
-    /// wildly different marks for the same setting. The top of the range fills a 24pt menu bar; past that the
-    /// queue hangs below the bar and over the windows.
-    public static let logoSizeRange: ClosedRange<Double> = 12...24
+    /// Side of one mark in points, independent of the display's menu bar height.
+    public static let logoSizeRange: ClosedRange<Double> = 12...36
+    /// Distance from the visible logo, including its outline, to its parked screen edge, in points.
+    public static let logoEdgeDistanceRange: ClosedRange<Double> = 0...20
     /// Gap between logos, as a share of the logo's height. A gap wider than about half a mark reads as
     /// separate marks rather than one queue.
     public static let gapScaleRange: ClosedRange<Double> = 0.1...0.6
@@ -43,6 +42,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// resolution change.
     public var offset: Double
     public var logoSize: Double
+    public var logoEdgeDistance: Double
     public var gapScale: Double
     /// Draw the marks. Turning them off leaves the backdrop alone — it still spans what the marks would
     /// have occupied, so the field keeps its place and its width; only the logos stop being drawn.
@@ -53,6 +53,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         edge: HUDEdge = .top,
         offset: Double = 0.5,
         logoSize: Double = 20,
+        logoEdgeDistance: Double = 2,
         gapScale: Double = 0.4,
         showsLogos: Bool = true
     ) {
@@ -60,6 +61,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         self.edge = edge
         self.offset = Self.clamp(offset, to: 0...1)
         self.logoSize = Self.clamp(logoSize, to: Self.logoSizeRange)
+        self.logoEdgeDistance = Self.clamp(logoEdgeDistance, to: Self.logoEdgeDistanceRange)
         self.gapScale = Self.clamp(gapScale, to: Self.gapScaleRange)
         self.showsLogos = showsLogos
     }
@@ -74,7 +76,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mode, edge, offset, logoSize, gapScale, showsLogos
+        case mode, edge, offset, logoSize, logoEdgeDistance, gapScale, showsLogos
     }
 
     public init(from decoder: Decoder) throws {
@@ -85,6 +87,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
             edge: (try? c.decodeIfPresent(HUDEdge.self, forKey: .edge)) ?? d.edge,
             offset: try c.decodeIfPresent(Double.self, forKey: .offset) ?? d.offset,
             logoSize: try c.decodeIfPresent(Double.self, forKey: .logoSize) ?? d.logoSize,
+            logoEdgeDistance: try c.decodeIfPresent(Double.self, forKey: .logoEdgeDistance) ?? d.logoEdgeDistance,
             gapScale: try c.decodeIfPresent(Double.self, forKey: .gapScale) ?? d.gapScale,
             showsLogos: try c.decodeIfPresent(Bool.self, forKey: .showsLogos) ?? d.showsLogos
         )

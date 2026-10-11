@@ -12,12 +12,13 @@ final class BotMotionTests: XCTestCase {
         }
     }
 
-    func testAnIdleMarkStaysItsLogoAndAtRest() {
+    func testANewIdleMarkWaitsAsItsLogoWithoutStoppingItsClock() {
         var motion = BotMotion(seed: 1)
-        run(&motion, from: 0, for: 2)
+        motion.set(.idle, at: 100)
+        run(&motion, from: 100, for: 2)
         XCTAssertEqual(motion.morph, 0)
         XCTAssertEqual(motion.pose, BotPose())
-        XCTAssertTrue(motion.isAtRest)
+        XCTAssertFalse(motion.isAtRest, "an initial idle phase still needs the clock for its first visit")
     }
 
     func testWorkTurnsTheLogoIntoItsBotInHalfASecond() {
@@ -29,6 +30,149 @@ final class BotMotionTests: XCTestCase {
         run(&motion, from: 0.3, for: 0.4)
         XCTAssertEqual(motion.morph, 1)
         XCTAssertFalse(motion.isAtRest)
+    }
+
+    func testWorkStaysItsBotThroughoutLongRunningWork() {
+        var motion = BotMotion(seed: 1)
+        motion.set(.working, at: 0)
+        for frame in 0...3600 {
+            motion.step(to: Double(frame) / 30)
+            XCTAssertEqual(motion.phase, .working)
+            if frame >= 16 { XCTAssertEqual(motion.morph, 1) }
+            XCTAssertFalse(motion.isAtRest)
+        }
+    }
+
+    func testIdleVisitsItsBotBrieflyWithoutStoppingItsClockOrResettingItsSchedule() {
+        var motion = BotMotion(seed: 1)
+        motion.set(.idle, at: 0)
+        var bots: [TimeInterval] = [], logos: [TimeInterval] = []
+        var sawBodyAction = false, sawExpression = false
+        for frame in 0...7200 {
+            let now = Double(frame) / 30, before = motion.morph, face = motion.face
+            // Repeated view updates must not postpone the visit by scheduling another twenty seconds.
+            motion.set(.idle, at: now)
+            motion.step(to: now, aim: CGPoint(x: 0.8, y: -0.6))
+            XCTAssertEqual(motion.phase, .idle)
+            XCTAssertFalse(motion.isAtRest, "the clock must survive the logo wait and the bot visit")
+            XCTAssertLessThanOrEqual(abs(motion.morph - before), 1.0 / 15 + 0.0001)
+            if before == 0, motion.morph > 0 { bots.append(now) }
+            if before > 0, motion.morph == 0 { logos.append(now) }
+            if motion.morph == 0 {
+                XCTAssertEqual(motion.pose, BotPose(), "the original logo stays still")
+                if before == 0 { XCTAssertEqual(motion.face, face, "hidden eyes need no animation frames") }
+            } else {
+                if motion.pose != BotPose() { sawBodyAction = true }
+                if motion.face != BotFace() { sawExpression = true }
+            }
+        }
+        XCTAssertGreaterThanOrEqual(logos.count, 5)
+        XCTAssertGreaterThanOrEqual(bots.count, logos.count)
+        XCTAssertGreaterThanOrEqual(bots.first ?? 0, 20)
+        XCTAssertLessThanOrEqual(bots.first ?? 100, 35.1)
+        for (bot, logo) in zip(bots, logos) {
+            XCTAssertGreaterThanOrEqual(logo - bot, 2.9)
+            XCTAssertLessThanOrEqual(logo - bot, 5.1)
+        }
+        for (logo, bot) in zip(logos, bots.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(bot - logo, 20)
+            XCTAssertLessThanOrEqual(bot - logo, 35.1)
+        }
+        XCTAssertTrue(sawBodyAction)
+        XCTAssertTrue(sawExpression)
+    }
+
+    func testIdleAndWorkKeepTheWholeBotAndItsRetainedArtworkInPlace() {
+        for phase in [BotPhase.idle, .working] {
+            for seed in 1...8 {
+                var motion = BotMotion(seed: UInt64(seed))
+                motion.spin = 9
+                motion.set(phase, at: 0)
+                for frame in 0...1800 {
+                    motion.step(to: Double(frame) / 30, aim: CGPoint(x: 0.8, y: -0.6))
+                    XCTAssertEqual(motion.pose.x, 0)
+                    XCTAssertEqual(motion.pose.y, 0)
+                    XCTAssertEqual(motion.kept.lift, 0)
+                    XCTAssertEqual(motion.kept.scale, 1)
+                    for runsDown in [true, false] {
+                        let transform = BotActor.transform(motion.pose, side: 36, yRunsDown: runsDown)
+                        XCTAssertEqual(transform.tx, 0)
+                        XCTAssertEqual(transform.ty, 0)
+                    }
+                }
+            }
+        }
+    }
+
+    func testDifferentSeedsTakeTheirIdleBotVisitsIndependently() {
+        var first = BotMotion(seed: 1), other = BotMotion(seed: 7)
+        first.set(.idle, at: 0); other.set(.idle, at: 0)
+        var differed = false
+        for frame in 0...1800 {
+            let now = Double(frame) / 30
+            first.step(to: now); other.step(to: now)
+            if (first.morph == 0) != (other.morph == 0) { differed = true }
+        }
+        XCTAssertTrue(differed)
+    }
+
+    func testAnAlertStaysItsBotThroughoutLongRunningIdle() {
+        var motion = BotMotion(seed: 1)
+        motion.staysBot = true
+        motion.set(.idle, at: 0)
+        for frame in 0...1800 {
+            motion.step(to: Double(frame) / 30)
+            if frame >= 16 { XCTAssertEqual(motion.morph, 1) }
+            XCTAssertFalse(motion.isAtRest)
+        }
+    }
+
+    func testWorkAskingAndDoneTakePriorityOverAnIdleWaitOrVisit() {
+        for visiting in [false, true] {
+            for phase in [BotPhase.working, .asking, .done] {
+                var motion = BotMotion(seed: 1)
+                motion.set(.idle, at: 0)
+                var now: TimeInterval = 0
+                if visiting {
+                    for frame in 0...1100 {
+                        now = Double(frame) / 30
+                        motion.step(to: now)
+                        if motion.morph == 1 { break }
+                    }
+                    XCTAssertEqual(motion.morph, 1, "idle must visit its bot before thirty-six seconds")
+                } else {
+                    now = 10
+                    run(&motion, from: 0, for: now)
+                    XCTAssertEqual(motion.morph, 0)
+                }
+                motion.set(phase, at: now)
+                run(&motion, from: now, for: 0.8)
+                XCTAssertEqual(motion.morph, 1)
+                XCTAssertFalse(motion.isAtRest)
+                if phase == .asking { XCTAssertGreaterThan(motion.pose.scaleX, 1.05) }
+                else if phase == .done { XCTAssertGreaterThan(motion.face.happy, 0.9) }
+                if phase == .working {
+                    run(&motion, from: now + 0.8, for: 60)
+                    XCTAssertEqual(motion.morph, 1, "the old idle visit must not fade out a running bot")
+                }
+            }
+        }
+    }
+
+    func testReturningFromAskingToIdleOrWorkImmediatelyFixesTheCentre() {
+        for phase in [BotPhase.idle, .working] {
+            var motion = BotMotion(seed: 1)
+            motion.set(.asking, at: 0)
+            run(&motion, from: 0, for: 0.2)
+            XCTAssertLessThan(motion.pose.y, 0)
+            XCTAssertGreaterThan(motion.kept.lift, 0)
+            motion.set(phase, at: 0.2)
+            motion.step(to: 0.2, aim: CGPoint(x: 0.8, y: 0.3))
+            XCTAssertEqual(motion.pose.x, 0)
+            XCTAssertEqual(motion.pose.y, 0)
+            XCTAssertEqual(motion.pose.footing, 0)
+            XCTAssertEqual(motion.kept.lift, 0)
+        }
     }
 
     func testAFinishedTurnSmilesThenSettlesBackIntoTheLogo() {
@@ -57,10 +201,11 @@ final class BotMotionTests: XCTestCase {
     func testAskingFacesTheUserWithWideEyesWhateverItWasLookingAt() {
         var motion = BotMotion(seed: 1)
         motion.set(.working, at: 0)
-        run(&motion, from: 0, for: 2, aim: CGPoint(x: 0.8, y: 0.3))
+        // The first random act starts no earlier than 0.9 seconds; establish the aimed gaze before it.
+        run(&motion, from: 0, for: 0.8, aim: CGPoint(x: 0.8, y: 0.3))
         XCTAssertGreaterThan(motion.face.look, 0.3)
-        motion.set(.asking, at: 2)
-        run(&motion, from: 2, for: 1, aim: CGPoint(x: 0.8, y: 0.3))
+        motion.set(.asking, at: 0.8)
+        run(&motion, from: 0.8, for: 1, aim: CGPoint(x: 0.8, y: 0.3))
         XCTAssertEqual(motion.face.look, 0, accuracy: 0.02)
         XCTAssertEqual(motion.face.lookY, 0, accuracy: 0.02)
         XCTAssertGreaterThan(motion.face.wide, 1.15)
@@ -68,18 +213,22 @@ final class BotMotionTests: XCTestCase {
     }
 
     func testTheSameSeedReplaysTheSameActs() {
-        var first = BotMotion(seed: 42), second = BotMotion(seed: 42), other = BotMotion(seed: 7)
-        first.set(.working, at: 0); second.set(.working, at: 0); other.set(.working, at: 0)
-        var differed = false
-        var now: TimeInterval = 0
-        while now < 20 {
-            first.step(to: now); second.step(to: now); other.step(to: now)
-            XCTAssertEqual(first.face, second.face)
-            XCTAssertEqual(first.pose, second.pose)
-            if first.face != other.face || first.pose != other.pose { differed = true }
-            now += 1.0 / 30
+        for phase in [BotPhase.idle, .working] {
+            var first = BotMotion(seed: 42), second = BotMotion(seed: 42), other = BotMotion(seed: 7)
+            first.set(phase, at: 0); second.set(phase, at: 0); other.set(phase, at: 0)
+            var differed = false
+            for frame in 0...2700 {
+                let now = Double(frame) / 30
+                first.step(to: now); second.step(to: now); other.step(to: now)
+                XCTAssertEqual(first.face, second.face)
+                XCTAssertEqual(first.pose, second.pose)
+                XCTAssertEqual(first.morph, second.morph)
+                if first.face != other.face || first.pose != other.pose || first.morph != other.morph {
+                    differed = true
+                }
+            }
+            XCTAssertTrue(differed)
         }
-        XCTAssertTrue(differed)
     }
 
     func testAimTurnsLessTowardsSomethingClose() {

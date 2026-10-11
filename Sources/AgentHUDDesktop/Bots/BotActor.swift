@@ -3,7 +3,7 @@ import QuartzCore
 import SwiftUI
 
 extension EnvironmentValues {
-    /// Whether marks turn into bots while their agents are in flight. Off, every mark stays a logo.
+    /// Whether marks show bots while working and occasionally while idle. Off, every mark stays a logo.
     @Entry var botLogos: Bool = true
 }
 
@@ -55,8 +55,8 @@ final class BotActor {
 
     func set(_ phase: BotPhase, at now: TimeInterval) { motion.set(phase, at: now) }
 
-    /// Advances to `now` and redraws if the bot looks different. Returns false once it has settled back into
-    /// its logo, when the layer hides and there is nothing left to step.
+    /// Advances to `now` and redraws if the bot looks different. An idle bot's logo interval hides the
+    /// layer while keeping the clock for its next appearance.
     ///
     /// - aim: where to look, from `BotMotion.aim(from:to:)`.
     /// - yRunsDown: whether y grows downwards in the space this layer is laid out in.
@@ -65,6 +65,10 @@ final class BotActor {
         guard !motion.isAtRest else {
             layer.isHidden = true
             return false
+        }
+        if motion.phase == .idle, !motion.staysBot, motion.morph == 0 {
+            layer.isHidden = true
+            return true
         }
         layer.isHidden = false
         let look = BotRenderer.look(of: motion)

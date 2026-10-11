@@ -256,7 +256,7 @@ final class DockDraggingTests: XCTestCase {
             for offset in [0.0, 0.5, 1.0] {
                 let queue = edge.isHorizontal ? CGSize(width: 216, height: 20) : CGSize(width: 20, height: 216)
                 let placement = ScreenPlacement(edge: edge, offset: offset)
-                let rect = NotchGeometry.stripRect(queue: queue, frame: screen, menuBar: 32, placement: placement)
+                let rect = NotchGeometry.stripRect(queue: queue, frame: screen, placement: placement)
                 let geometry = NotchGeometry(screenFrame: screen, mode: .logos, edge: edge, hasNotch: false,
                                              rect: rect, cornerRadius: 10, backingScale: 2, menuBarHeight: 32)
                 let surface = ScreenHUD.dragSurfaceFrame(for: geometry)

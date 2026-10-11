@@ -15,7 +15,7 @@ struct NotchGeometry: Equatable {
     /// Convex radius of the corners that face into the screen.
     let cornerRadius: CGFloat
     let backingScale: CGFloat
-    /// The screen's menu bar height, which every logo-mode size is derived from.
+    /// The screen's menu bar height, used by the stand-in notch.
     let menuBarHeight: CGFloat
 
     static let fallbackWidth: CGFloat = 200
@@ -29,7 +29,7 @@ struct NotchGeometry: Equatable {
     /// - screen: the display this HUD belongs to. Each screen is measured on its own — its own notch, its
     ///   own menu bar, its own scale — because two displays can be in different modes at once.
     /// - placement: how that screen presents the HUD.
-    /// - queue: the measured size of the logo queue's marks, when the placement asks for one.
+    /// - queue: the measured logo strip, including the configured distance around its marks.
     static func detect(screen: NSScreen?, placement: ScreenPlacement, queue: CGSize? = nil) -> NotchGeometry {
         let frame = screen?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         let menuBar = screen.map { max(22, $0.frame.maxY - $0.visibleFrame.maxY) } ?? 24
@@ -37,7 +37,7 @@ struct NotchGeometry: Equatable {
         let notch = screen.flatMap { $0.safeAreaInsets.top > 0 ? notchRect(of: $0) : nil }
 
         if placement.mode == .logos, let queue {
-            let rect = stripRect(queue: queue, frame: frame, menuBar: menuBar, placement: placement)
+            let rect = stripRect(queue: queue, frame: frame, placement: placement)
             return NotchGeometry(screenFrame: frame, mode: .logos, edge: placement.edge, hasNotch: notch != nil,
                                  rect: rect, cornerRadius: logoCornerRadius, backingScale: scale, menuBarHeight: menuBar)
         }
@@ -60,14 +60,14 @@ struct NotchGeometry: Equatable {
 
     /// Where the queue sits, centred on `placement.offset` along its edge and kept on screen. Nothing is drawn
     /// here — the marks stand on their own — so the rect only has to hold them and catch the pointer; the
-    /// padding is hover slack, not a visible strip.
-    static func stripRect(queue: CGSize, frame: CGRect, menuBar: CGFloat,
+    /// perpendicular padding is the configured distance between each logo and its screen edge.
+    static func stripRect(queue: CGSize, frame: CGRect,
                           placement: ScreenPlacement) -> CGRect {
         // The run is the marks themselves: the backdrop is clipped to this rect, and anything added here
         // would show up as backdrop reaching past the last mark. Whole points, because the spacing is a
         // fraction of the logo and a window on a half point puts every mark on a blurred pixel boundary.
         let long = (placement.edge.isHorizontal ? queue.width : queue.height).rounded()
-        let thick = max(menuBar, placement.edge.isHorizontal ? queue.height : queue.width)
+        let thick = placement.edge.isHorizontal ? queue.height : queue.width
         switch placement.edge {
         case .top, .bottom:
             // The notch is not avoided: a queue centred on the screen reads as centred, and sliding it off

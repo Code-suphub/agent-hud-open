@@ -47,8 +47,17 @@ enum BotRenderer {
         context.interpolationQuality = .high
 
         if let eyes = form.spec.ownEyes {
-            draw(form.stripped ?? form.artwork, in: box, on: context)
-            ownEyes(eyes, face: motion.face, on: context)
+            context.setAlpha(1 - motion.morph)
+            draw(form.artwork, in: box, on: context)
+            if motion.morph > 0 {
+                // Blend the complete eye animation as one picture: its drawing sets its own alpha.
+                context.setAlpha(motion.morph)
+                context.setBlendMode(.plusLighter)
+                context.beginTransparencyLayer(auxiliaryInfo: nil)
+                draw(form.stripped ?? form.artwork, in: box, on: context)
+                ownEyes(eyes, face: motion.face, on: context)
+                context.endTransparencyLayer()
+            }
         } else {
             body(form, motion: motion, on: context)
         }

@@ -3,9 +3,9 @@ import Foundation
 
 /// What the agent behind a mark is doing, as far as its bot acts it out.
 enum BotPhase: Sendable, Equatable {
-    /// Nothing in flight: the mark is its logo, and still.
+    /// Nothing in flight: the mark rests as its logo, with a brief bot visit now and then.
     case idle
-    /// A turn is running: the bot is awake and does one small thing at random every second or three.
+    /// A turn is running: the bot stays awake and acts in place.
     case working
     /// A turn is blocked on the user: the bot hops, stays raised and turns to face them.
     case asking
@@ -45,11 +45,12 @@ struct BotPose: Equatable, Sendable {
 /// One bot's state over time: how far the logo has turned into the bot, what its eyes are doing and how it
 /// sits. It is stepped with a clock and nothing else, so the same seed and the same times give the same bot.
 struct BotMotion: Sendable {
+    private static let morphSeconds: TimeInterval = 0.5
     /// An alert shows its bot for as long as the alert is up; a logo queue lets it settle back into the logo.
     var staysBot = false
-    /// Seconds for one breath of the working body.
+    /// Seconds for one breath of the body.
     var period: TimeInterval = 3
-    /// Degrees per second the body turns under the face while working.
+    /// Degrees per second the body turns under the face while awake.
     var spin: CGFloat = 0
 
     private(set) var phase: BotPhase = .idle
@@ -69,10 +70,12 @@ struct BotMotion: Sendable {
     private var nextAct: TimeInterval = 0
     private var blinks: [TimeInterval] = [-1, -1]
     private var nextBlink: TimeInterval = 2
+    /// The next brief bot visit while idle, between longer stretches as the original logo.
+    private var botInterval: Range<TimeInterval>?
     private var random: SplitMix
 
     private struct Act {
-        enum Kind: CaseIterable { case glance, blinkTwice, squint, widen, smile, inspect, tilt, hop, wiggle, turn }
+        enum Kind: CaseIterable { case glance, blinkTwice, squint, widen, smile, inspect, tilt, stretch, wiggle, turn }
         var kind: Kind
         var start: TimeInterval
         var length: TimeInterval
@@ -83,22 +86,29 @@ struct BotMotion: Sendable {
 
     init(seed: UInt64 = UInt64.random(in: 0...UInt64.max)) { random = SplitMix(state: seed) }
 
-    /// Nothing left to draw: the logo is back and at rest.
+    /// Nothing left to draw or wait for: the logo is back and at rest.
     var isAtRest: Bool {
         guard morph == 0, !staysBot else { return false }
         switch phase {
-        case .idle: return pose == BotPose()
+        case .idle: return botInterval == nil && pose == BotPose()
         case .done: return (last ?? 0) - since > 2.4
         case .working, .asking: return false
         }
     }
 
     mutating func set(_ next: BotPhase, at now: TimeInterval) {
-        guard next != phase else { return }
+        guard next != phase else {
+            if next == .idle, !staysBot, botInterval == nil { scheduleBot(after: now) }
+            return
+        }
         leaving = pose
         phase = next
         since = now
-        if next == .working { nextAct = now + 0.9 + random.unit() * 1.2 }
+        if next == .working {
+            nextAct = now + 0.9 + random.unit() * 1.2
+        }
+        botInterval = nil
+        if next == .idle, !staysBot { scheduleBot(after: now + Double(morph) * Self.morphSeconds) }
     }
 
     /// Advances to `now`. `aim` is where the bot should look, as returned by `BotMotion.aim(from:to:)`.
@@ -106,19 +116,24 @@ struct BotMotion: Sendable {
         let dt = min(0.1, max(0, now - (last ?? now)))
         last = now
         let age = now - since
-        let awake = phase == .working || phase == .asking || (phase == .done && age < 1.5)
+        if phase == .idle, !staysBot, let interval = botInterval, now >= interval.upperBound {
+            scheduleBot(after: now + Self.morphSeconds)
+        }
+        let idleVisit = phase == .idle && botInterval?.contains(now) == true
+        let awake = phase == .working || idleVisit || phase == .asking || (phase == .done && age < 1.5)
 
         let wanted: CGFloat = (awake || staysBot) && hasFace ? 1 : 0
-        let stride = CGFloat(dt / 0.5)
+        let stride = CGFloat(dt / Self.morphSeconds)
         morph = abs(wanted - morph) <= stride ? wanted : morph + (wanted > morph ? stride : -stride)
 
-        // Random life while working: one small act, a pause, another.
+        // Random life while awake: one small act, a pause, another.
         if let running = act, now - running.start >= running.length {
             if running.kind == .turn { turn = running.from + 60 * running.side }
             act = nil
         }
-        if phase == .working, morph > 0.9 || !hasFace {
-            if act == nil, now >= nextAct {
+        let actsInPlace = phase == .working || phase == .idle
+        if actsInPlace {
+            if awake || staysBot, morph > 0.9 || !hasFace, act == nil, now >= nextAct {
                 let chosen = pick(at: now)
                 act = chosen
                 nextAct = now + chosen.length + 0.5 + random.unit() * 1.9
@@ -129,16 +144,25 @@ struct BotMotion: Sendable {
         }
         let progress = act.map { CGFloat((now - $0.start) / $0.length) } ?? 0
         let swell = act == nil ? 0 : Self.easeInOut(min(1, min(progress / 0.22, (1 - progress) / 0.22)))
-        if phase == .working, morph > 0.5, spin != 0 {
+        if actsInPlace, morph > 0.5, spin != 0 {
             if let act, act.kind == .turn { turn = act.from + 60 * act.side * Self.easeInOut(progress) }
             else { turn += spin * CGFloat(dt) }
         }
 
         pose = sitting(age: age, progress: progress, swell: swell)
         if let leaving, age < 0.3 { pose = leaving.mixed(with: pose, Self.easeOut(CGFloat(age / 0.3))) }
-        if morph > 0.5 { pose.x += 0.025 * face.look }
+        if actsInPlace {
+            // Keep the centre fixed, even when returning from an alert's raised pose. The original logo
+            // is still while it is shown; breathing and turns arrive with the bot again.
+            pose = BotPose().mixed(with: pose, morph)
+            pose.x = 0
+            pose.y = 0
+            pose.footing = 0
+        } else if morph > 0.5 {
+            pose.x += 0.025 * face.look
+        }
 
-        look(age: age, now: now, dt: dt, aim: aim, swell: swell)
+        if !actsInPlace || morph > 0 { look(age: age, now: now, dt: dt, aim: aim, swell: swell) }
         keep(age: age, now: now, dt: dt)
     }
 
@@ -153,17 +177,22 @@ struct BotMotion: Sendable {
 
     // MARK: Body
 
+    private mutating func scheduleBot(after now: TimeInterval) {
+        let start = now + 20 + random.unit() * 15
+        // Fade-in is part of this interval; fade-out follows it. Together the visit lasts 3–5 seconds.
+        botInterval = start..<(start + 3 + random.unit() * 2 - Self.morphSeconds)
+        nextAct = start + Self.morphSeconds
+    }
+
     private func sitting(age: TimeInterval, progress: CGFloat, swell: CGFloat) -> BotPose {
         var pose = BotPose()
         let t = CGFloat(age)
         switch phase {
-        case .working:
-            // Breathing: a slow bob with the body filling out and settling twice per breath.
+        case .working, .idle:
+            // Breathing changes the body's shape around its fixed centre.
             let breath = 2 * CGFloat.pi * CGFloat(age / period)
-            pose.y = 0.035 * sin(breath)
             pose.scaleX = 1 + 0.03 * sin(2 * breath)
             pose.scaleY = 1 - 0.03 * sin(2 * breath)
-            pose.footing = 0.5
         case .asking:
             if t < 0.45 {
                 let x = t / 0.45, arc = sin(.pi * x)
@@ -187,15 +216,12 @@ struct BotMotion: Sendable {
                 pose.scaleY = 1 + 0.2 * pop
                 pose.y = -0.1 * pop
             }
-        case .idle:
-            break
         }
         guard let act else { return pose }
         switch act.kind {
         case .tilt: pose.rotation += act.side * 9 * swell
-        case .hop:
+        case .stretch:
             let arc = sin(.pi * progress)
-            pose.y -= 0.17 * 4 * progress * (1 - progress)
             pose.scaleY *= 1 + 0.06 * arc
             pose.scaleX *= 1 - 0.04 * arc
         case .wiggle: pose.rotation += 8 * sin(2 * .pi * 3 * progress) * (1 - progress)
@@ -210,7 +236,7 @@ struct BotMotion: Sendable {
         var target = BotFace()
         var every: ClosedRange<TimeInterval>? = 3.2...6.5
         switch phase {
-        case .working:
+        case .working, .idle:
             target.look = aim.x
             target.lookY = aim.y
             every = 2.2...4.5
@@ -242,9 +268,6 @@ struct BotMotion: Sendable {
                 target.look = aim.x
                 target.lookY = aim.y
             }
-        case .idle:
-            target.look = aim.x
-            target.lookY = aim.y
         }
 
         let eyes = CGFloat(1 - exp(-dt * 18)), head = CGFloat(1 - exp(-dt * 9))
@@ -271,18 +294,19 @@ struct BotMotion: Sendable {
     }
 
     private mutating func keep(age: TimeInterval, now: TimeInterval, dt: TimeInterval) {
+        guard phase != .working, phase != .idle else {
+            kept = (lift: 0, scale: 1)
+            return
+        }
         var lift: CGFloat = 0, scale: CGFloat = 1
         switch phase {
-        case .working:
-            let bounce = CGFloat((now / (period / 2)).truncatingRemainder(dividingBy: 1))
-            lift = 0.13 * 4 * bounce * (1 - bounce)
+        case .working, .idle:
+            break
         case .asking:
             lift = 0.03
             scale = 1.22 + 0.08 * CGFloat(sin(2 * .pi * now / 0.8))
         case .done:
             if age < 0.6 { lift = 0.22 * CGFloat(sin(.pi * age / 0.6)) }
-        case .idle:
-            break
         }
         let ease = CGFloat(1 - exp(-dt * 22))
         kept.lift += (lift - kept.lift) * ease
@@ -293,7 +317,7 @@ struct BotMotion: Sendable {
 
     private mutating func pick(at now: TimeInterval) -> Act {
         var pool: [(Act.Kind, Double)] = [(.glance, 5), (.blinkTwice, 2), (.squint, 2), (.widen, 2), (.smile, 2),
-                                          (.inspect, 2), (.tilt, 3), (.hop, 2), (.wiggle, 2)]
+                                          (.inspect, 2), (.tilt, 3), (.stretch, 2), (.wiggle, 2)]
         if spin != 0 { pool.append((.turn, 3)) }
         var roll = random.unit() * pool.reduce(0) { $0 + $1.1 }
         var kind = pool[0].0
@@ -310,7 +334,7 @@ struct BotMotion: Sendable {
         case .smile: length = 1.1
         case .inspect: length = 1.5
         case .tilt: length = 1.1
-        case .hop: length = 0.55
+        case .stretch: length = 0.55
         case .wiggle: length = 0.6
         case .turn: length = 0.7
         }

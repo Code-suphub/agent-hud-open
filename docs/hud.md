@@ -22,7 +22,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - A display with a notch defaults to notch mode; a display without one defaults to Dynamic Dock, so no screen draws a bar pretending to have a notch.
 - Either mode can be chosen for any display; notch mode stays at the physical notch or the screen's top centre.
 - A display keeps its own placement under its UUID; display settings can reset its position to top centre, or top left for a dock on a notched display, keeping its mode and logo settings.
-- The dock can sit anywhere along the top, right, bottom or left edge, running horizontally on the top and bottom and vertically on the sides; logo size is 12–24 pt and spacing is 0.1–0.6 of the logo.
+- The dock can sit anywhere along the top, right, bottom or left edge, running horizontally on the top and bottom and vertically on the sides; logo size is 12–36 pt, spacing is 0.1–0.6 of the logo, and the logos stand 0–20 pt in from the edge.
 - Drag a visible HUD directly to any edge; dragging a notch switches it to Dynamic Dock. Its bounds appear while it is grabbed or dragged.
 - The marks can be hidden, which leaves the backdrop alone, still where they would have been and as wide.
 
@@ -31,19 +31,19 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - The enabled, non-API-billed agents first, in the order they are watched in, then any vendor that ran in the last day without a window on that list, most recently used first.
 - Watched vendors appear before their first reading; vendors shown only for recent activity leave a day after their last turn and never appear with Live status off.
 - Shared artwork appears once: Claude windows share one mark, as do Codex and ChatGPT.
-- A mark turns into its bot while a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. With `botLogos` off, or for a mark that has no bot, it bobs instead.
+- A mark is its bot for as long as a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. An idle mark becomes its bot for three to five seconds every 20 to 35 seconds. With `botLogos` off, or for a mark that has no bot, a working mark bobs instead.
 - A dock with nothing to show keeps a minimal entry at its saved position without drawing a logo.
 - Marks retain their artwork with a hairline outline; single-colour marks are white, and status colour appears in the glow.
 
 ### Bots
 
-- Every bundled mark has a bot. Its body takes the mark's outline and colours: Claude twelve even heads, Pi a square on two legs under a flat hat, Grok a ball with a ring round its waist, CodeBuddy and WorkBuddy an upright cat. GitHub Copilot keeps its artwork and only its eyes move.
+- Every bundled mark has a bot. Its body is a plain ball or the mark's own simple shape, in the mark's colours, with any feature drawn on the body: Claude twelve even heads, Pi a square on two legs under a flat hat, Grok a ball with a ring round its waist, Hermes a ball with a fringe, Qoder a ball in a green neck warmer, CodeBuddy and WorkBuddy an upright cat. GitHub Copilot keeps its artwork and only its eyes move.
 - The logo turns into the bot in half a second: the outline relaxes, the artwork fades into the mark's colours and the eyes open. The eyes are small, stay upright and follow the pointer, sliding across the body as on a ball.
-- A working bot breathes at the glow's working period and does one small thing at random every one to three seconds: a glance, a double blink, a squint, a tilt, a hop, a wiggle, or a turn of its body.
+- A bot in the dock stays where its logo was: breathing changes its shape round a fixed centre, at the glow's working period. It does one small thing at random every one to three seconds: a glance, a double blink, a squint, a tilt, a stretch, a wiggle, or a turn of its body.
 - A permission reminder shows the asking bot: one hop, then raised by 12%, a knock every 2.6 seconds, eyes wide and straight at the user.
 - A reply reminder shows the bot smiling for about a second, then looking at the pointer.
 - A reminder keeps its bot for as long as it is shown; a dock's mark returns to its logo.
-- Bots are stepped 30 times a second by one timer that runs only while a bot is out. A bot's picture is drawn again only when its eyes or outline have visibly changed; breathing, hopping and leaning are layer transforms.
+- Bots are stepped 30 times a second by one timer, which runs for as long as a dock shows marks that have bots or a reminder shows one. A bot's picture is drawn again only when its eyes or outline have visibly changed, and an idle mark between visits is not drawn at all; breathing and leaning are layer transforms.
 - Reduce Motion, or `botLogos` off, leaves every mark its logo.
 
 ### Hovering and events
@@ -100,7 +100,8 @@ DeepSeek Harness questions can be answered on the HUD when its web host exposes 
 |---|---|---|
 | `screens[<display UUID>].mode` | `notch`, `logos` (Dynamic Dock) | By hardware: `notch` with a notch, `logos` without |
 | `screens[…].edge` / `offset` | `top`, `right`, `bottom`, `left` / 0–1 along the edge | `top` / 0.5 |
-| `screens[…].logoSize` / `gapScale` | 12–24 pt / 0.1–0.6 of the logo | 20 pt / 0.4 |
+| `screens[…].logoSize` / `gapScale` | 12–36 pt / 0.1–0.6 of the logo | 20 pt / 0.4 |
+| `screens[…].logoEdgeDistance` | 0–20 pt from the visible logo, outline included, to its edge | 2 pt |
 | `screens[…].showsLogos` | Draw the marks, or the backdrop alone | `true` |
 | `screenGlow[<display UUID>].style` | `blur`, `dots`, `ascii`, `blocks`, `braille`, `binary` | `blur` |
 | `screenGlow[…].effect` | `breathe`, `flow`, `scan`, `ripple`, `shimmer`, `boot` | `breathe` |

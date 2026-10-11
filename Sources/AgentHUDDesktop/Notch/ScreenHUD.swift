@@ -655,7 +655,7 @@ final class ScreenHUD {
     private func queueSize(_ config: LogoQueueConfig) -> CGSize {
         guard config.items.isEmpty else { return config.size }
         let run = max(32, config.logo)
-        return config.edge.isHorizontal ? CGSize(width: run, height: config.logo) : CGSize(width: config.logo, height: run)
+        return config.edge.isHorizontal ? CGSize(width: run, height: config.stripThickness) : CGSize(width: config.stripThickness, height: run)
     }
 
     /// The marks this screen shows: the watched agents and anything else run in the last day.
