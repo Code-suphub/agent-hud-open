@@ -102,6 +102,8 @@ enum BotRenderer {
             context.setAlpha(artwork)
             draw(form.artwork, in: box, on: context)
         }
+        // The logo stays where it is; the bot it turns into may settle a little above or below it.
+        context.translateBy(x: 0, y: spec.settle * eased)
         let outline = outline(form, eased: eased, turn: motion.turn)
 
         // A ring goes on in two passes: all of it first, so the body covers the far side; then the near side
@@ -115,6 +117,12 @@ enum BotRenderer {
             context.addPath(ringPath(ring, spec: spec, grown: ringShare, nearSideOnly: false))
             context.strokePath()
         }
+
+        // What the body wears arrives with the eyes.
+        let dressed = max(0, min(1, (share - 0.45) / 0.45))
+        let face = motion.face, turn = spec.reach * 0.72
+        let yaw = max(-1.15, min(1.15, face.look)) * turn, pitch = max(-1.15, min(1.15, face.lookY)) * turn
+        let glance = CGPoint(x: sin(yaw) * radius * 0.72, y: sin(pitch) * radius * 0.62)
 
         context.setAlpha(solid)
         context.saveGState()
@@ -169,17 +177,13 @@ enum BotRenderer {
             context.restoreGState()
         }
 
-        // What the body wears arrives with the eyes.
-        let dressed = max(0, min(1, (share - 0.45) / 0.45))
         guard dressed > 0 else { return }
-        let face = motion.face, turn = spec.reach * 0.72
-        let yaw = max(-1.15, min(1.15, face.look)) * turn, pitch = max(-1.15, min(1.15, face.lookY)) * turn
+        wear(spec, outline: outline, strength: dressed, on: context)
         for item in spec.decor {
             context.saveGState()
             var follows = false
             if case .blocks(_, _, let rides) = item { follows = rides }
-            context.translateBy(x: center.x + (follows ? sin(yaw) * radius * 0.72 : 0),
-                                y: center.y + (follows ? sin(pitch) * radius * 0.62 : 0))
+            context.translateBy(x: center.x + (follows ? glance.x : 0), y: center.y + (follows ? glance.y : 0))
             context.scaleBy(x: radius, y: radius)
             context.setAlpha(dressed)
             switch item {
@@ -203,10 +207,33 @@ enum BotRenderer {
                 context.setLineCap(.round)
                 context.addLines(between: points)
                 context.strokePath()
+            case .soft:
+                break
             }
             context.restoreGState()
         }
         eyes(spec, face: face, yaw: yaw, pitch: pitch, awake: dressed, on: context)
+    }
+
+    /// The soft pieces a body wears, kept to its outline: a fringe, a scarf. Sizes are in body radii from
+    /// the body's centre.
+    private static func wear(_ spec: BotSpec, outline: CGPath, strength: CGFloat, on context: CGContext) {
+        for item in spec.decor {
+            guard case .soft(let rects, let paint, let round) = item else { continue }
+            context.saveGState()
+            context.addPath(outline)
+            context.clip()
+            context.translateBy(x: spec.center.x, y: spec.center.y)
+            context.scaleBy(x: spec.radius, y: spec.radius)
+            context.setAlpha(strength)
+            context.setFillColor(color(paint))
+            for rect in rects {
+                let corner = min(rect.width, rect.height) / 2 * round
+                context.addPath(CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil))
+            }
+            context.fillPath()
+            context.restoreGState()
+        }
     }
 
     /// The outline at one moment of the morph: the logo's reach blended, angle by angle, with the body's.
@@ -278,7 +305,7 @@ enum BotRenderer {
     /// the far one, so the body reads as a head looking somewhere. They stay upright.
     private static func eyes(_ spec: BotSpec, face: BotFace, yaw: CGFloat, pitch: CGFloat, awake: CGFloat,
                              on context: CGContext) {
-        let radius = spec.radius, size: CGFloat = 0.78, spread: CGFloat = 0.34
+        let radius = spec.radius, size: CGFloat = 0.78, spread = spec.eye.spread
         let paint = spec.eyeColor.map(color) ?? ink
         // A smile is sized from how far apart the eyes are right now, so two never join into one line.
         let apart = (sin(yaw + spread) - sin(yaw - spread)) * radius * 0.76

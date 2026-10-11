@@ -290,6 +290,79 @@ final class GrokBotUsageTests: XCTestCase {
         XCTAssertNil(second.sessions.first?.usageKey)
     }
 
+    func testRoutineRunBecomesASubagentOfItsBotAndCountsInItsTotalOnce() async throws {
+        let fixture = try GrokBotCacheFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        _ = try fixture.writeRoster()
+        let bot = try GrokBotSessions.read(fixture.roster)
+        let billing = try CursorClient.parseEvents([
+            row(conversation: fixture.agent, at: -50, input: 10, output: 5, cache: 20, write: 2),
+            row(conversation: "sand-subagent-run-a", model: "grok-bot-automation", at: -40, input: 100, output: 7, cache: 300, write: 0),
+            row(conversation: "sand-subagent-run-a", model: "grok-bot-automation", at: -30, input: 50, output: 3, cache: 400, write: 0),
+            row(conversation: "sand-subagent-unexplained", at: -20, input: 1000, output: 9, cache: 0, write: 0),
+        ], account: "billing-account")
+        let runID = try XCTUnwrap(billing.sessions.first { $0.id.hasSuffix("sand-subagent-run-a") }?.id)
+        let now = now, agent = fixture.agent
+        let runs = GrokBotRoutineRuns(directory: fixture.directory, clock: { now })
+        await runs.refresh(billed: billing.sessions.map(\.id)) { _ in
+            GrokBotRoutineRunsTests.reply([(agent, #"{"id":"daily","name":"Daily digest","runs":[{"id":"run-a","startedAt":1799999960000}]}"#)])
+        }
+        let ledger = UsageLedger.inMemory()
+        let provider = combined(bot: bot, billing: billing, ledger: ledger, routineRuns: runs)
+
+        let report = try await provider.fetchAccountAndLocalUsage(agents: [], historyHours: 168)
+        XCTAssertEqual(Set(report.sessions.map(\.id)), [fixture.sessionID, "cursor-account:billing-account:sand-subagent-unexplained"])
+        let session = try XCTUnwrap(report.sessions.first { $0.id == fixture.sessionID })
+        XCTAssertEqual(session.tokensIn, 12, "the bot's own counts stay its own")
+        XCTAssertEqual(session.subagentTranscripts, [runID])
+        let run = try XCTUnwrap(session.subagentSessions?.first)
+        XCTAssertEqual(session.subagentSessions?.count, 1)
+        XCTAssertEqual(run.id, runID, "the run keeps its billing id, its ledger contribution")
+        XCTAssertEqual(run.agentName, "Daily digest")
+        XCTAssertEqual(run.client, "Grok Bot")
+        XCTAssertEqual(run.agentId, "cursor-model:grok-bot-automation")
+        XCTAssertEqual([run.tokensIn, run.tokensOut, run.cacheReadTokens], [150, 10, 700])
+        XCTAssertNil(run.transcriptPath)
+
+        let usage = try XCTUnwrap(report.sessionUsage?[fixture.sessionID])
+        XCTAssertEqual(usage.total, .init(tokensIn: 162, tokensOut: 15, cacheReadTokens: 720, cacheWriteTokens: 2))
+        XCTAssertEqual(usage.subagents, .init(tokensIn: 150, tokensOut: 10, cacheReadTokens: 700))
+        XCTAssertEqual(report.sessionUsage?[runID]?.total, .init(tokensIn: 150, tokensOut: 10, cacheReadTokens: 700))
+        XCTAssertEqual(report.usage.reduce(0) { $0 + $1.tokensIn }, 1162, "every billed call is still counted once")
+
+        let unexplained = try XCTUnwrap(report.sessions.first { $0.id.hasSuffix("sand-subagent-unexplained") })
+        XCTAssertTrue(unexplained.isBillingOnlyGrokBotSubagent, "a sub-agent no record names stays out of the session lists")
+        XCTAssertNil(unexplained.subagentSessions)
+        let view = ReportView(report: report, agents: [], settings: Settings(), now: now)
+        XCTAssertEqual(view.sessions.map(\.id), [fixture.sessionID])
+        XCTAssertEqual(view.session(runID)?.id, runID, "the run opens from its bot's page")
+    }
+
+    func testRunOfABotWithoutBillingOfItsOwnNestsAndARunOfAnUnknownBotStaysApart() async throws {
+        let fixture = try GrokBotCacheFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        _ = try fixture.writeRoster()
+        let bot = try GrokBotSessions.read(fixture.roster)
+        let billing = try CursorClient.parseEvents([
+            row(conversation: "sand-subagent-run-a", model: "grok-bot-automation", at: -40),
+            row(conversation: "sand-subagent-run-b", model: "grok-bot-automation", at: -30),
+        ], account: "billing-account")
+        let now = now, agent = fixture.agent
+        let runs = GrokBotRoutineRuns(directory: fixture.directory, clock: { now })
+        await runs.refresh(billed: billing.sessions.map(\.id)) { _ in
+            GrokBotRoutineRunsTests.reply([(agent, #"{"id":"daily","runs":[{"id":"run-a"}]}"#),
+                                           ("deleted-bot", #"{"id":"gone","runs":[{"id":"run-b"}]}"#)])
+        }
+        let report = try await combined(bot: bot, billing: billing, routineRuns: runs).fetchAccountAndLocalUsage(agents: [], historyHours: 168)
+
+        let session = try XCTUnwrap(report.sessions.first { $0.id == fixture.sessionID })
+        XCTAssertNil(session.usageKey)
+        XCTAssertEqual(session.subagentSessions?.map(\.id), ["cursor-account:billing-account:sand-subagent-run-a"])
+        XCTAssertEqual(session.subagentSessions?.first?.agentName, "daily")
+        XCTAssertEqual(report.sessionUsage?[fixture.sessionID]?.subagents, .init(tokensIn: 12, tokensOut: 5, cacheReadTokens: 20, cacheWriteTokens: 2))
+        XCTAssertTrue(report.sessions.contains { $0.id == "cursor-account:billing-account:sand-subagent-run-b" && $0.isBillingOnlyGrokBotSubagent })
+    }
+
     private func metadata(agent: String, account: String = "bot-account") -> ProviderSessions {
         var session = ProviderSession(id: GrokBotCache.sessionID(account: account, agent: agent), title: "Native title", client: "Grok Bot")
         session.startedAt = now.addingTimeInterval(-60)
@@ -316,8 +389,9 @@ final class GrokBotUsageTests: XCTestCase {
                                        history: QuotaHistoryStore(), clock: { now }, ledger: ledger)
     }
 
-    private func combined(bot: ProviderSessions, billing: ProviderSessions, ledger: UsageLedger = .inMemory()) -> CombinedUsageProvider {
+    private func combined(bot: ProviderSessions, billing: ProviderSessions, ledger: UsageLedger = .inMemory(),
+                          routineRuns: GrokBotRoutineRuns? = nil) -> CombinedUsageProvider {
         CombinedUsageProvider([.init("Cursor", provider(.cursor, sessions: billing, ledger: ledger)),
-                               .init("Grok", provider(.grok, sessions: bot, ledger: ledger))], ledger: ledger)
+                               .init("Grok", provider(.grok, sessions: bot, ledger: ledger))], ledger: ledger, grokBotRoutineRuns: routineRuns)
     }
 }

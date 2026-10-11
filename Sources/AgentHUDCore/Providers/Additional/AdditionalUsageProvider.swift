@@ -42,8 +42,9 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
     }
 
     /// `settings` holds the consent GitHub Copilot's quota reading waits for.
+    /// `grokBotRoutineRuns` is asked to learn the runs behind newly billed sub-agent conversations, in Cursor's account step.
     static func standard(_ source: AdditionalSource, settings: SettingsStore, ledger: UsageLedger,
-                         persistHistory: Bool = true) -> AdditionalUsageProvider {
+                         persistHistory: Bool = true, grokBotRoutineRuns: GrokBotRoutineRuns? = nil) -> AdditionalUsageProvider {
         let local = AdditionalLocalStore(source: source)
         let cursor = CursorClient()
         let grok = GrokClient()
@@ -66,7 +67,8 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
             return try CompletionHooks.read(source: hook, since: since)
         }, botQuotaDirectory: source == .grok ? grok.botDirectory : nil, refreshSessions: { hours in
             if source == .cursor {
-                _ = await cursor.sessions(since: Date().addingTimeInterval(-Double(max(168, hours)) * 3600))
+                let read = await cursor.sessions(since: Date().addingTimeInterval(-Double(max(168, hours)) * 3600))
+                await grokBotRoutineRuns?.refresh(billed: read.sessions.map(\.id)) { try await cursor.grokBotAutomations(agentIDs: $0) }
             }
         }, watchedDirectories: local.roots + (CompletionHooks.Source(rawValue: source.rawValue).map {
             [CompletionHooks.directory.appendingPathComponent($0.rawValue)]
