@@ -9,7 +9,9 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 - What a dock answers a glance with follows the dock's size. A Simple panel or Dynamic dock set larger than its default writes its hover line or bubble and its compact reminders larger too, in step with its own figures or logos, instead of always at 12 and 13 pt; nothing is written smaller than at the default.
 - A compact reminder on a dock is a slimmer pill: 34 pt high instead of 48.
 - Reminder cards use the sizes the usage panel uses: "New reply" beside the agent's name is 12 pt as in the compact reminder, and the model's name and the second lines that were 10 pt are 11.
+- The token chart's hover box is no longer crossed by the line above the Tokens section, which ran over its date in the usage panel. The date is written once for a period inside one day ("Sun 11 Oct at 23:00 – 23:15", or the date alone for a whole day) and at 11 pt instead of 10.
 - Host API: `AgentPeek.scale`; `IslandRootView.stripScale` and the `stripScale` environment value; `IslandRootView.dockCompactSize(edge:collapsedSize:scale:)`.
+- Host API: `ChartData.period(_:calendar:)`.
 - Host API: `BotPhase.glanced` and `BotPhase.opened`; `MarkAttention`, carried by `LogoQueueItem.attention` and `SimpleMeterItem.attention`.
 
 ## 0.5.2 — 2026-10-12

@@ -349,7 +349,7 @@ struct TokenBarsChart: View {
 
     private func detail(_ column: TokenColumn) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(period(column)).font(.ui(10)).foregroundStyle(theme.secondary)
+            Text(period(column)).font(.ui(11)).foregroundStyle(theme.secondary)
             Text("\(column.total.formatted()) tokens").font(.tabular(14, .semibold))
             ForEach(Array(consumers.enumerated()), id: \.element.id) { index, consumer in
                 if column.tokens.indices.contains(index), column.tokens[index] > 0 {
@@ -369,7 +369,7 @@ struct TokenBarsChart: View {
             }
             if column.interval.start < interval.start || column.interval.end > interval.end {
                 Text(L10n.text("仅统计所选范围内的部分时段", "Partial period within the selected range"))
-                    .font(.ui(10)).foregroundStyle(theme.secondary)
+                    .font(.ui(11)).foregroundStyle(theme.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -381,7 +381,8 @@ struct TokenBarsChart: View {
     }
 
     private func period(_ column: TokenColumn) -> String {
-        "\(ChartData.dateTime(max(column.interval.start, interval.start))) – \(ChartData.dateTime(min(column.interval.end, interval.end)))"
+        let start = max(column.interval.start, interval.start)
+        return ChartData.period(DateInterval(start: start, end: max(start, min(column.interval.end, interval.end))))
     }
 
     private func description(_ column: TokenColumn) -> String {
