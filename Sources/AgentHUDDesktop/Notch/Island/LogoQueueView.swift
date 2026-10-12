@@ -7,7 +7,7 @@ enum MarkAttention: Equatable, Sendable {
     case none
     /// Its card is a glance: the mark holds still as its logo, whatever its agent is doing.
     case glanced
-    /// A click opened its whole panel: the bot looks up for a moment, then settles into its logo.
+    /// A click opened its whole panel: the mark is its bot, watching the pointer, until the panel closes.
     case opened
 
     func phase(working: Bool) -> BotPhase {

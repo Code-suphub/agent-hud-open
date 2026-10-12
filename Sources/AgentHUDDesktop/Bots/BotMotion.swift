@@ -13,7 +13,7 @@ enum BotPhase: Sendable, Equatable {
     case done
     /// The agent's card is being glanced at: the mark holds still as its logo, whatever its agent is doing.
     case glanced
-    /// The agent's whole panel was just opened: the bot looks up for a moment, then settles into its logo.
+    /// The agent's whole panel is open: the bot is up and watches the pointer for as long as it stays open.
     case opened
 
     /// The mark stays where its logo is, with no hop and nothing raised.
@@ -68,8 +68,6 @@ struct BotMotion: Sendable {
     private static let longestStep: TimeInterval = 0.1
     /// How long after a turn ended its mark rests as the logo again.
     private static let doneSeconds: TimeInterval = 2.4
-    /// How long a mark whose panel was just opened is its bot before it settles into its logo.
-    static let openedSeconds: TimeInterval = 2.6
     /// An alert shows its bot for as long as the alert is up; a logo queue lets it settle back into the logo.
     var staysBot = false
     /// Seconds a staying bot keeps its logo after it is first given a phase. A reminder's card is still opening
@@ -125,8 +123,7 @@ struct BotMotion: Sendable {
         case .idle: return botInterval == nil && pose == BotPose()
         case .done: return (last ?? 0) - since > Self.doneSeconds
         case .glanced: return pose == BotPose()
-        case .opened: return (last ?? 0) - since > Self.openedSeconds
-        case .working, .asking: return false
+        case .working, .asking, .opened: return false
         }
     }
 
@@ -141,8 +138,7 @@ struct BotMotion: Sendable {
         if next == .working {
             nextAct = now + 0.9 + random.unit() * 1.2
         } else if next == .opened {
-            // Soon enough that the bot does one small thing before it settles.
-            nextAct = now + 0.7 + random.unit() * 0.4
+            nextAct = now + 0.9 + random.unit() * 1.2
         }
         botInterval = nil
         if next == .idle, !staysBot { scheduleBot(after: now + Double(morph) * Self.morphSeconds) }
@@ -161,8 +157,8 @@ struct BotMotion: Sendable {
         let idleVisit = phase == .idle && botInterval?.contains(now) == true
         // Before a staying bot arrives it is the logo at rest: no morph, no pose, no face.
         let arrived = age >= 0
-        let awake = arrived && (phase == .working || idleVisit || phase == .asking || (phase == .done && age < 1.5)
-                                || (phase == .opened && age < Self.openedSeconds))
+        let awake = arrived && (phase == .working || idleVisit || phase == .asking || phase == .opened
+                                || (phase == .done && age < 1.5))
 
         let wanted: CGFloat = arrived && (awake || staysBot) && hasFace ? 1 : 0
         let stride = CGFloat(dt / Self.morphSeconds)

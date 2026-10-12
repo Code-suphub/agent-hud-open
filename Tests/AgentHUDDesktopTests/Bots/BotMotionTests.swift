@@ -28,23 +28,31 @@ final class BotMotionTests: XCTestCase {
         XCTAssertEqual(motion.morph, 0)
     }
 
-    func testAnOpenedMarkIsItsBotForAMomentThenItsLogoForAsLongAsThePanelStays() {
+    func testAnOpenedMarkIsItsBotWatchingThePointerUntilItsPanelCloses() {
         var motion = BotMotion(seed: 3)
         motion.set(.glanced, at: 10)
         run(&motion, from: 10, for: 0.5)
         motion.set(.opened, at: 10.5)
-        run(&motion, from: 10.5, for: 1)
+        run(&motion, from: 10.5, for: 1, aim: CGPoint(x: 0.6, y: 0.2))
         XCTAssertEqual(motion.morph, 1, "half a second after the click it is the bot")
         XCTAssertEqual(motion.pose.y, 0, "and it stays where its logo was")
-        XCTAssertFalse(motion.isAtRest)
-        run(&motion, from: 11.5, for: BotMotion.openedSeconds)
-        XCTAssertEqual(motion.morph, 0)
-        XCTAssertTrue(motion.isAtRest)
-        XCTAssertNil(motion.wait)
-        // Its agent going back to work is what wakes it again.
-        motion.set(.working, at: 20)
-        run(&motion, from: 20, for: 1)
+        XCTAssertGreaterThan(motion.face.look, 0.3, "its eyes go to the pointer")
+        // However long the panel stays open, the bot stays up.
+        run(&motion, from: 11.5, for: 120, aim: CGPoint(x: 0.6, y: 0.2))
         XCTAssertEqual(motion.morph, 1)
+        XCTAssertFalse(motion.isAtRest)
+        XCTAssertNotNil(motion.wait)
+        // The panel closes over an idle agent: back to the logo.
+        motion.set(.idle, at: 131.5)
+        run(&motion, from: 131.5, for: 1)
+        XCTAssertEqual(motion.morph, 0)
+        // And over a working one, the bot simply stays.
+        var busy = BotMotion(seed: 3)
+        busy.set(.opened, at: 10)
+        run(&busy, from: 10, for: 2)
+        busy.set(.working, at: 12)
+        run(&busy, from: 12, for: 1)
+        XCTAssertEqual(busy.morph, 1)
     }
 
     func testAMarkFollowsItsAgentUnlessItsCardIsBeingLookedAt() {

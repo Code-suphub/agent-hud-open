@@ -5,7 +5,7 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 ## Unreleased
 
 - A recording made with `--record` and a `--snapshot` still no longer show a thin line past each tip of a capsule's outline: on a reply's pill beside a separated dock, at the ends of a Simple panel on the top or bottom edge, on a plan badge. The line was never on screen. Core Animation's software renderer, which draws both, adds it to an outline with continuous corners on a shape too short for them.
-- With Separate agents on, the hovered agent's logo answers to its card. While the small card shows, it is the logo, whatever the agent is doing; a click that opens the whole panel turns it into its bot for a moment, after which it settles back into its logo. Closing the card gives it back to its agent.
+- With Separate agents on, the hovered agent's logo answers to its card. While the small card shows, it is the logo, whatever the agent is doing; a click that opens the whole panel turns it into its bot, which watches the pointer until the panel closes. Closing the card gives it back to its agent.
 - What a dock answers a glance with follows the dock's size. A Simple panel or Dynamic dock set larger than its default writes its hover line or bubble and its compact reminders larger too, in step with its own figures or logos, instead of always at 12 and 13 pt; nothing is written smaller than at the default.
 - A compact reminder on a dock is a slimmer pill: 34 pt high instead of 48.
 - Reminder cards use the sizes the usage panel uses: "New reply" beside the agent's name is 12 pt as in the compact reminder, and the model's name and the second lines that were 10 pt are 11.
