@@ -1,12 +1,32 @@
 import SwiftUI
 import AgentHUDCore
 
+/// What looking at an agent's own card does to its mark, on a dock that separates its agents.
+enum MarkAttention: Equatable, Sendable {
+    /// Nobody is looking at this agent's card: the mark follows its agent.
+    case none
+    /// Its card is a glance: the mark holds still as its logo, whatever its agent is doing.
+    case glanced
+    /// A click opened its whole panel: the bot looks up for a moment, then settles into its logo.
+    case opened
+
+    func phase(working: Bool) -> BotPhase {
+        switch self {
+        case .none: working ? .working : .idle
+        case .glanced: .glanced
+        case .opened: .opened
+        }
+    }
+}
+
 /// One mark in the queue. The queue shows one mark per vendor, not per agent: two Claude windows are
 /// one Claude, and the mark's bot wakes when any of them is working.
 struct LogoQueueItem: Identifiable, Equatable {
     let vendor: String
     /// Any agent of this vendor has a running session.
     let isWorking: Bool
+    /// Whether this agent's card is the one being looked at.
+    var attention = MarkAttention.none
     var id: String { vendor }
 
     /// Collapses agents onto the mark they are drawn with, keeping the order they were watched in. Two
@@ -218,9 +238,11 @@ final class LogoQueueLayerView: NSView {
     private func animate(config: LogoQueueConfig, animates: Bool, previewsMotion: Bool) {
         let now = CACurrentMediaTime()
         for index in marks.indices {
-            let working = previewsMotion || (index < config.items.count && config.items[index].isWorking)
+            let item = index < config.items.count ? config.items[index] : nil
+            let phase: BotPhase = !animates ? .idle : previewsMotion ? .working
+                : item.map { $0.attention.phase(working: $0.isWorking) } ?? .idle
             if let actor = index < actors.count ? actors[index] : nil {
-                actor.set(animates && working ? .working : .idle, at: now)
+                actor.set(phase, at: now)
             }
         }
         followBots()

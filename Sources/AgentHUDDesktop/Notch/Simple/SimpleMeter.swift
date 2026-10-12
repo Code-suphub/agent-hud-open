@@ -11,6 +11,8 @@ struct SimpleMeterItem: Identifiable, Equatable {
     let level: StatusLevel?
     /// Any agent that shares this mark has a session running.
     var isWorking = false
+    /// Whether this agent's card is the one being looked at.
+    var attention = MarkAttention.none
     var id: String { vendor }
 
     /// What the number says: whole percent used, or a dash before the first reading.

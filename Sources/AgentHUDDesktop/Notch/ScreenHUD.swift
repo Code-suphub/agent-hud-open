@@ -885,6 +885,17 @@ final class ScreenHUD {
         root.simpleMeter = simpleMeter
         root.separatesAgents = placement.separatesAgents && geometry.mode.isDocked
         let focus = focus
+        // The agent whose own card is up has its mark looked at: glanced at while the card is a peek, opened once
+        // a click asked for the whole panel. An event's card leaves its sender's mark to its agent.
+        if open, activeAlert == nil, previewPlacement == nil, let focus {
+            let kind: MarkAttention = pinned ? .opened : .glanced
+            if let index = root.logoQueue?.items.firstIndex(where: { AgentArtwork.markKey($0.vendor) == focus.key }) {
+                root.logoQueue?.items[index].attention = kind
+            }
+            if let index = root.simpleMeter?.items.firstIndex(where: { AgentArtwork.markKey($0.vendor) == focus.key }) {
+                root.simpleMeter?.items[index].attention = kind
+            }
+        }
         root.focusVendor = focus?.vendor
         root.peek = focus.map(peek)
         root.pinned = pinned

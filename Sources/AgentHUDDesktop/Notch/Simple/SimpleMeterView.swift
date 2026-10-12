@@ -49,7 +49,7 @@ struct SimpleMeterView: View {
                 }
                 if config.bots {
                     // The panel has its own switch, so it does not follow the one for dock marks and reminders.
-                    BotMark(vendor: item.vendor, size: config.logo, phase: item.isWorking ? .working : .idle, staysBot: false)
+                    BotMark(vendor: item.vendor, size: config.logo, phase: item.attention.phase(working: item.isWorking), staysBot: false)
                         .environment(\.botLogos, true)
                 } else {
                     AgentLogo(vendor: item.vendor, size: config.logo)

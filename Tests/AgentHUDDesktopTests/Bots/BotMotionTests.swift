@@ -12,6 +12,48 @@ final class BotMotionTests: XCTestCase {
         }
     }
 
+    func testAGlancedMarkSettlesIntoItsLogoWhateverItsAgentIsDoing() {
+        var motion = BotMotion(seed: 3)
+        motion.set(.working, at: 10)
+        run(&motion, from: 10, for: 2)
+        XCTAssertEqual(motion.morph, 1)
+        motion.set(.glanced, at: 12)
+        run(&motion, from: 12, for: 1)
+        XCTAssertEqual(motion.morph, 0)
+        XCTAssertEqual(motion.pose, BotPose())
+        XCTAssertTrue(motion.isAtRest, "a glanced mark has no visit to wait for")
+        XCTAssertNil(motion.wait)
+        // However long the glance lasts, it stays the logo.
+        run(&motion, from: 13, for: 60)
+        XCTAssertEqual(motion.morph, 0)
+    }
+
+    func testAnOpenedMarkIsItsBotForAMomentThenItsLogoForAsLongAsThePanelStays() {
+        var motion = BotMotion(seed: 3)
+        motion.set(.glanced, at: 10)
+        run(&motion, from: 10, for: 0.5)
+        motion.set(.opened, at: 10.5)
+        run(&motion, from: 10.5, for: 1)
+        XCTAssertEqual(motion.morph, 1, "half a second after the click it is the bot")
+        XCTAssertEqual(motion.pose.y, 0, "and it stays where its logo was")
+        XCTAssertFalse(motion.isAtRest)
+        run(&motion, from: 11.5, for: BotMotion.openedSeconds)
+        XCTAssertEqual(motion.morph, 0)
+        XCTAssertTrue(motion.isAtRest)
+        XCTAssertNil(motion.wait)
+        // Its agent going back to work is what wakes it again.
+        motion.set(.working, at: 20)
+        run(&motion, from: 20, for: 1)
+        XCTAssertEqual(motion.morph, 1)
+    }
+
+    func testAMarkFollowsItsAgentUnlessItsCardIsBeingLookedAt() {
+        XCTAssertEqual(MarkAttention.none.phase(working: true), .working)
+        XCTAssertEqual(MarkAttention.none.phase(working: false), .idle)
+        XCTAssertEqual(MarkAttention.glanced.phase(working: true), .glanced)
+        XCTAssertEqual(MarkAttention.opened.phase(working: false), .opened)
+    }
+
     func testANewIdleMarkWaitsAsItsLogoWithoutStoppingItsClock() {
         var motion = BotMotion(seed: 1)
         motion.set(.idle, at: 100)
