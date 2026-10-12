@@ -96,6 +96,14 @@ final class AgentSeparationTests: XCTestCase {
         XCTAssertGreaterThan(large.size.width, usual.size.width * 1.4)
         XCTAssertEqual(small.lineFont, 12, "Nothing is written smaller than at the default")
         XCTAssertEqual(small.size, usual.size)
+
+        // The Dynamic dock's bubble keeps pace with its marks the same way.
+        var bubble = AgentPeek(vendor: "Claude", lines: lines, running: 0)
+        XCTAssertEqual(bubble.size, CGSize(width: 196, height: 20 + 18 * 3))
+        bubble.scale = 1.6
+        XCTAssertEqual(bubble.size, CGSize(width: 314, height: 2 * 16 + 29 * 3))
+        bubble.scale = 0.6
+        XCTAssertEqual(bubble.size, CGSize(width: 196, height: 20 + 18 * 3))
     }
 
     @MainActor

@@ -1,6 +1,12 @@
 import SwiftUI
 import AgentHUDCore
 
+extension EnvironmentValues {
+    /// How much larger than its default the dock a view belongs to is set; 1 anywhere else. What a dock grows
+    /// out of itself reads it; cards do not.
+    @Entry var stripScale: CGFloat = 1
+}
+
 /// A single silhouette: closed notch, lateral event wings, or a hovered detail surface.
 struct IslandRootView: View {
     let store: UsageStore?
@@ -157,9 +163,20 @@ struct IslandRootView: View {
 
     static let expandedTopRadius: CGFloat = NotchGeometry.expandedTopRadius
     static let expandedBottomRadius: CGFloat = IslandController.expandedRadius
-    static let dockCompactRowHeight: CGFloat = 32
+    /// A compact reminder on a dock is a slim pill: 34 pt for a 17 pt mark and 13 pt text, where the notch's own
+    /// height made it 48.
+    static let dockCompactRowHeight: CGFloat = 26
     /// The compact row already keeps `alertSidePadding` at each end, so the card adds none of its own.
-    static let dockCompactInsets = EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
+    static let dockCompactInsets = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    /// How much larger than its default this screen's dock is set. A compact reminder is the dock growing an arm,
+    /// as the Simple panel's line is, so it is written to this scale; cards keep their own sizes.
+    var stripScale: CGFloat = 1
+
+    /// A compact reminder's row and the room above and below it, on a dock set to `scale`.
+    static func dockCompactRow(scale: CGFloat) -> (height: CGFloat, inset: CGFloat) {
+        let scale = max(1, scale)
+        return ((dockCompactRowHeight * scale).rounded(), (dockCompactInsets.top * scale).rounded())
+    }
 
     static var placeholder: IslandRootView {
         IslandRootView(store: nil, isOpen: false, collapsedSize: CGSize(width: 216, height: 32),
@@ -349,10 +366,12 @@ struct IslandRootView: View {
                 .transition(detailTransition)
         } else if let alert {
             if hidesSilhouette {
-                IslandAlertCompactView(alert: alert, cameraWidth: 0, height: Self.dockCompactRowHeight, onOpen: onOpenAlert,
+                let row = Self.dockCompactRow(scale: stripScale)
+                IslandAlertCompactView(alert: alert, cameraWidth: 0, height: row.height, onOpen: onOpenAlert,
                                        waitingRequests: waitingRequests)
-                    .padding(Self.dockCompactInsets)
-                    .frame(width: Self.dockCompactSize(edge: edge, collapsedSize: collapsedSize).width)
+                    .environment(\.stripScale, max(1, stripScale))
+                    .padding(.vertical, row.inset)
+                    .frame(width: Self.dockCompactSize(edge: edge, collapsedSize: collapsedSize, scale: stripScale).width)
                     .offset(floats && !detached ? liftCentring : .zero)
                     .id(alert.id)
                     .transition(detailTransition)
@@ -380,13 +399,13 @@ struct IslandRootView: View {
         return insets
     }
 
-    static func dockCompactSize(edge: HUDEdge, collapsedSize: CGSize) -> CGSize {
+    static func dockCompactSize(edge: HUDEdge, collapsedSize: CGSize, scale: CGFloat = 1) -> CGSize {
         // Events replace the marks, so their row needs no queue clearance. The window adds the
         // contact shoulders along its parked edge once, outside this compact content core.
-        let insets = dockCompactInsets
-        let textWidth = 2 * IslandController.alertWingWidth + 2 * IslandController.alertSidePadding
-        return CGSize(width: textWidth + insets.leading + insets.trailing,
-                      height: dockCompactRowHeight + insets.top + insets.bottom)
+        let scale = max(1, scale), row = dockCompactRow(scale: scale)
+        // Each length is rounded as the row's own views round it, so the two agree to the point.
+        let textWidth = 2 * (IslandController.alertWingWidth * scale).rounded() + 2 * (IslandController.alertSidePadding * scale).rounded()
+        return CGSize(width: textWidth, height: row.height + 2 * row.inset)
     }
 
     /// A detached card covers no strip, so it needs none of a docked panel's clearance.
