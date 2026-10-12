@@ -41,14 +41,14 @@ Requires an Apple Silicon Mac running macOS 14 or later.
       <agenthudMinimumIOSVersion>1.5</agenthudMinimumIOSVersion>
     </item>
     <item>
-      <title>0.5.2</title>
-      <pubDate>Mon, 12 Oct 2026 04:01:39 +0800</pubDate>
-      <link>https://github.com/jazzenchen/agent-hud-open/releases/tag/v0.5.2</link>
-      <sparkle:version>484</sparkle:version>
-      <sparkle:shortVersionString>0.5.2</sparkle:shortVersionString>
+      <title>0.5.3</title>
+      <pubDate>Mon, 12 Oct 2026 17:48:10 +0800</pubDate>
+      <link>https://github.com/jazzenchen/agent-hud-open/releases/tag/v0.5.3</link>
+      <sparkle:version>485</sparkle:version>
+      <sparkle:shortVersionString>0.5.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-      <description sparkle:format="markdown"># Agent HUD 0.5.2
+      <description sparkle:format="markdown"># Agent HUD 0.5.3
 
 ## Compatibility
 
@@ -60,10 +60,14 @@ Requires an Apple Silicon Mac running macOS 14 or later.
 
 ## Changes
 
-- Shows Codex Desktop's app approvals and Question cards for long threads. Desktop sends a thread's whole history with every reading, and a reading over 8 MB was dropped, so a long thread showed no card and Remote Sessions could not continue it from the iPhone. Readings up to 64 MB are taken now.
-- Uses less CPU while a Codex Desktop turn runs: a reading costs about a third of what it did, and a long thread is read every several seconds instead of every two, which also spares Codex Desktop the work of answering. A thread keeps its cards between readings.
+- Shows an agent that is billed by use and has only a balance, such as DeepSeek through its API, on the Simple panel: its logo, an empty ring and the balance, after the agents with quota windows. With Separate agents on, hovering it reads the balance, on the Simple panel and on the Dynamic dock.
+- Keeps a hovered agent's logo as the logo while its small card shows, with Separate agents on. A click that opens the whole panel turns it into its bot, which watches the pointer until the panel closes.
+- Writes what a dock shows on hover to the dock's size: a Simple panel or Dynamic dock set larger than its default writes its hover line or bubble and its compact reminders larger too. Nothing is written smaller than at the default.
+- Makes a compact reminder on a dock a slimmer pill, 34 pt high instead of 48, and gives reminder cards the type sizes of the usage panel.
+- Keeps the line above the Tokens section from crossing the token chart's hover box, and writes the box's date once for a period inside one day.
+- Shows the closed hand while the HUD is dragged. In 0.5.1 and 0.5.2 the pointer stayed an arrow.
 </description>
-      <enclosure url="https://github.com/jazzenchen/agent-hud-open/releases/download/v0.5.2/Agent-HUD-0.5.2-arm64.dmg" length="13200817" type="application/octet-stream" sparkle:edSignature="z080qrDKbrmay6KUJaPNPFM/aDDyfjGoJ8JavL3SMzQry0mpKfU8BHfoILAuSqPwm+hDdR+OnUgmNaJI3ochBQ==" />
+      <enclosure url="https://github.com/jazzenchen/agent-hud-open/releases/download/v0.5.3/Agent-HUD-0.5.3-arm64.dmg" length="13217651" type="application/octet-stream" sparkle:edSignature="j68LGQpx0aa3zT23IDMAz0A7jifkCLfWNodc8s2EU6hRo/ZC7HnELPFUP3bbnuv2nGojTUv9emiYX50TECxQAw==" />
       <agenthudMacOnly>false</agenthudMacOnly>
       <agenthudMinimumIOSVersion>1.5</agenthudMinimumIOSVersion>
     </item>
