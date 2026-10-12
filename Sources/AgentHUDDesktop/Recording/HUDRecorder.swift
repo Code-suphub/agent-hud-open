@@ -163,10 +163,95 @@ final class HUDRecorder {
                 context.translateBy(x: 0, y: window.frame.height)
                 context.scaleBy(x: 1, y: -1)
             }
-            // The presentation copy carries the values of animations in flight, such as the glow's breath.
-            (layer.presentation() ?? layer).render(in: context)
+            Self.render(layer, in: context)
             context.restoreGState()
         }
+    }
+
+    /// Draws a layer and what is in it as they are being shown, without the lines `strayBorderLines` finds.
+    static func render(_ layer: CALayer, in context: CGContext) {
+        // The presentation copy carries the values of animations in flight, such as the glow's breath.
+        let shown = layer.presentation() ?? layer
+        // Whole pixels, so that the two drawings below meet without a seam.
+        let lines = strayBorderLines(under: shown).map { context.convertToUserSpace(context.convertToDeviceSpace($0).integral) }
+        guard !lines.isEmpty else { return shown.render(in: context) }
+        context.saveGState()
+        context.addPath(lines.reduce(CGPath(rect: context.boundingBoxOfClipPath, transform: nil)) {
+            $0.subtracting(CGPath(rect: $1, transform: nil))
+        })
+        context.clip()
+        shown.render(in: context)
+        context.restoreGState()
+        // The lines' own places come from the layers rather than their copies, which cannot be changed and show a
+        // change to their layers only once the screen shows it too. An animation in flight is not in these few points.
+        context.saveGState()
+        context.clip(to: lines)
+        withDrawableBorders(under: layer) { layer.render(in: context) }
+        context.restoreGState()
+    }
+
+    /// A continuous corner takes this many of its radii along each side it rounds.
+    private static let continuousCornerReach: CGFloat = 1.528665
+
+    /// A border `render(in:)` draws lines along that the screen does not show.
+    ///
+    /// `render(in:)` is Core Animation's software renderer, and the window server is another. The software one draws a
+    /// border with continuous corners as four corner curves joined by straight pieces. On a side shorter than the two
+    /// corners that round it the straight piece has a negative length and is drawn all the same: a line along the
+    /// layer's edge that runs past both ends of the curve it stands for. A capsule's outline gets one at each tip,
+    /// half the capsule's height long and clear of the shape above and below the tip.
+    private static func hasCrampedBorder(_ layer: CALayer) -> Bool {
+        layer.borderWidth > 0 && layer.cornerCurve == .continuous && (layer.borderColor?.alpha ?? 0) > 0
+            && 2 * layer.cornerRadius * continuousCornerReach > min(layer.bounds.width, layer.bounds.height)
+    }
+
+    /// Where those lines are under `root`, in its coordinates: the ones that reach outside their layer's outline.
+    static func strayBorderLines(under root: CALayer) -> [CGRect] {
+        var found: [CGRect] = []
+        func visit(_ layer: CALayer) {
+            guard !layer.isHidden, layer.opacity > 0 else { return }
+            if hasCrampedBorder(layer) {
+                let bounds = layer.bounds, border = layer.borderWidth, reach = layer.cornerRadius * continuousCornerReach
+                var lines: [CGRect] = []
+                if 2 * reach > bounds.height {
+                    let run = CGRect(x: bounds.minX, y: bounds.maxY - reach, width: border, height: 2 * reach - bounds.height)
+                    lines += [run, run.offsetBy(dx: bounds.width - border, dy: 0)]
+                }
+                if 2 * reach > bounds.width {
+                    let run = CGRect(x: bounds.maxX - reach, y: bounds.minY, width: 2 * reach - bounds.width, height: border)
+                    lines += [run, run.offsetBy(dx: 0, dy: bounds.height - border)]
+                }
+                let radius = min(layer.cornerRadius, min(bounds.width, bounds.height) / 2)
+                let outline = CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil)
+                for line in lines.map({ $0.intersection(bounds) }) where !line.isEmpty {
+                    // A line that stays inside the outline thickens it by less than can be seen.
+                    let outside = CGPath(rect: line, transform: nil).subtracting(outline).boundingBoxOfPath
+                    if !outside.isNull, min(outside.width, outside.height) > 0.05 { found.append(root.convert(line, from: layer)) }
+                }
+            }
+            layer.sublayers?.forEach(visit)
+        }
+        visit(root)
+        return found
+    }
+
+    /// Runs `draw`, which draws `root` with `render(in:)` or `cacheDisplay`, while every such border under it has
+    /// circular corners, which are drawn as they are shown. Nothing changes on screen: the corners are continuous
+    /// again before the change could be sent there.
+    static func withDrawableBorders<Drawn>(under root: CALayer, _ draw: () -> Drawn) -> Drawn {
+        var cramped: [CALayer] = []
+        func visit(_ layer: CALayer) {
+            if hasCrampedBorder(layer) { cramped.append(layer) }
+            layer.sublayers?.forEach(visit)
+        }
+        visit(root)
+        guard !cramped.isEmpty else { return draw() }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        cramped.forEach { $0.cornerCurve = .circular }
+        defer { cramped.forEach { $0.cornerCurve = .continuous } }
+        return draw()
     }
 
     private func report() {

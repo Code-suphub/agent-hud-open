@@ -58,6 +58,8 @@ Beside `steps`, `running` lists the sessions already at work when the script sta
 
 The recording is drawn in the application from the HUD's own windows as they are being shown, animations in flight included, so it needs no screen recording permission and no other window can appear in it. The picture has the display's pixel size, or the region's, and premultiplied alpha. A whole 2056 × 1329 pt display at 60 frames a second writes about 14 MB a second.
 
+Core Animation's software renderer draws the frames, and `--snapshot` stills too, where the window server draws the screen; along curved edges the two differ by fractions of a pixel. The software renderer also adds something the screen never shows: an outline with continuous corners on a shape too short for them, a capsule above all, gets a straight line along each short side that runs past the tips. A reply's pill beside a separated dock, a Simple panel on the top or bottom edge and a plan badge are such shapes. Neither a recording nor a still shows the line: a still is drawn with those outlines' corners circular, and a recording draws the few points where a line would be that way, everything else as it is being shown.
+
 ## Read-only probes
 
 | Command | Output |

@@ -2,6 +2,10 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
+## Unreleased
+
+- A recording made with `--record` and a `--snapshot` still no longer show a thin line past each tip of a capsule's outline: on a reply's pill beside a separated dock, at the ends of a Simple panel on the top or bottom edge, on a plan badge. The line was never on screen. Core Animation's software renderer, which draws both, adds it to an outline with continuous corners on a shape too short for them.
+
 ## 0.5.2 — 2026-10-12
 
 - Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.
