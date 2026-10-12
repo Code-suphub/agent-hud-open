@@ -147,6 +147,7 @@ final class ScreenHUD {
         peek.edge = geometry.edge
         if geometry.mode == .simple {
             peek.style = .line
+            if let meter = simpleMeter { peek.scale = meter.fontSize / AgentPeek.lineReference }
             // On a side edge the line starts behind the panel, so it reads as the panel growing.
             peek.tuck = geometry.edge.isHorizontal ? 0 : (geometry.rect.width / 2).rounded()
         }

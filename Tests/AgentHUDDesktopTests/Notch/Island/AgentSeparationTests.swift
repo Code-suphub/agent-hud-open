@@ -80,6 +80,25 @@ final class AgentSeparationTests: XCTestCase {
     }
 
     @MainActor
+    func testTheLineKeepsPaceWithALargerPanelAndIsNeverSmallerThanAtTheDefault() {
+        let lines = [AgentPeek.Line(label: "5h", value: "62%", level: .ok), AgentPeek.Line(label: "Weekly", value: "18%", level: .ok)]
+        func line(panel size: Double) -> AgentPeek {
+            let meter = SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple, edge: .left, simpleSize: size))
+            var peek = AgentPeek(vendor: "Claude", lines: lines, running: 0, style: .line)
+            peek.scale = meter.fontSize / AgentPeek.lineReference
+            return peek
+        }
+        let usual = line(panel: 22), large = line(panel: 36), small = line(panel: 16)
+        XCTAssertEqual(usual.lineFont, 12)
+        XCTAssertEqual(usual.size.height, 26, "The default panel's line is what it always was")
+        XCTAssertEqual(large.lineFont, 19, "A 36 pt panel writes 21 pt figures; its line keeps the same step below them")
+        XCTAssertEqual(large.size.height, 42)
+        XCTAssertGreaterThan(large.size.width, usual.size.width * 1.4)
+        XCTAssertEqual(small.lineFont, 12, "Nothing is written smaller than at the default")
+        XCTAssertEqual(small.size, usual.size)
+    }
+
+    @MainActor
     func testTheHoveredMarkIsGlancedAtThenOpenedAndLeftAloneAfterwards() throws {
         _ = NSApplication.shared
         let screen = try XCTUnwrap(NSScreen.main)
