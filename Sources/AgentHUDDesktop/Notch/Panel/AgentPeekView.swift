@@ -43,17 +43,23 @@ struct AgentPeek: Equatable {
     var linePadding: CGFloat { (12 * max(1, scale)).rounded() }
     var lineHeight: CGFloat { (26 * max(1, scale)).rounded() }
 
-    /// The agent's windows in row order, each with the share already used.
+    /// The agent's windows in row order, each with the share already used, then its balance if it is billed by use.
     @MainActor
     static func make(vendor: String, store: UsageStore) -> AgentPeek {
         let key = AgentArtwork.markKey(vendor)
         let rows = store.rowGroups.filter { AgentArtwork.markKey($0.vendor) == key }.flatMap(\.rows)
         var seen = Set<String>()
-        let lines = rows.compactMap { row -> Line? in
+        var lines = rows.compactMap { row -> Line? in
             guard row.isCurrentAccount, seen.insert(row.agent.shortName).inserted else { return nil }
             return Line(label: row.agent.shortName,
                         value: row.usedPct.map { "\(Int($0.rounded()))%" } ?? row.missingQuotaLabel,
                         level: row.level)
+        }
+        for billing in store.enabledBilling where AgentArtwork.markKey(billing.vendor) == key {
+            lines += billing.balances.prefix(1).map {
+                Line(label: L10n.text("余额", "Balance"), value: MoneyFormat.amount($0.total, currency: $0.currency),
+                     level: store.view.level(of: billing))
+            }
         }
         return AgentPeek(vendor: vendor, lines: lines, running: HoverPanelView.sessionRows(store, vendor: vendor).running.count)
     }

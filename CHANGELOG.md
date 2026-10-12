@@ -2,14 +2,17 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
-## Unreleased
+## 0.5.3 — 2026-10-12
 
+- Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.
 - A recording made with `--record` and a `--snapshot` still no longer show a thin line past each tip of a capsule's outline: on a reply's pill beside a separated dock, at the ends of a Simple panel on the top or bottom edge, on a plan badge. The line was never on screen. Core Animation's software renderer, which draws both, adds it to an outline with continuous corners on a shape too short for them.
 - With Separate agents on, the hovered agent's logo answers to its card. While the small card shows, it is the logo, whatever the agent is doing; a click that opens the whole panel turns it into its bot, which watches the pointer until the panel closes. Closing the card gives it back to its agent.
 - What a dock answers a glance with follows the dock's size. A Simple panel or Dynamic dock set larger than its default writes its hover line or bubble and its compact reminders larger too, in step with its own figures or logos, instead of always at 12 and 13 pt; nothing is written smaller than at the default.
 - A compact reminder on a dock is a slimmer pill: 34 pt high instead of 48.
 - Reminder cards use the sizes the usage panel uses: "New reply" beside the agent's name is 12 pt as in the compact reminder, and the model's name and the second lines that were 10 pt are 11.
 - The token chart's hover box is no longer crossed by the line above the Tokens section, which ran over its date in the usage panel. The date is written once for a period inside one day ("Sun 11 Oct at 23:00 – 23:15", or the date alone for a whole day) and at 11 pt instead of 10.
+- The Simple panel shows an agent that is billed by use and has only a balance, such as DeepSeek through its API: its logo, an empty ring and the balance, after the agents with quota windows. Hovering it with Separate agents on reads the balance, on the Simple panel and on the Dynamic dock, where the line used to be the agent's name alone.
+- Host API: `SimpleMeterItem.balance`, `SimpleMeterItem.Balance`, `SimpleMeterItem.balances(_:)` and the `balances` argument of `SimpleMeterItem.items(rows:balances:working:)`.
 - Host API: `AgentPeek.scale`; `IslandRootView.stripScale` and the `stripScale` environment value; `IslandRootView.dockCompactSize(edge:collapsedSize:scale:)`.
 - Host API: `ChartData.period(_:calendar:)`.
 - Host API: `BotPhase.glanced` and `BotPhase.opened`; `MarkAttention`, carried by `LogoQueueItem.attention` and `SimpleMeterItem.attention`.

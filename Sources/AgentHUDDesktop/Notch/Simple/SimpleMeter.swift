@@ -13,18 +13,38 @@ struct SimpleMeterItem: Identifiable, Equatable {
     var isWorking = false
     /// Whether this agent's card is the one being looked at.
     var attention = MarkAttention.none
+    /// An agent billed by use has no window to be a share of: its balance stands where the percentage would.
+    var balance: String? = nil
     var id: String { vendor }
 
-    /// What the number says: whole percent used, or a dash before the first reading.
-    var label: String { usedPct.map { "\(Int($0.rounded()))%" } ?? "–" }
+    /// What the number says: whole percent used, a balance, or a dash before the first reading.
+    var label: String { usedPct.map { "\(Int($0.rounded()))%" } ?? balance ?? "–" }
+
+    /// A balance as the panel is told it: whose it is, how it reads, and its level. No text before its first reading.
+    struct Balance: Equatable {
+        let vendor: String
+        let text: String?
+        let level: StatusLevel?
+    }
+
+    /// The balances of the agents billed by use, as the store reads them now: the first currency of each.
+    @MainActor
+    static func balances(_ store: UsageStore) -> [Balance] {
+        store.enabledBilling.map { billing in
+            Balance(vendor: billing.vendor,
+                    text: billing.balances.first.map { MoneyFormat.amount($0.total, currency: $0.currency) },
+                    level: store.view.level(of: billing))
+        }
+    }
 
     /// One item per mark, in row order. Windows that share artwork share an item — two Claude windows are
     /// one Claude, Codex and ChatGPT one OpenAI — and it reports the most consumed of them. Only a reading
-    /// that shows a level counts, the rule the menu bar's figure follows.
+    /// that shows a level counts, the rule the menu bar's figure follows. An agent with a balance and no window
+    /// follows them, as balances follow windows in the menu: its mark, an empty ring and the balance.
     ///
     /// - working: the vendors with a session running, as a logo queue is told them.
     @MainActor
-    static func items(rows: [AgentRow], working: [String] = []) -> [SimpleMeterItem] {
+    static func items(rows: [AgentRow], balances: [Balance] = [], working: [String] = []) -> [SimpleMeterItem] {
         let busy = Set(working.map(AgentArtwork.markKey))
         var order: [String] = []
         var vendors: [String: String] = [:]
@@ -39,10 +59,18 @@ struct SimpleMeterItem: Identifiable, Equatable {
                   used > (tightest[key]?.used ?? -1) else { continue }
             tightest[key] = (used, level)
         }
-        return order.map {
+        var items = order.map {
             SimpleMeterItem(vendor: vendors[$0] ?? $0, usedPct: tightest[$0]?.used, level: tightest[$0]?.level,
                             isWorking: busy.contains($0))
         }
+        for balance in balances {
+            let key = AgentArtwork.markKey(balance.vendor)
+            guard vendors[key] == nil else { continue }
+            vendors[key] = balance.vendor
+            items.append(SimpleMeterItem(vendor: balance.vendor, usedPct: nil, level: balance.level,
+                                         isWorking: busy.contains(key), balance: balance.text))
+        }
+        return items
     }
 }
 

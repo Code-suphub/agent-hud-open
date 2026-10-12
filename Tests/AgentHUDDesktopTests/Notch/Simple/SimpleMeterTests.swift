@@ -30,6 +30,50 @@ final class SimpleMeterTests: XCTestCase {
         XCTAssertEqual(busy.map(\.isWorking), [false, true, false], "Work under a shared mark is that mark's work")
     }
 
+    @MainActor
+    func testAnAgentWithOnlyABalanceFollowsTheWindowsWithItsBalanceForAFigure() {
+        let now = Date()
+        let agents = [AgentDescriptor(id: "claude-5h", vendor: "Claude", model: "claude-5h", source: "test", enabled: true)]
+        let report = UsageReport(generatedAt: now, snapshots: [
+            .init(agentId: "claude-5h", remainingPct: 69, resetAt: now.addingTimeInterval(3600), windowDuration: 5.0 * 3600, updatedAt: now),
+        ], sessions: [])
+        let view = ReportView(report: report, agents: agents, settings: Settings(), now: now)
+        let balances = [SimpleMeterItem.Balance(vendor: "DeepSeek", text: "¥8.85", level: .ok),
+                        // Claude has a window, so a balance of its own does not give it a second place.
+                        SimpleMeterItem.Balance(vendor: "Claude", text: "$3.00", level: .ok),
+                        SimpleMeterItem.Balance(vendor: "Kimi", text: nil, level: nil)]
+
+        let items = SimpleMeterItem.items(rows: view.rows, balances: balances, working: ["DeepSeek"])
+
+        XCTAssertEqual(items.map(\.vendor), ["Claude", "DeepSeek", "Kimi"])
+        XCTAssertEqual(items.map(\.label), ["31%", "¥8.85", "–"], "A balance stands where the percentage would; none read yet is a dash")
+        XCTAssertNil(items[1].usedPct, "A balance is a share of nothing, so its ring stays empty")
+        XCTAssertEqual(items[1].level, .ok)
+        XCTAssertEqual(items.map(\.isWorking), [false, true, false])
+    }
+
+    @MainActor
+    func testTheDemosDeepSeekBalanceIsOnThePanelAndInItsPeek() throws {
+        L10n.setLanguage(.en)
+        defer { L10n.setLanguage(.system) }
+        let domain = "app.agenthud.tests.simple-balance.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
+        let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
+        store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))
+
+        let items = SimpleMeterItem.items(rows: store.rows, balances: SimpleMeterItem.balances(store))
+        let deepSeek = try XCTUnwrap(items.last)
+        XCTAssertEqual(deepSeek.vendor, "DeepSeek")
+        XCTAssertEqual(deepSeek.label, "¥8.85")
+
+        let peek = AgentPeek.make(vendor: "DeepSeek", store: store)
+        XCTAssertEqual(peek.lines.map(\.label), ["Balance"])
+        XCTAssertEqual(peek.lines.map(\.value), ["¥8.85"])
+        XCTAssertEqual(AgentPeek.make(vendor: "Claude", store: store).lines.map(\.label).contains("Balance"), false)
+    }
+
     func testPanelIsSizedFromItsOneLengthAndDropsWhatIsSwitchedOff() {
         let items = [SimpleMeterItem(vendor: "Claude", usedPct: 62, level: .ok),
                      SimpleMeterItem(vendor: "Codex", usedPct: 100, level: .critical)]
@@ -92,7 +136,8 @@ final class SimpleMeterTests: XCTestCase {
         defer { hud.close() }
 
         let working = store.queueVendors.filter(\.isWorking).map(\.vendor)
-        let config = SimpleMeterConfig(items: SimpleMeterItem.items(rows: store.rows, working: working), placement: placement)
+        let config = SimpleMeterConfig(items: SimpleMeterItem.items(rows: store.rows, balances: SimpleMeterItem.balances(store), working: working),
+                                       placement: placement)
         XCTAssertFalse(config.items.isEmpty)
         XCTAssertTrue(config.items.contains(where: \.isWorking), "The demo has work in flight for the panel's bots to show")
         XCTAssertEqual(hud.geometry.mode, .simple)

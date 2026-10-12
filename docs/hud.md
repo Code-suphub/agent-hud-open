@@ -60,6 +60,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 ### What the Simple panel shows
 
 - One item per mark, in row order, for the enabled windows that are not API-billed; windows that share artwork share an item.
+- An agent billed by use, with a balance and no window, follows them in the balances' order: its mark, an empty ring, and its balance where the percentage would be, in the balance's level colour (a dash before its first reading). The hover line of such an agent reads its balance.
 - An item reports its most used window among the readings that show a level, as the menu bar's figure does: a ring round the mark filled to that share, the whole percentage beside it, or both. Each can be switched off, and with both off the panel is the marks alone. A window with no reading shows an empty ring and a dash.
 - The ring and the number take that window's level colour. No glow is drawn behind it, collapsed or open.
 - Nothing in the panel moves unless its Bot animation is switched on. A working agent's mark is then its bot and an idle one visits as a bot now and then, as in the dock. The switch is the panel's own and off to begin with; `botLogos` does not affect it, and Reduce Motion keeps the logos.

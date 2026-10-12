@@ -828,9 +828,10 @@ final class ScreenHUD {
         return queueSize(LogoQueueConfig(items: queueItems, placement: placement, settings: settings.settings))
     }
 
-    /// The agents with a quota row, each with its tightest window.
+    /// The agents with a quota row, each with its tightest window, then those with only a balance.
     private var meterItems: [SimpleMeterItem] {
-        SimpleMeterItem.items(rows: store.rows, working: store.queueVendors.filter(\.isWorking).map(\.vendor))
+        SimpleMeterItem.items(rows: store.rows, balances: SimpleMeterItem.balances(store),
+                              working: store.queueVendors.filter(\.isWorking).map(\.vendor))
     }
 
     private var simpleMeter: SimpleMeterConfig? {
