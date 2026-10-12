@@ -40,6 +40,13 @@ struct PermissionAlertCompactView: View {
     /// Every request waiting for this user, on any screen. One is the card itself and needs no number.
     var waiting = 1
     @Environment(\.stripScale) private var scale
+    @Environment(\.compactWings) private var wings
+
+    /// What a request's reminder says beside its project: a question, a plan, or a call waiting to be allowed.
+    static func status(of request: PermissionRequest) -> String {
+        request.isQuestion ? L10n.text("待回答", "Question")
+            : request.isPlan ? L10n.text("计划待审", "Plan") : L10n.text("待批准", "Waiting")
+    }
 
     /// A length at the scale of the dock this reminder grows from.
     private func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
@@ -50,18 +57,17 @@ struct PermissionAlertCompactView: View {
                 BotMark(vendor: request.vendor, size: s(17), phase: .asking)
                 Text(request.project ?? request.vendor)
                     .font(.ui(s(13), .semibold)).lineLimit(1).minimumScaleFactor(0.78)
-            }.frame(width: s(IslandController.alertWingWidth), alignment: .leading)
-            Color.clear.frame(width: cameraWidth)
+            }.frame(width: wings?.leading ?? s(IslandController.alertWingWidth), alignment: .leading)
+            Color.clear.frame(width: wings?.gap ?? cameraWidth)
             HStack(spacing: s(7)) {
                 PermissionSymbol(requestID: request.id, size: s(14))
-                Text(request.isQuestion ? L10n.text("待回答", "Question")
-                     : request.isPlan ? L10n.text("计划待审", "Plan") : L10n.text("待批准", "Waiting"))
+                Text(Self.status(of: request))
                     .font(.ui(s(12), .medium))
                 WaitingCount(waiting: waiting, scale: scale)
-            }.frame(width: s(IslandController.alertWingWidth), alignment: .trailing)
+            }.frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
         }
         .foregroundStyle(PermissionColor.text)
-        .padding(.horizontal, s(IslandController.alertSidePadding)).frame(height: height)
+        .padding(.horizontal, wings?.padding ?? s(IslandController.alertSidePadding)).frame(height: height)
         .accessibilityIdentifier("island-alert-permissionRequest")
         .accessibilityLabel("\(request.vendor) · \(request.isQuestion ? L10n.text("在问你问题", "Asks a question") : request.isPlan ? L10n.text("有计划待审", "Has a plan to review") : L10n.text("等待批准", "Needs approval")) · \(request.summary)"
                             + (waiting > 1 ? " · " + L10n.text("共 \(waiting) 个", "\(waiting) waiting") : ""))

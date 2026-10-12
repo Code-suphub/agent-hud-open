@@ -5,6 +5,63 @@ extension EnvironmentValues {
     /// How much larger than its default the dock a view belongs to is set; 1 anywhere else. What a dock grows
     /// out of itself reads it; cards do not.
     @Entry var stripScale: CGFloat = 1
+    /// The widths of a compact reminder's two halves on a dock; nil beside the notch, where they are its wings.
+    @Entry var compactWings: CompactWings? = nil
+}
+
+/// A compact reminder says who on one side and what on the other. Beside the notch the two are wings of one fixed
+/// width with the camera between them. On a dock nothing stands between them, so each is as wide as its words and
+/// the pill is as long as what it says: the dock growing an arm, as the Simple panel's hover line is.
+struct CompactWings: Equatable {
+    var leading: CGFloat
+    var trailing: CGFloat
+    /// Between the two halves.
+    var gap: CGFloat
+    /// At each end of the pill.
+    var padding: CGFloat
+    var width: CGFloat { leading + gap + trailing + 2 * padding }
+
+    /// The halves of `alert`'s reminder on a dock set to `scale`, each measured from its text and no wider than a
+    /// wing, so the pill is placed before anything is drawn. The lengths are the ones the reminders' views use.
+    @MainActor
+    static func dock(for alert: IslandAlert, waiting: Int = 1, scale: CGFloat) -> CompactWings {
+        let scale = max(1, scale)
+        func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
+        func width(_ text: String, _ font: NSFont) -> CGFloat { ceil((text as NSString).size(withAttributes: [.font: font]).width) }
+        // A symbol is wider than its point size, each by its own amount, so its width is asked of the symbol.
+        func symbol(_ name: String, _ size: CGFloat) -> CGFloat {
+            let drawn = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: size, weight: .semibold))?.size.width
+            return ceil(drawn ?? size * 1.4)
+        }
+        let name = NSFont.systemFont(ofSize: s(13), weight: .semibold)
+        let who: String, what: String, mark: CGFloat, status: NSFont
+        var count: CGFloat = 0
+        switch alert {
+        case .completion(let event):
+            who = event.agentVendor; what = IslandAlertCompactView.replyStatus; mark = symbol("text.bubble", s(16))
+            status = .systemFont(ofSize: s(12), weight: .medium)
+        case .permission(let request):
+            who = request.project ?? request.vendor; what = PermissionAlertCompactView.status(of: request)
+            mark = symbol("hand.raised.fill", s(14))
+            status = .systemFont(ofSize: s(12), weight: .medium)
+            if waiting > 1 {
+                count = s(7) + width("×\(waiting)", .monospacedDigitSystemFont(ofSize: s(10), weight: .semibold)) + 2 * s(5)
+            }
+        case .quota(let event):
+            // These two symbols sit in a frame of their own, two points over their size.
+            who = event.agent.vendorName; what = QuotaAlertCompactView.status(of: event); mark = s(12) + 2
+            status = .monospacedDigitSystemFont(ofSize: s(12), weight: .medium)
+        case .resetCredits(let grant):
+            who = grant.account.account.provider; what = ResetCreditAlertCompactView.status(of: grant); mark = s(12) + 2
+            status = .monospacedDigitSystemFont(ofSize: s(12), weight: .medium)
+        }
+        let wing = s(IslandController.alertWingWidth)
+        // A point to spare each: a width measured here and one laid out by SwiftUI can differ by a fraction.
+        return CompactWings(leading: min(wing, s(17) + s(8) + width(who, name) + 1),
+                            trailing: min(wing + count, mark + s(7) + width(what, status) + count + 1),
+                            gap: s(14), padding: s(12))
+    }
 }
 
 /// A single silhouette: closed notch, lateral event wings, or a hovered detail surface.
@@ -163,11 +220,11 @@ struct IslandRootView: View {
 
     static let expandedTopRadius: CGFloat = NotchGeometry.expandedTopRadius
     static let expandedBottomRadius: CGFloat = IslandController.expandedRadius
-    /// A compact reminder on a dock is a slim pill: 34 pt for a 17 pt mark and 13 pt text, where the notch's own
-    /// height made it 48.
-    static let dockCompactRowHeight: CGFloat = 26
-    /// The compact row already keeps `alertSidePadding` at each end, so the card adds none of its own.
-    static let dockCompactInsets = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    /// A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt for a 17 pt mark
+    /// and 13 pt text, where the notch's own height made it 48.
+    static let dockCompactRowHeight: CGFloat = 20
+    /// The compact row already keeps its own padding at each end, so the card adds none.
+    static let dockCompactInsets = EdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
     /// How much larger than its default this screen's dock is set. A compact reminder is the dock growing an arm,
     /// as the Simple panel's line is, so it is written to this scale; cards keep their own sizes.
     var stripScale: CGFloat = 1
@@ -367,11 +424,13 @@ struct IslandRootView: View {
         } else if let alert {
             if hidesSilhouette {
                 let row = Self.dockCompactRow(scale: stripScale)
+                let wings = CompactWings.dock(for: alert, waiting: max(1, waitingRequests.count), scale: stripScale)
                 IslandAlertCompactView(alert: alert, cameraWidth: 0, height: row.height, onOpen: onOpenAlert,
                                        waitingRequests: waitingRequests)
                     .environment(\.stripScale, max(1, stripScale))
+                    .environment(\.compactWings, wings)
                     .padding(.vertical, row.inset)
-                    .frame(width: Self.dockCompactSize(edge: edge, collapsedSize: collapsedSize, scale: stripScale).width)
+                    .frame(width: wings.width)
                     .offset(floats && !detached ? liftCentring : .zero)
                     .id(alert.id)
                     .transition(detailTransition)
@@ -399,12 +458,15 @@ struct IslandRootView: View {
         return insets
     }
 
-    static func dockCompactSize(edge: HUDEdge, collapsedSize: CGSize, scale: CGFloat = 1) -> CGSize {
+    /// - wings: the reminder's own halves, which make the pill as long as what it says; without them it is two full
+    ///   wings long, the most a reminder can be.
+    static func dockCompactSize(edge: HUDEdge, collapsedSize: CGSize, scale: CGFloat = 1, wings: CompactWings? = nil) -> CGSize {
         // Events replace the marks, so their row needs no queue clearance. The window adds the
         // contact shoulders along its parked edge once, outside this compact content core.
         let scale = max(1, scale), row = dockCompactRow(scale: scale)
         // Each length is rounded as the row's own views round it, so the two agree to the point.
-        let textWidth = 2 * (IslandController.alertWingWidth * scale).rounded() + 2 * (IslandController.alertSidePadding * scale).rounded()
+        let textWidth = wings?.width
+            ?? 2 * (IslandController.alertWingWidth * scale).rounded() + 2 * (IslandController.alertSidePadding * scale).rounded()
         return CGSize(width: textWidth, height: row.height + 2 * row.inset)
     }
 

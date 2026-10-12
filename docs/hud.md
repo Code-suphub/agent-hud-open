@@ -54,7 +54,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - Two tiers. What a dock answers a glance with is written to the dock's scale; what opens as a card has one fixed scale.
 - The dock's scale is how much larger than its default the dock is set: a Simple panel by its figures (13 pt at the default 22 pt panel), a Dynamic dock by its marks (20 pt by default). It is never below 1, so nothing is written smaller than at the default, and the notch's is always 1.
 - Written to the dock's scale: the Simple panel's hover line (12 pt at the default, 19 pt beside a 36 pt panel), the Dynamic dock's hover bubble, and a compact reminder, with their marks, gaps and heights.
-- A compact reminder on a dock is a slim pill, 34 pt high at the default for a 17 pt mark and 13 pt text.
+- A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt at the default for a 17 pt mark and 13 pt text. It is as long as what it says: who on one side and what on the other, each as wide as its words and no wider than one of the notch's wings (112 pt), 14 pt apart. Beside the notch the two are wings of that fixed width with the camera between them.
 - Cards — the usage panel, an agent's own panel, a reminder's card — use one size per role: the agent's name 13 semibold, at most one 15 pt headline, rows 12, a status beside the name 12 medium, secondary text 11. 10 pt is for badges and counts only.
 
 ### What the Simple panel shows
