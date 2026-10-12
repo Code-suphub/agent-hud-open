@@ -21,11 +21,27 @@ struct AgentPeek: Equatable {
     /// Room the line keeps on the side that sits behind the Simple panel it grows from.
     var tuck: CGFloat = 0
     var edge: HUDEdge = .top
+    /// How much larger than its default the dock this peek belongs to is set. A peek is the dock answering a
+    /// hover, so its text keeps pace with the dock's own marks and figures; it is never smaller than at the default.
+    var scale: CGFloat = 1
+
+    /// A length of the bubble at the dock's scale.
+    func scaled(_ value: CGFloat) -> CGFloat { (value * max(1, scale)).rounded() }
 
     static let bubbleWidth: CGFloat = 196
     private static let rowHeight: CGFloat = 18
     private static var labelFont: NSFont { .systemFont(ofSize: 12) }
     private static var valueFont: NSFont { .monospacedDigitSystemFont(ofSize: 12, weight: .semibold) }
+    /// The Simple panel's figures at its default size, which the line's 12 pt text was drawn beside.
+    static let lineReference: CGFloat = 13
+
+    /// The line's lengths, all from the one scale: its text, the gap inside a pair and between pairs, its end
+    /// padding and its height.
+    var lineFont: CGFloat { (12 * max(1, scale)).rounded() }
+    var linePairGap: CGFloat { (5 * max(1, scale)).rounded() }
+    var lineSpacing: CGFloat { (12 * max(1, scale)).rounded() }
+    var linePadding: CGFloat { (12 * max(1, scale)).rounded() }
+    var lineHeight: CGFloat { (26 * max(1, scale)).rounded() }
 
     /// The agent's windows in row order, each with the share already used.
     @MainActor
@@ -54,13 +70,15 @@ struct AgentPeek: Equatable {
         switch style {
         case .bubble:
             let rows = 1 + lines.count + (runningText == nil ? 0 : 1)
-            return CGSize(width: Self.bubbleWidth, height: 20 + Self.rowHeight * CGFloat(rows))
+            return CGSize(width: scaled(Self.bubbleWidth), height: 2 * scaled(10) + scaled(Self.rowHeight) * CGFloat(rows))
         case .line:
             func width(_ text: String, _ font: NSFont) -> CGFloat { ceil((text as NSString).size(withAttributes: [.font: font]).width) }
-            let cells = lines.isEmpty ? width(fallback, Self.labelFont)
-                : lines.reduce(0) { $0 + width($1.label, Self.labelFont) + 5 + width($1.value, Self.valueFont) }
-                    + 12 * CGFloat(lines.count - 1)
-            return CGSize(width: cells + 24 + tuck, height: 26)
+            let label = NSFont.systemFont(ofSize: lineFont)
+            let value = NSFont.monospacedDigitSystemFont(ofSize: lineFont, weight: .semibold)
+            let cells = lines.isEmpty ? width(fallback, label)
+                : lines.reduce(0) { $0 + width($1.label, label) + linePairGap + width($1.value, value) }
+                    + lineSpacing * CGFloat(lines.count - 1)
+            return CGSize(width: cells + linePadding * 2 + tuck, height: lineHeight)
         }
     }
 }
@@ -82,40 +100,40 @@ struct AgentPeekView: View {
 
     private var bubble: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(peek.vendor).font(.ui(13, .semibold)).frame(height: 18)
+            Text(peek.vendor).font(.ui(peek.scaled(13), .semibold)).frame(height: peek.scaled(18))
             ForEach(peek.lines) { line in
                 HStack {
                     Text(line.label).foregroundStyle(theme.secondary)
                     Spacer(minLength: 8)
-                    Text(line.value).font(.tabular(12, .semibold)).foregroundStyle(tint(line))
-                }.frame(height: 18)
+                    Text(line.value).font(.tabular(peek.scaled(12), .semibold)).foregroundStyle(tint(line))
+                }.frame(height: peek.scaled(18))
             }
             if peek.running > 0 {
                 Text(L10n.text("\(peek.running) 个运行中", "\(peek.running) running"))
-                    .foregroundStyle(theme.secondary).frame(height: 18)
+                    .foregroundStyle(theme.secondary).frame(height: peek.scaled(18))
             }
         }
-        .font(.ui(12)).lineLimit(1)
+        .font(.ui(peek.scaled(12))).lineLimit(1)
         .foregroundStyle(theme.text)
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        .padding(.horizontal, peek.scaled(12)).padding(.vertical, peek.scaled(10))
         .frame(width: peek.size.width, height: peek.size.height, alignment: .topLeading)
     }
 
     private var line: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: peek.lineSpacing) {
             if peek.lines.isEmpty {
                 Text(peek.running > 0 ? L10n.text("\(peek.running) 个运行中", "\(peek.running) running") : peek.vendor)
                     .foregroundStyle(theme.secondary)
             }
             ForEach(peek.lines) { line in
-                HStack(spacing: 5) {
+                HStack(spacing: peek.linePairGap) {
                     Text(line.label).foregroundStyle(theme.secondary)
-                    Text(line.value).font(.tabular(12, .semibold)).foregroundStyle(tint(line))
+                    Text(line.value).font(.tabular(peek.lineFont, .semibold)).foregroundStyle(tint(line))
                 }
             }
         }
-        .font(.ui(12)).lineLimit(1).fixedSize()
-        .padding(.horizontal, 12)
+        .font(.ui(peek.lineFont)).lineLimit(1).fixedSize()
+        .padding(.horizontal, peek.linePadding)
         // The side tucked behind the panel carries no text.
         .padding(tuckEdge, peek.tuck)
         .frame(width: peek.size.width, height: peek.size.height)

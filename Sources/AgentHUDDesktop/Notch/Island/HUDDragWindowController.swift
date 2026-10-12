@@ -21,7 +21,7 @@ final class HUDDragWindowController {
     var isPressed: Bool { surface.isPressed }
     /// The press has become a pick-up, by travel or by holding.
     var isArmed: Bool { surface.isArmed }
-    /// The cursor the surface asks for: an open hand at rest, a closed one while the HUD is picked up.
+    /// The cursor the surface asks for: the arrow at rest, a closed hand while the HUD is picked up.
     var cursor: NSCursor { surface.cursor }
 
     init(holdDelay: TimeInterval = 0.3) {
@@ -103,9 +103,10 @@ private final class HUDDragView: NSView {
 
     override func layout() { super.layout(); updateOutline() }
     /// The surface moves with the HUD, which rebuilds its cursor rects under the pointer on every step; the
-    /// rect has to carry the dragging cursor itself or the open hand comes straight back.
-    var cursor: NSCursor { isArmed ? .closedHand : .openHand }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
+    /// rect has to carry the dragging cursor itself or the arrow comes straight back. At rest the pointer is left
+    /// as the app underneath has it: showing a hand there would mean taking that app's keyboard on every hover.
+    var cursor: NSCursor { isArmed ? .closedHand : .arrow }
+    override func resetCursorRects() { if isArmed { addCursorRect(bounds, cursor: cursor) } }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
@@ -127,6 +128,10 @@ private final class HUDDragView: NSView {
         guard isPressed, !isArmed else { return }
         isArmed = true
         updateOutline()
+        // macOS takes a cursor only from the key window, and this panel is never key in an app that is never
+        // active. It is key for as long as the HUD is held, without activating the app, and hands the keys back
+        // when it is let go.
+        (window as? OverlayPanel)?.takeKeyboard()
         window?.invalidateCursorRects(for: self)
         cursor.set()
     }
@@ -148,6 +153,7 @@ private final class HUDDragView: NSView {
         holdTimer?.invalidate()
         holdTimer = nil
         let moved = isDragging, clicked = downAt != nil && !isArmed
+        if isArmed { (window as? OverlayPanel)?.releaseKeyboard() }
         downAt = nil
         isDragging = false
         isArmed = false

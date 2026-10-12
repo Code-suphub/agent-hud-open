@@ -786,7 +786,12 @@ public enum SnapshotRunner {
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         ) else { return }
         rep.size = size
-        view.cacheDisplay(in: view.bounds, to: rep)
+        // The software renderer draws a capsule's continuous outline with a line past each tip; see `HUDRecorder`.
+        if let layer = view.layer {
+            HUDRecorder.withDrawableBorders(under: layer) { view.cacheDisplay(in: view.bounds, to: rep) }
+        } else {
+            view.cacheDisplay(in: view.bounds, to: rep)
+        }
 
         guard let data = rep.representation(using: .png, properties: [:]) else { return }
         let url = folder.appendingPathComponent("\(name).png")

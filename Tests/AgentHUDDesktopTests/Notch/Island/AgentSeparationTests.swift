@@ -80,6 +80,72 @@ final class AgentSeparationTests: XCTestCase {
     }
 
     @MainActor
+    func testTheLineKeepsPaceWithALargerPanelAndIsNeverSmallerThanAtTheDefault() {
+        let lines = [AgentPeek.Line(label: "5h", value: "62%", level: .ok), AgentPeek.Line(label: "Weekly", value: "18%", level: .ok)]
+        func line(panel size: Double) -> AgentPeek {
+            let meter = SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple, edge: .left, simpleSize: size))
+            var peek = AgentPeek(vendor: "Claude", lines: lines, running: 0, style: .line)
+            peek.scale = meter.fontSize / AgentPeek.lineReference
+            return peek
+        }
+        let usual = line(panel: 22), large = line(panel: 36), small = line(panel: 16)
+        XCTAssertEqual(usual.lineFont, 12)
+        XCTAssertEqual(usual.size.height, 26, "The default panel's line is what it always was")
+        XCTAssertEqual(large.lineFont, 19, "A 36 pt panel writes 21 pt figures; its line keeps the same step below them")
+        XCTAssertEqual(large.size.height, 42)
+        XCTAssertGreaterThan(large.size.width, usual.size.width * 1.4)
+        XCTAssertEqual(small.lineFont, 12, "Nothing is written smaller than at the default")
+        XCTAssertEqual(small.size, usual.size)
+
+        // The Dynamic dock's bubble keeps pace with its marks the same way.
+        var bubble = AgentPeek(vendor: "Claude", lines: lines, running: 0)
+        XCTAssertEqual(bubble.size, CGSize(width: 196, height: 20 + 18 * 3))
+        bubble.scale = 1.6
+        XCTAssertEqual(bubble.size, CGSize(width: 314, height: 2 * 16 + 29 * 3))
+        bubble.scale = 0.6
+        XCTAssertEqual(bubble.size, CGSize(width: 196, height: 20 + 18 * 3))
+    }
+
+    @MainActor
+    func testTheHoveredMarkIsGlancedAtThenOpenedAndLeftAloneAfterwards() throws {
+        _ = NSApplication.shared
+        let screen = try XCTUnwrap(NSScreen.main)
+        let key = ScreenIdentity.key(for: screen)
+        for mode in [HUDMode.simple, .logos] {
+            let domain = "app.agenthud.tests.attention.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+            defer { defaults.removePersistentDomain(forName: domain) }
+            let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.everyAgent)
+            settings.update { $0.screens[key] = ScreenPlacement(mode: mode, edge: .right, separatesAgents: true) }
+            let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
+            store.replace(report: DemoUsageProvider.report(agents: settings.agents,
+                historyHours: UsageStore.historyHours, now: Date()))
+            var pointer = CGPoint(x: -10_000, y: -10_000)
+            let hud = ScreenHUD(key: key, screen: screen, store: store, settings: settings, mouseLocation: { pointer })
+            defer { hud.close() }
+            func attention() -> [MarkAttention] {
+                let root = hud.island.rootView
+                return mode == .simple ? (root.simpleMeter?.items.map(\.attention) ?? []) : (root.logoQueue?.items.map(\.attention) ?? [])
+            }
+            XCTAssertFalse(attention().isEmpty, "\(mode)")
+            XCTAssertTrue(attention().allSatisfy { $0 == .none }, "\(mode): nothing is looked at while the dock is closed")
+
+            let strip = hud.geometry.rect
+            pointer = CGPoint(x: strip.midX, y: strip.maxY - 6)
+            hud.samplePointer()
+            hud.forceOpen()
+            XCTAssertEqual(attention().first, .glanced, "\(mode): the hovered mark is its logo for the glance")
+            XCTAssertTrue(attention().dropFirst().allSatisfy { $0 == .none }, "\(mode): the others follow their agents")
+
+            hud.pinAgent()
+            XCTAssertEqual(attention().first, .opened, "\(mode): a click wakes it for a moment")
+
+            hud.forceCollapse()
+            XCTAssertTrue(attention().allSatisfy { $0 == .none }, "\(mode): closing gives every mark back to its agent")
+        }
+    }
+
+    @MainActor
     func testHoverPeeksAClickOpensTheWholeCardAndEventsKeepTheMarks() throws {
         _ = NSApplication.shared
         let screen = try XCTUnwrap(NSScreen.main)

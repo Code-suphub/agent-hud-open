@@ -145,12 +145,24 @@ final class ScreenHUD {
     private func peek(for mark: AgentMark) -> AgentPeek {
         var peek = AgentPeek.make(vendor: mark.vendor, store: store)
         peek.edge = geometry.edge
+        peek.scale = stripScale
         if geometry.mode == .simple {
             peek.style = .line
             // On a side edge the line starts behind the panel, so it reads as the panel growing.
             peek.tuck = geometry.edge.isHorizontal ? 0 : (geometry.rect.width / 2).rounded()
         }
         return peek
+    }
+
+    /// How much larger than its default this screen's dock is set: a Simple panel by its figures, a logo queue by
+    /// its marks. What the dock grows out of itself — the Simple panel's line, a compact reminder — is written to
+    /// this scale, and never smaller than at the default. Cards keep their own sizes.
+    private var stripScale: CGFloat {
+        switch geometry.mode {
+        case .simple: max(1, SimpleMeterConfig(items: [], placement: placement).fontSize / AgentPeek.lineReference)
+        case .logos: max(1, CGFloat(placement.logoSize / ScreenPlacement().logoSize))
+        case .notch: 1
+        }
     }
 
     /// A detached card's place: beside the strip on its inner side, centred on the mark and kept on screen.
@@ -884,7 +896,19 @@ final class ScreenHUD {
         root.logoQueue = logoQueue
         root.simpleMeter = simpleMeter
         root.separatesAgents = placement.separatesAgents && geometry.mode.isDocked
+        root.stripScale = stripScale
         let focus = focus
+        // The agent whose own card is up has its mark looked at: glanced at while the card is a peek, opened once
+        // a click asked for the whole panel. An event's card leaves its sender's mark to its agent.
+        if open, activeAlert == nil, previewPlacement == nil, let focus {
+            let kind: MarkAttention = pinned ? .opened : .glanced
+            if let index = root.logoQueue?.items.firstIndex(where: { AgentArtwork.markKey($0.vendor) == focus.key }) {
+                root.logoQueue?.items[index].attention = kind
+            }
+            if let index = root.simpleMeter?.items.firstIndex(where: { AgentArtwork.markKey($0.vendor) == focus.key }) {
+                root.simpleMeter?.items[index].attention = kind
+            }
+        }
         root.focusVendor = focus?.vendor
         root.peek = focus.map(peek)
         root.pinned = pinned
@@ -1112,7 +1136,7 @@ final class ScreenHUD {
         let peek = peek(for: focus)
         let showsPeek = open && !pinned && activeAlert == nil
         let size: CGSize = if !open {
-            IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size)
+            IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size, scale: stripScale)
         } else if alerts.current?.inUsagePanel == false {
             CGSize(width: activeAlert?.detailWidth ?? IslandController.alertDetailWidth, height: height)
         } else if showsPeek {
@@ -1149,7 +1173,7 @@ final class ScreenHUD {
         let expanded = (open || activeAlert != nil) && previewPlacement == nil && !parked
         if let focus, expanded { return detachedSurface(open: open, height: height, focus: focus) }
         let compactSize = geometry.mode.isDocked
-            ? IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size)
+            ? IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size, scale: stripScale)
             : CGSize(width: geometry.rect.width + 2 * (IslandController.alertWingWidth + IslandController.alertSidePadding),
                      height: max(38, geometry.rect.height))
         let size = open

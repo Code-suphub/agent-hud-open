@@ -89,13 +89,15 @@ final class DockDraggingTests: XCTestCase {
         XCTAssertFalse(drag.isDragging)
         XCTAssertEqual(outline.opacity, 1, "Holding shows the bounds before anything moves")
         XCTAssertEqual(drag.cursor, .closedHand, "A picked-up HUD keeps the closed hand while its surface moves")
+        XCTAssertTrue(drag.panel.canBecomeKey, "Only a key window's cursor reaches the screen, so a held HUD is key")
         view.mouseDragged(with: try mouseEvent(.leftMouseDragged, at: CGPoint(x: 16, y: 16), in: drag.panel))
         XCTAssertTrue(drag.isDragging, "A held HUD follows the first movement")
         view.mouseUp(with: try mouseEvent(.leftMouseUp, at: CGPoint(x: 16, y: 16), in: drag.panel))
         XCTAssertEqual(starts, 1)
         XCTAssertEqual(ends, 1)
         XCTAssertFalse(drag.isArmed)
-        XCTAssertEqual(drag.cursor, .openHand)
+        XCTAssertEqual(drag.cursor, .arrow)
+        XCTAssertFalse(drag.panel.isKeyWindow, "Letting go hands the keyboard back")
         XCTAssertEqual(outline.opacity, 0)
 
         // Letting go before the hold elapses leaves nothing armed behind.

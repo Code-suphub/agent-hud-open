@@ -12,6 +12,56 @@ final class BotMotionTests: XCTestCase {
         }
     }
 
+    func testAGlancedMarkSettlesIntoItsLogoWhateverItsAgentIsDoing() {
+        var motion = BotMotion(seed: 3)
+        motion.set(.working, at: 10)
+        run(&motion, from: 10, for: 2)
+        XCTAssertEqual(motion.morph, 1)
+        motion.set(.glanced, at: 12)
+        run(&motion, from: 12, for: 1)
+        XCTAssertEqual(motion.morph, 0)
+        XCTAssertEqual(motion.pose, BotPose())
+        XCTAssertTrue(motion.isAtRest, "a glanced mark has no visit to wait for")
+        XCTAssertNil(motion.wait)
+        // However long the glance lasts, it stays the logo.
+        run(&motion, from: 13, for: 60)
+        XCTAssertEqual(motion.morph, 0)
+    }
+
+    func testAnOpenedMarkIsItsBotWatchingThePointerUntilItsPanelCloses() {
+        var motion = BotMotion(seed: 3)
+        motion.set(.glanced, at: 10)
+        run(&motion, from: 10, for: 0.5)
+        motion.set(.opened, at: 10.5)
+        run(&motion, from: 10.5, for: 1, aim: CGPoint(x: 0.6, y: 0.2))
+        XCTAssertEqual(motion.morph, 1, "half a second after the click it is the bot")
+        XCTAssertEqual(motion.pose.y, 0, "and it stays where its logo was")
+        XCTAssertGreaterThan(motion.face.look, 0.3, "its eyes go to the pointer")
+        // However long the panel stays open, the bot stays up.
+        run(&motion, from: 11.5, for: 120, aim: CGPoint(x: 0.6, y: 0.2))
+        XCTAssertEqual(motion.morph, 1)
+        XCTAssertFalse(motion.isAtRest)
+        XCTAssertNotNil(motion.wait)
+        // The panel closes over an idle agent: back to the logo.
+        motion.set(.idle, at: 131.5)
+        run(&motion, from: 131.5, for: 1)
+        XCTAssertEqual(motion.morph, 0)
+        // And over a working one, the bot simply stays.
+        var busy = BotMotion(seed: 3)
+        busy.set(.opened, at: 10)
+        run(&busy, from: 10, for: 2)
+        busy.set(.working, at: 12)
+        run(&busy, from: 12, for: 1)
+        XCTAssertEqual(busy.morph, 1)
+    }
+
+    func testAMarkFollowsItsAgentUnlessItsCardIsBeingLookedAt() {
+        XCTAssertEqual(MarkAttention.none.phase(working: true), .working)
+        XCTAssertEqual(MarkAttention.none.phase(working: false), .idle)
+        XCTAssertEqual(MarkAttention.glanced.phase(working: true), .glanced)
+        XCTAssertEqual(MarkAttention.opened.phase(working: false), .opened)
+    }
+
     func testANewIdleMarkWaitsAsItsLogoWithoutStoppingItsClock() {
         var motion = BotMotion(seed: 1)
         motion.set(.idle, at: 100)

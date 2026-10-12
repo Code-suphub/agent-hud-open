@@ -11,6 +11,13 @@ enum BotPhase: Sendable, Equatable {
     case asking
     /// A turn just ended: the bot smiles.
     case done
+    /// The agent's card is being glanced at: the mark holds still as its logo, whatever its agent is doing.
+    case glanced
+    /// The agent's whole panel is open: the bot is up and watches the pointer for as long as it stays open.
+    case opened
+
+    /// The mark stays where its logo is, with no hop and nothing raised.
+    var staysInPlace: Bool { self == .working || self == .idle || self == .glanced || self == .opened }
 }
 
 /// The bot's eyes. `look` and `lookY` are shares of a full turn of the head, right and down positive.
@@ -115,7 +122,8 @@ struct BotMotion: Sendable {
         switch phase {
         case .idle: return botInterval == nil && pose == BotPose()
         case .done: return (last ?? 0) - since > Self.doneSeconds
-        case .working, .asking: return false
+        case .glanced: return pose == BotPose()
+        case .working, .asking, .opened: return false
         }
     }
 
@@ -128,6 +136,8 @@ struct BotMotion: Sendable {
         phase = next
         since = now + (staysBot && morph == 0 ? max(0, arrivesAfter) : 0)
         if next == .working {
+            nextAct = now + 0.9 + random.unit() * 1.2
+        } else if next == .opened {
             nextAct = now + 0.9 + random.unit() * 1.2
         }
         botInterval = nil
@@ -147,7 +157,8 @@ struct BotMotion: Sendable {
         let idleVisit = phase == .idle && botInterval?.contains(now) == true
         // Before a staying bot arrives it is the logo at rest: no morph, no pose, no face.
         let arrived = age >= 0
-        let awake = arrived && (phase == .working || idleVisit || phase == .asking || (phase == .done && age < 1.5))
+        let awake = arrived && (phase == .working || idleVisit || phase == .asking || phase == .opened
+                                || (phase == .done && age < 1.5))
 
         let wanted: CGFloat = arrived && (awake || staysBot) && hasFace ? 1 : 0
         let stride = CGFloat(dt / Self.morphSeconds)
@@ -158,7 +169,7 @@ struct BotMotion: Sendable {
             if running.kind == .turn { turn = running.from + 60 * running.side }
             act = nil
         }
-        let actsInPlace = phase == .working || phase == .idle
+        let actsInPlace = phase.staysInPlace
         if actsInPlace {
             if awake || staysBot, morph > 0.9 || !hasFace, act == nil, now >= nextAct {
                 let chosen = pick(at: now)
@@ -213,7 +224,7 @@ struct BotMotion: Sendable {
             return age < 1.2 || knock < 0.55 ? BotPace.lively : BotPace.following
         case .done:
             if age < 1.5 { return BotPace.lively }
-        case .working, .idle:
+        case .working, .idle, .glanced, .opened:
             break
         }
         return following ? BotPace.following : BotPace.calm
@@ -241,7 +252,7 @@ struct BotMotion: Sendable {
         var pose = BotPose()
         let t = CGFloat(age)
         switch phase {
-        case .working, .idle:
+        case .working, .idle, .glanced, .opened:
             // Breathing changes the body's shape around its fixed centre.
             let breath = 2 * CGFloat.pi * CGFloat(age / period)
             pose.scaleX = 1 + 0.03 * sin(2 * breath)
@@ -289,7 +300,7 @@ struct BotMotion: Sendable {
         var target = BotFace()
         var every: ClosedRange<TimeInterval>? = 3.2...6.5
         switch phase {
-        case .working, .idle:
+        case .working, .idle, .glanced, .opened:
             target.look = aim.x
             target.lookY = aim.y
             every = 2.2...4.5
@@ -352,13 +363,13 @@ struct BotMotion: Sendable {
     }
 
     private mutating func keep(age: TimeInterval, now: TimeInterval, dt: TimeInterval) {
-        guard phase != .working, phase != .idle else {
+        guard !phase.staysInPlace else {
             kept = (lift: 0, scale: 1)
             return
         }
         var lift: CGFloat = 0, scale: CGFloat = 1
         switch phase {
-        case .working, .idle:
+        case .working, .idle, .glanced, .opened:
             break
         case .asking:
             lift = 0.03

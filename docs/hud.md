@@ -45,8 +45,17 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - A permission reminder shows the asking bot: one hop, then raised by 12%, a knock every 2.6 seconds, eyes wide and straight at the user.
 - A reply reminder shows the bot smiling for about a second, then looking at the pointer.
 - A reminder keeps its bot for as long as it is shown; a dock's mark returns to its logo.
+- On a dock that separates its agents, the mark whose own card is up answers to the card instead of its agent. While the card is a peek, the mark is its logo, whatever its agent is doing. A click that opens the whole panel turns it into its bot, which stays up and watches the pointer for as long as the panel is open. Closing the card gives the mark back to its agent — its bot stays if the agent is working, and settles into its logo if not — and an event's card leaves its sender's mark alone.
 - One timer steps every bot, as often as the liveliest of them needs: 30 times a second during a morph, an act, a blink or a hop, 15 while eyes follow the pointer, 10 while a bot only breathes, and not at all while every mark waits as its logo for its next visit. A bot's picture is drawn again only when its eyes or outline have visibly changed, in the colours of its display so the layer shows it without converting it; breathing and leaning are layer transforms.
 - Reduce Motion, or `botLogos` off, leaves every mark its logo.
+
+### Type sizes
+
+- Two tiers. What a dock answers a glance with is written to the dock's scale; what opens as a card has one fixed scale.
+- The dock's scale is how much larger than its default the dock is set: a Simple panel by its figures (13 pt at the default 22 pt panel), a Dynamic dock by its marks (20 pt by default). It is never below 1, so nothing is written smaller than at the default, and the notch's is always 1.
+- Written to the dock's scale: the Simple panel's hover line (12 pt at the default, 19 pt beside a 36 pt panel), the Dynamic dock's hover bubble, and a compact reminder, with their marks, gaps and heights.
+- A compact reminder on a dock is a slim pill, 34 pt high at the default for a 17 pt mark and 13 pt text.
+- Cards — the usage panel, an agent's own panel, a reminder's card — use one size per role: the agent's name 13 semibold, at most one 15 pt headline, rows 12, a status beside the name 12 medium, secondary text 11. 10 pt is for badges and counts only.
 
 ### What the Simple panel shows
 
