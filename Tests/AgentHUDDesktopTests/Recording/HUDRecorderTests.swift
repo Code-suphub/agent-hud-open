@@ -239,7 +239,9 @@ final class HUDRecorderTests: XCTestCase {
         let recorder = try HUDRecorder(options: options, screen: screen) { [.init(window: window, bounds: nil)] }
 
         try recorder.start()
-        try await Task.sleep(for: .milliseconds(600))
+        // A slow machine draws its first frames late, so wait for the frames rather than for a fixed time.
+        let deadline = Date().addingTimeInterval(5)
+        while recorder.frames <= 5, Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
         await withCheckedContinuation { done in recorder.finish { done.resume() } }
 
         XCTAssertGreaterThan(recorder.frames, 5)
