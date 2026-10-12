@@ -8,6 +8,10 @@ struct ResetCreditAlertCompactView: View {
     let height: CGFloat
     let onOpen: () -> Void
     @Environment(\.stripScale) private var scale
+    @Environment(\.compactWings) private var wings
+
+    /// What the reminder says beside its client, for whoever has to know how wide that is.
+    static func status(of grant: ResetCreditGrant) -> String { ResetCreditAlertCopy(grant: grant).compactTitle }
 
     /// A length at the scale of the dock this reminder grows from.
     private func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
@@ -21,16 +25,16 @@ struct ResetCreditAlertCompactView: View {
                     Text(grant.account.account.provider)
                         .font(.ui(s(13), .semibold)).foregroundStyle(.white).lineLimit(1)
                 }
-                .frame(width: s(IslandController.alertWingWidth), alignment: .leading)
-                Color.clear.frame(width: cameraWidth)
+                .frame(width: wings?.leading ?? s(IslandController.alertWingWidth), alignment: .leading)
+                Color.clear.frame(width: wings?.gap ?? cameraWidth)
                 HStack(spacing: s(7)) {
                     ResetCreditSymbol(grant: grant, size: s(12))
                     Text(copy.compactTitle)
                         .font(.tabular(s(12), .medium)).foregroundStyle(.white.opacity(0.92)).lineLimit(1)
                 }
-                .frame(width: s(IslandController.alertWingWidth), alignment: .trailing)
+                .frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
             }
-            .padding(.horizontal, s(IslandController.alertSidePadding))
+            .padding(.horizontal, wings?.padding ?? s(IslandController.alertSidePadding))
             .frame(height: height)
             .contentShape(Rectangle())
         }

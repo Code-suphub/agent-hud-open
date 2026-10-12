@@ -8,6 +8,10 @@ struct IslandAlertCompactView: View {
     let onOpen: () -> Void
     var waitingRequests: [PermissionRequest] = []
     @Environment(\.stripScale) private var scale
+    @Environment(\.compactWings) private var wings
+
+    /// What a finished turn's reminder says beside its agent.
+    static var replyStatus: String { L10n.text("有新回复", "New reply") }
 
     /// A length at the scale of the dock this reminder grows from.
     private func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
@@ -27,16 +31,16 @@ struct IslandAlertCompactView: View {
                     HStack(spacing: s(8)) {
                         BotMark(vendor: event.agentVendor, size: s(17), phase: .done)
                         Text(event.agentVendor).font(.ui(s(13), .semibold)).lineLimit(1)
-                    }.frame(width: s(IslandController.alertWingWidth), alignment: .leading)
-                    Color.clear.frame(width: cameraWidth)
+                    }.frame(width: wings?.leading ?? s(IslandController.alertWingWidth), alignment: .leading)
+                    Color.clear.frame(width: wings?.gap ?? cameraWidth)
                     HStack(spacing: s(7)) {
                         TurnEndedSymbol(size: s(16))
-                        Text(L10n.text("有新回复", "New reply"))
+                        Text(Self.replyStatus)
                             .font(.ui(s(12), .medium)).foregroundStyle(Color(alert.accent))
-                    }.frame(width: s(IslandController.alertWingWidth), alignment: .trailing)
+                    }.frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, s(IslandController.alertSidePadding)).frame(height: height)
+                .padding(.horizontal, wings?.padding ?? s(IslandController.alertSidePadding)).frame(height: height)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
