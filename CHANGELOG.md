@@ -2,6 +2,11 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
+## Unreleased
+
+- A compact reminder on a dock is smaller: as tall as the Simple panel's hover line (26 pt at the default, where it was 34) and as long as what it says, where it was always two notch wings long with a gap in the middle. A reply from Claude is about 60 pt shorter at the default than the 256 pt it was.
+- Host API: `CompactWings` and the `compactWings` environment value; the `wings` argument of `IslandRootView.dockCompactSize(edge:collapsedSize:scale:wings:)`.
+
 ## 0.5.3 — 2026-10-12
 
 - Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.

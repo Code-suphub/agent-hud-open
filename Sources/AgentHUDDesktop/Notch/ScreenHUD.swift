@@ -165,6 +165,11 @@ final class ScreenHUD {
         }
     }
 
+    /// The halves of the reminder on show, as its view lays them out on this dock.
+    private var compactWings: CompactWings? {
+        activeAlert.map { CompactWings.dock(for: $0, waiting: max(1, PermissionRequests.shared.pending.count), scale: stripScale) }
+    }
+
     /// A detached card's place: beside the strip on its inner side, centred on the mark and kept on screen.
     /// A negative gap starts the card behind the strip.
     static func detachedFrame(size: CGSize, anchor: CGFloat, strip: CGRect, edge: HUDEdge, gap: CGFloat,
@@ -1137,7 +1142,7 @@ final class ScreenHUD {
         let peek = peek(for: focus)
         let showsPeek = open && !pinned && activeAlert == nil
         let size: CGSize = if !open {
-            IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size, scale: stripScale)
+            IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size, scale: stripScale, wings: compactWings)
         } else if alerts.current?.inUsagePanel == false {
             CGSize(width: activeAlert?.detailWidth ?? IslandController.alertDetailWidth, height: height)
         } else if showsPeek {
@@ -1174,7 +1179,7 @@ final class ScreenHUD {
         let expanded = (open || activeAlert != nil) && previewPlacement == nil && !parked
         if let focus, expanded { return detachedSurface(open: open, height: height, focus: focus) }
         let compactSize = geometry.mode.isDocked
-            ? IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size, scale: stripScale)
+            ? IslandRootView.dockCompactSize(edge: geometry.edge, collapsedSize: geometry.rect.size, scale: stripScale, wings: compactWings)
             : CGSize(width: geometry.rect.width + 2 * (IslandController.alertWingWidth + IslandController.alertSidePadding),
                      height: max(38, geometry.rect.height))
         let size = open
