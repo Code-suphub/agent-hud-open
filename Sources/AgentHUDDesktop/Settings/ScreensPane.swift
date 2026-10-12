@@ -65,7 +65,8 @@ struct ScreensPane: View {
         var sample = placement
         sample.edge = .top
         var items = store.map {
-            SimpleMeterItem.items(rows: $0.rows, working: $0.queueVendors.filter(\.isWorking).map(\.vendor))
+            SimpleMeterItem.items(rows: $0.rows, balances: SimpleMeterItem.balances($0),
+                                  working: $0.queueVendors.filter(\.isWorking).map(\.vendor))
         } ?? []
         if items.isEmpty { items = SimpleMeterItem.samples }
         // The preview shows what the bot switch does even while nothing is running.
