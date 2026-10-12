@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/videos/agent-hud-loop.gif" alt="The glow around a MacBook's notch breathing in green, yellow and red quota segments, then a hover opening the panel with quota windows and the last 24 hours of tokens" width="800">
+  <img src="docs/videos/agent-hud-loop.webp" alt="The glow around a MacBook's notch breathing in green, yellow and red quota segments, then the panel opening on the quota windows, the last 24 hours of tokens and the sessions" width="800">
 </p>
 
 Agent HUD keeps your coding agents in view while you work in another app. It sits at your Mac's notch, and on every display you connect, and answers the questions you would otherwise switch windows for:

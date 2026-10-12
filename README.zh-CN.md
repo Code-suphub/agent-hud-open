@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/videos/agent-hud-loop.gif" alt="MacBook 灵动岛周围呼吸着的光晕，分为绿、黄、红的额度色段；悬停后面板展开，显示各额度窗口与过去 24 小时的 Token" width="800">
+  <img src="docs/videos/agent-hud-loop.webp" alt="MacBook 灵动岛周围呼吸着的光晕，分为绿、黄、红的额度色段；随后面板展开，显示各额度窗口、过去 24 小时的 Token 与会话" width="800">
 </p>
 
 Agent HUD 让你在使用其他应用时，也能看到各个编程 agent 的状态。它常驻 Mac 灵动岛，也出现在你接入的每块屏幕上，替你回答那些原本要切换窗口才能知道的事：
