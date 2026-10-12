@@ -32,7 +32,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - The enabled, non-API-billed agents first, in the order they are watched in, then any vendor that ran in the last day without a window on that list, most recently used first.
 - Watched vendors appear before their first reading; vendors shown only for recent activity leave a day after their last turn and never appear with Live status off.
 - Shared artwork appears once: Claude windows share one mark, as do Codex and ChatGPT.
-- A mark is its bot for as long as a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. An idle mark becomes its bot for three to five seconds every 20 to 35 seconds. With `botLogos` off, or for a mark that has no bot, a working mark bobs instead.
+- A mark is its bot for as long as a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. An idle mark becomes its bot for three to five seconds every 20 to 35 seconds. With `botLogos` off, or for a mark that has no bot, a working mark stays its logo and keeps still.
 - A dock with nothing to show keeps a minimal entry at its saved position without drawing a logo.
 - Marks retain their artwork with a hairline outline; single-colour marks are white, and status colour appears in the glow.
 

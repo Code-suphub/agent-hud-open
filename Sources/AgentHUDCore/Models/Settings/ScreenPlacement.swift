@@ -32,8 +32,8 @@ public enum HUDEdge: String, Codable, Sendable, CaseIterable {
 }
 
 /// One screen's HUD. Everything here is per screen: two displays can run different modes, sit on
-/// different edges and size their logos differently. The glow style is not — it is the HUD's material,
-/// shared by every screen; what changes per screen is the shape it is drawn around.
+/// different edges and size their logos differently. The glow is per screen too, kept beside this in
+/// `Settings.screenGlow` under the same display key, with `Settings.glow` for a display that has none.
 public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// Side of one mark in points, independent of the display's menu bar height.
     public static let logoSizeRange: ClosedRange<Double> = 12...36
