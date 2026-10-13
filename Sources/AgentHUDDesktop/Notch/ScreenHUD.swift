@@ -154,16 +154,10 @@ final class ScreenHUD {
         return peek
     }
 
-    /// How much larger than its default this screen's dock is set: a Simple panel by its figures, a logo queue by
-    /// its marks. What the dock grows out of itself — the Simple panel's line, a compact reminder — is written to
-    /// this scale, and never smaller than at the default. Cards keep their own sizes.
-    private var stripScale: CGFloat {
-        switch geometry.mode {
-        case .simple: max(1, SimpleMeterConfig(items: [], placement: placement).fontSize / AgentPeek.lineReference)
-        case .logos: max(1, CGFloat(placement.logoSize / ScreenPlacement().logoSize))
-        case .notch: 1
-        }
-    }
+    /// What the dock grows out of itself — the Simple panel's line, the Dynamic dock's bubble, a compact reminder —
+    /// is written to this scale: as tall as one of the dock's marks, and never smaller than at the default. Cards
+    /// keep their own sizes.
+    private var stripScale: CGFloat { IslandRootView.dockScale(mode: geometry.mode, placement: placement) }
 
     /// The halves of the reminder on show, as its view lays them out on this dock.
     private var compactWings: CompactWings? {

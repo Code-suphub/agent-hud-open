@@ -32,7 +32,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - The enabled, non-API-billed agents first, in the order they are watched in, then any vendor that ran in the last day without a window on that list, most recently used first.
 - Watched vendors appear before their first reading; vendors shown only for recent activity leave a day after their last turn and never appear with Live status off.
 - Shared artwork appears once: Claude windows share one mark, as do Codex and ChatGPT.
-- A mark is its bot for as long as a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. An idle mark becomes its bot for three to five seconds every 20 to 35 seconds. With `botLogos` off, or for a mark that has no bot, a working mark bobs instead.
+- A mark is its bot for as long as a session is live, including one blocked on the user, using the same liveness as the panel, and settles back into its logo when the session ends. An idle mark becomes its bot for three to five seconds every 20 to 35 seconds. With `botLogos` off, or for a mark that has no bot, a working mark stays its logo and keeps still.
 - A dock with nothing to show keeps a minimal entry at its saved position without drawing a logo.
 - Marks retain their artwork with a hairline outline; single-colour marks are white, and status colour appears in the glow.
 
@@ -52,9 +52,9 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 ### Type sizes
 
 - Two tiers. What a dock answers a glance with is written to the dock's scale; what opens as a card has one fixed scale.
-- The dock's scale is how much larger than its default the dock is set: a Simple panel by its figures (13 pt at the default 22 pt panel), a Dynamic dock by its marks (20 pt by default). It is never below 1, so nothing is written smaller than at the default, and the notch's is always 1.
-- Written to the dock's scale: the Simple panel's hover line (12 pt at the default, 19 pt beside a 36 pt panel), the Dynamic dock's hover bubble, and a compact reminder, with their marks, gaps and heights.
-- A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt at the default for a 17 pt mark and 13 pt text. It is as long as what it says: who on one side and what on the other, each as wide as its words and no wider than one of the notch's wings (112 pt), 14 pt apart. Beside the notch the two are wings of that fixed width with the camera between them.
+- The dock's scale makes a compact reminder's pill and the Simple panel's hover line as tall as one of the dock's marks: a Simple panel's ring (its Size, 16–40 pt, whether or not the rings are drawn) or a Dynamic dock's logo (12–36 pt). Both are 26 pt high at scale 1, so the scale is the mark's size over 26. It is never below 1: beside a mark of 26 pt or less, which both defaults are (a 22 pt ring, a 20 pt logo), everything is written as at the default. The notch has no size to follow and its scale is always 1.
+- Written to the dock's scale: the Simple panel's hover line (12 pt at the default, 14 pt beside a 30 pt ring, 17 pt beside a 36 pt one), the Dynamic dock's hover bubble, and a compact reminder, with their marks, gaps and heights.
+- A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt at the default for a 17 pt mark and 13 pt text, 30 pt beside a 30 pt ring for a 20 pt mark and 15 pt text. It is as long as what it says: who on one side and what on the other, each as wide as its words and no wider than one of the notch's wings (112 pt), 14 pt apart. Beside the notch the two are wings of that fixed width with the camera between them.
 - Cards — the usage panel, an agent's own panel, a reminder's card — use one size per role: the agent's name 13 semibold, at most one 15 pt headline, rows 12, a status beside the name 12 medium, secondary text 11. 10 pt is for badges and counts only.
 
 ### What the Simple panel shows

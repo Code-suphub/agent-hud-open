@@ -29,6 +29,30 @@ final class DockLayoutTests: XCTestCase {
     }
 
     @MainActor
+    func testADockReminderIsAsTallAsOneOfTheDocksMarksAndTheNotchHasNoScale() {
+        func pill(_ placement: ScreenPlacement) -> CGFloat {
+            IslandRootView.dockCompactSize(edge: placement.edge, collapsedSize: CGSize(width: 216, height: 32),
+                                           scale: IslandRootView.dockScale(mode: placement.mode, placement: placement)).height
+        }
+        // A Simple panel's mark is its ring, drawn or not. A ring shorter than the default pill leaves the pill alone.
+        for (ring, height): (Double, CGFloat) in [(16, 26), (22, 26), (26, 26), (27, 27), (30, 30), (33, 33), (40, 40)] {
+            XCTAssertEqual(pill(ScreenPlacement(mode: .simple, simpleSize: ring)), height, "A \(ring) pt ring")
+            XCTAssertEqual(pill(ScreenPlacement(mode: .simple, simpleSize: ring, showsRings: false)), height)
+        }
+        // A Dynamic dock's is its logo, whatever the Simple panel on the same screen was set to.
+        for (logo, height): (Double, CGFloat) in [(12, 26), (20, 26), (27, 27), (36, 36)] {
+            XCTAssertEqual(pill(ScreenPlacement(mode: .logos, logoSize: logo, simpleSize: 40)), height, "A \(logo) pt logo")
+        }
+        // The notch has no size of its own to follow, so neither dock's setting reaches it.
+        XCTAssertEqual(IslandRootView.dockScale(mode: .notch, placement: ScreenPlacement(mode: .notch, logoSize: 36, simpleSize: 40)), 1)
+        // The row and its two margins are the pill, to the point, at every size.
+        for size in stride(from: 16.0, through: 40, by: 1) {
+            let row = IslandRootView.dockCompactRow(scale: IslandRootView.dockScale(mode: .simple, placement: ScreenPlacement(mode: .simple, simpleSize: size)))
+            XCTAssertEqual(row.height + 2 * row.inset, max(26, size), "A \(size) pt ring")
+        }
+    }
+
+    @MainActor
     func testCompactDockEventsUseOneThinRowInsideTheirContactShoulders() async throws {
         _ = NSApplication.shared
         let alert = IslandAlert.completion(SessionCompletion(
@@ -44,7 +68,7 @@ final class DockLayoutTests: XCTestCase {
             // default grows its reminder with it, and one set smaller does not shrink it.
             let widest = IslandRootView.dockCompactSize(edge: edge, collapsedSize: strip)
             XCTAssertEqual(widest, CGSize(width: 256, height: 26))
-            XCTAssertEqual(IslandRootView.dockCompactSize(edge: edge, collapsedSize: strip, scale: 1.5), CGSize(width: 384, height: 40))
+            XCTAssertEqual(IslandRootView.dockCompactSize(edge: edge, collapsedSize: strip, scale: 1.5), CGSize(width: 384, height: 39))
             XCTAssertEqual(IslandRootView.dockCompactSize(edge: edge, collapsedSize: strip, scale: 0.6), widest)
             XCTAssertEqual(IslandRootView.dockCompactSize(edge: edge, collapsedSize: CGSize(width: 80, height: 500), wings: wings), core,
                            "Making the logo queue thicker or longer must not add empty space to a compact event")
