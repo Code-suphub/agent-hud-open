@@ -21,8 +21,8 @@ struct AgentPeek: Equatable {
     /// Room the line keeps on the side that sits behind the Simple panel it grows from.
     var tuck: CGFloat = 0
     var edge: HUDEdge = .top
-    /// How much larger than its default the dock this peek belongs to is set. A peek is the dock answering a
-    /// hover, so its text keeps pace with the dock's own marks and figures; it is never smaller than at the default.
+    /// The scale of the dock this peek belongs to (`IslandRootView.dockScale`). A peek is the dock answering a
+    /// hover, so it grows with the dock's own marks; it is never smaller than at the default.
     var scale: CGFloat = 1
 
     /// A length of the bubble at the dock's scale.
@@ -32,16 +32,13 @@ struct AgentPeek: Equatable {
     private static let rowHeight: CGFloat = 18
     private static var labelFont: NSFont { .systemFont(ofSize: 12) }
     private static var valueFont: NSFont { .monospacedDigitSystemFont(ofSize: 12, weight: .semibold) }
-    /// The Simple panel's figures at its default size, which the line's 12 pt text was drawn beside.
-    static let lineReference: CGFloat = 13
-
     /// The line's lengths, all from the one scale: its text, the gap inside a pair and between pairs, its end
-    /// padding and its height.
+    /// padding and its height, which is a compact reminder's.
     var lineFont: CGFloat { (12 * max(1, scale)).rounded() }
     var linePairGap: CGFloat { (5 * max(1, scale)).rounded() }
     var lineSpacing: CGFloat { (12 * max(1, scale)).rounded() }
     var linePadding: CGFloat { (12 * max(1, scale)).rounded() }
-    var lineHeight: CGFloat { (26 * max(1, scale)).rounded() }
+    var lineHeight: CGFloat { (IslandRootView.dockCompactHeight * max(1, scale)).rounded() }
 
     /// The agent's windows in row order, each with the share already used, then its balance if it is billed by use.
     @MainActor

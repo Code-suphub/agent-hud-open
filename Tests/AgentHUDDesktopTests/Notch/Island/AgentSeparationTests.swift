@@ -80,20 +80,22 @@ final class AgentSeparationTests: XCTestCase {
     }
 
     @MainActor
-    func testTheLineKeepsPaceWithALargerPanelAndIsNeverSmallerThanAtTheDefault() {
+    func testTheLineIsAsTallAsThePanelsRingAndNeverSmallerThanAtTheDefault() {
         let lines = [AgentPeek.Line(label: "5h", value: "62%", level: .ok), AgentPeek.Line(label: "Weekly", value: "18%", level: .ok)]
         func line(panel size: Double) -> AgentPeek {
-            let meter = SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple, edge: .left, simpleSize: size))
             var peek = AgentPeek(vendor: "Claude", lines: lines, running: 0, style: .line)
-            peek.scale = meter.fontSize / AgentPeek.lineReference
+            peek.scale = IslandRootView.dockScale(mode: .simple, placement: ScreenPlacement(mode: .simple, edge: .left, simpleSize: size))
             return peek
         }
         let usual = line(panel: 22), large = line(panel: 36), small = line(panel: 16)
         XCTAssertEqual(usual.lineFont, 12)
         XCTAssertEqual(usual.size.height, 26, "The default panel's line is what it always was")
-        XCTAssertEqual(large.lineFont, 19, "A 36 pt panel writes 21 pt figures; its line keeps the same step below them")
-        XCTAssertEqual(large.size.height, 42)
-        XCTAssertGreaterThan(large.size.width, usual.size.width * 1.4)
+        XCTAssertEqual(line(panel: 26).size, usual.size, "A ring no taller than the line leaves it alone")
+        XCTAssertEqual(line(panel: 30).size.height, 30, "Past that the line is as tall as the ring")
+        XCTAssertEqual(line(panel: 30).lineFont, 14)
+        XCTAssertEqual(large.size.height, 36)
+        XCTAssertEqual(large.lineFont, 17, "Its text grows by as much as it does")
+        XCTAssertGreaterThan(large.size.width, usual.size.width * 1.3)
         XCTAssertEqual(small.lineFont, 12, "Nothing is written smaller than at the default")
         XCTAssertEqual(small.size, usual.size)
 

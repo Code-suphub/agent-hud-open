@@ -2,7 +2,7 @@ import SwiftUI
 import AgentHUDCore
 
 extension EnvironmentValues {
-    /// How much larger than its default the dock a view belongs to is set; 1 anywhere else. What a dock grows
+    /// The scale of the dock a view belongs to (`IslandRootView.dockScale`); 1 anywhere else. What a dock grows
     /// out of itself reads it; cards do not.
     @Entry var stripScale: CGFloat = 1
     /// The widths of a compact reminder's two halves on a dock; nil beside the notch, where they are its wings.
@@ -222,17 +222,30 @@ struct IslandRootView: View {
     static let expandedBottomRadius: CGFloat = IslandController.expandedRadius
     /// A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt for a 17 pt mark
     /// and 13 pt text, where the notch's own height made it 48.
-    static let dockCompactRowHeight: CGFloat = 20
-    /// The compact row already keeps its own padding at each end, so the card adds none.
+    nonisolated static let dockCompactHeight: CGFloat = 26
+    /// Above and below the pill's row. The row already keeps its own padding at each end, so the card adds none.
     static let dockCompactInsets = EdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
-    /// How much larger than its default this screen's dock is set. A compact reminder is the dock growing an arm,
-    /// as the Simple panel's line is, so it is written to this scale; cards keep their own sizes.
+    /// This screen's `dockScale`. A compact reminder is the dock growing an arm, as the Simple panel's line is,
+    /// so it is written to this scale; cards keep their own sizes.
     var stripScale: CGFloat = 1
 
-    /// A compact reminder's row and the room above and below it, on a dock set to `scale`.
+    /// How much larger than at its default a dock writes what it grows out of itself: enough for a compact
+    /// reminder's pill and the hover line to be as tall as one of the dock's marks, a Simple panel's ring or a
+    /// Dynamic dock's logo. Never below 1, so beside a mark shorter than the default pill nothing is written
+    /// smaller than it was. The notch has no size to follow and keeps 1.
+    nonisolated static func dockScale(mode: HUDMode, placement: ScreenPlacement) -> CGFloat {
+        switch mode {
+        case .simple: max(1, CGFloat(placement.simpleSize) / dockCompactHeight)
+        case .logos: max(1, CGFloat(placement.logoSize) / dockCompactHeight)
+        case .notch: 1
+        }
+    }
+
+    /// A compact reminder's row and the room above and below it, on a dock set to `scale`. The row is what the
+    /// two insets leave of the pill, so a pill written to a mark's size is that size to the point.
     static func dockCompactRow(scale: CGFloat) -> (height: CGFloat, inset: CGFloat) {
-        let scale = max(1, scale)
-        return ((dockCompactRowHeight * scale).rounded(), (dockCompactInsets.top * scale).rounded())
+        let scale = max(1, scale), inset = (dockCompactInsets.top * scale).rounded()
+        return ((dockCompactHeight * scale).rounded() - 2 * inset, inset)
     }
 
     static var placeholder: IslandRootView {
