@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/videos/agent-hud-loop.webp" alt="The glow around a MacBook's notch breathing in green, yellow and red quota segments, then the panel opening on the quota windows, the last 24 hours of tokens and the sessions" width="800">
+  <img src="docs/videos/agent-hud-loop.webp" alt="A tour of Agent HUD at a MacBook's notch. The glow breathes in red, yellow and green quota segments. A hover opens the panel on Claude's and Codex's quotas, a DeepSeek balance, the last 24 hours of tokens and the sessions, and a click turns Claude's quotas into burn rates. Claude then asks to run the test suite and is answered with Allow once, and its reply arrives as a New reply reminder whose card offers Return to session" width="800">
 </p>
 
 Agent HUD keeps your coding agents in view while you work in another app.
@@ -31,8 +31,6 @@ Agent HUD keeps your coding agents in view while you work in another app.
 - **Which agent is waiting for you?** Approvals, questions and replies in one place, and a click takes you back.
 - **Where did the tokens go?** Statistics by time, agent, model, session and turn, with the cost at API prices.
 - **Away from your Mac?** The same numbers on your iPhone and Apple Watch.
-
-**Everything on the Mac is free**, with no account and no API key. This repository is the open-source core of the [official app](https://agenthud.app/mac), which adds the connection to your iPhone. The one paid feature is [Agent HUD Remote](#agent-hud-remote).
 
 ## At a glance, or a hover
 

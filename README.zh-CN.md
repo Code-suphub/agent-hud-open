@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/videos/agent-hud-loop.webp" alt="MacBook 灵动岛周围呼吸着的光晕，分为绿、黄、红的额度色段；随后面板展开，显示各额度窗口、过去 24 小时的 Token 与会话" width="800">
+  <img src="docs/videos/agent-hud-loop.zh-CN.webp" alt="灵动岛上的 Agent HUD 演示。光晕呼吸着红、黄、绿的额度色段；悬停后面板展开，显示 Claude 与 Codex 的额度、DeepSeek 的余额、过去 24 小时的 Token 与会话，点击后 Claude 的额度切换为消耗速率。随后 Claude 请求运行测试，用「批准一次」回应；它的回复以「有新回复」提醒出现，卡片上有「回到会话」" width="800">
 </p>
 
 Agent HUD 让你在使用其他应用时，也能看到各个编程 agent 的状态。
@@ -31,8 +31,6 @@ Agent HUD 让你在使用其他应用时，也能看到各个编程 agent 的状
 - **哪个 agent 在等你？** 批准请求、提问与回复集中在一处，点一下就回到会话。
 - **Token 花在了哪里？** 按时间、agent、模型、会话与轮次统计，并按 API 价折合费用。
 - **离开 Mac 之后呢？** 同样的数字，在 iPhone 与 Apple Watch 上也能看到。
-
-**Mac 上的功能全部免费**，无需账户，也无需 API Key。本仓库是[官方应用](https://agenthud.app/mac)的开源核心，官方应用在此之上增加了与 iPhone 的连接。唯一的付费功能是 [Agent HUD Remote](#agent-hud-remote)。
 
 ## 看一眼，或悬停一下
 
