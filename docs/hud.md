@@ -15,6 +15,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 | Glow | Colour drawn from the enabled windows' levels — a rim around the island, a backdrop falling inward behind the dock |
 | Bot | What a mark turns into while its agent is in flight: a small body in the mark's own outline and colour, with two eyes |
 | Placement | What one display shows and where: mode, edge, position along the edge, logo size, logo spacing, whether the marks are drawn, and the Simple panel's size, ring stroke, rings and numbers |
+| Panel layout | How this Mac's hover panel differs from its default view: what is hidden, in what order, and which widget and measure draw each block |
 
 ## Rules
 
@@ -80,9 +81,32 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 
 ### Usage panel
 
-- The panel shows quota and balances, then Tokens, then the local session summary with at most five rows in total: sessions with work in flight, those waiting for the user ahead of those still running and newest created first within each group, then sessions last active in the past 24 hours by their last event. Account-wide API receipts and older ended sessions remain in statistics and do not occupy these rows or enter their remaining count. Each row shows its agent's mark and its state on the mark's corner. The remaining count covers every hidden session in this summary; it and the header open the full Sessions page.
+- In its default layout the panel shows quota and balances, then Tokens, then the local session summary with at most five rows in total: sessions with work in flight, those waiting for the user ahead of those still running and newest created first within each group, then sessions last active in the past 24 hours by their last event. Account-wide API receipts and older ended sessions remain in statistics and do not occupy these rows or enter their remaining count. Each row shows its agent's mark and its state on the mark's corner. The remaining count covers every hidden session in this summary; it and the header open the full Sessions page.
 - A session waiting on a question shows a badge on its row. It opens the question right there, answered the same way the island's own card answers it, beside a way back to the agent for answering it in its own dialog instead. A row's title returns to its agent, or opens that session's page where the client names no destination; its token count opens that session's usage.
 - The token chart is a compact strip with the latest 24 hours in 96 quarter-hour bars, including the current quarter, and all token kinds. Dashboard range, bucket, model and token-kind controls do not change it; its legend, axis and peak mark belong to the statistics window. Height follows content up to the display's height minus 80 pt; overflow scrolls above fixed settings, statistics and host controls, clear of the notch and dock.
+
+### Panel layout
+
+- The panel has three sections: the agents' blocks, the token chart and the sessions, in that order by default. A block is one agent's quota windows, under its vendor id (`Claude`), or the balances of the accounts one API provider bills, under `api:` and the provider (`api:DeepSeek`), each account's card under its own divider. A quota block's rows are its windows, each under its provider's own window name (`claude-weekly`), which stands for that window on every account that has it.
+- A layout records how this Mac's panel differs from the default view and nothing else: for a block, the widget that draws it, the measure it shows first, whether it is hidden and which of its rows are; the order of the blocks; the order of the sections; the sections that are hidden. Blocks and sections it does not name follow in default order, and a block with all of its rows hidden is left out. A key that names no block or row the panel has now is passed over and stays in the layout, which applies to it again when it returns. A layout that comes through the tools is kept as what it changes: a widget or a measure that is the block's default, and a block's place in the order where it would come there anyway, are left out, so the default view spelled out in full is still the default layout.
+- The Settings switches still decide what exists. Settings → Display → Expanded panel switches the sessions, the quota details, the reset countdown and the token chart, and every window and account keeps its switch and its place in Settings → Agents. A layout hides, orders and redraws what they leave and never brings back what a switch turned off.
+- Every display's panel follows the one layout, and so does an agent's own panel on a dock that separates its agents. Nothing outside the hover panel follows it.
+- One of four widgets draws a quota block, and the block's picker flips between the measures its widget offers:
+
+| Widget | Draws | Measures |
+|---|---|---|
+| `bar`, the default | A row per window: its name, a bar filled to the share used, the selected measure and its detail | `quota`, `burn`, `tokens`, `cost` |
+| `ring` | A cell per window, up to four to a line: a 46 pt ring filled to the share used with the percentage inside, the window's name, and the selected measure in the line under it | `quota`, `burn`, `tokens`, `cost` |
+| `number` | A cell per window, up to four to a line: the window's name, the selected measure in 15 pt figures, and its detail | `quota`, `burn`, `tokens`, `cost` |
+| `chart` | The tokens of the agent's models over the latest 24 hours in 96 quarter-hour bars, in place of its windows, with their total beside the agent's name and no picker | `tokens` |
+
+- Account headers, wallet amounts and Codex's earned resets stay under every widget. An API balance has no ceiling to fill a bar or a ring against, so its block is its card, under the `number` widget with the one measure `quota`: the balance beside the estimated cost.
+- `quota` is the share used, with the reset countdown where Settings shows it; `burn` the burn rate with its outlook ([alert levels](usage-semantics.md#alert-levels)); `tokens` the tokens per hour over the window's current cycle, with the same pace per day. Each time the panel opens, a block's picker starts from the measure the layout names; a flip lasts until the panel closes and is never saved. A widget is as tall in every measure it offers, so a flip never resizes the panel: a value is one line and never cut, and one wider than a bar row's column takes its room from the bar. A ring cell reads its share used to VoiceOver before the selected measure, whatever that is.
+- `cost` is what the tokens a window's models spent in its current cycle so far would cost at list price ([usage semantics](usage-semantics.md#percentages-windows-and-presentation)), each 15-minute bucket priced as the Tokens page prices it, with that amount per hour beside it: `$283` and `$5.90/h`. It is an estimate of a price nobody is charged, since a subscription is not billed by the token. A model without a list price is left out; currencies are never added, and a second one is written in place of the hourly pace; an amount above zero that rounds to no cent is written `<$0.01`; a window without a known cycle, a priced model or a level shows a dash.
+- An agent's change arrives as a draft through the MCP tools ([command line](command-line.md#mcp-server)) and is drawn at once, without opening the panel. While it waits, a bar sits above the footer, outside the scrolling content: Unsaved layout, Dropped on restart, Discard and Save. Save makes the draft this Mac's layout and keeps the layout it replaces as the previous one; Discard returns to the saved layout. Only that click keeps a draft: no tool saves, a draft lives in memory, and quitting Agent HUD drops it. A proposal that draws what the saved layout draws leaves no draft, however it is spelled out.
+- Settings → Display → Expanded panel → Layout says which state the layout is in (Default layout, Custom layout, or The panel shows an unsaved layout) and has two buttons that take effect at once and drop a waiting draft. Revert to Previous swaps the saved layout with the one saved before it, so a second press undoes the first; it is unavailable while there is no previous layout. Reset to Default makes the default view the saved layout and keeps the one it replaces as the previous layout; it is unavailable while the default view is saved and no draft waits.
+- A change of layout, and the bar's arrival and leaving, animate on the island's geometry curve, 0.4 s, with blocks fading in and out; Reduce Motion applies them at once.
+- The open panel can turn shorter under the pointer: Discard takes away what a draft added, and a row can leave with a refresh. The pointer is then below the panel it never left, and the place the panel gave up counts as hovering until the pointer moves out of it, so the panel does not close under the hand that pressed the button.
 
 ### Approvals
 
@@ -145,6 +169,17 @@ Supported approval hooks are installed for detected clients at startup, alongsid
 
 `Settings.placement(on:hasNotch:)` and `glow(on:)` answer what one display uses, falling back to the default when it has none of its own. Both are keyed by the string `ScreenIdentity.key(for:)` returns for a display.
 
+The panel's layout is stored apart from these settings, under `panelLayout.v1` in the same preferences: `current`, the saved layout, and `previous`, the one saved before it. The default layout with no previous one stores nothing, and a draft is never stored. A layout is a JSON object, and `{}` is the default view:
+
+| Field | Values |
+|---|---|
+| `blocks.<block key>.widget` / `.measure` | `bar`, `ring`, `number`, `chart` / `quota`, `burn`, `tokens`, `cost` |
+| `blocks.<block key>.hidden` / `.hiddenRows` | `true` leaves the block out / the keys of the rows left out of it |
+| `order` | Block keys in the order their blocks come |
+| `sections` / `hiddenSections` | `blocks`, `tokens` and `sessions` in the order they come / those left out |
+
+A stored layout is read forgivingly, field by field: a widget or measure name this build does not know counts as not given, a section it does not know is left out, and a widget or measure a block does not accept falls back to the block's default. `SettingsStore.panelLayout` is the store (`PanelLayoutStore`), and the panel draws its `effective` layout.
+
 ## Code map
 
 | Concept | Where |
@@ -157,6 +192,9 @@ Supported approval hooks are installed for detected clients at startup, alongsid
 | What each mark becomes, how a bot moves and how it is drawn | `Sources/AgentHUDDesktop/Bots/BotSpec.swift`, `BotForm.swift`, `BotMotion.swift`, `BotRenderer.swift`, `BotActor.swift` |
 | Glow geometry, falloff, colours and frames | `Sources/AgentHUDDesktop/Notch/Glow/GlowGeometry.swift`, `GlowMatrix.swift`, `GlowMotion.swift`, `GlowGradient.swift`, `GlowWindowController.swift`, `GlowFrameRenderer.swift`, `GlowAnimator.swift` |
 | Collapsed shape, panel and events | `Sources/AgentHUDDesktop/Notch/Island/IslandRootView.swift`, `IslandWindowController.swift` |
+| The panel's layout: document, rules, plan and store | `Sources/AgentHUDCore/PanelLayout/PanelLayout.swift`, `PanelLayoutRules.swift`, `PanelLayoutPlan.swift`, `PanelLayoutStore.swift` |
+| The panel's sections and blocks, its session rows, its widgets, the draft bar and the Settings buttons | `Sources/AgentHUDDesktop/Notch/Panel/HoverPanelView.swift`, `HoverPanelView+Sessions.swift`, `ProviderQuotaBlock.swift`, `ModelUsageRow.swift`, `Widgets/QuotaCell.swift`, `PanelDraftBar.swift`; `Sources/AgentHUDDesktop/Settings/IslandPane.swift` |
+| The cost measure | `Sources/AgentHUDCore/Logic/Quota/QuotaMath.swift`, `Sources/AgentHUDCore/Formatting/MoneyFormat.swift` |
 | Requests waiting, and the channel they wait on | `Sources/AgentHUDCore/Hooks/Permission/PermissionRequests.swift`, `PermissionRequest.swift`, `PermissionHooks.swift`, `PermissionHookClient.swift`; `Sources/AgentHUDCore/System/UnixSocketListener.swift`, `UnixSocket.swift` |
 | Native Antigravity approvals | `Sources/AgentHUDCore/Hooks/Permission/AntigravityPermissions.swift`, `AntigravityPermissionObserver.swift`; `Sources/AgentHUDCore/Providers/Antigravity/AntigravityService.swift` |
 | Native Codex Desktop app approvals and mid-turn questions | `Sources/AgentHUDCore/Providers/Codex/CodexDesktopPermissions.swift`, `CodexDesktopQuestions.swift`, `CodexDesktopIPC.swift`; `Sources/AgentHUDCore/Hooks/Permission/CodexDesktopPermissionObserver.swift` |

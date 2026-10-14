@@ -9,7 +9,7 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | Module | Responsibility | Depends on |
 | --- | --- | --- |
 | `AgentHUDSupport` | `JSONValue` (integer-preserving JSON) and `RecordCoding` (deterministic encoding, millisecond dates, hashed identities) | — |
-| `AgentHUDCore` | Providers, usage models, calculations, alert decisions, the usage ledger, the settings and usage stores | Support |
+| `AgentHUDCore` | Providers, usage models, calculations, alert decisions, the usage ledger, the settings and usage stores, the hover panel's layout and the MCP server | Support |
 | `AgentHUDDesktop` | Menu bar item, notch glow and panel, island alerts, onboarding, settings and statistics windows; its resource bundle holds every logo and notice | Core |
 | `AgentHUDOpenApp` (product `AgentHUDOpen`) | Launch options, live or sample data, adapter setup, process lifetime | Desktop, Core |
 
@@ -21,7 +21,7 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 
 - A host creates a `SettingsStore` and a `UsageStore` around any `UsageProvider`, then a `DesktopApplication`; it owns every additional service and its lifecycle. The shared UI never initializes account services or transports.
 - A host supplies `additionalHUDControls` beside the expanded HUD's Stats button. Its factory receives an action that collapses that display's HUD before opening another window; the host owns the controls' state and calls that action before presenting its window. `additionalMenuItems` adds host entries below Settings.
-- A host hands its process arguments to `HookEntry.handle(arguments:)` first thing at launch: the clients' hook commands and the adapter commands run there and quit without the interface, and anything else starts the application.
+- A host hands its process arguments to `HookEntry.handle(arguments:)` first thing at launch: the clients' hook commands and the adapter commands run there and quit without the interface, the `--mcp` server once its client closes its input, and anything else starts the application.
 - `UsageAssembly` builds the settings and the store as the standalone application does, over the installed clients with the restart copy on screen, or over the sample data without a ledger, with the host's collection hooks; `UsageProbe.run(settings:)` prints the `--probe` diagnostics.
 - `fetchUsage(agents:historyHours:)` assembles local activity with the latest account results; `refreshAccountUsage(historyHours:)` performs the slower quota, balance and account-wide requests at every call and has a no-op default, and the collector alone spaces those calls; `accountRefreshSteps` splits it into steps the store runs between reads, and `watchedDirectories` names the directories whose changes need a read (nil means the provider is read every poll interval). A provider that wraps another forwards all of them.
 - `sources` splits a provider into parts read on their own, each with its signals: its directories, its account steps and the checks it asks for. A provider that does not split itself is one source. `fetchUsage(agents:historyHours:sources:)` reads the named sources again and keeps every other source's last result, and `sourceChecks()` names the times at which a source's last result changes with time alone. `accountChecks(since:spread:now:)` names when each source's account steps are next worth running, a scheduled reading waiting the spread the collector drew for it, and `seesLocalWork` is false for a provider whose usage is the account's from every device, which keeps it on the account interval. `CombinedUsageProvider` makes one source per vendor.
@@ -60,6 +60,13 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 - `HookSettings.write(_:to:)` writes every client settings file the hooks change, and a host's own hooks can use it too: through a symbolic link to the file it leads to, keeping the file's permissions.
 - `HookInstaller` reads one hook's settings file, up to 16 MB, and points Agent HUD's handlers in it at the running copy or takes them out, the hook's own edit given; `HookCommand` makes and recognizes a handler's command. A host's own hooks use both.
 - `UnixSocketListener` is the application's end of the socket a hook process reaches through `UnixSocket`: only the user can reach it, a request is one message the sender ends by closing its side, and one process serves a path.
+
+### Panel layout and agent tools
+
+- `SettingsStore.panelLayout` is the hover panel's `PanelLayoutStore`: the saved layout, the one saved before it and an unsaved draft, of which the panel draws `effective`. The two saved layouts are one value in the store's defaults, `panelLayout.v1`, and the draft lives in memory. `SettingsStore.onChange` hears nothing of the layout, so a change of it never wakes collection.
+- `PanelLayoutPlan(layout:blocks:)` resolves a layout against `ReportView.panelBlocks`, the blocks the panel has now. What a layout names that does not exist is passed over and stays in the document, and a widget or measure a block does not accept falls back to the block's default. A stored layout is read that way; a proposal is not: `PanelTools` refuses one that asks for anything the panel cannot do, naming every mismatch, except what a layout already holds for a block or a row that is away.
+- A client's agent reaches the application through the `--mcp` process ([command line](command-line.md#mcp-server)). The process answers the protocol itself and passes on only tool calls, one connection a call, to `MCPAppChannel`: a `UnixSocketListener` on `mcp.sock` in the data directory. `DesktopApplication.start()` opens the channel and answers it with `PanelTools`, except in a demo, which shares the data directory with the real copy and must not take its calls.
+- Tool calls answer from held state: the last report, the settings and the layout store. The handler runs for any process of this user that reaches the socket, so it never starts a provider read, opens the panel or writes the agent list, and it keeps nothing a person did not confirm: a proposal is a draft, and only `PanelLayoutStore.save()`, behind the panel's Save button, keeps one.
 
 ### Storage
 
@@ -111,6 +118,10 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | `HookCommand` | AgentHUDCore | `make(executable:arguments:)`, `runs(_:arguments:)`, `isTransient(_:)` and `checkInstall(executable:)` |
 | `HookEntry.handle(arguments:)` | AgentHUDCore | Runs the hook or adapter command the process arguments name and returns its exit status; nil starts the application |
 | `UnixSocket`, `UnixSocketListener(path:requestLimit:category:onRequest:)` | AgentHUDCore | The hook process's `connect(to:)`, `send(_:_:)` and `readToEnd(_:limit:)`; the application's `start()` and `stop()`, with each request handed over on the main actor |
+| `SettingsStore.panelLayout` → `PanelLayoutStore` | AgentHUDCore | `current`, `effective`, `hasDraft` and `canRevert`; `propose(_:)` for an agent's change, `save()`, `discard()`, `revert()` and `reset()` for a person's |
+| `PanelLayout`, `PanelLayoutPlan(layout:blocks:)` | AgentHUDCore | The layout document, `{}` for the default view, and what the panel shows under it against `ReportView.panelBlocks` |
+| `MCPAppChannel(directory:handler:)` | AgentHUDCore | `start()` and `stop()` for `mcp.sock` in the data directory; each `MCPToolRequest` reaches the handler on the main actor, and its `MCPToolReply` is written back |
+| `PanelTools(store:)` | AgentHUDCore | `answer(_:)` for `MCPTools.getPanel`, `setPanelLayout` and `discardPanelDraft`, from the store's last report, its settings and the layout store |
 | `ChildProcess` | AgentHUDCore | A child whose pipes are drained up to their caps and whose reads end when it exits: `run(_:_:environment:timeout:stdoutLimit:)`, or `write(_:)`, `line(before:)`, `waitForExit(before:)` and `stop()` |
 | `UsageAssembly.settings(defaults:defaultAgents:language:)`, `store(settings:ledger:hooks:)` | AgentHUDCore | The settings and the store as the standalone application builds them; a nil ledger is the demo, with the demo's turn calls in `UsageStore.sampleTurnCalls` |
 | `UsageProbe.run(settings:)` | AgentHUDCore | Prints the `--probe` diagnostics and returns the exit status |
@@ -134,8 +145,10 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | Island alerts: decision and presentation | `Sources/AgentHUDCore/Logic/Alerts/IslandEvents.swift`, `QuotaAlerts.swift`; `Sources/AgentHUDDesktop/Notch/Island/IslandController.swift`, `Notch/Alerts/IslandAlert.swift` |
 | Standalone entry, launch assembly and probe | `Sources/AgentHUDOpenApp/main.swift`; `Sources/AgentHUDCore/Store/UsageAssembly.swift`, `UsageProbe.swift` |
 | Hook and adapter commands, hook installation and records, the socket to hook processes, child processes | `Sources/AgentHUDCore/Hooks/HookEntry.swift`, `HookInstaller.swift`, `HookInbox.swift`, `HookCommand.swift`; `Sources/AgentHUDCore/System/UnixSocket.swift`, `UnixSocketListener.swift`, `ChildProcess.swift` |
+| The hover panel's layout: document, rules, plan and store, and what the tools do with them | `Sources/AgentHUDCore/PanelLayout/PanelLayout.swift`, `PanelLayoutRules.swift`, `PanelLayoutPlan.swift`, `PanelLayoutStore.swift`, `PanelTools.swift` |
+| MCP server: the `--mcp` process, the protocol, the tool list, a call's request and reply, and the socket to the application | `Sources/AgentHUDCore/MCP/MCPStdio.swift`, `MCPServer.swift`, `MCPProtocol.swift`, `MCPTools.swift`, `MCPToolCall.swift`, `MCPAppClient.swift`, `MCPAppChannel.swift` |
 | Build, boundary check, CI | `scripts/build-app.sh`, `scripts/check-source-boundaries.py`, `.github/workflows/ci.yml` |
 
 ## Related
 
-[providers.md](providers.md) per-client data sources · [usage-semantics.md](usage-semantics.md) counting and alert rules · [session-lifecycle.md](session-lifecycle.md) turn evidence and hooks · [data-access.md](data-access.md) boundaries · [../CHANGELOG.md](../CHANGELOG.md) host-visible API changes
+[providers.md](providers.md) per-client data sources · [usage-semantics.md](usage-semantics.md) counting and alert rules · [session-lifecycle.md](session-lifecycle.md) turn evidence and hooks · [data-access.md](data-access.md) boundaries · [hud.md](hud.md#panel-layout) the panel's layout as behaviour · [command-line.md](command-line.md#mcp-server) the MCP server and its tools · [../CHANGELOG.md](../CHANGELOG.md) host-visible API changes

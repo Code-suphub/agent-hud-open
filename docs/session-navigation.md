@@ -55,7 +55,7 @@ A completion reminder offers token usage on the left and session return on the r
 | --- | --- |
 | Local target model | `Sources/AgentHUDCore/Models/Sessions/SessionNavigationTarget.swift` |
 | Client dispatch | `Sources/AgentHUDDesktop/App/SessionNavigator.swift`, `AntigravityNavigation.swift` |
-| HUD navigation | `Sources/AgentHUDDesktop/Notch/ScreenHUD.swift`, `Alerts/IslandAlertViews.swift`, `Panel/HoverPanelView.swift` |
+| HUD navigation | `Sources/AgentHUDDesktop/Notch/ScreenHUD.swift`, `Alerts/IslandAlertViews.swift`, `Panel/HoverPanelView.swift`, `Panel/HoverPanelView+Sessions.swift` |
 | Observer capture | `Sources/AgentHUDCore/Hooks/PiSessionObserver.swift`, `OpenCodeSessionObserver.swift` |
 | Codex terminal identity | `Sources/AgentHUDCore/Hooks/CodexSessionOrigins.swift`, `Sources/AgentHUDCore/Providers/Codex/CodexTerminalOrigins.swift`, `CodexDaemonOriginTransport.swift` |
 | Claude session identity | `Sources/AgentHUDCore/Hooks/ClaudeSessionOrigins.swift`, `Sources/AgentHUDCore/Providers/Claude/ClaudeCodeProvider.swift`, `ClaudeDesktopSessions.swift` |

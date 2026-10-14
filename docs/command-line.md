@@ -2,7 +2,7 @@
 
 ## Overview
 
-Launch options, read-only probes and adapter commands of the standalone application. The same switches work on `build/Agent HUD Open.app/Contents/MacOS/Agent HUD Open` (after `make build`), on `swift run AgentHUDOpen`, and through Launch Services as `open "build/Agent HUD Open.app" --args …`. Unknown switches are ignored; probes and adapter commands run before the application object exists and never show a window. Applications that embed the libraries document their own parameters.
+Launch options, read-only probes, adapter commands and the MCP server of the standalone application. The same switches work on `build/Agent HUD Open.app/Contents/MacOS/Agent HUD Open` (after `make build`), on `swift run AgentHUDOpen`, and through Launch Services as `open "build/Agent HUD Open.app" --args …`. Unknown switches are ignored; probes and adapter commands run before the application object exists and never show a window. Applications that embed the libraries document their own parameters.
 
 ## Launch and display
 
@@ -79,8 +79,30 @@ Core Animation's software renderer draws the frames, and `--snapshot` stills too
 | `--permission-hook claude\|codex\|qoder\|qoderCN\|qoderWork\|codebuddy\|workbuddy\|zcode\|qwen` | The handler the client invokes when it is about to ask whether a tool may run: forwards the payload to the running application and waits, prints back the decision the user gave, and exits 0. Codex CLI and Desktop share the `codex` handler. Prints nothing — leaving the client's own permission flow untouched — when the application is not running, the payload cannot be read, nobody answers before the client stops waiting, or Claude Code's session record shows the call was answered in Claude Code itself. It never initializes the interface or queries an account. |
 | `--install-completion-hook antigravity\|cursor\|copilot\|codebuddy\|qwen` | Point the client's stop hook at this executable, adding it when it is missing; an Agent HUD handler already there, whichever copy wrote it, is taken over. Other hooks in the client's configuration are preserved. Fails, changing nothing, when this executable runs from a disk image or a translocated copy. |
 | `--completion-hook antigravity\|cursor\|copilot\|codebuddy\|qwen` | The handler the clients invoke: reads the hook payload from standard input, stores a completion record when the payload describes a successful stop, prints `{"decision":"stop"}` for Antigravity or `{}` for the others, and exits 0 even when recording fails. It never initializes the interface or queries an account. |
+| `--mcp` | Agent HUD's MCP server on standard input and output, one JSON-RPC message a line each way; see [MCP server](#mcp-server). A client starts it and keeps it running, and it exits 0 when its input ends. It must be the only argument. It starts no interface, takes no instance lock, queries no account and never starts the application. |
 
 Normal start-up already runs `SessionObservers.configure(executable:enabled:)` for installed clients with the `clientHooks` setting — pointing every Agent HUD handler at this executable when it is on, whichever copy wrote it, and removing them all when it is off — which also installs Claude Code's notification hook and each supported client's approval hook ([approvals](hud.md#approvals)). Moving the application, or starting another build of it, therefore moves the hooks at the next start. Codex requires the user to review and trust a new or changed hook through `/hooks` before it runs; the HUD does not change hook trust or enable disabled hooks. The install commands exist for a first setup without launching the application ([notification hook](session-lifecycle.md#notification-hook), [completion hooks](session-lifecycle.md#completion-hooks)).
+
+## MCP server
+
+`--mcp` is how an AI agent reads the hover panel and proposes a layout for it ([panel layout](hud.md#panel-layout)). The client that starts the process keeps it for as long as it wants the tools. The process answers the protocol itself, in revisions 2024-11-05 to 2025-11-25, which open with a handshake, and 2026-07-28, which has none, and hands each tool call to the running application over `mcp.sock` in the data directory: one connection a call, at most 10 s for the answer. With no application running a call comes back as an error result that says "Agent HUD is not running. Open Agent HUD and try again." A `--demo` launch serves no calls and leaves the socket to the real copy.
+
+| Tool | Effect |
+| --- | --- |
+| `get_panel` | Returns the panel as JSON and changes nothing: `revision`, `unsaved`, `hasPrevious`, the `layout` in effect, each section with whether the layout shows it and whether Settings has it on, and every block the panel has, the shown ones first in the panel's order, with its `key`, `kind` (`quota` or `billing`), name, `widget`, `measure`, the `widgets` and `measures` it accepts, and the latest readings of its rows or balances. A row's name is the window's as the panel writes it, in the application's language; keys, notes and refusals are the same in both. It takes no arguments. |
+| `set_panel_layout` | Proposes a layout as [it is stored](hud.md#interfaces-and-configuration): `blocks`, `order`, `sections` and `hiddenSections`, the whole layout wanted, with anything left out at its default. What the layout `get_panel` returned holds for a block or a row that is away can be sent back as it is. `from` set to `default` or `previous` proposes the default view or the layout saved before the current one instead. With `revision`, the call is refused when the layout has changed, or Agent HUD has restarted, since the `get_panel` that returned it. The proposal is drawn at once as an unsaved draft, kept as what it changes; one that draws what the saved layout draws clears the draft. Returns the panel as `get_panel` does, with a `note`. |
+| `discard_panel_draft` | Drops the draft, so the panel shows the saved layout, and returns the panel. It takes no arguments. |
+
+No tool saves: a person keeps a draft with Save in the panel. A proposal the panel cannot do as asked changes nothing and is refused whole, with every reason: an argument or a block property it does not have, a value of the wrong type, a widget, measure or section name it does not know, a block or row key the panel does not have now, a widget the block's kind does not accept, a measure its widget does not offer, `from` beside a layout, or `previous` while there is none. A key the layout in effect or the saved layout already holds for a block or a row that is away is no such reason, as long as what is held for an away block comes back unchanged: the panel has nothing to weigh a change to it against. The two other tools refuse any argument. A result is one block of JSON text and a refusal an error result in English sentences; a request or a reply is at most 1 MiB.
+
+Agent HUD does not register the server with any client yet. A person adds it to a client by hand, as a stdio server whose command is the application's executable, by its full path, with `--mcp`. From this repository after `make build`:
+
+```sh
+claude mcp add agent-hud -- "$PWD/build/Agent HUD Open.app/Contents/MacOS/Agent HUD Open" --mcp
+codex mcp add agent-hud -- "$PWD/build/Agent HUD Open.app/Contents/MacOS/Agent HUD Open" --mcp
+```
+
+`agent-hud` is the name the client lists the server under, and everything after `--` is the command. Claude Code's `--scope local|user|project` chooses where the entry is kept, `local` unless given. The entry is the client's own: Agent HUD neither writes nor updates it, so a moved application needs the command changed there. What a connected agent can read and change is in [data access](data-access.md#agent-tools).
 
 ## Environment
 
@@ -99,6 +121,8 @@ Normal start-up already runs `SessionObservers.configure(executable:enabled:)` f
 | Switch parsing | `Sources/AgentHUDDesktop/App/LaunchOptions.swift` |
 | One copy at a time | `Sources/AgentHUDCore/System/InstanceLock.swift`, `Sources/AgentHUDDesktop/App/SingleInstance.swift` |
 | Adapter commands and hook handlers | `Sources/AgentHUDCore/Hooks/HookEntry.swift` |
+| MCP server: the process, the protocol, the tool list and the calls to the application | `Sources/AgentHUDCore/MCP/MCPStdio.swift`, `MCPServer.swift`, `MCPProtocol.swift`, `MCPTools.swift`, `MCPToolCall.swift`, `MCPAppClient.swift` |
+| What the tools do in the application, and the socket it answers on | `Sources/AgentHUDCore/PanelLayout/PanelTools.swift`, `Sources/AgentHUDCore/MCP/MCPAppChannel.swift` |
 | Probes | `Sources/AgentHUDCore/Store/UsageProbe.swift`, `Sources/AgentHUDOpenApp/main.swift` |
 | Demo script, stage and clock | `Sources/AgentHUDCore/Demo/DemoScript.swift`, `DemoStage.swift`, `DemoClock.swift`; `Sources/AgentHUDDesktop/App/DemoScriptRunner.swift` |
 | HUD recording | `Sources/AgentHUDDesktop/Recording/HUDRecorder.swift` |
@@ -108,4 +132,4 @@ Normal start-up already runs `SessionObservers.configure(executable:enabled:)` f
 
 ## Related
 
-[session-lifecycle.md](session-lifecycle.md) completion hooks and the observers · [providers.md](providers.md) per-client environment variables · [architecture.md](architecture.md) host integration
+[session-lifecycle.md](session-lifecycle.md) completion hooks and the observers · [providers.md](providers.md) per-client environment variables · [architecture.md](architecture.md) host integration · [hud.md](hud.md#panel-layout) the panel's layout · [data-access.md](data-access.md#agent-tools) what the MCP tools read and change
