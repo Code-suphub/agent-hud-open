@@ -1,17 +1,19 @@
 import AgentHUDSupport
 import Foundation
 
-/// What Agent HUD's MCP tools do in the running application: read what the hover panel shows, draw a picture of it,
-/// propose a layout for it, and drop a proposal, for the shared layout or for one screen's own.
+/// What Agent HUD's MCP tools do in the running application: read what the hover panel shows, draw a picture of it or
+/// of a screen's resting HUD, propose a layout for it, and drop a proposal, for the shared layout or for one screen's
+/// own, whose proposal can also change the style of that screen's resting HUD.
 ///
 /// Every answer comes from what the application holds: the last report, the settings and the layout store, the
 /// attached screens, and the panel's own views, which the host measures and draws off screen through the closures it
 /// passes in. Nothing here starts a provider read, opens the panel or writes the agent list or the settings, and nothing
-/// here saves: a proposal is a draft until a person presses Save in the panel. A proposal is checked as an agent sent
-/// it, and one the panel cannot do as asked is refused whole, with every reason, so an agent never believes a change
-/// that fell back. What the layout already holds for a block, a row or an agent that is away may come back with it, so
-/// the layout that was read can be sent again, and a proposal is kept as what it changes, so one that draws what is
-/// saved leaves no draft. Screens are named by role and agents by vendor; nothing names an account.
+/// here saves: a proposal is a draft, a screen's style one drawn over its settings, until a person presses Save in the
+/// panel. A proposal is checked as an agent sent it, and one the panel or the HUD cannot do as asked is refused whole,
+/// with every reason, so an agent never believes a change that fell back. What the layout already holds for a block, a
+/// row or an agent that is away may come back with it, so the layout that was read can be sent again, and a proposal is
+/// kept as what it changes, so one that draws what is saved leaves no draft. Screens are named by role and agents by
+/// vendor; nothing names an account.
 @MainActor
 public struct PanelTools {
     let store: UsageStore
@@ -23,6 +25,9 @@ public struct PanelTools {
     let picture: (@MainActor (PanelLayoutScope) -> PanelPicture?)?
     /// Measures a scope's panel without drawing it; nil where nothing can.
     let fit: (@MainActor (PanelLayoutScope) -> PanelFit?)?
+    /// Draws an attached screen's resting HUD, by its key, as `get_panel_image` returns it with show "hud"; nil where
+    /// nothing can draw it.
+    let hud: (@MainActor (String) -> HUDPicture?)?
 
     /// Drawn once a launch. The layout store counts its changes from 0 at every launch, so counted from 0 a revision
     /// an agent read before a relaunch would pass for the current one after it.
@@ -35,21 +40,26 @@ public struct PanelTools {
     ///   out and what providers and clients wrote as placeholder bars; without it `get_panel_image` is refused.
     /// - fit: measures that panel off screen; without it `get_panel` leaves out the panel's height and whether it
     ///   scrolls.
+    /// - hud: draws an attached screen's resting HUD off screen as it looks now, a style draft included, without
+    ///   opening anything; without it `get_panel_image` refuses show "hud".
     public init(store: UsageStore, screens: (@MainActor () -> [PanelScreen])? = nil,
                 picture: (@MainActor (PanelLayoutScope) -> PanelPicture?)? = nil,
-                fit: (@MainActor (PanelLayoutScope) -> PanelFit?)? = nil) {
-        self.init(store: store, launch: Self.drawnAtLaunch, screens: screens, picture: picture, fit: fit)
+                fit: (@MainActor (PanelLayoutScope) -> PanelFit?)? = nil,
+                hud: (@MainActor (String) -> HUDPicture?)? = nil) {
+        self.init(store: store, launch: Self.drawnAtLaunch, screens: screens, picture: picture, fit: fit, hud: hud)
     }
 
     /// - launch: the number revisions are counted from, where a test names its own.
     init(store: UsageStore, launch: Int64, screens: (@MainActor () -> [PanelScreen])? = nil,
          picture: (@MainActor (PanelLayoutScope) -> PanelPicture?)? = nil,
-         fit: (@MainActor (PanelLayoutScope) -> PanelFit?)? = nil) {
+         fit: (@MainActor (PanelLayoutScope) -> PanelFit?)? = nil,
+         hud: (@MainActor (String) -> HUDPicture?)? = nil) {
         self.store = store
         self.launch = launch
         self.screens = screens
         self.picture = picture
         self.fit = fit
+        self.hud = hud
     }
 
     var layout: PanelLayoutStore { store.settings.panelLayout }
@@ -68,11 +78,19 @@ public struct PanelTools {
             do { return .result(panel(try scope(of: arguments, among: attached), among: attached)) }
             catch { return .failure(Self.sentence(error)) }
         case MCPTools.getPanelImage:
-            if let unknown = Self.unknown(arguments, taking: ["screen"]) {
-                return .failure("get_panel_image takes only screen. \(unknown)")
+            if let unknown = Self.unknown(arguments, taking: ["screen", "show"]) {
+                return .failure("get_panel_image takes only screen and show. \(unknown)")
             }
-            do { return image(try scope(of: arguments, among: attached), among: attached) }
-            catch { return .failure(Self.sentence(error)) }
+            do {
+                let scope = try scope(of: arguments, among: attached)
+                switch arguments["show"] ?? .null {
+                case .null, .string("panel"): return image(scope, among: attached)
+                case .string("hud"): return hudImage(scope, among: attached)
+                default: return .failure("show is \"panel\", the default, or \"hud\".")
+                }
+            } catch {
+                return .failure(Self.sentence(error))
+            }
         case MCPTools.setPanelLayout:
             return propose(arguments, among: attached)
         case MCPTools.discardPanelDraft:
@@ -81,8 +99,11 @@ public struct PanelTools {
             }
             do {
                 let scope = try scope(of: arguments, among: attached)
+                let styled = layout.hasStyleDraft(scope.screenKey)
                 layout.discard(scope)
-                return .result(panel(scope, among: attached, note: discardNote(scope, among: attached)))
+                var note = discardNote(scope, among: attached)
+                if styled { note += " Its resting HUD is back to the style it has saved." }
+                return .result(panel(scope, among: attached, note: note))
             } catch {
                 return .failure("Nothing was changed. " + Self.sentence(error))
             }
@@ -162,9 +183,15 @@ public struct PanelTools {
             guard Self.layoutKeys.allSatisfy({ (arguments[$0] ?? .null) == .null }) else {
                 return .failure("Nothing was changed. Pass either from or a layout, not both.")
             }
+            // For a screen, the default and the previous version take its resting HUD's style with its layout, as a
+            // person's Reset to Default and Revert to Previous do; using the shared layout leaves the style as saved, as
+            // Use Shared Layout does. A proposal is whole, so a style draft it does not bring is dropped.
+            let target = attached.first { $0.key == scope.screenKey }
+            var away = false
             switch from.stringValue {
             case "default":
-                layout.proposeDefault(scope)
+                away = scope.screenKey.map { target == nil && layout.versionChangesLook(of: $0, previous: false) } ?? false
+                layout.proposeDefault(scope, hasNotch: target?.hasNotch)
             case "previous":
                 guard layout.canRevert(scope) else {
                     if case .screen(let key) = scope {
@@ -173,40 +200,61 @@ public struct PanelTools {
                     }
                     return .failure("Nothing was changed. There is no previous saved layout.")
                 }
-                layout.proposePrevious(scope)
+                away = scope.screenKey.map { target == nil && layout.versionChangesLook(of: $0, previous: true) } ?? false
+                layout.proposePrevious(scope, hasNotch: target?.hasNotch)
             case "shared":
                 guard case .screen(let key) = scope else {
                     return .failure("Nothing was changed. from \"shared\" is for a screen: it proposes that the screen "
                                     + "use the shared layout, which is screen \"all\".")
                 }
                 layout.propose(.shared, for: key)
+                layout.discardStyle(key)
             default:
                 return .failure("Nothing was changed. from is \"default\", \"previous\" or \"shared\".")
             }
-            return .result(panel(scope, among: attached, note: proposalNote(scope, among: attached)))
+            var note = proposalNote(scope, among: attached)
+            if away {
+                note += " The placement and glow of its resting HUD in that version are not part of the draft while the "
+                    + "screen is not attached."
+            }
+            return .result(panel(scope, among: attached, note: note))
         }
         let document = JSONValue.object(arguments.filter { Self.layoutKeys.contains($0.key) })
         let existing = store.view.panelBlocks
         let saved = savedLayout(scope)
         let held = [effective(scope), saved]
         // Every reason at once: what the reading would forgive, then what the rest of the layout asks that the panel
-        // cannot do. What the layout already holds for a block, a row or an agent that is away may come back with it.
+        // or the screen's resting HUD cannot do. What the layout already holds for a block, a row or an agent that is
+        // away may come back with it.
         var reasons = PanelLayout.misreadings(of: document)
         let proposal = PanelLayout(json: document) ?? PanelLayout()
+        let style = StyleProposal(hud: arguments["hud"]?.objectValue ?? [:], scope: scope, among: attached, tools: self)
         reasons += proposal.issues(against: existing, holding: held).map { "\($0.path): \($0.message)" }
-        reasons += proposal.hudIssues(against: agents(for: scope, among: attached), whose: whose(scope, among: attached),
-                                      holding: held).map { "\($0.path): \($0.message)" }
+        reasons += style.reasons
+        reasons += proposal.hudIssues(against: agents(for: scope, among: attached, in: style.mode),
+                                      whose: whose(scope, among: attached), holding: held).map { "\($0.path): \($0.message)" }
         guard reasons.isEmpty else { return .failure("Nothing was changed. " + reasons.joined(separator: " ")) }
         // A proposal that draws what the saved layout draws is the saved layout, however it is spelled out: it leaves
-        // no draft, and nothing a person could save that changes nothing.
+        // no draft, and nothing a person could save that changes nothing. The same holds for a screen's style, and a
+        // proposal is whole: a style it leaves out is the style the screen has saved.
         let asked = proposal.reduced(against: existing)
         switch scope {
         case .shared:
             layout.propose(asked == layout.current.reduced(against: existing) ? layout.current : asked)
         case .screen(let key):
             layout.propose(choice(asked, for: key, against: existing), for: key)
+            if let target = style.target {
+                layout.proposeStyle(style.reduced, for: key, hasNotch: target.hasNotch)
+            } else {
+                layout.discardStyle(key)
+            }
         }
-        return .result(panel(scope, among: attached, note: proposalNote(scope, among: attached)))
+        var note = proposalNote(scope, among: attached)
+        if style.placedClear {
+            note += " The dock it becomes starts at position 0, the top left, clear of the notch, as Settings places one; "
+                + "another position can be proposed once the user has saved it."
+        }
+        return .result(panel(scope, among: attached, note: note))
     }
 
     /// What a screen is proposed for a layout sent for it: its saved own layout where the layout draws that; the shared
@@ -231,9 +279,12 @@ public struct PanelTools {
         return layout.ownLayout(of: key) ?? layout.current
     }
 
-    /// The agents a scope's layout can list now: an attached screen's own, else what any attached screen can show.
-    func agents(for scope: PanelLayoutScope, among attached: [PanelScreen]) -> [String] {
-        if case .screen(let key) = scope, let screen = attached.first(where: { $0.key == key }) { return screen.agents }
+    /// The agents a scope's layout can list now: an attached screen's own in `mode`, the mode it has now where none is
+    /// named, else what any attached screen can show.
+    func agents(for scope: PanelLayoutScope, among attached: [PanelScreen], in mode: HUDMode? = nil) -> [String] {
+        if case .screen(let key) = scope, let screen = attached.first(where: { $0.key == key }) {
+            return screen.agents(in: mode ?? screen.mode)
+        }
         return VendorMark.merged(attached.flatMap(\.agents))
     }
 
@@ -253,7 +304,9 @@ public struct PanelTools {
                 : Self.draftNote + " Screens with a layout of their own do not show it: \(PanelLayout.quoted(own))."
         case .screen(let key):
             let name = name(of: key, among: attached)
-            guard let draft = layout.draft(of: key) else {
+            let draft = layout.draft(of: key)
+            if layout.styleDraft(of: key) != nil { return styleNote(name, layout: draft) }
+            guard let draft else {
                 return "This is what \(name) already has saved, so there is no draft for it."
             }
             let what = draft == .shared ? "an unsaved draft that uses the shared layout" : "an unsaved draft of its own"
@@ -264,6 +317,22 @@ public struct PanelTools {
             return "Shown in the panel on \(name) as \(what). The user keeps it by hovering the Agent HUD on that display "
                 + "and pressing Save in the panel; it is dropped when Agent HUD restarts."
         }
+    }
+
+    /// What a proposal that leaves a screen a style draft did: its resting HUD shows the style at once, beside the
+    /// layout draft it has, if any. A person keeps both with one Save; moving that HUD or changing that display in
+    /// Settings drops the style first.
+    private func styleNote(_ name: String, layout draft: PanelScreenLayout?) -> String {
+        let dropped = "and the style also when the user moves that HUD or changes that display in Settings."
+        guard let draft else {
+            return "The resting HUD of \(name) shows its style as an unsaved draft; its panel's layout is the one it has "
+                + "saved. The user keeps the style by hovering the Agent HUD on that display and pressing Save in the "
+                + "panel; it is dropped when Agent HUD restarts, " + dropped
+        }
+        let what = draft == .shared ? "an unsaved draft that uses the shared layout" : "an unsaved draft of its own"
+        return "Shown on \(name) as \(what), with its resting HUD's style as an unsaved draft too. The user keeps both by "
+            + "hovering the Agent HUD on that display and pressing Save in the panel; they are dropped when Agent HUD "
+            + "restarts, " + dropped
     }
 
     private func discardNote(_ scope: PanelLayoutScope, among attached: [PanelScreen]) -> String {

@@ -26,7 +26,7 @@ final class MCPToolsTests: XCTestCase {
         let known: Set<String> = ["type", "description", "properties", "additionalProperties", "items", "enum"]
         XCTAssertTrue(Set(node.keys).isSubset(of: known), "\(path): \(node.keys.sorted())", file: file, line: line)
         let type = try XCTUnwrap(node["type"]?.stringValue, "\(path) has a type", file: file, line: line)
-        XCTAssertTrue(["object", "array", "string", "boolean", "integer"].contains(type), "\(path): \(type)", file: file, line: line)
+        XCTAssertTrue(["object", "array", "string", "boolean", "integer", "number"].contains(type), "\(path): \(type)", file: file, line: line)
         if let description = node["description"] {
             let sentence = try XCTUnwrap(description.stringValue, file: file, line: line)
             XCTAssertFalse(sentence.isEmpty || sentence.contains("\n"), "\(path) is described on one line", file: file, line: line)
@@ -67,11 +67,12 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual([MCPTools.getPanel, MCPTools.getPanelImage, MCPTools.setPanelLayout, MCPTools.discardPanelDraft],
                        tools.map { $0["name"].stringValue })
         for index in [0, 1, 3] {
-            XCTAssertEqual(tools[index]["inputSchema"]["properties"].objectValue?.keys.sorted(), ["screen"],
-                           "\(tools[index]["name"]) takes the screen it acts on and nothing else")
+            XCTAssertEqual(tools[index]["inputSchema"]["properties"].objectValue?.keys.sorted(), index == 1 ? ["screen", "show"] : ["screen"],
+                           "\(tools[index]["name"]) takes the screen it acts on and, for a picture, what to draw")
             XCTAssertEqual(tools[index]["inputSchema"]["properties"]["screen"], tools[2]["inputSchema"]["properties"]["screen"],
                            "every tool names a screen the same way")
         }
+        XCTAssertEqual(tools[1]["inputSchema"]["properties"]["show"]["enum"], .array([.string("panel"), .string("hud")]))
         XCTAssertFalse(tools.contains { $0["name"].stringValue?.contains("save") == true }, "saving is the user's click in the panel")
     }
 
@@ -100,9 +101,12 @@ final class MCPToolsTests: XCTestCase {
         let style = schema["properties"]["style"]
         XCTAssertEqual(style["type"], .string("object"))
         XCTAssertEqual(style["additionalProperties"], .bool(false))
-        XCTAssertEqual(style["properties"].objectValue?.keys.sorted(), ["separators", "spacing"])
+        XCTAssertEqual(style["properties"].objectValue?.keys.sorted(), ["separators", "spacing", "width"])
         XCTAssertEqual(choices(style["properties"]["spacing"]), ["compact", "regular", "roomy"])
         XCTAssertEqual(style["properties"]["separators"]["type"], .string("boolean"))
+        XCTAssertEqual(style["properties"]["width"]["type"], .string("integer"))
+        XCTAssertEqual(style["properties"]["width"]["description"].stringValue,
+                       "The whole panel's width, 480 to 720 points; 540 if left out.")
 
         XCTAssertEqual(schema["properties"]["order"]["items"], .object(["type": .string("string")]))
         for name in ["sections", "hiddenSections"] {
@@ -118,9 +122,31 @@ final class MCPToolsTests: XCTestCase {
         let hud = schema["properties"]["hud"]
         XCTAssertEqual(hud["type"], .string("object"))
         XCTAssertEqual(hud["additionalProperties"], .bool(false))
-        XCTAssertEqual(hud["properties"].objectValue?.keys.sorted(), ["agents"])
+        XCTAssertEqual(hud["properties"].objectValue?.keys.sorted(),
+                       ["agents", "bots", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "mode", "position", "ringWidth",
+                        "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize"])
         XCTAssertEqual(hud["properties"]["agents"]["type"], .string("array"))
         XCTAssertEqual(hud["properties"]["agents"]["items"], .object(["type": .string("string")]))
+        XCTAssertEqual(choices(hud["properties"]["mode"]), ["notch", "dynamic", "simple"])
+        XCTAssertEqual(choices(hud["properties"]["edge"]), ["top", "right", "bottom", "left"])
+        for name in ["position", "logoSize", "logoGap", "edgeDistance", "simpleSize", "ringWidth"] {
+            XCTAssertEqual(hud["properties"][name]["type"], .string("number"), name)
+        }
+        for name in ["showLogos", "showRings", "showNumbers", "bots", "separateAgents"] {
+            XCTAssertEqual(hud["properties"][name]["type"], .string("boolean"), name)
+        }
+        XCTAssertEqual(hud["properties"]["logoSize"]["description"].stringValue, "Dynamic: logo size in points, 12 to 36.")
+        XCTAssertEqual(hud["properties"]["logoGap"]["description"].stringValue,
+                       "Dynamic: gap between logos, as a share of a logo, 0.1 to 0.6.")
+        let glow = hud["properties"]["glow"]
+        XCTAssertEqual(glow["additionalProperties"], .bool(false))
+        XCTAssertEqual(glow["properties"].objectValue?.keys.sorted(),
+                       ["amplitude", "blur", "brightness", "effect", "outwardOnly", "range", "speed", "style"])
+        XCTAssertEqual(choices(glow["properties"]["style"]), ["blur", "dots", "ascii", "blocks", "braille", "binary"])
+        XCTAssertEqual(choices(glow["properties"]["effect"]), ["breathe", "flow", "scan", "ripple", "shimmer", "boot"])
+        XCTAssertEqual(glow["properties"]["speed"]["description"].stringValue,
+                       "Seconds a cycle takes while an agent works, 1 to 12.")
+        XCTAssertEqual(glow["properties"]["brightness"]["description"].stringValue, "Its strength, 0.2 to 1.")
     }
 
     /// The names the schema offers are the names the layout reads, so an agent is never offered one that is refused.
@@ -133,19 +159,26 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(choices(block["ringSize"]), PanelRingSize.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["style"]["properties"]["spacing"]), PanelSpacing.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["sections"]["items"]), PanelSection.allCases.map(\.rawValue))
+        let hud = schema["properties"]["hud"]["properties"]
+        XCTAssertEqual(choices(hud["mode"]), HUDMode.allCases.map(\.agentName))
+        XCTAssertEqual(choices(hud["edge"]), HUDEdge.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(hud["glow"]["properties"]["style"]), GlowStyle.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(hud["glow"]["properties"]["effect"]), GlowEffect.allCases.map(\.rawValue))
+        XCTAssertEqual(Set(hud.objectValue?.keys.map { $0 } ?? []), Set(["agents"] + HUDStyle.names),
+                       "the hud's fields are the ones the strict reading knows")
     }
 
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {
         let tools = Dictionary(uniqueKeysWithValues: MCPTools.definitions.map { ($0["name"].stringValue ?? "", $0) })
         XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
-                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's height and whether it scrolls, and the widgets and measures each block accepts; and the attached screens, with the agents each one's resting HUD can show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
+                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; and the attached screens, each with its resting HUD's style and the agents it can show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
         XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
-                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with account names masked and session titles left out. Use it to check how a layout looks; get_panel reads the same panel as data.")
+                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with account names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now. Use it to check how a change looks; get_panel reads the same as data.")
         XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
         XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
-                       "Propose a layout for the Agent HUD hover panel: its blocks, sections and style, and which agents the screen's resting HUD shows. Send the whole layout you want; anything left out uses the default. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead, or 'shared' to have a screen use the shared layout again.")
+                       "Propose a layout for the Agent HUD hover panel: its blocks, sections and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead, for a screen with the resting HUD style that goes with it, or 'shared' to have a screen use the shared layout again.")
         XCTAssertEqual(tools["discard_panel_draft"]?["description"].stringValue,
-                       "Drop the unsaved draft so the Agent HUD panel returns to the saved layout.")
+                       "Drop the unsaved draft so the Agent HUD panel returns to the saved layout and, for a screen, its resting HUD to its saved style.")
 
         XCTAssertEqual(tools["get_panel"]?["annotations"], .object(["readOnlyHint": .bool(true), "openWorldHint": .bool(false)]))
         XCTAssertEqual(tools["get_panel_image"]?["annotations"], .object(["readOnlyHint": .bool(true), "openWorldHint": .bool(false)]))

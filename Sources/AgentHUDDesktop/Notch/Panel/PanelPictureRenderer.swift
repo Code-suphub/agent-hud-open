@@ -54,8 +54,11 @@ struct PanelPictureRenderer {
     /// The tallest picture drawn, in pixels.
     var pixelLimit = PanelPicture.pixelLimit
 
-    /// The whole panel's width, which every display's island gives it.
-    static var width: CGFloat { IslandController.expandedWidth }
+    /// The whole panel's width, which the island gives it: the width of the layout drawn (`PanelStyle.panelWidth`), or on
+    /// a side dock the width that keeps the content at its narrowest (`HoverPanelView.width(_:insets:)`).
+    var width: CGFloat {
+        HoverPanelView.width(CGFloat(store.settings.panelLayout.effective(for: screen).style.panelWidth), insets: display.insets)
+    }
 
     /// The panel's height as the island opens it, at least 80 points, and the tallest the display lets it open.
     func fit() -> PanelFit {
@@ -71,7 +74,7 @@ struct PanelPictureRenderer {
     /// The picture, masked or as a person sees the panel.
     func draw(masked: Bool) -> PanelPicture? {
         let fit = fit()
-        let size = CGSize(width: Self.width, height: CGFloat(fit.height))
+        let size = CGSize(width: width, height: CGFloat(fit.height))
         let scale = PanelPicture.scale(forHeight: fit.height, limit: pixelLimit)
         let wide = Int((Double(size.width) * scale).rounded())
         let high = min(pixelLimit, Int((fit.height * scale).rounded()))
@@ -97,7 +100,7 @@ struct PanelPictureRenderer {
     /// The panel's own view as the island draws the whole of it, without an alert or a refresh error.
     func panel(masked: Bool) -> some View {
         HoverPanelView(store: store, onOpenStats: {}, insets: display.insets, showsRefreshError: false, screen: screen)
-            .frame(width: Self.width, alignment: .top)
+            .frame(width: width, alignment: .top)
             .environment(\.masksIdentity, masked)
     }
 

@@ -19,7 +19,7 @@ final class PanelToolsOptionsTests: PanelToolsCase {
                      "blocks.Claude.ringSize is one of \"small\", \"medium\", \"large\".",
                      "blocks.Codex.columns is a whole number from 2 to 6.",
                      "style.spacing is one of \"compact\", \"regular\", \"roomy\".", "style.separators is true or false.",
-                     "style has no property \"dividers\"; the style takes spacing and separators."] {
+                     "style has no property \"dividers\"; the style takes spacing, separators and width."] {
             XCTAssertTrue(typed.contains(part), "\(part) — \(typed)")
         }
         XCTAssertTrue(try refusal(["style": .string("compact")]).contains("style is an object."))
@@ -51,7 +51,7 @@ final class PanelToolsOptionsTests: PanelToolsCase {
             "Claude": PanelLayout.Block(widget: .ring, measures: [.cost], countdown: false, columns: 2, ringSize: .large),
             "Codex": PanelLayout.Block(widget: .number, columns: 6),
         ], style: PanelStyle(spacing: .compact, separators: false)))
-        XCTAssertEqual(panel["style"], .object(["spacing": .string("compact"), "separators": .bool(false)]))
+        XCTAssertEqual(panel["style"], .object(["spacing": .string("compact"), "separators": .bool(false), "width": .integer(540)]))
         let claude = try block("Claude", in: panel)
         XCTAssertEqual(claude["measures"], .array([.string("cost")]))
         XCTAssertEqual(claude["countdown"], .bool(false))

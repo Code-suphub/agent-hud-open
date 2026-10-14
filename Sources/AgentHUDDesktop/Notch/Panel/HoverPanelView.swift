@@ -32,6 +32,19 @@ struct HoverPanelView: View {
     var insets = HoverPanelView.notchInsets
     static let notchInsets = EdgeInsets(top: 32, leading: 18, bottom: 14, trailing: 18)
 
+    /// The narrowest the panel's content is laid out: an agent's own panel at its narrowest, inside the insets of a card
+    /// that keeps no strip clear, 404 points. Beside the notch and on a top or bottom dock the whole panel's content is
+    /// always wider; a dock on a side edge keeps its strip clear inside the panel, so there the panel is widened to it.
+    static let narrowestContentWidth = CGFloat(PanelStyle(width: PanelStyle.widthRange.lowerBound).agentPanelWidth)
+        - IslandRootView.detachedInsets.leading - IslandRootView.detachedInsets.trailing
+
+    /// The whole panel's width with `insets`: its layout's `width`, or wider where those insets would leave the content
+    /// narrower than `narrowestContentWidth`, which only a side dock's strip does. The type and the insets stay as they
+    /// are, so no text is cut that the narrowest panel shows whole.
+    static func width(_ width: CGFloat, insets: EdgeInsets) -> CGFloat {
+        max(width, narrowestContentWidth + insets.leading + insets.trailing)
+    }
+
     /// The row whose questions are open for answering here rather than in the agent.
     var answeringSessionID: String? = nil
     var onAnswerSession: (String?) -> Void = { _ in }
@@ -116,7 +129,8 @@ struct HoverPanelView: View {
             } else {
                 measuredContent
             }
-            // An unsaved layout is said above the footer, outside the scrolling content, and counts in the height.
+            // An unsaved layout, or this screen's unsaved HUD style, is said above the footer, outside the scrolling
+            // content, and counts in the height.
             VStack(alignment: .leading, spacing: footerSpacing) {
                 if layout.hasDraft(on: screen) {
                     PanelDraftBar(layout: layout, screen: screen).transition(.opacity)
@@ -134,6 +148,7 @@ struct HoverPanelView: View {
         .foregroundStyle(theme.text)
         .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.effective(for: screen))
         .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.draftScope(on: screen))
+        .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.hasDraft(on: screen))
     }
 
     private var measuredContent: some View {

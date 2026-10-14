@@ -2,11 +2,14 @@ import SwiftUI
 import AgentHUDCore
 
 /// One screen's panel layout, in that screen's part of Settings → Display: whether the screen uses the shared layout or
-/// its own, in which state, and what a person can do about it. A click takes effect at once, where an agent's change
+/// its own, in which state, and what a person can do about it. A screen's versions cover its whole look, so Revert to
+/// Previous and Reset to Default take its HUD style back too. A click takes effect at once, where an agent's change
 /// waits in the panel to be saved.
 struct ScreenLayoutRow: View {
     let layout: PanelLayoutStore
     let screen: String
+    /// Whether the screen keeps a placement or a glow of its own in the settings, which Reset to Default takes away.
+    var hasOwnStyle = false
 
     private var scope: PanelLayoutScope { .screen(screen) }
     /// Whether the screen keeps a layout of its own, saved or as its draft.
@@ -24,7 +27,8 @@ struct ScreenLayoutRow: View {
                     .accessibilityIdentifier("settings-screen-layout-revert")
                 if hasOwn {
                     Button(L10n.text("恢复默认", "Reset to Default")) { layout.reset(scope) }
-                        .disabled(layout.ownLayout(of: screen)?.isDefault == true && layout.draft(of: screen) == nil)
+                        .disabled(layout.ownLayout(of: screen)?.isDefault == true && layout.draft(of: screen) == nil
+                                  && !layout.hasStyleDraft(screen) && !hasOwnStyle)
                         .accessibilityIdentifier("settings-screen-layout-reset")
                 }
             }
@@ -32,8 +36,23 @@ struct ScreenLayoutRow: View {
         }
     }
 
-    /// Which layout the screen's panel draws, and in which state.
+    /// Which layout the screen's panel draws, and in which state, whether its HUD shows an agent's unsaved style, and,
+    /// where Reset to Default is offered and the display keeps a placement or a glow of its own, that the reset takes
+    /// those back to the defaults too.
     private var status: String {
+        var lines = [layoutStatus]
+        if layout.hasStyleDraft(screen) {
+            lines.append(L10n.text("HUD 正显示 agent 未保存的样式，在这里改动会先丢弃它",
+                                   "The HUD shows an agent's unsaved style; a change here drops it first"))
+        }
+        if hasOwn, hasOwnStyle {
+            lines.append(L10n.text("恢复默认也会重置它的 HUD 样式和光晕", "Reset to Default also resets its HUD style and glow"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Which layout the screen's panel draws, and in which state.
+    private var layoutStatus: String {
         switch layout.draft(of: screen) {
         case .own?:
             return L10n.text("面板正显示这块屏幕未保存的布局", "The panel shows an unsaved layout for this display")

@@ -273,7 +273,8 @@ final class PanelToolsScreensTests: PanelToolsCase {
     func testWhatIsReadOfTheScreensNamesNoOneAndNoAccount() throws {
         let text = String(decoding: try RecordCoding.encoder().encode(JSONValue.object(try call(MCPTools.getPanel))), as: UTF8.self)
         for listed in screens(try call(MCPTools.getPanel)) {
-            XCTAssertEqual(listed.keys.sorted(), ["agents", "edge", "hasNotch", "key", "layout", "mode", "name", "shows", "unsaved"])
+            XCTAssertEqual(listed.keys.sorted(), ["agents", "edge", "hasNotch", "hud", "key", "layout", "mode", "name", "shows",
+                                                  "styleUnsaved", "unsaved", "width"])
         }
         let labels = (store.report?.accounts ?? [:]).values.flatMap { $0 }.flatMap { [$0.displayName, $0.account.id] }
         for label in labels { XCTAssertFalse(text.contains(label), label) }

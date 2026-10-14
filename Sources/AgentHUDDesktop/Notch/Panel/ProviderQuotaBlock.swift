@@ -284,8 +284,15 @@ struct CodexResetCreditsView: View {
             Spacer(minLength: 8)
             if resets.availableCount > 0 {
                 if showExpiry {
-                    Text(nextExpiryLabel)
-                        .font(.tabular(11))
+                    // Never cut: where the whole label has no room beside the count, as in a narrow panel, the date
+                    // alone stands in for it, and where that has none either the icon, whose card tells every expiry.
+                    let label = nextExpiryLabel
+                    ViewThatFits(in: .horizontal) {
+                        Text(label.full)
+                        Text(label.short)
+                        Color.clear.frame(width: 0, height: 0)
+                    }
+                    .font(.tabular(11))
                 }
                 Image(systemName: "info.circle")
                     .font(.ui(11))
@@ -310,15 +317,19 @@ struct CodexResetCreditsView: View {
         L10n.text("\(resets.availableCount) 次可用", "\(resets.availableCount) available")
     }
 
-    private var nextExpiryLabel: String {
+    /// The earliest expiry, whole and short: the short form of a date is the date alone; a label without one has none
+    /// shorter than itself.
+    var nextExpiryLabel: (full: String, short: String) {
         let dates = resets.creditsByExpiry.compactMap(\.expirationDate)
         guard let date = dates.first else {
-            return L10n.text("有效期未提供", "Expiry unavailable")
+            let label = L10n.text("有效期未提供", "Expiry unavailable")
+            return (label, label)
         }
         guard dates.count == resets.availableCount else {
-            return L10n.text("部分有效期可查看", "Partial expiry details")
+            let label = L10n.text("部分有效期可查看", "Partial expiry details")
+            return (label, label)
         }
         let label = date.formatted(Date.FormatStyle().month(.abbreviated).day().locale(L10n.dateLocale))
-        return L10n.text("最早 \(label) 到期", "First expires \(label)")
+        return (L10n.text("最早 \(label) 到期", "First expires \(label)"), label)
     }
 }

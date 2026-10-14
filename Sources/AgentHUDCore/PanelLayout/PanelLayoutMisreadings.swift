@@ -3,7 +3,8 @@ import Foundation
 
 extension PanelLayout {
     /// What reading a layout's JSON would forgive, as sentences for the agent that sent it: a value of the wrong type,
-    /// a name this build does not know, columns outside 2 to 6, a property a block, the style or the hud does not have.
+    /// a name this build does not know, columns outside 2 to 6, a width outside 480 to 720, a hud style value outside
+    /// its range, a property a block, the style, the hud or its glow does not have.
     /// Stored layouts are read forgivingly so that a newer build's layout still loads; an agent's proposal is told
     /// instead, since a forgiven name is a change that silently did not happen.
     static func misreadings(of json: JSONValue) -> [String] {
@@ -62,13 +63,19 @@ extension PanelLayout {
                 found += misnamed(value, at: "style.spacing", among: PanelSpacing.allCases.map(\.rawValue))
             case "separators":
                 if value != .null, value.boolValue == nil { found.append("style.separators is true or false.") }
+            case "width":
+                if value != .null, value.countValue.map({ PanelStyle.widthRange.contains($0) }) != true {
+                    found.append("style.width is a whole number from \(PanelStyle.widthRange.lowerBound) to "
+                                 + "\(PanelStyle.widthRange.upperBound).")
+                }
             default:
-                found.append("style has no property \"\(property)\"; the style takes spacing and separators.")
+                found.append("style has no property \"\(property)\"; the style takes spacing, separators and width.")
             }
         }
         return found
     }
 
+    /// What is wrong with a hud: its agents, as below, and its style fields (`HUDStyle.misreadings(ofField:_:)`).
     private static func misreadings(ofHUD value: JSONValue) -> [String] {
         if value == .null { return [] }
         guard let hud = value.objectValue else { return ["hud is an object."] }
@@ -76,7 +83,8 @@ extension PanelLayout {
         for property in hud.keys.sorted() {
             let value = hud[property] ?? .null
             guard property == "agents" else {
-                found.append("hud has no property \"\(property)\"; the hud takes agents.")
+                found += HUDStyle.misreadings(ofField: property, value)
+                    ?? ["hud has no property \"\(property)\"; the hud takes \(HUDStyle.listed(["agents"] + HUDStyle.names))."]
                 continue
             }
             found += names(value, at: "hud.agents", among: nil)

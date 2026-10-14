@@ -870,14 +870,17 @@ struct IslandScene: View {
         }
         let hosting = NSHostingView(rootView: HoverPanelView(store: store, onOpenStats: {}, alert: alert,
                                                             failedListedSessionID: failedListedSessionID, screen: screen)
-            .frame(width: IslandController.expandedWidth).fixedSize(horizontal: false, vertical: true))
+            .frame(width: panelWidth).fixedSize(horizontal: false, vertical: true))
         return max(80, min(hosting.fittingSize.height, maximumPanelHeight))
     }
+
+    /// The whole panel's width in the layout the screen draws, as the island gives it.
+    private var panelWidth: CGFloat { CGFloat(settings.panelLayout.effective(for: screen).style.panelWidth) }
 
     var body: some View {
         let cameraWidth: CGFloat = alert == nil ? 380 : 216
         let closedHeight: CGFloat = alert == nil ? 44 : 38
-        let islandSize = open ? CGSize(width: showsAlertDetails ? (alert?.detailWidth ?? IslandController.alertDetailWidth) : IslandController.expandedWidth, height: panelHeight)
+        let islandSize = open ? CGSize(width: showsAlertDetails ? (alert?.detailWidth ?? IslandController.alertDetailWidth) : panelWidth, height: panelHeight)
             : alert != nil ? CGSize(width: cameraWidth + 2 * (IslandController.alertWingWidth + IslandController.alertSidePadding), height: closedHeight)
             : CGSize(width: cameraWidth, height: closedHeight)
         let radius: CGFloat = open ? IslandController.expandedRadius : 14
@@ -912,17 +915,17 @@ struct IslandScene: View {
 
             GlowPreview(
                 appearance: glowAppearance,
-                settings: settings.settings.glow,
+                settings: settings.effectiveGlow(on: screen),
                 islandSize: islandSize,
                 islandRadius: radius
             )
             .environment(\.glowFrozenTime, glowTime ?? 0.9)
-            .frame(width: 720, alignment: .top)
+            .frame(width: max(720, islandSize.width + 2 * flare + 40), alignment: .top)
             island(cameraWidth: cameraWidth, closedHeight: closedHeight, size: islandSize)
                 .frame(width: islandSize.width + flare * 2, height: islandSize.height)
                 .shadow(color: Color.black.opacity(0.35), radius: 15, y: 8)
         }
-        .frame(width: 720, height: max(390, islandSize.height + 36))
+        .frame(width: max(720, islandSize.width + 2 * flare + 40), height: max(390, islandSize.height + 36))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -936,6 +939,7 @@ struct IslandScene: View {
             showsAlertDetails: showsAlertDetails, presentationSize: size
         )
         root.panelScreen = screen
+        root.panelWidth = panelWidth
         return root
     }
 }

@@ -1,9 +1,9 @@
 import AgentHUDSupport
 
 /// The tools Agent HUD's MCP server offers: a fixed list, the same for every client and in the same order, so a
-/// client may cache it. All four act on the hover panel's layouts, the shared one or a screen's own, and none of them
-/// saves a layout: saving is the user's click in the panel. What a tool does with its arguments is the running
-/// application's business; only the names and the shapes are known here.
+/// client may cache it. All four act on the hover panel's layouts, the shared one or a screen's own, and on one
+/// screen's resting HUD style, and none of them saves: saving is the user's click in the panel. What a tool does with
+/// its arguments is the running application's business; only the names and the shapes are known here.
 public enum MCPTools {
     /// The tools' names, as a client calls them and as the application is handed them.
     public static let getPanel = "get_panel"
@@ -15,34 +15,36 @@ public enum MCPTools {
     /// What a client's model is told about the server before it has called anything.
     static let instructions = """
         Agent HUD shows AI coding agents' quota, usage and sessions at the Mac's notch. \
-        These tools read what its hover panel shows and rearrange it, for every screen or for one. \
-        A layout change is a draft until the user presses Save in the panel.
+        These tools read what its hover panel shows and rearrange it, for every screen or for one, \
+        and restyle one screen's resting HUD. A change is a draft until the user presses Save in the panel.
         """
 
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
-        with their latest readings, the layout in effect, the panel's height and whether it scrolls, and the widgets \
-        and measures each block accepts; and the attached screens, with the agents each one's resting HUD can show. \
-        Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel \
-        shows them, in the application's language.
+        with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
+        widgets and measures each block accepts; and the attached screens, each with its resting HUD's style and the \
+        agents it can show. Call it before changing the layout; block, row and screen keys come from here. Names are \
+        written as the panel shows them, in the application's language.
         """
 
     private static let getPanelImageDescription = """
         Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with \
-        account names masked and session titles left out. Use it to check how a layout looks; get_panel reads the \
-        same panel as data.
+        account names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now. \
+        Use it to check how a change looks; get_panel reads the same as data.
         """
 
     private static let setPanelLayoutDescription = """
-        Propose a layout for the Agent HUD hover panel: its blocks, sections and style, and which agents the screen's \
-        resting HUD shows. Send the whole layout you want; anything left out uses the default. What the layout from \
-        get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an \
-        unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from \
-        'default' or 'previous' to propose the built-in layout or the last saved one instead, or 'shared' to have a \
-        screen use the shared layout again.
+        Propose a layout for the Agent HUD hover panel: its blocks, sections and style, its width included, and the \
+        screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes and glow. Send the whole \
+        layout you want; anything left out uses the default, and a HUD style field left out stays as saved. What the \
+        layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows \
+        at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD \
+        restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead, for \
+        a screen with the resting HUD style that goes with it, or 'shared' to have a screen use the shared layout again.
         """
 
-    private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved layout."
+    private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
+        + "layout and, for a screen, its resting HUD to its saved style."
 
     /// What every tool takes to name the layout it acts on.
     private static let screenDescription = "A screen key from get_panel for that screen's own layout; 'all', the default, "
@@ -51,8 +53,11 @@ public enum MCPTools {
     /// The definitions `tools/list` returns.
     static let definitions: [JSONValue] = [
         tool(getPanel, getPanelDescription, input: object(["screen": described("string", screenDescription)]), changes: false),
-        tool(getPanelImage, getPanelImageDescription, input: object(["screen": described("string", screenDescription)]),
-             changes: false),
+        tool(getPanelImage, getPanelImageDescription, input: object([
+            "screen": described("string", screenDescription),
+            "show": text("What to draw: the hover panel, the default, or the screen's resting HUD, which needs a screen key.",
+                         oneOf: ["panel", "hud"]),
+        ]), changes: false),
         tool(setPanelLayout, setPanelLayoutDescription, input: layout, changes: true),
         tool(discardPanelDraft, discardPanelDraftDescription, input: object(["screen": described("string", screenDescription)]),
              changes: true),
@@ -82,10 +87,38 @@ public enum MCPTools {
         let style = object([
             "spacing": text("Room between sections, blocks and rows; regular if left out.", oneOf: ["compact", "regular", "roomy"]),
             "separators": described("boolean", "False drops the lines between blocks and sections."),
+            "width": described("integer", "The whole panel's width, \(PanelStyle.widthRange.lowerBound) to "
+                               + "\(PanelStyle.widthRange.upperBound) points; \(PanelStyle.defaultWidth) if left out."),
         ], description: "How the whole panel is set.")
         let hud = object([
             "agents": list("Agents it shows, in order, by name from get_panel's screens; none shows every agent.", of: key),
-        ], description: "The screen's resting HUD: the marks of a Dynamic dock, the items of a Simple panel, the glow.")
+            "mode": text("For one screen only, as is every field but agents. notch needs a screen with a notch.",
+                         oneOf: HUDMode.allCases.map(\.agentName)),
+            "edge": text("Dynamic or simple: the edge it is parked on.", oneOf: HUDEdge.allCases.map(\.rawValue)),
+            "position": described("number", "Dynamic or simple: its centre along that edge, \(bounds(HUDStyle.Field.position.range)) "
+                                  + "A notch HUD made a dock at the top centre starts at 0, clear of the notch."),
+            "logoSize": number("Dynamic: logo size in points,", .logoSize),
+            "logoGap": number("Dynamic: gap between logos, as a share of a logo,", .logoGap),
+            "edgeDistance": number("Dynamic: logos' distance from the edge in points,", .edgeDistance),
+            "showLogos": described("boolean", "Dynamic: false leaves the backdrop alone."),
+            "simpleSize": number("Simple: ring diameter in points,", .simpleSize),
+            "ringWidth": number("Simple: ring stroke in points,", .ringWidth),
+            "showRings": described("boolean", "Simple: a ring round each mark."),
+            "showNumbers": described("boolean", "Simple: the percentage beside each mark."),
+            "bots": described("boolean", "Simple: marks turn into bots."),
+            "separateAgents": described("boolean", "Dynamic or simple: hovering a mark opens that agent's own panel."),
+            "glow": object([
+                "style": text("Glow style.", oneOf: GlowStyle.allCases.map(\.rawValue)),
+                "effect": text("What it plays.", oneOf: GlowEffect.allCases.map(\.rawValue)),
+                "brightness": number("Its strength,", glow: .brightness),
+                "range": number("Blur style: reach in points,", glow: .range),
+                "blur": number("Blur style: feather in points,", glow: .blur),
+                "speed": number("Seconds a cycle takes while an agent works,", glow: .speed),
+                "amplitude": number("Breathe effect: how deep a breath dips,", glow: .amplitude),
+                "outwardOnly": described("boolean", "Blur style: fade outward from the rim only."),
+            ], description: "Notch or dynamic: the glow."),
+        ], description: "The resting HUD: the marks of a Dynamic dock, the items of a Simple panel, the glow; a style "
+            + "field left out stays as saved.")
         return object([
             "screen": described("string", screenDescription),
             "blocks": .object(blocks),
@@ -123,6 +156,21 @@ public enum MCPTools {
 
     private static func described(_ type: String, _ description: String) -> JSONValue {
         .object(["type": .string(type), "description": .string(description)])
+    }
+
+    /// A number field of a screen's placement, described with the range it keeps within.
+    private static func number(_ description: String, _ field: HUDStyle.Field) -> JSONValue {
+        described("number", description + " " + bounds(field.range))
+    }
+
+    /// A number field of a screen's glow, described with the range it keeps within.
+    private static func number(_ description: String, glow field: HUDStyle.GlowField) -> JSONValue {
+        described("number", description + " " + bounds(field.range))
+    }
+
+    private static func bounds(_ range: ClosedRange<Double>?) -> String {
+        guard let range else { return "" }
+        return "\(HUDStyle.written(range.lowerBound)) to \(HUDStyle.written(range.upperBound))."
     }
 
     private static func text(_ description: String, oneOf values: [String]) -> JSONValue {

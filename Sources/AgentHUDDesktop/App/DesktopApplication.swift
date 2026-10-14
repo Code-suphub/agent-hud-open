@@ -153,8 +153,15 @@ public final class DesktopApplication {
                 return PanelPictureRenderer(store: self.store, display: self.notch?.panelDisplay(for: scope.screenKey) ?? .main,
                                             screen: scope.screenKey)
             }
+            // A screen's resting HUD is drawn as Settings previews it, off screen, with that display's notch.
+            let hud = { @MainActor [weak self] (key: String) -> HUDPicture? in
+                guard let self else { return nil }
+                let display = NSScreen.screens.first { ScreenIdentity.key(for: $0) == key }
+                return HUDPictureRenderer(store: self.store, screen: key, hasNotch: display.map(ScreenIdentity.hasNotch) ?? false,
+                                          metrics: ScreenMetrics(screen: display)).picture()
+            }
             let tools = PanelTools(store: store, screens: { [weak self] in self?.notch?.panelScreens ?? [] },
-                                   picture: { renderer($0)?.picture() }, fit: { renderer($0)?.fit() })
+                                   picture: { renderer($0)?.picture() }, fit: { renderer($0)?.fit() }, hud: hud)
             toolChannel = MCPAppChannel { tools.answer($0) }
             toolChannel?.start()
         }

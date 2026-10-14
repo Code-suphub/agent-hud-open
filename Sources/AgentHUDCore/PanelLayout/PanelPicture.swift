@@ -52,6 +52,29 @@ public struct PanelPicture: Equatable, Sendable {
     public var isScaledDown: Bool { scale < Self.pointScale }
 }
 
+/// A screen's resting HUD drawn for an agent that checks how a style looks: the island at the notch, a Dynamic dock's
+/// marks or a Simple panel, as that screen draws it now with any style draft, on a dark backdrop, as PNG data. A dock is
+/// laid along a top edge, as Settings previews it. It shows marks and figures, and no account or session.
+public struct HUDPicture: Equatable, Sendable {
+    /// The picture as PNG data, at `PanelPicture.pointScale` pixels a point.
+    public let png: Data
+    /// The picture's size in points.
+    public let width: Double
+    public let height: Double
+    /// The pixels a point the picture was drawn at.
+    public let scale: Double
+    /// Whether the HUD's glow is in the picture. A Simple panel draws none.
+    public let drawsGlow: Bool
+
+    public init(png: Data, width: Double, height: Double, scale: Double, drawsGlow: Bool) {
+        self.png = png
+        self.width = width
+        self.height = height
+        self.scale = scale
+        self.drawsGlow = drawsGlow
+    }
+}
+
 /// How the panel's picture hides whose it is. A picture goes to an agent's model like any tool result, so it shows
 /// how the panel is drawn and never whose accounts or work it shows. Off the picture nothing is masked.
 public enum IdentityMask {

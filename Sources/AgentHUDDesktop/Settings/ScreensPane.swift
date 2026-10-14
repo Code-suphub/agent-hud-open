@@ -25,21 +25,28 @@ struct ScreensPane: View {
         screens.first { $0.key == selected } ?? screens.first
     }
 
+    /// The selected screen's placement as its HUD draws it now, an agent's unsaved style included.
     private var placement: ScreenPlacement {
         guard let current else { return .default(hasNotch: false) }
-        return settings.settings.placement(on: current.key, hasNotch: current.hasNotch)
+        return settings.effectivePlacement(on: current.key, hasNotch: current.hasNotch)
+    }
+
+    /// A person's edit of the selected screen's placement: an agent's unsaved style for the screen is dropped first,
+    /// so the change is made to the placement the screen has saved, and only the fields it changes differ.
+    private func edit(_ change: (inout ScreenPlacement, Screen) -> Void) {
+        guard let current else { return }
+        settings.updateScreen(current.key) {
+            var next = $0.placement(on: current.key, hasNotch: current.hasNotch)
+            change(&next, current)
+            $0.screens[current.key] = next
+        }
     }
 
     /// Edits one field of the selected screen's placement, leaving the rest as stored.
     private func binding<Value>(_ field: WritableKeyPath<ScreenPlacement, Value>) -> Binding<Value> {
         Binding(
             get: { placement[keyPath: field] },
-            set: { value in
-                guard let key = current?.key else { return }
-                var next = placement
-                next[keyPath: field] = value
-                settings.update { $0.screens[key] = next }
-            }
+            set: { value in edit { next, _ in next[keyPath: field] = value } }
         )
     }
 
@@ -49,13 +56,12 @@ struct ScreensPane: View {
         Binding(
             get: { placement.mode },
             set: { mode in
-                guard let current else { return }
-                var next = placement
-                if next.mode == .notch, mode.isDocked, current.hasNotch, next.edge == .top, next.offset == 0.5 {
-                    next.offset = 0
+                edit { next, screen in
+                    if next.mode == .notch, mode.isDocked, screen.hasNotch, next.edge == .top, next.offset == 0.5 {
+                        next.offset = 0
+                    }
+                    next.mode = mode
                 }
-                next.mode = mode
-                settings.update { $0.screens[current.key] = next }
             }
         )
     }
@@ -107,7 +113,9 @@ struct ScreensPane: View {
             }
             if let current {
                 SettingsDivider(theme: theme)
-                ScreenLayoutRow(layout: settings.panelLayout, screen: current.key)
+                ScreenLayoutRow(layout: settings.panelLayout, screen: current.key,
+                                hasOwnStyle: settings.settings.screens[current.key] != nil
+                                    || settings.settings.screenGlow[current.key] != nil)
             }
             if placement.mode.isDocked {
                 SettingsDivider(theme: theme)
@@ -201,12 +209,11 @@ struct ScreensPane: View {
     }
 
     private func resetPosition() {
-        guard let current else { return }
-        var next = placement
-        next.edge = .top
-        // A short queue at top centre can disappear behind the physical notch.
-        next.offset = current.hasNotch && next.mode.isDocked ? 0 : 0.5
-        settings.update { $0.screens[current.key] = next }
+        edit { next, screen in
+            next.edge = .top
+            // A short queue at top centre can disappear behind the physical notch.
+            next.offset = screen.hasNotch && next.mode.isDocked ? 0 : 0.5
+        }
     }
 
     private func refresh() {

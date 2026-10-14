@@ -86,11 +86,33 @@ final class PanelToolsPictureTests: PanelToolsCase {
         XCTAssertFalse(fits["note"]?.stringValue?.contains("scrolls") == true)
     }
 
-    func testThePictureToolTakesOnlyAScreen() {
+    func testThePictureToolTakesOnlyAScreenAndWhatToShow() {
         let tools = tools(picture: picture(height: 741))
         XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.getPanelImage, arguments: ["scale": .integer(1), "block": .string("Claude")])),
-                       .failure("get_panel_image takes only screen. Unknown: \"block\", \"scale\"."))
+                       .failure("get_panel_image takes only screen and show. Unknown: \"block\", \"scale\"."))
+        XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.getPanelImage, arguments: ["show": .string("glow")])),
+                       .failure("show is \"panel\", the default, or \"hud\"."))
         XCTAssertEqual(drawn, 0, "nothing is drawn for a refused call")
+        guard case .result = tools.answer(MCPToolRequest(tool: MCPTools.getPanelImage, arguments: ["show": .string("panel")])) else {
+            return XCTFail("show panel is the panel")
+        }
+        XCTAssertEqual(drawn, 1)
+    }
+
+    /// A screen whose resting HUD has an unsaved style shows the bar that says so in its panel, which the note names
+    /// beside the saved layout it draws.
+    func testAPictureOfAScreenWithAStyleDraftSaysWhyItIsUnsaved() throws {
+        layout.proposeStyle(HUDStyle(logoSize: 30), for: "SCREEN-A", hasNotch: false)
+        let (result, _) = try answer(tools(picture: picture(height: 785)), ["screen": .string("SCREEN-A")])
+        XCTAssertEqual(result["unsaved"], .bool(true))
+        XCTAssertTrue(result["note"]?.stringValue?.hasPrefix("The hover panel on the screen \"SCREEN-A\", which is not attached "
+                                                             + "now, as the saved shared layout draws it, with the bar above its "
+                                                             + "footer that says its resting HUD's style is unsaved, 540 by 785")
+                      == true, "\(result["note"] ?? .null)")
+        layout.propose(.own(PanelLayout(order: ["Codex"])), for: "SCREEN-A")
+        let (both, _) = try answer(tools(picture: picture(height: 785)), ["screen": .string("SCREEN-A")])
+        XCTAssertTrue(both["note"]?.stringValue?.contains("with the bar above its footer for the unsaved layout and its resting "
+                                                          + "HUD's unsaved style") == true, "\(both["note"] ?? .null)")
     }
 
     func testWithoutARendererThePictureIsRefused() {

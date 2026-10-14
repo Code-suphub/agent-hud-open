@@ -70,6 +70,13 @@ enum ScreenIdentity {
         settings.placement(on: key(for: screen), hasNotch: hasNotch(screen))
     }
 
+    /// The placement a screen's HUD draws: the stored one, or the default its hardware deserves, with the style draft an
+    /// agent proposed for that screen drawn over it (`SettingsStore.effectivePlacement(on:hasNotch:)`).
+    @MainActor
+    static func placement(for screen: NSScreen, in settings: SettingsStore) -> ScreenPlacement {
+        settings.effectivePlacement(on: key(for: screen), hasNotch: hasNotch(screen))
+    }
+
     /// The screen the pointer is on, which is the one alerts belong on.
     static func underPointer(_ screens: [NSScreen] = NSScreen.screens) -> NSScreen? {
         let point = NSEvent.mouseLocation

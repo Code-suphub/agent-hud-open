@@ -14,7 +14,7 @@ final class PanelToolsTests: PanelToolsCase {
         XCTAssertEqual(panel["unsaved"], .bool(false))
         XCTAssertEqual(panel["hasPrevious"], .bool(false))
         XCTAssertEqual(panel["layout"], .object([:]))
-        XCTAssertEqual(panel["style"], .object(["spacing": .string("regular"), "separators": .bool(true)]))
+        XCTAssertEqual(panel["style"], .object(["spacing": .string("regular"), "separators": .bool(true), "width": .integer(540)]))
         XCTAssertEqual(panel["countdownOnInSettings"], .bool(true))
         XCTAssertNil(panel["note"])
         XCTAssertEqual(blocks(panel).map { $0["key"] }, [.string("Claude"), .string("Codex"), .string("api:DeepSeek")])

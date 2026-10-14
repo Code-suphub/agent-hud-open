@@ -58,17 +58,19 @@ extension SnapshotRunner {
                                         insets: IslandRootView.dockInsets(edge: .top, collapsedSize: CGSize(width: 120, height: 36)),
                                         focusVendor: "Claude", showsRefreshError: false, screen: "snapshot-notch")
         save("panel-layout-screen-draft-agent",
-             agentPanel.frame(width: IslandController.agentPanelWidth, alignment: .top)
+             agentPanel.frame(width: CGFloat(layout.effective(for: "snapshot-notch").style.agentPanelWidth), alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
                 .background(Color.black, in: RoundedRectangle(cornerRadius: IslandController.expandedRadius))
                 .padding(20).background(Color(white: 0.10)),
              folder: folder, scheme: .dark)
         layout.discard(.screen("snapshot-notch"))
 
-        // The first display keeps a layout of its own: rings for Claude, no token chart, and its own agents.
+        // The first display keeps a layout of its own: rings for Claude, no token chart, and its own agents; and a
+        // placement of its own, the one its hardware is given, so its row says Reset to Default takes that back too.
         if let first = ScreensPane.attached().first {
             keep(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring)], hiddenSections: [.tokens],
                              hud: PanelLayout.HUD(agents: listed)), for: first.key)
+            settings.update { $0.screens[first.key] = $0.screens[first.key] ?? .default(hasNotch: first.hasNotch) }
             save("panel-layout-settings-screen-dark", SettingsView(settings: settings, store: store, initialTab: .display)
                 .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
         }

@@ -1,59 +1,8 @@
 import AgentHUDSupport
 import Foundation
 
-/// What `get_panel` and `get_panel_image` tell an agent, and what every other tool answers with.
+/// What `get_panel` tells an agent, and what every tool but `get_panel_image` answers with.
 extension PanelTools {
-    // MARK: Picture
-
-    /// The picture with what it shows: which screen and layout and its revision, the panel's size in points, whether it
-    /// scrolls on its display, and the pixels a point it is drawn at, with a note that says the same in words.
-    func image(_ scope: PanelLayoutScope, among attached: [PanelScreen]) -> MCPToolReply {
-        guard let picture else {
-            return .failure("This copy of Agent HUD cannot draw the panel, so there is no picture of it here. "
-                            + "get_panel reads the same panel as data.")
-        }
-        guard let drawn = picture(scope) else {
-            return .failure("The panel's picture could not be drawn. Try again, or read the panel with get_panel.")
-        }
-        let fit = drawn.fit
-        var note: String
-        var display = "The main display"
-        switch scope {
-        case .shared:
-            note = "The hover panel as \(layout.hasDraft ? "the unsaved draft" : "the saved layout") draws it"
-        case .screen(let key):
-            note = "The hover panel on \(name(of: key, among: attached)) as \(drawing(key)) draws it"
-            if attached.contains(where: { $0.key == key }) { display = "That display" }
-        }
-        note += ", \(Self.points(drawn.width)) by \(Self.points(fit.height)) points, with account names masked, session titles "
-            + "left out and any reading's reason or client's notice drawn as grey bars."
-        if fit.scrolls {
-            note += " \(display) opens it at most \(Self.points(fit.maximumHeight)) points tall, so a person scrolls to see "
-                + "the rest; the picture shows all of it."
-        }
-        if drawn.isScaledDown {
-            note += " It is drawn at \(Self.hundredths(drawn.scale)) pixels a point instead of \(Self.points(PanelPicture.pointScale)) "
-                + "to stay within \(PanelPicture.pixelLimit) pixels tall."
-        }
-        let result: [String: JSONValue] = [
-            "screen": .string(Self.name(of: scope)), "revision": .integer(revision), "unsaved": .bool(unsaved(scope)),
-            "width": .integer(Int64(drawn.width.rounded())), "height": .integer(Int64(fit.height.rounded())),
-            "scrolls": .bool(fit.scrolls), "pixelsPerPoint": .number(Self.hundredths(drawn.scale)), "note": .string(note),
-        ]
-        return .result(result, images: [MCPImage(mimeType: "image/png", data: drawn.png)])
-    }
-
-    /// Which layout a screen's panel draws, in words.
-    private func drawing(_ key: String) -> String {
-        switch layout.draft(of: key) {
-        case .own?: return "its own unsaved draft"
-        case .shared?: return "the shared layout, in an unsaved draft that has it use the shared layout"
-        case nil: break
-        }
-        if layout.ownLayout(of: key) != nil { return "its own saved layout" }
-        return layout.hasDraft ? "the shared layout's unsaved draft" : "the saved shared layout"
-    }
-
     // MARK: Reading
 
     /// The screen argument that names a scope.
@@ -63,14 +12,15 @@ extension PanelTools {
     }
 
     /// Whether the panel of a scope shows a draft: the shared layout's own, or for a screen the one its bar saves.
-    private func unsaved(_ scope: PanelLayoutScope) -> Bool {
+    func unsaved(_ scope: PanelLayoutScope) -> Bool {
         guard case .screen(let key) = scope else { return layout.hasDraft }
         return layout.hasDraft(on: key)
     }
 
-    /// The panel as an agent reads it: which screen, the layout in effect there and the style it sets, the panel's
-    /// height on that display and whether it scrolls there, whether Settings shows reset countdowns, every section and
-    /// every block the panel has, shown or hidden, with the readings of each block's rows, and the attached screens.
+    /// The panel as an agent reads it: which screen, the layout in effect there, with a screen's style draft in its
+    /// hud, and the style it sets, its width among it, the panel's height on that display and whether it scrolls there,
+    /// whether Settings shows reset countdowns, every section and every block the panel has, shown or hidden, with the
+    /// readings of each block's rows, and the attached screens.
     func panel(_ scope: PanelLayoutScope, among attached: [PanelScreen], note: String? = nil) -> [String: JSONValue] {
         let effective = effective(scope), existing = store.view.panelBlocks
         let plan = PanelLayoutPlan(layout: effective, blocks: existing)
@@ -81,13 +31,14 @@ extension PanelTools {
         let shown = Set(plan.blocks.map(\.key))
         let drawn = plan.blocks + existing.filter { !shown.contains($0.key) }
             .map { PanelBlockPlan($0, changed: effective.blocks[$0.key] ?? PanelLayout.Block()) }
-        let style: [String: JSONValue] = ["spacing": .string(plan.style.spacing.rawValue), "separators": .bool(plan.style.separators)]
+        let style: [String: JSONValue] = ["spacing": .string(plan.style.spacing.rawValue), "separators": .bool(plan.style.separators),
+                                          "width": .integer(Int64(plan.style.panelWidth))]
         var result: [String: JSONValue] = [
             "screen": .string(Self.name(of: scope)),
             "revision": .integer(revision),
             "unsaved": .bool(unsaved(scope)),
             "hasPrevious": .bool(layout.canRevert(scope)),
-            "layout": (try? JSONValue.from(effective)) ?? .object([:]),
+            "layout": layoutJSON(scope),
             "style": .object(style),
             "countdownOnInSettings": .bool(settings.showResetCountdown),
             "sections": .array(sections.map { section in
@@ -107,14 +58,19 @@ extension PanelTools {
     }
 
     /// One attached screen as an agent reads it: its key and role, how it presents the HUD, which layout its panel
-    /// draws and whether that is a draft, the agents its resting HUD can show now, and those it shows under its layout.
+    /// draws, the panel's width there and whether the panel shows a draft, its resting HUD's style in effect and
+    /// whether a style draft waits, the agents its resting HUD can show now, and those it shows under its layout.
     private func listing(_ screen: PanelScreen) -> JSONValue {
-        let order = HUDAgentOrder(listed: layout.effective(for: screen.key).hud.agents, available: screen.agents)
+        let drawn = layout.effective(for: screen.key)
+        let order = HUDAgentOrder(listed: drawn.hud.agents, available: screen.agents)
         return .object([
             "key": .string(screen.key), "name": .string(screen.name), "mode": .string(screen.modeName),
             "edge": .string(screen.edge.rawValue), "hasNotch": .bool(screen.hasNotch),
             "layout": .string(layout.usesShared(screen.key) ? "shared" : "own"),
+            "width": .integer(Int64(drawn.style.panelWidth)),
             "unsaved": .bool(layout.hasDraft(on: screen.key)),
+            "hud": styleInEffect(of: screen),
+            "styleUnsaved": .bool(layout.hasStyleDraft(screen.key)),
             "agents": .array(screen.agents.map(JSONValue.string)),
             "shows": .array(order.arrange(screen.agents) { $0 }.map(JSONValue.string)),
         ])
@@ -194,7 +150,7 @@ extension PanelTools {
 
     private static func tenths(_ value: Double) -> Double { (value * 10).rounded() / 10 }
     /// A picture's scale to the hundredth below it, which never reads as more pixels than were drawn.
-    private static func hundredths(_ value: Double) -> Double { (value * 100).rounded(.down) / 100 }
-    private static func points(_ value: Double) -> String { "\(Int64(value.rounded()))" }
+    static func hundredths(_ value: Double) -> Double { (value * 100).rounded(.down) / 100 }
+    static func points(_ value: Double) -> String { "\(Int64(value.rounded()))" }
     private static func time(_ date: Date) -> String { date.formatted(.iso8601) }
 }

@@ -9,13 +9,13 @@ public extension UsageStore {
     }
 
     /// A glow drawn from the given parts' levels and pace, as a screen whose layout lists its agents draws it
-    /// (`ScreenAgents`), under that screen's glow settings.
+    /// (`ScreenAgents`), under that screen's glow settings with its style draft drawn over them.
     internal func glowAppearance(light: Bool, on screen: String?, levels: [StatusLevel], anyAgentActive: Bool) -> GlowAppearance {
         let appearance = GlowAppearance.resolve(
             levels: levels,
             paused: isPaused || !isAccessAllowed,
             anyAgentActive: anyAgentActive,
-            glow: settings.settings.glow(on: screen),
+            glow: settings.effectiveGlow(on: screen),
             light: light
         )
         guard glowHidden else { return appearance }

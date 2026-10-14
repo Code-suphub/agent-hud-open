@@ -233,6 +233,41 @@ final class PanelPictureRendererTests: XCTestCase {
         XCTAssertTrue(back.contains("This display only"), "with the bar of the screen's own draft:\n\(back)")
     }
 
+    /// The picture and the measure take the width of the layout drawn, the screen's own or the shared one, a draft
+    /// included: at 480 and at 720 the panel is that wide, and a narrower panel is never shorter.
+    func testThePictureIsDrawnAtTheLayoutsWidth() throws {
+        let layout = store.settings.panelLayout
+        XCTAssertEqual(renderer.width, 540)
+        layout.propose(PanelLayout(style: PanelStyle(width: 720)))
+        let wide = try XCTUnwrap(renderer.picture())
+        XCTAssertEqual(wide.width, 720)
+        XCTAssertEqual(try bitmap(wide).pixelsWide, 1_440)
+        layout.propose(.own(PanelLayout(style: PanelStyle(width: 480))), for: "screen-narrow")
+        var narrow = renderer
+        narrow.screen = "screen-narrow"
+        let picture = try XCTUnwrap(narrow.picture())
+        XCTAssertEqual(picture.width, 480)
+        XCTAssertEqual(try bitmap(picture).pixelsWide, 960)
+        XCTAssertGreaterThanOrEqual(narrow.fit().height, renderer.fit().height - 0.5)
+        XCTAssertTrue(try text(of: picture).contains("This display only"), "its own draft's bar fits the narrow panel")
+    }
+
+    /// A dock on a side edge keeps its strip clear inside the panel; at the narrowest width, beside the widest strip a
+    /// Simple panel has, the panel is widened to keep its content at the narrowest any panel has, and nothing in it is
+    /// cut: Codex's earned resets name their first expiry, whole or as the date alone.
+    func testASideDockAtTheNarrowestWidthCutsNothing() throws {
+        store.settings.panelLayout.propose(PanelLayout(style: PanelStyle(width: PanelStyle.widthRange.lowerBound)))
+        let insets = EdgeInsets(top: 14, leading: 155, bottom: 14, trailing: 18)
+        let side = PanelPictureRenderer(store: store, display: .init(insets: insets, maximumHeight: 2_000))
+        XCTAssertEqual(side.width, HoverPanelView.narrowestContentWidth + 155 + 18)
+        let read = try text(of: try XCTUnwrap(side.picture()))
+        let expiry = CodexResetCreditsView(resets: DemoData.codexResetCredits(now: DemoClock.now), showExpiry: true).nextExpiryLabel
+        XCTAssertTrue(read.contains(expiry.short), read)
+        // A word cut short ends in an ellipsis, as "First ex…" did; the chart's bars read as dots between letters.
+        let cut = read.split(separator: "\n").filter { $0.range(of: #"\p{L}{2,}(…|\.\.\.)$"#, options: .regularExpression) != nil }
+        XCTAssertEqual(cut, [], "nothing is cut: \(read)")
+    }
+
     func testAPanelTallerThanTheDisplayIsDrawnWholeAndSaidToScroll() throws {
         let short = PanelPictureRenderer(store: store, display: .init(insets: HoverPanelView.notchInsets, maximumHeight: 400))
         let picture = try XCTUnwrap(short.picture())

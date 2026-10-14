@@ -285,9 +285,9 @@ final class ScreenHUD {
         self.additionalHUDControls = additionalHUDControls
         self.renderMaterials = renderMaterials
         // The stored placement decides notch or queue before the first frame, so the HUD never flashes
-        // the wrong shape on launch.
-        let placement = screen.map { ScreenIdentity.placement(for: $0, in: settings.settings) }
-            ?? .default(hasNotch: false)
+        // the wrong shape on launch. A style draft an agent proposed for this screen is drawn over it.
+        let placement = screen.map { ScreenIdentity.placement(for: $0, in: settings) }
+            ?? settings.effectivePlacement(on: key, hasNotch: false)
         let geometry = NotchGeometry.detect(screen: screen, placement: placement)
         self.geometry = geometry
         glow = GlowWindowController(geometry: geometry)
@@ -698,11 +698,23 @@ final class ScreenHUD {
     }
 
     /// How this display draws the whole panel, for a picture or a measurement made off screen: the insets its notch or
-    /// its dock gives the content, as `IslandRootView` sets them, and the tallest the panel opens here.
+    /// its dock gives the content, as `IslandRootView` sets them, and the tallest the panel opens here. It is worked out
+    /// from the placement in effect now, a style draft just proposed included, before the HUD has re-applied it.
     var panelDisplay: PanelPictureRenderer.Display {
-        let insets = geometry.mode.isDocked
+        PanelPictureRenderer.Display(insets: Self.panelInsets(on: resolveGeometry()), maximumHeight: maximumContentHeight)
+    }
+
+    /// The room the open panel's content keeps from the card's edges on `geometry`, as `IslandRootView` sets it: the
+    /// notch's, or a dock's, which keeps its strip clear.
+    private static func panelInsets(on geometry: NotchGeometry) -> EdgeInsets {
+        geometry.mode.isDocked
             ? IslandRootView.dockInsets(edge: geometry.edge, collapsedSize: geometry.rect.size) : HoverPanelView.notchInsets
-        return PanelPictureRenderer.Display(insets: insets, maximumHeight: maximumContentHeight)
+    }
+
+    /// The whole panel's width here: its layout's, widened on a side dock to keep the content at its narrowest
+    /// (`HoverPanelView.width(_:insets:)`).
+    private var panelWidth: CGFloat {
+        HoverPanelView.width(CGFloat(panelStyle.panelWidth), insets: Self.panelInsets(on: geometry))
     }
 
     /// Resizes the open panel to its content (rows come and go as windows are discovered).
@@ -738,9 +750,15 @@ final class ScreenHUD {
         NSScreen.screens.first { ScreenIdentity.key(for: $0) == key }
     }
 
+    /// The placement this HUD draws: a drag's preview, else the screen's settings with its style draft drawn over them.
     private var placement: ScreenPlacement {
-        previewPlacement ?? screen.map { ScreenIdentity.placement(for: $0, in: settings.settings) } ?? .default(hasNotch: false)
+        previewPlacement ?? screen.map { ScreenIdentity.placement(for: $0, in: settings) }
+            ?? settings.effectivePlacement(on: key, hasNotch: false)
     }
+
+    /// The panel's style in this screen's layout, whose width the open panel takes: the whole panel's, or on a dock
+    /// that separates its agents one agent's own, 100 points narrower.
+    private var panelStyle: PanelStyle { settings.panelLayout.effective(for: key).style }
 
     // MARK: Repositioning
 
@@ -796,6 +814,9 @@ final class ScreenHUD {
     }
 
     func beginMoving(at point: CGPoint? = nil) {
+        // A person moving the HUD wins over an agent's style draft: it is dropped first, and the move starts from the
+        // placement the screen has saved.
+        settings.panelLayout.discardStyle(key)
         materialPreparation = nil
         if let point {
             let run = geometry.edge.isHorizontal ? geometry.rect.width : geometry.rect.height
@@ -826,7 +847,7 @@ final class ScreenHUD {
 
     func finishMoving() {
         guard let next = previewPlacement else { return }
-        settings.update { $0.screens[key] = next }
+        settings.updateScreen(key) { $0.screens[key] = next }
         previewPlacement = nil
         // Dropping the HUD is an explicit repositioning, not a request to open its panel under the pointer.
         hoverOpens = true
@@ -926,8 +947,10 @@ final class ScreenHUD {
         )
         root.onOpenListedSession = { [weak self] id in Task { await self?.openListedSession(id) } }
         root.failedListedSessionID = failedListedSessionID
-        // The panel draws this screen's layout, and so does the copy the island is measured from.
+        // The panel draws this screen's layout, at its width, and so does the copy the island is measured from.
         root.panelScreen = key
+        root.panelWidth = panelWidth
+        root.agentPanelWidth = CGFloat(panelStyle.agentPanelWidth)
         root.sessionEvents = alerts.sessionEvents
         root.logoQueue = logoQueue
         root.simpleMeter = simpleMeter
@@ -1179,7 +1202,7 @@ final class ScreenHUD {
         } else if showsPeek {
             peek.size
         } else {
-            CGSize(width: IslandController.agentPanelWidth, height: height)
+            CGSize(width: CGFloat(panelStyle.agentPanelWidth), height: height)
         }
         let cardFrame = Self.detachedFrame(size: size, anchor: focus.anchor, strip: geometry.rect, edge: geometry.edge,
                                            gap: showsPeek && peek.style == .line ? -peek.tuck : 6,
@@ -1217,7 +1240,7 @@ final class ScreenHUD {
             ? (alerts.current?.inUsagePanel == false
                 ? CGSize(width: activeAlert?.detailWidth ?? IslandController.alertDetailWidth,
                          height: height)
-                : CGSize(width: IslandController.expandedWidth, height: height))
+                : CGSize(width: panelWidth, height: height))
             : compactSize
         // The shoulder curves widen the contact with the parked edge. Clamp their whole canvas, then
         // derive the card's core from it, so even a dock near a corner retains both curved shoulders.
@@ -1241,9 +1264,8 @@ final class ScreenHUD {
                 : geometry.expandedFrame(size: size))
             : geometry.rect
         let radius = open ? IslandController.expandedRadius : max(geometry.cornerRadius, activeAlert == nil ? 0 : 14)
-        let current = settings.settings
-        // This screen's own glow, or the default when it has not been given one.
-        let glowSettings = current.glow(on: key)
+        // This screen's own glow, or the default when it has not been given one, with its style draft drawn over it.
+        let glowSettings = settings.effectiveGlow(on: key)
         // The glow style is the HUD's backdrop in both modes, but the shape it radiates from differs. The
         // notch is a small silhouette, so the field reads as a rim around it. A logo queue wants a curtain
         // exactly as wide as the marks: the shape is a flat lip at the screen's top edge, run wider than the

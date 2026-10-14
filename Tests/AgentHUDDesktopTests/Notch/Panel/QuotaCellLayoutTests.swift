@@ -5,8 +5,9 @@ import XCTest
 @testable import AgentHUDDesktop
 
 /// Ring and number cells in every arrangement a layout can ask for: two to six columns, the three ring sizes, the
-/// three spacings, both panel widths and one to six windows, in English and in Chinese. Measured as the island measures
-/// the panel, from a fresh view tree at a fixed width.
+/// three spacings, both panels at the default width and at the narrowest and widest a layout sets, and one to six
+/// windows, in English and in Chinese. Measured as the island measures the panel, from a fresh view tree at a fixed
+/// width.
 @MainActor
 final class QuotaCellLayoutTests: XCTestCase {
     private static let languages: [AppLanguage] = [.en, .zhHans]
@@ -32,10 +33,17 @@ final class QuotaCellLayoutTests: XCTestCase {
         super.tearDown()
     }
 
-    /// The panel's content widths: the hover panel's and an agent's own panel's, inside their insets.
+    /// The panel's content widths, inside their insets: the hover panel's and an agent's own panel's by default, then
+    /// the whole panel at the narrowest and the widest width a layout sets, and an agent's own panel at the widest
+    /// (at the narrowest it is 440, the default's). An agent's own panel by default has the narrowest content any panel
+    /// has, which a dock on a side edge widens its panel to keep.
     private var widths: [CGFloat] {
         let insets = HoverPanelView.notchInsets.leading + HoverPanelView.notchInsets.trailing
-        return [IslandController.expandedWidth - insets, IslandController.agentPanelWidth - insets]
+        let narrowest = PanelStyle(width: PanelStyle.widthRange.lowerBound), widest = PanelStyle(width: PanelStyle.widthRange.upperBound)
+        XCTAssertEqual(narrowest.agentPanelWidth, PanelStyle().agentPanelWidth)
+        XCTAssertEqual(IslandController.agentPanelWidth - insets, HoverPanelView.narrowestContentWidth)
+        return [IslandController.expandedWidth, IslandController.agentPanelWidth, CGFloat(narrowest.panelWidth),
+                CGFloat(widest.panelWidth), CGFloat(widest.agentPanelWidth)].map { $0 - insets }
     }
 
     /// The sample's six quota windows in `language`, which the tests set side by side one to six at a time.
@@ -109,7 +117,7 @@ final class QuotaCellLayoutTests: XCTestCase {
                 }
             }
         }
-        XCTAssertEqual(checked, 2 * 2 * 5 * 4 * 3 * 6)
+        XCTAssertEqual(checked, 2 * 5 * 5 * 4 * 3 * 6)
     }
 
     /// While the readings load, a cell keeps the height it has once they are in, so the island does not jump.
@@ -246,7 +254,7 @@ final class QuotaCellLayoutTests: XCTestCase {
 
     /// The line under a cell's name never runs past its cell and is never cut: it is shown whole, as its short form or
     /// not at all, and whatever is shown fits. A number cell's figure fits its cell. In the panel's default four columns
-    /// every caption is shown, whole or as its short form, at both widths.
+    /// every caption is shown, whole or as its short form, at every width.
     func testNoCaptionOrFigureOverflowsItsCell() {
         var leftOut: Set<Int> = []
         for language in Self.languages {

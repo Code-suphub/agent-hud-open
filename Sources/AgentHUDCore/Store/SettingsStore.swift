@@ -9,9 +9,10 @@ public final class SettingsStore {
     public private(set) var settings: Settings
     public private(set) var agents: [AgentDescriptor]
     public private(set) var hasCompletedOnboarding: Bool
-    /// The hover panel's layouts, the shared one and each screen's own, kept in the same defaults under their own key.
-    /// They change apart from the settings and the agent list: `onChange` hears nothing of them, so a layout change never
-    /// wakes collection.
+    /// The hover panel's layouts, the shared one and each screen's own, kept in the same defaults under their own key,
+    /// and each screen's style draft. They change apart from the settings and the agent list: `onChange` hears nothing
+    /// of them, so a layout change never wakes collection. Only a person's Save, revert or reset of a screen's version
+    /// writes its style into the settings, as one settings change.
     public let panelLayout: PanelLayoutStore
 
     public enum Change { case settings, agents, discovery }
@@ -49,6 +50,8 @@ public final class SettingsStore {
         }
         hasCompletedOnboarding = defaults.bool(forKey: Keys.onboarding)
         panelLayout = PanelLayoutStore(defaults: defaults)
+        // A screen's style draft is drawn over these settings, and a person's Save writes it into them.
+        panelLayout.owner = self
         let normalized = applyingAccountVisibility(to: agents)
         if normalized != agents {
             agents = normalized
