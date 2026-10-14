@@ -554,6 +554,39 @@ final class AdditionalProviderTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(kinds, [0])
     }
 
+    func testLinesFromTheEndComeNewestFirstAndStopWhenAsked() throws {
+        let url = try file("session.jsonl", "{\"kind\":0,\"usage\":{}}\nnot json \"usage\"\n{\"kind\":1}\n\n{\"kind\":2,\"usage\":{}}\n{\"kind\":3,\"usage\":{}}\n{\"usage\":{},\"ki")
+        let marker = Data(#""usage""#.utf8)
+        var kinds: [Int] = []
+        try ProviderFiles.linesFromEnd(url, marker: marker) { value in kinds.append(value["kind"].countValue!); return true }
+        XCTAssertEqual(kinds, [3, 2, 0], "a line without the marker, one that is no JSON and a tail still being written are passed over")
+        kinds = []
+        try ProviderFiles.linesFromEnd(url, marker: marker) { value in kinds.append(value["kind"].countValue!); return false }
+        XCTAssertEqual(kinds, [3], "nothing older is decoded once the reader has what it came for")
+        try ProviderFiles.linesFromEnd(try file("empty.jsonl", ""), marker: marker) { _ in XCTFail("an empty log holds no line"); return true }
+    }
+
+    func testLinesFromTheEndMatchTheLinesFromTheStartAcrossReadsOfAnyLength() throws {
+        // Lines of every length against the reader's 256 KiB steps, one far longer than a step, and one no reader keeps.
+        var text = "", expected: [Int] = []
+        for index in 0..<900 {
+            let filler = String(repeating: "x", count: index == 400 ? 700_000 : (index * 7919) % 1500)
+            let wanted = index % 3 != 1
+            text += "{\"kind\":\(index),\(wanted ? "\"usage\":{}," : "")\"filler\":\"\(filler)\"}\n"
+            if wanted { expected.append(index) }
+            if index == 600 { text += "{\"usage\":{},\"filler\":\"" + String(repeating: "y", count: ProviderFiles.jsonLimit + 1) + "\"}\n" }
+        }
+        let url = try file("session.jsonl", text)
+        let marker = Data(#""usage""#.utf8)
+        var backward: [Int] = []
+        try ProviderFiles.linesFromEnd(url, marker: marker) { value in backward.append(value["kind"].countValue!); return true }
+        XCTAssertEqual(backward, expected.reversed(), "every line holding the marker, whole, once, newest first")
+        var forward: [Int] = []
+        XCTAssertThrowsError(try ProviderFiles.lines(url, markers: [marker]) { value, _ in forward.append(value["kind"].countValue!) },
+                             "from the start the over-long line ends the read")
+        XCTAssertEqual(forward, expected.filter { $0 <= 600 })
+    }
+
     func testLinesWithoutAMarkerAreNumberedButNotDecoded() throws {
         let url = try file("session.jsonl", "{\"kind\":0}\nnot json\n\n{\"kind\":1,\"usage\":{}}\n{\"usage\":{},\"kind\":2}")
         var read: [Int: Int] = [:]

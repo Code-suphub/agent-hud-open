@@ -61,6 +61,12 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 - `HookInstaller` reads one hook's settings file, up to 16 MB, and points Agent HUD's handlers in it at the running copy or takes them out, the hook's own edit given; `HookCommand` makes and recognizes a handler's command. A host's own hooks use both.
 - `UnixSocketListener` is the application's end of the socket a hook process reaches through `UnixSocket`: only the user can reach it, a request is one message the sender ends by closing its side, and one process serves a path.
 
+### Client declarations
+
+- Every client Agent HUD reads or hears from is an `AgentClient`, and `ClientDeclarations` holds one `ClientDeclaration` for each: the channels through which its sessions, its usage, each phase of its sessions and each kind of request it asks arrive, with the answers the HUD can send back and how a request answered in the client itself is noticed. A part a client does not offer is empty, and nothing is inferred for it.
+- A channel is the client running a hook, an event of the plugin or extension Agent HUD adds, a subscription the client sends changes on, what a log or table gained since a saved position, an answer asked for at a stated interval where nothing can be observed, or a whole file or table read again at every change. The last is below the baseline every client is moving to, and `belowBaseline` lists where a client still reads that way.
+- The declarations describe what is read today and change with it; tests hold them to the hooks installed, the observers that run and the readers each provider uses.
+
 ### Storage
 
 - The standalone bundle identifier is `app.agenthud.open`; preferences live in its UserDefaults domain, with separate domains for demo and snapshot runs.
@@ -122,6 +128,7 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | Concept | Code |
 | --- | --- |
 | JSON values, record coding | `Sources/AgentHUDSupport/JSONValue.swift`, `RecordCoding.swift` |
+| Clients and what each declares | `Sources/AgentHUDCore/Clients/AgentClient.swift`, `ClientDeclaration.swift`, `ClientDeclarations.swift` |
 | Provider protocol, combination, retention, observers | `Sources/AgentHUDCore/Providers/UsageProvider.swift`, `CombinedUsageProvider.swift`, `RetainedUsageProvider.swift`; `Sources/AgentHUDCore/Hooks/SessionObservers.swift` |
 | Per-client providers, and the toolbox they share: JSON, files, HTTP, SQLite, log stores | `Sources/AgentHUDCore/Providers/<Client>/`; `Sources/AgentHUDCore/Providers/Kit/`, `Providers/Kit/Logs/` |
 | Models: usage, sessions, accounts, agents, catalog, settings; calculations: quota, alerts, what the Mac shows | `Sources/AgentHUDCore/Models/<Area>/`; `Sources/AgentHUDCore/Logic/`, `Logic/Quota/`, `Logic/Alerts/` |

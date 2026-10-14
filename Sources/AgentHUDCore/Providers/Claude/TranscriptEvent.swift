@@ -38,6 +38,8 @@ public struct TranscriptEvent: Hashable, Sendable {
     /// An assistant line calling `StructuredOutput`: the result a workflow agent hands back, after which its log ends
     /// without an `end_turn`.
     public let returnsStructuredOutput: Bool
+    /// Where the line begins in its log, when it was read from a known place in one.
+    public var offset: Int?
 
     public init(
         timestamp: Date, role: Role, model: String?, inputTokens: Int, cacheCreationTokens: Int, cacheReadTokens: Int,
