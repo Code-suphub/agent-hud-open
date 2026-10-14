@@ -69,6 +69,8 @@ final class ScreenHUD {
     }
     private var showsAlertDetails: Bool { machine.isOpen && alerts.current?.inUsagePanel == false }
     private var pointerInside = false
+    /// The hover region the pointer was last found inside; nil once it is found outside. See `hovers`.
+    private var heldHoverRegion: CGRect?
     /// Whether the hover currently counts as one that opens the panel; see `reevaluateHover`.
     private var hoverOpens = false
     /// The user is typing into the island. It stays open under their hands, wherever the pointer goes, until they stop.
@@ -337,7 +339,25 @@ final class ScreenHUD {
     func samplePointer() {
         let point = mouseLocation()
         if previewPlacement == nil, !dragSurface.isPressed { followHoveredMark(point) }
-        pointer(inside: Self.containsPointer(point, in: hoverRegion))
+        let region = hoverRegion
+        let inside = Self.hovers(point, region: region, held: heldHoverRegion,
+                                 usagePanelOpen: machine.isOpen && !showsAlertDetails)
+        if Self.containsPointer(point, in: region) { heldHoverRegion = region } else if !inside { heldHoverRegion = nil }
+        pointer(inside: inside)
+    }
+
+    /// Whether a pointer counts as on the HUD: inside its hover region, or, while the usage panel is open, still inside
+    /// the region it was last found in.
+    ///
+    /// The panel can turn shorter under the pointer that is using it: discarding a layout takes away what the draft
+    /// added, and a row can leave with a refresh. The pointer is then below the panel it never left, which reads as
+    /// having left the HUD, and the panel would close under the hand that pressed the button. The place the panel
+    /// gave up counts as hovering until the pointer moves out of it. An event's card holds its window instead
+    /// (`heldWindowHeight`).
+    static func hovers(_ point: CGPoint, region: CGRect, held: CGRect?, usagePanelOpen: Bool) -> Bool {
+        if containsPointer(point, in: region) { return true }
+        guard usagePanelOpen, let held else { return false }
+        return containsPointer(point, in: held)
     }
 
     /// CGRect.contains excludes its top and right edges. A pointer pinned to a display edge is still
