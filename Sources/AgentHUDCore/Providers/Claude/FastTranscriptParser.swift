@@ -74,7 +74,8 @@ public enum FastTranscriptParser {
     }
 
     /// Parses complete lines in `data` (a trailing partial line is ignored by the caller).
-    public static func parse(_ data: Data) -> [TranscriptEvent] {
+    /// - offset: where `data` begins in its log, which each event then carries as its own.
+    public static func parse(_ data: Data, at offset: Int? = nil) -> [TranscriptEvent] {
         var events: [TranscriptEvent] = []
         data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
             guard let base = buffer.baseAddress else { return }
@@ -89,7 +90,8 @@ public enum FastTranscriptParser {
                 } else {
                     end = count
                 }
-                if end > start, let event = parseLine(UnsafeRawBufferPointer(start: rest, count: end - start)) {
+                if end > start, var event = parseLine(UnsafeRawBufferPointer(start: rest, count: end - start)) {
+                    event.offset = offset.map { $0 + start }
                     events.append(event)
                 }
                 start = end + 1

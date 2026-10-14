@@ -18,8 +18,25 @@ protocol TailLog: Sendable {
     /// The decoded log from `start`, for a format that cannot be read from an offset, with the places a later read can
     /// start from; nil reads the file itself from where the last read stopped.
     static func contents(of url: URL, from start: DecodedPosition) async throws -> DecodedLog?
-    /// Reads one or more complete lines, each ending in a newline, and returns the usage they added.
-    static func ingest(_ lines: Data, into summary: inout Summary) throws -> [UsageLedger.Event]
+    /// Reads one or more complete lines, each ending in a newline, that begin `offset` bytes into the log (into its
+    /// decoded text, for a log that has to be decoded), and returns the usage they added. An event is keyed by what it
+    /// is or where it lies, never by the order lines are read in: a log's history is read after its end.
+    static func ingest(_ lines: Data, at offset: Int, into summary: inout Summary) throws -> [UsageLedger.Event]
+    /// Whether a line starts a turn, by the client's own mark. A log that can tell is first read from its newest turn
+    /// on, and its history a page at a time after that, newest first; nil reads the log from its start, as a log that
+    /// has to be decoded is.
+    static var startsTurn: LogPager.StartsTurn? { get }
+    /// What every page needs before its own lines, such as the log's session and its first prompt: read from the log's
+    /// first complete lines, without counting their usage.
+    static func head(_ lines: Data, into summary: inout Summary)
+    /// Takes in what an older page of the same log read, into the summary of everything after it.
+    static func merge(older: Summary, into summary: inout Summary)
+    /// Whether a line, judged by its first bytes, carries state the lines after it are read against, such as a running
+    /// total. A page, and a log first read from its newest turn, starts from the newest such line before it, as a read
+    /// from the log's start would have; nil when no line does.
+    static var carriesState: (@Sendable (Data) -> Bool)? { get }
+    /// Takes the state such a line carries, counting nothing.
+    static func seed(_ line: Data, into summary: inout Summary)
     /// The prompts and compactions read since the last call.
     static func drainMarks(_ summary: inout Summary) -> [UsageLedger.Mark]
     /// Runs once a read of the log ends.
@@ -35,6 +52,11 @@ extension TailLog {
     static func drainMarks(_ summary: inout Summary) -> [UsageLedger.Mark] { [] }
     static func finishRead(_ summary: inout Summary, now: Date) {}
     static func group(_ summary: Summary) -> String? { nil }
+    static var startsTurn: LogPager.StartsTurn? { nil }
+    static func head(_ lines: Data, into summary: inout Summary) {}
+    static func merge(older: Summary, into summary: inout Summary) {}
+    static var carriesState: (@Sendable (Data) -> Bool)? { nil }
+    static func seed(_ line: Data, into summary: inout Summary) {}
 }
 
 /// A place a log that has to be decoded can be read from: the byte of the file and the byte of the decoded text it
@@ -69,6 +91,9 @@ final class TailLogStore<Log: TailLog> {
         var summary: Log.Summary
         /// Where decoding can start again without losing the line at `offset`, for a log that has to be decoded.
         var restart: DecodedPosition?
+        /// Where the history not read yet ends; nil once it is read back to the log's start or past the ledger's
+        /// retention, and for a log read from its start.
+        var back: Int?
     }
 
     /// One poll's work.
@@ -86,6 +111,14 @@ final class TailLogStore<Log: TailLog> {
     }
 
     static var chunkSize: Int { 4 << 20 }
+    /// Lines a page of history holds at least, before it reaches back to the start of a turn.
+    static var pageLines: Int { 200 }
+    /// Lines looked back over for the state a page starts from.
+    static var seedLines: Int { 2000 }
+    /// How much of a log's start is read for its head.
+    static var headLength: Int { 256 << 10 }
+
+    private typealias Update = (entry: Entry, events: [UsageLedger.Event], marks: [UsageLedger.Mark], reset: Bool)
 
     private let ledger: UsageLedger
     private let files: LogFiles
@@ -99,6 +132,8 @@ final class TailLogStore<Log: TailLog> {
     private var modified: [String: Date] = [:]
     private var loadedGeneration: Int?
     private var failed = FailedReads()
+    /// How long a poll reads history, apart from what logs gained: a small share of the processor while history lasts.
+    var historyBudget: TimeInterval = 0.1
     private var failureReasons: [String: any Error] = [:]
 
     /// - watchesChanges: after the first listing, polls look only at logs a directory watch reports changed.
@@ -159,7 +194,7 @@ final class TailLogStore<Log: TailLog> {
         pass.failures = pausing.compactMap { failureReasons[$0.path] }
         let reading = changing.filter { !failed.isPausing($0.path, at: started) }
         // Always make progress on the newest log, then keep going while the budget lasts.
-        var updates: [String: (entry: Entry, events: [UsageLedger.Event], marks: [UsageLedger.Mark], reset: Bool)] = [:]
+        var updates: [String: Update] = [:]
         for (index, log) in reading.sorted(by: { $0.file.modified > $1.file.modified }).enumerated() {
             if index > 0, Date() >= deadline {
                 pass.pending += reading.count - index
@@ -176,6 +211,27 @@ final class TailLogStore<Log: TailLog> {
                 failureReasons[log.path] = error
                 pass.failures.append(error)
             }
+        }
+
+        // History on a budget of its own: a page at a time, the most recently written log first. A log whose new lines
+        // were not all read, or that could not be read, waits.
+        let historyDeadline = Date().addingTimeInterval(historyBudget)
+        for (path, file) in listing.sorted(by: { $0.value.modified > $1.value.modified }) where file.modified >= retained {
+            let waiting = changing.contains { $0.path == path } && updates[path] == nil
+            guard !waiting, !failed.isPausing(path, at: started), let current = updates[path]?.entry ?? entry(path),
+                  current.back != nil else { continue }
+            var update = updates[path] ?? (entry: current, events: [], marks: [], reset: false)
+            do {
+                while update.entry.back != nil, Date() < historyDeadline {
+                    try readPage(path, into: &update, retained: retained, pass: &pass)
+                }
+                updates[path] = update
+            } catch {
+                if !Task.isCancelled { failed.failed(path, at: Date()) }
+                failureReasons[path] = error
+                pass.failures.append(error)
+            }
+            if update.entry.back != nil { pass.pending += 1 }
         }
 
         let removed = Set(entries.keys).union(stored.keys).union(outdated).filter { listing[$0] == nil }
@@ -222,10 +278,10 @@ final class TailLogStore<Log: TailLog> {
         return pass
     }
 
-    /// Reads what the log gained since its entry, or all of it once rewritten. Each read ingests at least one chunk.
+    /// Reads what the log gained since its entry, or, once rewritten, all of it: from its start, or for a log that tells
+    /// where its turns start, from its newest turn, its history left to `readPage`. Each read ingests at least one chunk.
     private func read(_ path: String, file: LogFiles.File, deadline: Date, pass: inout Pass,
-                      isolation: isolated (any Actor)? = #isolation) async throws
-        -> (entry: Entry, events: [UsageLedger.Event], marks: [UsageLedger.Mark], reset: Bool) {
+                      isolation: isolated (any Actor)? = #isolation) async throws -> Update {
         let url = URL(fileURLWithPath: path), previous = entry(path)
         var entry = Entry(modified: file.modified, size: file.size, summary: Log.summary(for: url))
         var events: [UsageLedger.Event] = [], marks: [UsageLedger.Mark] = []
@@ -242,6 +298,15 @@ final class TailLogStore<Log: TailLog> {
             entry.offset = previous.offset
             entry.summary = previous.summary
             entry.restart = previous.restart
+            entry.back = previous.back
+        } else if contents == nil, let startsTurn = Log.startsTurn {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            Log.head(try Self.head(of: handle, size: file.size), into: &entry.summary)
+            let pager = LogPager(handle: handle, startsTurn: startsTurn)
+            entry.offset = try pager.lastTurnStart(before: try pager.completeEnd(of: file.size))
+            entry.back = entry.offset > 0 ? entry.offset : nil
+            try Self.seed(&entry.summary, before: entry.offset, with: pager)
         }
         pass.filesRead += 1
         if let contents {
@@ -253,7 +318,7 @@ final class TailLogStore<Log: TailLog> {
                 guard entry.offset < entry.committed else { break }
                 let limit = min(entry.committed, entry.offset + Self.chunkSize)
                 let end = data[(data.startIndex + limit - base - 1)..<(data.startIndex + entry.committed - base)].firstIndex(of: 0x0A)! + 1
-                events += try Log.ingest(data[(data.startIndex + entry.offset - base)..<end], into: &entry.summary)
+                events += try Log.ingest(data[(data.startIndex + entry.offset - base)..<end], at: entry.offset, into: &entry.summary)
                 marks += Log.drainMarks(&entry.summary)
                 entry.offset = base + end - data.startIndex
             } while Date() < deadline
@@ -268,7 +333,7 @@ final class TailLogStore<Log: TailLog> {
                 pass.bytesRead += chunk.count
                 carry.append(chunk)
                 guard let newline = carry.lastIndex(of: 0x0A) else { continue }
-                events += try Log.ingest(carry[...newline], into: &entry.summary)
+                events += try Log.ingest(carry[...newline], at: entry.offset, into: &entry.summary)
                 marks += Log.drainMarks(&entry.summary)
                 entry.offset += newline + 1
                 carry = Data(carry[(newline + 1)...])
@@ -278,6 +343,52 @@ final class TailLogStore<Log: TailLog> {
         }
         Log.finishRead(&entry.summary, now: Date())
         return (entry, events, marks, reset)
+    }
+
+    /// Reads the page of history that ends where the update's history does, and takes it into the update: the page's
+    /// usage and marks, and its summary into the summary of everything after it. History stops at the log's start, or at
+    /// a page whose usage is all older than the ledger keeps.
+    private func readPage(_ path: String, into update: inout Update, retained: Date, pass: inout Pass) throws {
+        guard let back = update.entry.back, let startsTurn = Log.startsTurn else { return }
+        let url = URL(fileURLWithPath: path)
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let pager = LogPager(handle: handle, startsTurn: startsTurn)
+        let start = try pager.pageStart(before: back, minimumLines: Self.pageLines)
+        var page = Log.summary(for: url), events: [UsageLedger.Event] = []
+        Log.head(try Self.head(of: handle, size: update.entry.size), into: &page)
+        try Self.seed(&page, before: start, with: pager)
+        try handle.seek(toOffset: UInt64(start))
+        var offset = start, carry = Data()
+        while offset + carry.count < back {
+            guard let chunk = try handle.read(upToCount: min(Self.chunkSize, back - offset - carry.count)), !chunk.isEmpty else { break }
+            pass.bytesRead += chunk.count
+            carry.append(chunk)
+            guard let newline = carry.lastIndex(of: 0x0A) else { continue }
+            events += try Log.ingest(carry[...newline], at: offset, into: &page)
+            update.marks += Log.drainMarks(&page)
+            offset += newline + 1
+            carry = Data(carry[(newline + 1)...])
+        }
+        pass.filesRead += 1
+        Log.merge(older: page, into: &update.entry.summary)
+        update.events += events
+        let done = start == 0 || (!events.isEmpty && events.allSatisfy { $0.timestamp < retained })
+        update.entry.back = done ? nil : start
+    }
+
+    /// Seeds a summary that starts at `start` with the state the newest line before it carries.
+    private static func seed(_ summary: inout Log.Summary, before start: Int, with pager: LogPager) throws {
+        guard start > 0, let carries = Log.carriesState,
+              let line = try pager.lastLine(before: start, limit: seedLines, matching: carries) else { return }
+        Log.seed(line, into: &summary)
+    }
+
+    /// The complete lines among a log's first `headLength` bytes.
+    private static func head(of handle: FileHandle, size: Int) throws -> Data {
+        try handle.seek(toOffset: 0)
+        let data = try handle.read(upToCount: min(size, headLength)) ?? Data()
+        return data.lastIndex(of: 0x0A).map { Data(data[...$0]) } ?? Data()
     }
 
     /// The listed logs that count: of the copies sharing a `Log.copyName`, the most recently modified.
@@ -304,7 +415,7 @@ final class TailLogStore<Log: TailLog> {
 
     private static func state(_ entry: Entry) -> UsageLedger.FileState {
         let data = try? JSONEncoder().encode(StoredState(offset: entry.offset, committed: entry.committed, summary: entry.summary,
-                                                         restart: entry.restart))
+                                                         restart: entry.restart, back: entry.back))
         return UsageLedger.FileState(signature: LedgerCopies.signature(modified: entry.modified, size: entry.size), state: data,
                                      group: Log.group(entry.summary))
     }
@@ -313,16 +424,18 @@ final class TailLogStore<Log: TailLog> {
         guard let parts = LedgerCopies.signature(file.signature), let data = file.state,
               let state = try? JSONDecoder().decode(StoredState.self, from: data) else { return nil }
         return Entry(modified: parts.modified, size: parts.size, offset: state.offset, committed: state.committed ?? parts.size, summary: state.summary,
-                     restart: state.restart)
+                     restart: state.restart, back: state.back)
     }
 
-    /// `{"version", "offset", "committedSize", <summaryKey>, "restart"}`. A state without `committedSize` has complete lines
-    /// waiting unless its log was read to the end; one without `restart` decodes its log from the start.
+    /// `{"version", "offset", "committedSize", <summaryKey>, "restart", "back"}`. A state without `committedSize` has
+    /// complete lines waiting unless its log was read to the end; one without `restart` decodes its log from the start;
+    /// one without `back` has no history left to read.
     private struct StoredState: Codable {
         let offset: Int
         let committed: Int?
         let summary: Log.Summary
         let restart: DecodedPosition?
+        let back: Int?
 
         private struct Key: CodingKey {
             let stringValue: String
@@ -332,8 +445,8 @@ final class TailLogStore<Log: TailLog> {
             init?(intValue: Int) { nil }
         }
 
-        init(offset: Int, committed: Int?, summary: Log.Summary, restart: DecodedPosition?) {
-            self.offset = offset; self.committed = committed; self.summary = summary; self.restart = restart
+        init(offset: Int, committed: Int?, summary: Log.Summary, restart: DecodedPosition?, back: Int?) {
+            self.offset = offset; self.committed = committed; self.summary = summary; self.restart = restart; self.back = back
         }
 
         init(from decoder: any Decoder) throws {
@@ -345,6 +458,7 @@ final class TailLogStore<Log: TailLog> {
             committed = try container.decodeIfPresent(Int.self, forKey: Key("committedSize"))
             summary = try container.decode(Log.Summary.self, forKey: Key(Log.summaryKey))
             restart = try container.decodeIfPresent(DecodedPosition.self, forKey: Key("restart"))
+            back = try container.decodeIfPresent(Int.self, forKey: Key("back"))
         }
 
         func encode(to encoder: any Encoder) throws {
@@ -354,6 +468,7 @@ final class TailLogStore<Log: TailLog> {
             try container.encodeIfPresent(committed, forKey: Key("committedSize"))
             try container.encode(summary, forKey: Key(Log.summaryKey))
             try container.encodeIfPresent(restart, forKey: Key("restart"))
+            try container.encodeIfPresent(back, forKey: Key("back"))
         }
     }
 }
