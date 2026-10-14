@@ -13,6 +13,7 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 - A dock's compact reminder and the Simple panel's hover line are as tall as one of the dock's marks: a Simple panel's ring, a Dynamic dock's logo. Since 0.5.3 they grew with the panel's figures or with the logo's share of its default size, which made them taller than the mark they sit beside and their text larger than anything on the dock. Beside a 30 pt ring the hover line is 30 pt high with 14 pt text where it was 36 pt with 17 pt, and a reminder is 30 pt high with 15 pt text where 0.5.3 drew 48 pt with 18 pt. The Dynamic dock's hover bubble follows the same scale: beside 36 pt logos it is 271 pt wide with an 18 pt name, where it was 353 pt with 23 pt. Nothing changes at either default or beside the notch, and nothing is written smaller than at the default.
 - Host API: `CompactWings` and the `compactWings` environment value; the `wings` argument of `IslandRootView.dockCompactSize(edge:collapsedSize:scale:wings:)`.
 - Host API: `IslandRootView.dockScale(mode:placement:)` gives a dock's scale; `IslandRootView.dockCompactHeight` replaces `dockCompactRowHeight`, and `AgentPeek.lineReference` is gone.
+- Host API: `AgentClient`, `ClientDeclaration` and `ClientDeclarations`: one declaration per client of the channel through which its sessions, usage, session phases and requests arrive.
 
 ## 0.5.3 — 2026-10-12
 
