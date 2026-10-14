@@ -83,6 +83,17 @@ public struct CodexTranscript: Codable, Sendable {
     public mutating func ingest(_ line: Data, at offset: Int? = nil) {
         // Rollouts can contain multi-MB tool outputs. Inspect the envelope before decoding.
         guard Self.envelopes.contains(where: { line.range(of: $0) != nil }) else { return }
+        // A completed item counts as a prompt or an answer. A tool's call and its output, most of a long rollout's bytes
+        // with its screenshots and page dumps, only date the turn, which their first bytes do without decoding them.
+        let head = line.prefix(1024)
+        if head.range(of: Self.itemCompleted) != nil, head.range(of: Self.itemType) != nil,
+           head.range(of: Self.userItem) == nil, head.range(of: Self.agentItem) == nil {
+            if let timestamp = Self.timestamp(in: head), timestamp >= (startedAt ?? .distantPast),
+               let index = turns?.indices.last, turns?[index].state == .running, timestamp > turns![index].observedAt {
+                turns?[index].observedAt = timestamp
+            }
+            return
+        }
         guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               let type = object["type"] as? String,
               let payload = object["payload"] as? [String: Any],
@@ -362,6 +373,20 @@ public struct CodexTranscript: Codable, Sendable {
         let value = Turn(id: id, startedAt: nil, state: state, observedAt: date)
         turns = Array(((turns ?? []) + [value]).suffix(32))
         return value
+    }
+
+    private static let itemCompleted = Data(#""type":"item_completed""#.utf8)
+    /// The item's type is the first thing Codex writes of it; a line written otherwise is decoded whole.
+    private static let itemType = Data(#""item":{"type":""#.utf8)
+    private static let userItem = Data(#""item":{"type":"UserMessage""#.utf8)
+    private static let agentItem = Data(#""item":{"type":"AgentMessage""#.utf8)
+    private static let timestampKey = Data(#""timestamp":""#.utf8)
+
+    /// The line's own time, written first.
+    private static func timestamp(in head: Data) -> Date? {
+        guard let key = head.range(of: timestampKey),
+              let end = head[key.upperBound...].firstIndex(of: UInt8(ascii: "\"")) else { return nil }
+        return ISO8601Fast.parse(String(decoding: head[key.upperBound..<end], as: UTF8.self))
     }
 
     private static let envelopes = ["\"session_meta\"", "\"turn_context\"", "\"event_msg\"", "\"type\":\"compacted\""].map { Data($0.utf8) }
