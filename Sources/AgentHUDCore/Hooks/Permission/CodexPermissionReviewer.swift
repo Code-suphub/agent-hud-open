@@ -40,25 +40,40 @@ enum CodexPermissionReviewer {
     }
 }
 
-/// The reviewer of each Codex turn whose context record the log reader has met, kept while the app runs. A turn that
-/// began before the app did is not here, and is looked up in its log.
+/// The reviewer of each recent Codex turn whose context record the log reader has met, kept while the app runs. A
+/// turn that began before the app did, or long ago, is not here, and is looked up in its log.
+///
+/// The reader can meet a log's records out of order, its newest turns first and then its history page by page, so a
+/// record is placed by its own time rather than by when it was read.
 final class CodexTurnReviewers: @unchecked Sendable {
     static let shared = CodexTurnReviewers()
     /// Turns are short-lived questions: the newest ones are the ones asked about.
     static let limit = 512
+    /// A context record older than this is history read for other ends: a turn that asks for approval began recently.
+    static let recent: TimeInterval = 24 * 60 * 60
+
+    private struct Entry {
+        let reviewer: String?
+        let at: Date
+    }
 
     private let lock = NSLock()
-    private var reviewers: [String: String?] = [:]
-    private var order: [String] = []
+    private var reviewers: [String: Entry] = [:]
 
-    /// A turn's context record as read: the reviewer it names, or that it names none.
-    func note(turn: String, reviewer: String?) {
+    /// A turn's context record as read: the reviewer it names, or that it names none, and the record's own time; a record
+    /// with no time counts as written now. A record older than `recent` is passed over, and an older record of a turn
+    /// never takes the place of a newer one. Beyond `limit` turns, the one with the oldest record goes.
+    func note(turn: String, reviewer: String?, at: Date? = nil, now: Date = Date()) {
+        let at = at ?? now
+        guard now.timeIntervalSince(at) < Self.recent else { return }
         lock.withLock {
-            if reviewers.updateValue(reviewer, forKey: turn) == nil { order.append(turn) }
-            if order.count > Self.limit { reviewers.removeValue(forKey: order.removeFirst()) }
+            if let earlier = reviewers[turn], earlier.at > at { return }
+            reviewers[turn] = Entry(reviewer: reviewer, at: at)
+            guard reviewers.count > Self.limit, let oldest = reviewers.min(by: { $0.value.at < $1.value.at })?.key else { return }
+            reviewers.removeValue(forKey: oldest)
         }
     }
 
     /// The reviewer of a turn whose record was met: nil inside for a record that names none. Nil for a turn not met.
-    func reviewer(of turn: String) -> String?? { lock.withLock { reviewers[turn] } }
+    func reviewer(of turn: String) -> String?? { lock.withLock { reviewers[turn].map(\.reviewer) } }
 }

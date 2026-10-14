@@ -418,9 +418,28 @@ final class PermissionHookTests: XCTestCase, @unchecked Sendable {
         rollout.ingest(Data(#"{"timestamp":"2026-10-14T03:00:00.000Z","type":"turn_context","payload":{"turn_id":"\#(turn)","approvals_reviewer":"user","model":"gpt"}}"#.utf8))
         XCTAssertEqual(CodexTurnReviewers.shared.reviewer(of: turn), .some("user"))
         XCTAssertNil(CodexTurnReviewers.shared.reviewer(of: "turn-never-read"))
-        for index in 0...CodexTurnReviewers.limit { reviewers.note(turn: "later-\(index)", reviewer: "user") }
-        XCTAssertNil(reviewers.reviewer(of: "turn"), "an old turn makes room")
-        XCTAssertEqual(reviewers.reviewer(of: "later-\(CodexTurnReviewers.limit)"), .some("user"))
+        let now = Date()
+        let kept = CodexTurnReviewers()
+        kept.note(turn: "oldest", reviewer: "user", at: now.addingTimeInterval(-3600), now: now)
+        for index in 0..<CodexTurnReviewers.limit {
+            kept.note(turn: "later-\(index)", reviewer: "user", at: now.addingTimeInterval(Double(index - CodexTurnReviewers.limit)), now: now)
+        }
+        XCTAssertNil(kept.reviewer(of: "oldest"), "past the limit, the turn with the oldest record makes room")
+        XCTAssertEqual(kept.reviewer(of: "later-0"), .some("user"))
+
+        // History read back after the newest turns: a record keeps its place by its own time, not by when it was read.
+        let history = CodexTurnReviewers()
+        history.note(turn: "current", reviewer: "user", at: now.addingTimeInterval(-60), now: now)
+        history.note(turn: "current", reviewer: "auto_review", at: now.addingTimeInterval(-600), now: now)
+        XCTAssertEqual(history.reviewer(of: "current"), .some("user"), "an older record of the turn does not take the newer one's place")
+        history.note(turn: "current", reviewer: nil, at: now.addingTimeInterval(-30), now: now)
+        XCTAssertEqual(history.reviewer(of: "current"), .some(nil), "a newer one does, a record naming no reviewer included")
+        history.note(turn: "last-week", reviewer: "user", at: now.addingTimeInterval(-7 * 86_400), now: now)
+        XCTAssertNil(history.reviewer(of: "last-week"), "a turn that began long ago is history, and asks for no approval now")
+        for index in 0..<(CodexTurnReviewers.limit * 2) {
+            history.note(turn: "old-\(index)", reviewer: "auto_review", at: now.addingTimeInterval(-2 * 86_400), now: now)
+        }
+        XCTAssertEqual(history.reviewer(of: "current"), .some(nil), "however much history is read, the current turns stay")
     }
 
     func testAnUnknownCodexReviewerLeavesApprovalToCodex() async throws {
