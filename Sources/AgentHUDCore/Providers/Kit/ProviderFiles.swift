@@ -62,8 +62,19 @@ enum ProviderFiles {
         let newline = Data([10])
         let deadline = Date().addingTimeInterval(linesTime)
         var position = try handle.seekToEnd(), read = 0
-        // The end of a line whose start is still to be read, and whether that line already proved too long to keep.
-        var head = Data(), skipping = false
+        // What has been read of the line whose start is still to come, the piece read last standing first in the
+        // file; nil once that line proved too long to keep.
+        var pieces: [Data]? = [], held = 0
+        /// Whether the reader wants more after this line, which is decoded when it holds the marker.
+        func more(after line: Data) throws -> Bool {
+            guard line.count <= jsonLimit, line.range(of: marker) != nil, let value = try? ProviderJSON.read(line) else { return true }
+            return try consume(value)
+        }
+        /// The line that `start` begins and the kept pieces continue; nil when it was too long to keep.
+        func joined(_ start: Data) -> Data? {
+            guard let kept = pieces, start.count + held <= jsonLimit else { return nil }
+            return kept.reversed().reduce(into: start) { $0.append($1) }
+        }
         while position > 0 {
             try Task.checkCancellation()
             let count = min(UInt64(chunk), position)
@@ -74,33 +85,26 @@ enum ProviderFiles {
             guard let block = try handle.read(upToCount: Int(count)), block.count == Int(count) else {
                 throw CocoaError(.fileReadUnknown)
             }
-            var window: Data
-            if skipping {
-                // The line being passed over starts after the block's last newline; what is before it is kept.
-                guard let cut = block.range(of: newline, options: .backwards) else { continue }
-                window = Data(block[..<cut.lowerBound])
-                skipping = false
-            } else {
-                window = block
-                window.append(head)
-            }
-            // Whole lines start after the window's first newline; before it is the end of a line that starts earlier.
-            guard let first = position > 0 ? window.range(of: newline)?.upperBound : window.startIndex else {
-                skipping = window.count > jsonLimit
-                head = skipping ? Data() : window
+            guard let last = block.range(of: newline, options: .backwards), let first = block.range(of: newline) else {
+                // The block lies inside one line.
+                held += block.count
+                if held > jsonLimit { pieces = nil } else { pieces?.append(block) }
                 continue
             }
-            var end = window.endIndex
-            while let hit = window.range(of: marker, options: .backwards, in: first..<end) {
-                let start = window.range(of: newline, options: .backwards, in: first..<hit.lowerBound)?.upperBound ?? first
-                let stop = window.range(of: newline, in: hit.upperBound..<end)?.lowerBound ?? end
-                if stop - start <= jsonLimit, let value = try? ProviderJSON.read(Data(window[start..<stop])) {
-                    guard try consume(value) else { return }
-                }
+            // Newest first: the line the block's end begins, the lines whole inside it, and its start for later.
+            if let line = joined(Data(block[last.upperBound...])) { guard try more(after: line) else { return } }
+            var end = last.lowerBound
+            while end > first.upperBound, let hit = block.range(of: marker, options: .backwards, in: first.upperBound..<end) {
+                let start = block.range(of: newline, options: .backwards, in: first.upperBound..<hit.lowerBound)?.upperBound ?? first.upperBound
+                let stop = block.range(of: newline, in: hit.upperBound..<end)?.lowerBound ?? end
+                guard try more(after: Data(block[start..<stop])) else { return }
                 end = start
             }
-            head = first > window.startIndex ? Data(window[..<(first - 1)]) : Data()
+            pieces = [Data(block[..<first.lowerBound])]
+            held = first.lowerBound - block.startIndex
         }
+        // What is left begins the file: its first line.
+        if let line = joined(Data()) { _ = try more(after: line) }
     }
 
     /// The last `bytes` of the file open in `handle`, from the first line that starts inside them, since a read that
