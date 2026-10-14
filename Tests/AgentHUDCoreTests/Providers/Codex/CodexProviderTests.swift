@@ -375,6 +375,37 @@ final class CodexProviderTests: XCTestCase {
         XCTAssertFalse(value.isLive(now: start.addingTimeInterval(16), modifiedAt: start.addingTimeInterval(15)))
     }
 
+    func testATaskCompleteThatCarriesAnErrorEndsTheTurnWithoutACompletion() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var value = CodexTranscript()
+        ingest(&value, type: "session_meta", payload: ["id": "session", "source": "cli"], at: start)
+        // The shape Codex writes when a usage limit stops a turn: a terminal task_complete with a structured error.
+        ingest(&value, payload: ["type": "task_started", "turn_id": "limited"], at: start.addingTimeInterval(1))
+        ingest(&value, payload: ["type": "task_complete", "turn_id": "limited",
+                                 "error": ["codex_error_info": "usage_limit_exceeded", "message": "You've hit your usage limit."]],
+               at: start.addingTimeInterval(5))
+        XCTAssertEqual(value.sessionTurns.map(\.state), [.ended], "a failed turn ended; it did not complete")
+        XCTAssertEqual(value.completions?.count ?? 0, 0, "and it earns no completion reminder")
+        XCTAssertFalse(value.isLive(now: start.addingTimeInterval(6), modifiedAt: start.addingTimeInterval(5)))
+
+        // A plain string error is a failure too; a null or empty `error` is not one.
+        ingest(&value, payload: ["type": "task_started", "turn_id": "text"], at: start.addingTimeInterval(10))
+        ingest(&value, payload: ["type": "task_complete", "turn_id": "text", "error": "stream closed"], at: start.addingTimeInterval(12))
+        ingest(&value, payload: ["type": "task_started", "turn_id": "null"], at: start.addingTimeInterval(20))
+        ingest(&value, payload: ["type": "task_complete", "turn_id": "null", "error": NSNull()], at: start.addingTimeInterval(22))
+        ingest(&value, payload: ["type": "task_started", "turn_id": "empty"], at: start.addingTimeInterval(30))
+        ingest(&value, payload: ["type": "task_complete", "turn_id": "empty", "error": ""], at: start.addingTimeInterval(32))
+        XCTAssertEqual(value.sessionTurns.map(\.state), [.ended, .ended, .completed, .completed])
+        XCTAssertEqual(value.completions?.map { $0.completedAt.timeIntervalSince(start) }, [22, 32], "only the turns without an error complete")
+
+        // Replaying the failed line changes nothing.
+        ingest(&value, payload: ["type": "task_complete", "turn_id": "limited",
+                                 "error": ["codex_error_info": "usage_limit_exceeded", "message": "You've hit your usage limit."]],
+               at: start.addingTimeInterval(5))
+        XCTAssertEqual(value.sessionTurns.map(\.state), [.ended, .ended, .completed, .completed])
+        XCTAssertEqual(value.completions?.count, 2)
+    }
+
     func testOnlyExplicitIdentifiedTurnsAreReportedAndRetainSourceTime() throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         var value = CodexTranscript()
