@@ -168,8 +168,11 @@ public struct CodexTranscript: Codable, Sendable {
                 }
             case "task_complete":
                 lastActivityAt = max(lastActivityAt ?? timestamp, timestamp)
-                let finished = finishTurn(payload["turn_id"] as? String, state: .completed, at: timestamp)
-                if let id, !isSubagent, !isInternal {
+                // Codex also closes a turn that failed (a usage limit, for one) with `task_complete`, and records the
+                // failure as a structured `error`. That turn ended without an answer: like an abort, it is no completion.
+                let failed = Self.carriesError(payload["error"])
+                let finished = finishTurn(payload["turn_id"] as? String, state: failed ? .ended : .completed, at: timestamp)
+                if !failed, let id, !isSubagent, !isInternal {
                     let answer = (payload["last_agent_message"] as? String).flatMap {
                         $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0
                     } ?? finished?.finalMessage
@@ -273,6 +276,12 @@ public struct CodexTranscript: Codable, Sendable {
         guard let index, turns?[index].state == .running,
               date >= (turns?[index].startedAt ?? .distantPast) else { return }
         if let paragraph = SessionCompletion.lastParagraph(text) { turns?[index].finalMessage = paragraph }
+    }
+
+    /// Whether an event's `error` field reports a failure: present, not JSON null and not an empty string.
+    private static func carriesError(_ value: Any?) -> Bool {
+        guard let value, !(value is NSNull) else { return false }
+        return (value as? String)?.isEmpty != true
     }
 
     private mutating func finishTurn(_ id: String?, state: SessionTurn.State, at date: Date) -> Turn? {
