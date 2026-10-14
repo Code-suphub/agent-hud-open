@@ -113,9 +113,9 @@ struct ScreensPane: View {
             }
             if let current {
                 SettingsDivider(theme: theme)
-                ScreenLayoutRow(layout: settings.panelLayout, screen: current.key,
-                                hasOwnStyle: settings.settings.screens[current.key] != nil
-                                    || settings.settings.screenGlow[current.key] != nil)
+                ScreenStyleRow(settings: settings, screen: current.key)
+                SettingsDivider(theme: theme)
+                ScreenLayoutRow(layout: settings.panelLayout, screen: current.key)
             }
             if placement.mode.isDocked {
                 SettingsDivider(theme: theme)

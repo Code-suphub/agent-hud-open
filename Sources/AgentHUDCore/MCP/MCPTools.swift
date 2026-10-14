@@ -40,9 +40,9 @@ public enum MCPTools {
         and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out \
         stays as saved. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent \
         back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is \
-        dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last \
-        saved one instead, for a screen with the resting HUD style that goes with it, or 'shared' to have a screen use \
-        the shared layout again.
+        dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for \
+        the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen \
+        use the shared layout again; hud.reset proposes a screen's default HUD style.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
@@ -134,6 +134,8 @@ public enum MCPTools {
                 "amplitude": number("Breathe effect: how deep a breath dips,", glow: .amplitude),
                 "outwardOnly": described("boolean", "Blur style: fade outward from the rim only."),
             ], description: "Notch or dynamic: the glow."),
+            HUDStyle.resetName: described("boolean", "True proposes the screen's default style, the placement its "
+                                          + "hardware is given and the default glow, with no other style field."),
         ], description: "The resting HUD: the marks of a Dynamic dock, the items of a Simple panel, the glow; a style "
             + "field left out stays as saved.")
         return object([
@@ -147,7 +149,8 @@ public enum MCPTools {
             "tokens": tokens,
             "hud": hud,
             "from": text("Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of "
-                         + "the one described here.", oneOf: ["default", "previous", "shared"]),
+                         + "the one described here. Only 'previous' brings a screen's HUD style with it.",
+                         oneOf: ["default", "previous", "shared"]),
             "revision": described("integer", "The revision get_panel returned; when given and no longer current the call is refused."),
         ])
     }

@@ -183,15 +183,16 @@ public struct PanelTools {
             guard Self.layoutKeys.allSatisfy({ (arguments[$0] ?? .null) == .null }) else {
                 return .failure("Nothing was changed. Pass either from or a layout, not both.")
             }
-            // For a screen, the default and the previous version take its resting HUD's style with its layout, as a
-            // person's Reset to Default and Revert to Previous do; using the shared layout leaves the style as saved, as
-            // Use Shared Layout does. A proposal is whole, so a style draft it does not bring is dropped.
+            // For a screen, the previous version takes its resting HUD's style with its layout, as a person's Revert to
+            // Previous does; the default layout and using the shared layout leave the style as saved, as the layout's
+            // Reset to Default and Use Shared Layout do, and hud.reset proposes the default style. A proposal is whole,
+            // so a style draft it does not bring is dropped.
             let target = attached.first { $0.key == scope.screenKey }
             var away = false
             switch from.stringValue {
             case "default":
-                away = scope.screenKey.map { target == nil && layout.versionChangesLook(of: $0, previous: false) } ?? false
-                layout.proposeDefault(scope, hasNotch: target?.hasNotch)
+                layout.proposeDefault(scope)
+                if let key = scope.screenKey { layout.discardStyle(key) }
             case "previous":
                 guard layout.canRevert(scope) else {
                     if case .screen(let key) = scope {
@@ -200,7 +201,7 @@ public struct PanelTools {
                     }
                     return .failure("Nothing was changed. There is no previous saved layout.")
                 }
-                away = scope.screenKey.map { target == nil && layout.versionChangesLook(of: $0, previous: true) } ?? false
+                away = scope.screenKey.map { target == nil && layout.previousChangesLook(of: $0) } ?? false
                 layout.proposePrevious(scope, hasNotch: target?.hasNotch)
             case "shared":
                 guard case .screen(let key) = scope else {
@@ -245,7 +246,9 @@ public struct PanelTools {
             layout.propose(asked == layout.current.reduced(against: existing) ? layout.current : asked)
         case .screen(let key):
             layout.propose(choice(asked, for: key, against: existing), for: key)
-            if let target = style.target {
+            if let target = style.target, style.resets {
+                layout.proposeDefaultLook(for: key, hasNotch: target.hasNotch)
+            } else if let target = style.target {
                 layout.proposeStyle(style.reduced, for: key, hasNotch: target.hasNotch)
             } else {
                 layout.discardStyle(key)

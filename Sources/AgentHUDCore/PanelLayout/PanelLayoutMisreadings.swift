@@ -86,7 +86,8 @@ extension PanelLayout {
             let value = hud[property] ?? .null
             guard property == "agents" else {
                 found += HUDStyle.misreadings(ofField: property, value)
-                    ?? ["hud has no property \"\(property)\"; the hud takes \(HUDStyle.listed(["agents"] + HUDStyle.names))."]
+                    ?? ["hud has no property \"\(property)\"; the hud takes "
+                        + "\(HUDStyle.listed(["agents"] + HUDStyle.names + [HUDStyle.resetName]))."]
                 continue
             }
             found += names(value, at: "hud.agents", among: nil)

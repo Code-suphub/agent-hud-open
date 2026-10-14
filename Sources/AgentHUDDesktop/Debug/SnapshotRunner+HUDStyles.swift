@@ -8,8 +8,8 @@ extension SnapshotRunner {
     /// A screen's resting HUD under an agent's style draft, drawn as `get_panel_image` draws it with show "hud": a notch
     /// turned into a Simple panel, a Dynamic dock with larger logos, and the notch's glow in another style; that screen's
     /// panel with the bar that says the style waits; the panel at the narrowest and the widest width a layout sets; and
-    /// the Display page of Settings while the first display has a style draft. They are drawn from a settings store of
-    /// their own.
+    /// the Display page of Settings while the first display has a style draft, and before and after a person resets its
+    /// HUD style. They are drawn from a settings store of their own.
     static func saveHUDStyles(preferences: AgentHUDCore.Settings, folder: URL) {
         let suite = "app.agenthud.open.snapshot.layout-styles"
         let defaults = UserDefaults(suiteName: suite)!
@@ -73,9 +73,22 @@ extension SnapshotRunner {
         // Settings while the first display shows an agent's style.
         if let first = ScreensPane.attached().first {
             layout.proposeStyle(HUDStyle(mode: first.hasNotch ? .logos : .simple), for: first.key, hasNotch: first.hasNotch)
-            save("panel-layout-settings-style-dark", SettingsView(settings: settings, store: store, initialTab: .display)
-                .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
+            saveDisplaySettings("panel-layout-settings-style-dark", settings: settings, store: store, folder: folder)
             layout.discard(.screen(first.key))
+
+            // The HUD style's Reset to Default on a display that uses the shared layout and has no version before:
+            // with a style of its own, a Simple panel or a Dynamic dock and a glow in another style, the button is
+            // offered and Revert to Previous rests; after the click the display has the default style, the button rests
+            // and Revert to Previous is offered to bring the style back.
+            settings.update {
+                $0.screens[first.key] = ScreenPlacement(mode: first.hasNotch ? .logos : .simple, logoSize: 30, simpleSize: 30)
+                var glow = $0.glow
+                glow.style = .dots
+                $0.screenGlow[first.key] = glow
+            }
+            saveDisplaySettings("panel-layout-settings-style-reset-dark", settings: settings, store: store, folder: folder)
+            layout.resetLook(first.key)
+            saveDisplaySettings("panel-layout-settings-style-reset-done-dark", settings: settings, store: store, folder: folder)
         }
     }
 }

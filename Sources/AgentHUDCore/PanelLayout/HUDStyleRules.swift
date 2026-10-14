@@ -2,11 +2,13 @@ import AgentHUDSupport
 import Foundation
 
 extension HUDStyle {
-    /// What is wrong with one style field of a hud as an agent sent it, as sentences: a value of the wrong type or out of
-    /// its range, a mode, edge, glow style or effect this build does not know, or a property the glow does not have.
-    /// Nil for a key that names no style field, which the caller words. A value given as null is not given.
+    /// What is wrong with one style field of a hud as an agent sent it, or its `reset`, as sentences: a value of the
+    /// wrong type or out of its range, a mode, edge, glow style or effect this build does not know, or a property the
+    /// glow does not have. Nil for a key that names no style field, which the caller words. A value given as null is not
+    /// given.
     static func misreadings(ofField name: String, _ value: JSONValue) -> [String]? {
         if name == "glow" { return glowMisreadings(value) }
+        if name == resetName { return value == .null || value.boolValue != nil ? [] : ["hud.\(name) is true or false."] }
         guard let field = Field(rawValue: name) else { return nil }
         if value == .null { return [] }
         let path = "hud.\(name)"

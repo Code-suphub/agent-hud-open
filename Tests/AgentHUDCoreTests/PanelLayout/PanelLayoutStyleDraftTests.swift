@@ -3,8 +3,9 @@ import XCTest
 @testable import AgentHUDCore
 
 /// A screen's style draft: an agent's change to its resting HUD, drawn over that screen's settings at once and written
-/// into them only by a person's Save. A screen's versions cover its whole look, so Save, Revert to Previous and Reset
-/// to Default take its layout and its style together, and a person's own edit of the screen drops a waiting draft.
+/// into them only by a person's Save. A screen's versions cover its whole look, so Save and Revert to Previous take its
+/// layout and its style together, and a person's own edit of the screen drops a waiting draft. The two resets are
+/// `PanelLayoutResetTests`'.
 @MainActor
 final class PanelLayoutStyleDraftTests: XCTestCase {
     private let screen = "SCREEN-A", other = "SCREEN-B"
@@ -184,7 +185,7 @@ final class PanelLayoutStyleDraftTests: XCTestCase {
         XCTAssertFalse(layout.hasDraft(on: screen))
     }
 
-    // MARK: Revert and reset
+    // MARK: Revert
 
     /// Revert to Previous takes back the style a Save wrote, and an edit made since is no version: it is what reverting
     /// again returns to.
@@ -201,36 +202,6 @@ final class PanelLayoutStyleDraftTests: XCTestCase {
         layout.revert(.screen(screen))
         XCTAssertEqual(settings.settings.screenGlow[screen]?.style, .ascii)
         XCTAssertEqual(settings.settings.screenGlow[screen]?.brightness, 0.4, "the look it had when it was reverted from")
-    }
-
-    /// Reset to Default gives the screen the default layout and the default style, its hardware's placement and the
-    /// default glow, and keeps what it replaces as the previous version.
-    func testResetRestoresTheDefaultLayoutAndStyle() {
-        let settings = makeSettings()
-        let layout = settings.panelLayout
-        let own = PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring)])
-        layout.propose(.own(own), for: screen)
-        layout.proposeStyle(HUDStyle(mode: .logos, logoSize: 28, glow: HUDStyle.Glow(range: 30)), for: screen, hasNotch: true)
-        layout.save(.screen(screen))
-        layout.proposeStyle(HUDStyle(logoSize: 36), for: screen, hasNotch: true)
-        changes = 0
-        layout.reset(.screen(screen))
-        XCTAssertNil(layout.styleDraft(of: screen), "a waiting draft is dropped")
-        XCTAssertEqual(layout.ownLayout(of: screen), PanelLayout())
-        XCTAssertNil(settings.settings.screens[screen])
-        XCTAssertNil(settings.settings.screenGlow[screen])
-        XCTAssertEqual(settings.effectivePlacement(on: screen, hasNotch: true), .default(hasNotch: true))
-        XCTAssertEqual(changes, 1)
-        layout.revert(.screen(screen))
-        XCTAssertEqual(layout.ownLayout(of: screen), own)
-        XCTAssertEqual(settings.settings.screens[screen]?.logoSize, 28)
-        XCTAssertEqual(settings.settings.screenGlow[screen]?.range, 30)
-
-        // Resetting what is already the default changes nothing and keeps the version before.
-        layout.reset(.screen(other))
-        let previous = layout.previous(of: other)
-        layout.reset(.screen(other))
-        XCTAssertEqual(layout.previous(of: other), previous)
     }
 
     /// An agent's proposal of the previous version waits as a draft that draws that version's look whole, a glow's grid

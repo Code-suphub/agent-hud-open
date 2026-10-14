@@ -137,8 +137,13 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(hud["type"], .string("object"))
         XCTAssertEqual(hud["additionalProperties"], .bool(false))
         XCTAssertEqual(hud["properties"].objectValue?.keys.sorted(),
-                       ["agents", "bots", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "mode", "position", "ringWidth",
-                        "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize"])
+                       ["agents", "bots", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "mode", "position", "reset",
+                        "ringWidth", "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize"])
+        XCTAssertEqual(hud["properties"]["reset"]["type"], .string("boolean"))
+        XCTAssertEqual(hud["properties"]["reset"]["description"].stringValue,
+                       "True proposes the screen's default style, the placement its hardware is given and the default glow, with no other style field.")
+        XCTAssertEqual(schema["properties"]["from"]["description"].stringValue,
+                       "Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of the one described here. Only 'previous' brings a screen's HUD style with it.")
         XCTAssertEqual(hud["properties"]["agents"]["type"], .string("array"))
         XCTAssertEqual(hud["properties"]["agents"]["items"], .object(["type": .string("string")]))
         XCTAssertEqual(choices(hud["properties"]["mode"]), ["notch", "dynamic", "simple"])
@@ -181,7 +186,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(choices(hud["edge"]), HUDEdge.allCases.map(\.rawValue))
         XCTAssertEqual(choices(hud["glow"]["properties"]["style"]), GlowStyle.allCases.map(\.rawValue))
         XCTAssertEqual(choices(hud["glow"]["properties"]["effect"]), GlowEffect.allCases.map(\.rawValue))
-        XCTAssertEqual(Set(hud.objectValue?.keys.map { $0 } ?? []), Set(["agents"] + HUDStyle.names),
+        XCTAssertEqual(Set(hud.objectValue?.keys.map { $0 } ?? []), Set(["agents"] + HUDStyle.names + [HUDStyle.resetName]),
                        "the hud's fields are the ones the strict reading knows")
     }
 
@@ -193,7 +198,7 @@ final class MCPToolsTests: XCTestCase {
                        "Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with account names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now. Use it to check how a change looks; get_panel reads the same as data.")
         XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
         XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
-                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead, for a screen with the resting HUD style that goes with it, or 'shared' to have a screen use the shared layout again.")
+                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style.")
         XCTAssertEqual(tools["discard_panel_draft"]?["description"].stringValue,
                        "Drop the unsaved draft so the Agent HUD panel returns to the saved layout and, for a screen, its resting HUD to its saved style.")
 

@@ -7,7 +7,8 @@ extension PanelTools {
     /// resting HUD to draw one on. A proposal is whole: a field it leaves out is what the screen has saved. A field set
     /// to what the screen has saved changes nothing and is no issue, so the style `get_panel` lists can be sent back,
     /// and the style a waiting draft lists asks nothing new, so a draft's style read back can be sent back too, a
-    /// version of the screen it brings back included.
+    /// version of the screen it brings back included. `reset` true asks for the screen's default style whole, as the
+    /// HUD style's Reset to Default gives it, in place of every other style field.
     @MainActor
     struct StyleProposal {
         /// The attached screen the proposal is for; nil for the shared layout or a screen that is away.
@@ -15,6 +16,8 @@ extension PanelTools {
         /// What the proposal asks, reduced to what it changes about what the screen has saved, with a dock leaving the
         /// notch placed clear of it as Settings places one.
         let reduced: HUDStyle
+        /// Whether the proposal asks for the screen's default style (`hud.reset`).
+        let resets: Bool
         /// The mode the screen's resting HUD would have under the proposal; nil without a screen to have one.
         let mode: HUDMode?
         /// Why the style cannot be done as asked, as sentences; what the reading would forgive is said by
@@ -24,7 +27,9 @@ extension PanelTools {
         let placedClear: Bool
 
         init(hud fields: [String: JSONValue], scope: PanelLayoutScope, among attached: [PanelScreen], tools: PanelTools) {
-            let given = HUDStyle.names.filter { Self.sets($0, fields[$0]) }.map { "hud.\($0)" }
+            let fieldsGiven = HUDStyle.names.filter { Self.sets($0, fields[$0]) }.map { "hud.\($0)" }
+            resets = fields[HUDStyle.resetName] == .bool(true)
+            let given = fieldsGiven + (resets ? ["hud.\(HUDStyle.resetName)"] : [])
             let style = HUDStyle(json: fields)
             let paths = HUDStyle.listed(given)
             let sets = given.count == 1 ? "sets" : "set"
@@ -50,7 +55,15 @@ extension PanelTools {
             let placement = settings.placement(on: key, hasNotch: screen.hasNotch), glow = settings.glow(on: key)
             target = screen
             let asked = style.reduced(placement: placement, glow: glow)
-            if let waiting = tools.layout.styleDraft(of: key), asked == waiting {
+            if resets {
+                // The default style, as the store proposes it: what it changes, which the default always draws.
+                reduced = HUDStyle(every: .default(hasNotch: screen.hasNotch), glow: settings.glow)
+                    .reduced(placement: placement, glow: glow)
+                placedClear = false
+                reasons = fieldsGiven.isEmpty ? [] : ["hud.reset proposes the default style of the resting HUD of "
+                    + "\(tools.name(of: key, among: attached)) whole, so the hud takes no other style field with it: "
+                    + "leave out \(HUDStyle.listed(fieldsGiven)), or reset."]
+            } else if let waiting = tools.layout.styleDraft(of: key), asked == waiting {
                 reduced = asked
                 placedClear = false
                 reasons = []

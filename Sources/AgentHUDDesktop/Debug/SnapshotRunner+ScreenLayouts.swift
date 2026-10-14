@@ -66,14 +66,20 @@ extension SnapshotRunner {
         layout.discard(.screen("snapshot-notch"))
 
         // The first display keeps a layout of its own: rings for Claude, no token chart, and its own agents; and a
-        // placement of its own, the one its hardware is given, so its row says Reset to Default takes that back too.
+        // placement of its own, the one its hardware is given, so the HUD style's Reset to Default is offered beside the
+        // layout's, and the layout's row says nothing of the style.
         if let first = ScreensPane.attached().first {
             keep(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring)], hiddenSections: [.tokens],
                              hud: PanelLayout.HUD(agents: listed)), for: first.key)
             settings.update { $0.screens[first.key] = $0.screens[first.key] ?? .default(hasNotch: first.hasNotch) }
-            save("panel-layout-settings-screen-dark", SettingsView(settings: settings, store: store, initialTab: .display)
-                .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
+            saveDisplaySettings("panel-layout-settings-screen-dark", settings: settings, store: store, folder: folder)
         }
+    }
+
+    /// The Display page of Settings at the window's size.
+    static func saveDisplaySettings(_ name: String, settings: SettingsStore, store: UsageStore, folder: URL) {
+        save(name, SettingsView(settings: settings, store: store, initialTab: .display)
+            .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
     }
 }
 #endif

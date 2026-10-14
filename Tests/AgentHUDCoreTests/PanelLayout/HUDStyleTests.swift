@@ -144,7 +144,12 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertNil(HUDStyle.misreadings(ofField: "background", .string("blue")), "a key that names no field is the caller's")
         XCTAssertEqual(PanelLayout.misreadings(of: .object(["hud": .object(["background": .string("blue")])])),
                        ["hud has no property \"background\"; the hud takes agents, mode, edge, position, logoSize, logoGap, "
-                        + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, bots, separateAgents and glow."])
+                        + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, bots, separateAgents, glow "
+                        + "and reset."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .string("yes")), ["hud.reset is true or false."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .bool(false)), [])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .null), [])
+        XCTAssertEqual(HUDStyle(json: ["reset": .bool(true)]), HUDStyle(), "reset is no field of a style")
     }
 
     /// What the screen's HUD would not draw as asked is refused: the notch on a screen without one, and a field the mode

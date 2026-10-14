@@ -294,6 +294,10 @@ extension HUDStyle {
 
     /// The names of the style's fields, as a hud takes them beside `agents`.
     static var names: [String] { Field.allCases.map(\.rawValue) + ["glow"] }
+
+    /// The hud's switch that asks for a screen's default style whole, in place of the style's fields: the placement its
+    /// hardware is given and the default glow, as the HUD style's Reset to Default gives them.
+    static let resetName = "reset"
 }
 
 extension HUDStyle.Glow {

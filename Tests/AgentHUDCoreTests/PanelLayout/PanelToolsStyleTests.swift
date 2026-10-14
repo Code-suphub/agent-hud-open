@@ -211,30 +211,6 @@ final class PanelToolsStyleTests: PanelToolsCase {
         XCTAssertEqual(settings.settings.screens[key]?.logoSize, 30, "the version it replaced, style and all")
     }
 
-    /// From "default" proposes the default style with the default layout, as Reset to Default gives them, and from
-    /// "shared" drops a waiting style draft and leaves the style as saved, as Use Shared Layout does: a proposal is whole.
-    func testFromDefaultAndFromSharedTakeTheStyleAsThePersonsButtonsDo() throws {
-        let key = "SECOND-UUID"
-        settings.update {
-            $0.screens[key] = ScreenPlacement(mode: .simple, edge: .left, simpleSize: 30)
-            var glow = GlowSettings()
-            glow.brightness = 0.5
-            $0.screenGlow[key] = glow
-        }
-        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "from": .string("default")])
-        XCTAssertEqual(layout.effective(for: key), PanelLayout())
-        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false), .default(hasNotch: false))
-        XCTAssertEqual(settings.effectiveGlow(on: key), settings.settings.glow)
-        layout.savePanel(on: key)
-        XCTAssertNil(settings.settings.screens[key])
-        XCTAssertNil(settings.settings.screenGlow[key])
-
-        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(["logoSize": .integer(30)])])
-        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "from": .string("shared")])
-        XCTAssertNil(layout.styleDraft(of: key))
-        XCTAssertEqual(layout.draft(of: key), .shared)
-    }
-
     /// A screen that is away has no resting HUD to draw a version's style on: from "previous" proposes its layout, and
     /// the note says the style is not part of it.
     func testFromPreviousForAScreenThatIsAwaySaysTheStyleStays() throws {
