@@ -216,4 +216,99 @@ final class PanelLayoutRulesTests: XCTestCase {
         // A layout with issues still resolves: what cannot be done as asked falls back or waits.
         XCTAssertEqual(PanelLayoutPlan(layout: layout, blocks: blocks).blocks.map(\.key), ["Claude", "Codex", "api:DeepSeek"])
     }
+
+    // MARK: What a layout already holds
+
+    private let held = PanelLayout(blocks: ["Cursor": PanelLayout.Block(widget: .ring, hiddenRows: ["cursor-auto"]),
+                                            "Claude": PanelLayout.Block(hiddenRows: ["claude-weekly-fable"])],
+                                   order: ["Zed", "Claude"])
+
+    /// A layout keeps what it holds for a block or a row that is away, so a layout that was read can be sent back.
+    func testWhatALayoutAlreadyHoldsForSomethingThatIsAwayIsNoIssue() {
+        XCTAssertEqual(held.issues(against: blocks).map(\.path), ["blocks.Claude.hiddenRows[0]", "blocks.Cursor", "order[0]"],
+                       "asked for anew, each of them names something the panel does not have")
+        XCTAssertEqual(held.issues(against: blocks, holding: [held]), [])
+
+        var more = held
+        more.blocks["Codex"] = PanelLayout.Block(widget: .number)
+        more.blocks["Claude"]?.hiddenRows += ["claude-weekly"]
+        more.blocks["Cursor"]?.hiddenRows = ["cursor-auto", "cursor-auto", ""]
+        more.order = ["Codex", "Cursor", "Zed"]
+        more.hiddenSections = [.tokens]
+        XCTAssertEqual(more.issues(against: blocks, holding: [PanelLayout(), held]), [],
+                       "a change to what is there, beside what is held: an away block's key may be ordered")
+    }
+
+    func testOnlyWhatIsHeldIsLetThrough() {
+        var changed = held
+        changed.blocks["Cursor"]?.widget = .chart
+        let away = "No block has the key \"Cursor\" now. The layout holds it for a block that is away: send it back as it is, "
+            + "or leave it out. The panel's blocks now: \"Claude\", \"Codex\", \"api:DeepSeek\"."
+        XCTAssertEqual(changed.issues(against: blocks, holding: [held]), [PanelLayoutIssue(path: "blocks.Cursor", message: away)],
+                       "a block that is away has no kind to weigh a new widget against")
+
+        var newer = held
+        newer.blocks["Claude"]?.hiddenRows += ["claude-monthly"]
+        newer.blocks["Trae"] = PanelLayout.Block(hidden: true)
+        newer.order += ["Trae", "Kiro"]
+        XCTAssertEqual(newer.issues(against: blocks, holding: [held]).map(\.path),
+                       ["blocks.Claude.hiddenRows[1]", "blocks.Trae", "order[2]", "order[3]"])
+        // What is held is still weighed where the block is there to weigh it.
+        let unfit = PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(widget: .ring)])
+        XCTAssertEqual(unfit.issues(against: blocks, holding: [unfit]).map(\.path), ["blocks.api:DeepSeek.widget"])
+    }
+
+    // MARK: What a layout changes
+
+    /// An agent reads every block's widget and measure and may send them all back: spelled out, the default is still
+    /// the default.
+    func testALayoutThatSpellsOutTheDefaultViewIsTheDefaultLayout() {
+        let spelled = PanelLayout(blocks: [
+            "Claude": PanelLayout.Block(widget: .bar, measure: .quota),
+            "Codex": PanelLayout.Block(widget: .bar),
+            "api:DeepSeek": PanelLayout.Block(widget: .number, measure: .quota),
+        ], order: ["Claude", "Codex", "api:DeepSeek"], sections: [.blocks, .tokens, .sessions])
+        XCTAssertFalse(spelled.isDefault)
+        XCTAssertEqual(spelled.reduced(against: blocks), PanelLayout())
+        XCTAssertEqual(PanelLayout(order: ["Claude"]).reduced(against: blocks), PanelLayout(), "Claude comes first anyway")
+        XCTAssertEqual(PanelLayout().reduced(against: blocks), PanelLayout())
+    }
+
+    func testOnlyWhatDiffersFromTheDefaultIsKept() {
+        let layout = PanelLayout(blocks: [
+            "Claude": PanelLayout.Block(widget: .chart, measure: .tokens, hiddenRows: ["claude-weekly"]),
+            "Codex": PanelLayout.Block(widget: .bar, measure: .cost, hidden: true),
+            "api:DeepSeek": PanelLayout.Block(measure: .quota),
+        ], order: ["Codex", "Claude", "api:DeepSeek"], hiddenSections: [.tokens])
+        XCTAssertEqual(layout.reduced(against: blocks), PanelLayout(blocks: [
+            "Claude": PanelLayout.Block(widget: .chart, hiddenRows: ["claude-weekly"]),
+            "Codex": PanelLayout.Block(measure: .cost, hidden: true),
+        ], order: ["Codex"], hiddenSections: [.tokens]), "tokens is what a chart shows first, and the rest of the order follows anyway")
+        XCTAssertEqual(PanelLayout(order: ["api:DeepSeek", "Claude", "Codex"]).reduced(against: blocks), PanelLayout(order: ["api:DeepSeek"]))
+        XCTAssertEqual(PanelLayout(order: ["Codex", "api:DeepSeek", "Claude"]).reduced(against: blocks),
+                       PanelLayout(order: ["Codex", "api:DeepSeek"]))
+    }
+
+    /// What it draws now is the same for both, and so are the plans.
+    func testAReducedLayoutDrawsWhatTheLayoutDraws() {
+        let layouts = [
+            PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring, measure: .quota), "Codex": PanelLayout.Block(widget: .bar, measure: .burnRate)],
+                        order: ["Codex", "Zed", "Claude", "api:DeepSeek"], sections: [.sessions]),
+            PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(widget: .number, hidden: true)], order: ["api:DeepSeek", "Codex"]),
+            held,
+        ]
+        for layout in layouts {
+            XCTAssertEqual(PanelLayoutPlan(layout: layout.reduced(against: blocks), blocks: blocks),
+                           PanelLayoutPlan(layout: layout, blocks: blocks))
+        }
+    }
+
+    func testWhatIsHeldForABlockThatIsAwayStaysAsWritten() {
+        var kept = held
+        kept.order = ["Zed"]
+        XCTAssertEqual(held.reduced(against: blocks), kept, "an away block's widget and its place stay; Claude comes first after it anyway")
+        let trailing = PanelLayout(blocks: ["Cursor": PanelLayout.Block(widget: .bar, measure: .quota)], order: ["Codex", "Claude", "Zed"])
+        XCTAssertEqual(trailing.reduced(against: blocks), trailing, "nothing is known of Cursor's default, and Zed keeps its place")
+        XCTAssertEqual(PanelLayout(order: ["Zed", "Claude", "Codex"]).reduced(against: blocks), PanelLayout(order: ["Zed"]))
+    }
 }

@@ -5,7 +5,7 @@ import AgentHUDCore
 struct ModelUsageRow: View {
     let row: AgentRow
     let now: Date
-    var metric = IslandQuotaMetric.quota
+    var metric = PanelMeasure.quota
     let showReset: Bool
     var showVendor = true
     var insights: UsageInsights?
@@ -60,10 +60,14 @@ struct ModelUsageRow: View {
                           projectionFill: runsOut ? theme.status(.warning) : theme.secondary,
                           track: theme.track, isLoading: isLoading)
                 .frame(height: 4)
+            // A value is one line and never cut: one wider than its column, such as a burn rate of 100 %/h, takes the
+            // room from the bar, so the row is as tall in every measure.
             Text(value ?? "—")
                 .font(.tabular(13, .semibold))
                 .foregroundStyle(value == nil ? theme.secondary : valueColor)
-                .frame(width: 62, alignment: .trailing)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(minWidth: 62, alignment: .trailing)
                 .contentTransition(.numericText())
             if showsDetail {
                 Text(metricDetail)
@@ -139,7 +143,7 @@ struct QuotaRowMetrics {
         self.cost = row.assessment.showsLevel ? cost : nil
     }
 
-    func value(_ metric: IslandQuotaMetric) -> String? {
+    func value(_ metric: PanelMeasure) -> String? {
         switch metric {
         case .quota:
             row.usedPct.map(TokenFormat.percent) ?? row.missingQuotaLabel
@@ -153,7 +157,7 @@ struct QuotaRowMetrics {
         }
     }
 
-    func detail(_ metric: IslandQuotaMetric, isLoading: Bool) -> String {
+    func detail(_ metric: PanelMeasure, isLoading: Bool) -> String {
         guard row.usedPct != nil else {
             return metric == .quota && !isLoading ? row.resetLabel(now: now) : "—"
         }

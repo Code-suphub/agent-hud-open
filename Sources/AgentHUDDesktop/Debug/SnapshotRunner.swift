@@ -169,7 +169,7 @@ public enum SnapshotRunner {
         settings.update { $0.glowStyle = .blur; $0.glowEffect = .breathe }
         save("island-expanded-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
         save("island-expanded-light", IslandScene(store: store, settings: settings, open: true, light: true), folder: folder, scheme: .light)
-        saveLayouts(settings: settings, store: store, folder: folder)
+        saveLayouts(preferences: settings.settings, folder: folder)
         // Session titles and token counts remain separate controls, including unavailable and failed returns.
         if let codex = settings.agents.first(where: { $0.vendor == "Codex" }) {
             let saved = settings.settings
@@ -726,8 +726,22 @@ public enum SnapshotRunner {
     }
 
     /// The hover panel under layouts an agent might propose: each widget with each measure first, then an unsaved
-    /// draft that mixes widgets, reorders the blocks and hides a section. The layout is the default again afterwards.
-    private static func saveLayouts(settings: SettingsStore, store: UsageStore, folder: URL) {
+    /// draft that mixes widgets, reorders the blocks and hides a section. They are drawn from a settings store of their
+    /// own, with the preferences the other stills have at this point: a layout once saved leaves a previous one behind,
+    /// which every Settings still after these would show as something to revert to.
+    private static func saveLayouts(preferences: AgentHUDCore.Settings, folder: URL) {
+        if let prefix = ProcessInfo.processInfo.environment["AGENTHUD_SNAPSHOT_PREFIX"],
+           !"panel-layout".hasPrefix(prefix) && !prefix.hasPrefix("panel-layout") { return }
+        let suite = "app.agenthud.open.snapshot.layout"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
+        settings.update { $0 = preferences }
+        let store = demoStore(settings)
+        store.sampleTurnCalls = { DemoData.turnCalls(session: $0.id, turn: $1) }
+        store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: DemoClock.now))
+
         let layout = settings.panelLayout
         let quota = store.view.panelBlocks.filter { $0.kind == .quota }
         func every(_ widget: PanelWidget, _ measure: PanelMeasure) -> PanelLayout {
@@ -750,8 +764,6 @@ public enum SnapshotRunner {
         save("panel-layout-settings-dark", SettingsView(settings: settings, store: store, initialTab: .display)
             .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark,
              scrollToBottom: true)
-        layout.discard()
-        layout.reset()
     }
 
     /// A store of sample data on the demo's clock, the one every report here is built on.

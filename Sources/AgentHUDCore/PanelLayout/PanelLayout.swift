@@ -47,11 +47,11 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         }
 
         /// Whether the block changes nothing: no widget, no measure, not hidden, and no row hidden.
-        public var isEmpty: Bool { widget == nil && measure == nil && !hidden && hiddenRows.isEmpty }
+        var isEmpty: Bool { widget == nil && measure == nil && !hidden && hiddenRows.isEmpty }
 
         /// The block with each hidden row named once, in key order, and no empty key among them: which rows are hidden
         /// matters, not the order they were named in.
-        public func normalized() -> Block {
+        func normalized() -> Block {
             Block(widget: widget, measure: measure, hidden: hidden,
                   hiddenRows: hiddenRows.filter { !$0.isEmpty }.withoutRepeats.sorted())
         }
@@ -108,7 +108,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
     /// hidden rows once, in key order; `sections` as the whole order it gives, or empty when that is the default
     /// order; and `hiddenSections` once each, in default order. A hidden section keeps its place in `sections`, which
     /// it takes again when it is shown.
-    public func normalized() -> PanelLayout {
+    func normalized() -> PanelLayout {
         var kept: [String: Block] = [:]
         for (key, block) in blocks {
             let block = block.normalized()

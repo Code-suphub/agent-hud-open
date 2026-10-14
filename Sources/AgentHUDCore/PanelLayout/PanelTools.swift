@@ -7,29 +7,59 @@ import Foundation
 /// Every answer comes from what the application holds: the last report, the settings and the layout store. Nothing
 /// here starts a provider read, opens the panel or writes the agent list, and nothing here saves: a proposal is a
 /// draft until a person presses Save in the panel. A proposal is checked as an agent sent it, and one the panel
-/// cannot do as asked is refused whole, with every reason, so an agent never believes a change that fell back.
+/// cannot do as asked is refused whole, with every reason, so an agent never believes a change that fell back. What
+/// the layout already holds for a block or a row that is away may come back with it, so the layout that was read can
+/// be sent again, and a proposal is kept as what it changes, so one that draws what is saved leaves no draft.
 @MainActor
 public struct PanelTools {
     private let store: UsageStore
+    /// The number the revisions an agent is given are counted from.
+    private let launch: Int64
+
+    /// Drawn once a launch. The layout store counts its changes from 0 at every launch, so counted from 0 a revision
+    /// an agent read before a relaunch would pass for the current one after it.
+    private static let drawnAtLaunch = Int64.random(in: 1...999_999) * 1_000
 
     public init(store: UsageStore) {
+        self.init(store: store, launch: Self.drawnAtLaunch)
+    }
+
+    /// - launch: the number revisions are counted from, where a test names its own.
+    init(store: UsageStore, launch: Int64) {
         self.store = store
+        self.launch = launch
     }
 
     private var layout: PanelLayoutStore { store.settings.panelLayout }
 
+    /// The layout's revision as an agent is given it.
+    private var revision: Int64 { launch + Int64(layout.revision) }
+
     public func answer(_ request: MCPToolRequest) -> MCPToolReply {
         switch request.tool {
         case MCPTools.getPanel:
+            if let unknown = Self.unknown(request.arguments, taking: []) {
+                return .failure("get_panel takes no arguments. \(unknown)")
+            }
             return .result(panel())
         case MCPTools.setPanelLayout:
             return propose(request.arguments)
         case MCPTools.discardPanelDraft:
+            if let unknown = Self.unknown(request.arguments, taking: []) {
+                return .failure("Nothing was changed. discard_panel_draft takes no arguments. \(unknown)")
+            }
             layout.discard()
             return .result(panel(note: "There is no draft now. The panel shows the saved layout."))
         default:
             return .failure("Agent HUD has no tool named \"\(request.tool)\".")
         }
+    }
+
+    /// Names the arguments a tool was sent and does not take; nil when it takes them all. An argument a tool does not
+    /// take is something its caller believes was heeded, so it is refused, not passed over.
+    private static func unknown(_ arguments: [String: JSONValue], taking taken: [String]) -> String? {
+        let unknown = arguments.keys.filter { !taken.contains($0) }.sorted()
+        return unknown.isEmpty ? nil : "Unknown: \(PanelLayout.quoted(unknown))."
     }
 
     // MARK: Proposing
@@ -41,21 +71,21 @@ public struct PanelTools {
 
     private func propose(_ arguments: [String: JSONValue]) -> MCPToolReply {
         let taken = Self.layoutKeys + ["from", "revision"]
-        let unknown = arguments.keys.filter { !taken.contains($0) }.sorted()
-        guard unknown.isEmpty else {
-            return .failure("Nothing was changed. Unknown: \(Self.quoted(unknown)). It takes: \(Self.quoted(taken)).")
+        if let unknown = Self.unknown(arguments, taking: taken) {
+            return .failure("Nothing was changed. \(unknown) It takes: \(PanelLayout.quoted(taken)).")
         }
         if let given = arguments["revision"], given != .null {
-            guard case .integer(let revision) = given else {
+            guard case .integer(let read) = given else {
                 return .failure("Nothing was changed. revision is the whole number get_panel returned.")
             }
-            guard revision == Int64(layout.revision) else {
+            guard read == revision else {
                 return .failure("Nothing was changed. The layout changed since you read it: its revision is now "
-                                + "\(layout.revision). Call get_panel again, then propose.")
+                                + "\(revision). Call get_panel again, then propose.")
             }
         }
         if let from = arguments["from"], from != .null {
-            guard Self.layoutKeys.allSatisfy({ arguments[$0] == nil }) else {
+            // A key given as null is not given, here as everywhere.
+            guard Self.layoutKeys.allSatisfy({ (arguments[$0] ?? .null) == .null }) else {
                 return .failure("Nothing was changed. Pass either from or a layout, not both.")
             }
             switch from.stringValue {
@@ -72,15 +102,19 @@ public struct PanelTools {
             return .result(panel(note: layout.hasDraft ? Self.draftNote : Self.savedNote))
         }
         let document = JSONValue.object(arguments.filter { Self.layoutKeys.contains($0.key) })
+        let existing = store.view.panelBlocks
+        // Every reason at once: what the reading would forgive, then what the rest of the layout asks that the panel
+        // cannot do. What the layout already holds for a block or a row that is away may come back with it.
         var reasons = PanelLayout.misreadings(of: document)
-        if reasons.isEmpty, let proposal = PanelLayout(json: document) {
-            reasons = proposal.issues(against: store.view.panelBlocks).map { "\($0.path): \($0.message)" }
-            if reasons.isEmpty {
-                layout.propose(proposal)
-                return .result(panel(note: layout.hasDraft ? Self.draftNote : Self.savedNote))
-            }
-        }
-        return .failure("Nothing was changed. " + reasons.joined(separator: " "))
+        let proposal = PanelLayout(json: document) ?? PanelLayout()
+        reasons += proposal.issues(against: existing, holding: [layout.effective, layout.current])
+            .map { "\($0.path): \($0.message)" }
+        guard reasons.isEmpty else { return .failure("Nothing was changed. " + reasons.joined(separator: " ")) }
+        // A proposal that draws what the saved layout draws is the saved layout, however it is spelled out: it leaves
+        // no draft, and nothing a person could save that changes nothing.
+        let asked = proposal.reduced(against: existing)
+        layout.propose(asked == layout.current.reduced(against: existing) ? layout.current : asked)
+        return .result(panel(note: layout.hasDraft ? Self.draftNote : Self.savedNote))
     }
 
     // MARK: Reading
@@ -98,7 +132,7 @@ public struct PanelTools {
         let drawn = plan.blocks + existing.filter { !shown.contains($0.key) }
             .map { PanelBlockPlan($0, changed: effective.blocks[$0.key] ?? PanelLayout.Block()) }
         var result: [String: JSONValue] = [
-            "revision": .integer(Int64(layout.revision)),
+            "revision": .integer(revision),
             "unsaved": .bool(layout.hasDraft),
             "hasPrevious": .bool(layout.canRevert),
             "layout": (try? JSONValue.from(effective)) ?? .object([:]),
@@ -140,8 +174,10 @@ public struct PanelTools {
         return .object(block)
     }
 
-    /// One quota window's reading: numbers and times only, with no account name. A reading that shows no level has
-    /// no burn rate, run-out time or token rate, as in the panel.
+    /// One quota window's reading: numbers and times only, with no account name. Its name is the window's as the panel
+    /// writes it, in the application's language: its provider worded it when it was read, and it is how the person
+    /// who looks at the panel will call the row. A reading that shows no level has no burn rate, run-out time or token
+    /// rate, as in the panel.
     private func reading(of row: AgentRow, shown: Bool) -> JSONValue {
         var reading: [String: JSONValue] = [
             "key": .string(row.agent.windowKey), "name": .string(row.agent.name), "shown": .bool(shown),
@@ -176,7 +212,6 @@ public struct PanelTools {
 
     private static func tenths(_ value: Double) -> Double { (value * 10).rounded() / 10 }
     private static func time(_ date: Date) -> String { date.formatted(.iso8601) }
-    private static func quoted(_ names: [String]) -> String { names.map { "\"\($0)\"" }.joined(separator: ", ") }
 }
 
 extension PanelLayout {
@@ -193,7 +228,7 @@ extension PanelLayout {
             for (index, item) in items.enumerated() {
                 guard let name = item.stringValue else { found.append("\(key)[\(index)] is a string."); continue }
                 if let allowed, !allowed.contains(name) {
-                    found.append("\(key)[\(index)]: \"\(name)\" is not one of \(quotedList(allowed)).")
+                    found.append("\(key)[\(index)]: \"\(name)\" is not one of \(quoted(allowed)).")
                 }
             }
         }
@@ -229,12 +264,9 @@ extension PanelLayout {
     private static func misnamed(_ value: JSONValue, at path: String, among allowed: [String]) -> [String] {
         if value == .null { return [] }
         guard let name = value.stringValue, allowed.contains(name) else {
-            return ["\(path) is one of \(quotedList(allowed))."]
+            return ["\(path) is one of \(quoted(allowed))."]
         }
         return []
     }
 
-    private static func quotedList(_ names: [String]) -> String {
-        names.map { "\"\($0)\"" }.joined(separator: ", ")
-    }
 }

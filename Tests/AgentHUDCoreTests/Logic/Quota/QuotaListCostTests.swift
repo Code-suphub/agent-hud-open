@@ -61,4 +61,28 @@ final class QuotaListCostTests: XCTestCase {
         }
         L10n.setLanguage(.system)
     }
+
+    /// The decimals are chosen for the amount as it is written, not as it was before rounding.
+    func testAShortAmountThatRoundsToAHundredIsWrittenWhole() {
+        L10n.setLanguage(.en)
+        defer { L10n.setLanguage(.system) }
+        for amount in ["99.995", "99.996", "99.999", "100"] {
+            XCTAssertEqual(MoneyFormat.short(Decimal(string: amount)!, currency: "USD"), "$100", amount)
+        }
+        XCTAssertEqual(MoneyFormat.short(Decimal(string: "-99.999")!, currency: "USD"), "-$100")
+        XCTAssertEqual(MoneyFormat.short(Decimal(string: "99.985")!, currency: "USD"), "$99.98", "rounded as the format rounds")
+    }
+
+    /// A pace of less than a cent an hour is not nothing.
+    func testAShortAmountUnderACentSaysSo() {
+        for (language, yuan) in [(AppLanguage.zhHans, "<¥0.01"), (.en, "<¥0.01")] {
+            L10n.setLanguage(language)
+            XCTAssertEqual(MoneyFormat.short(Decimal(string: "0.004")!, currency: "USD"), "<$0.01")
+            XCTAssertEqual(MoneyFormat.short(Decimal(string: "0.000001")!, currency: "CNY"), yuan)
+            XCTAssertEqual(MoneyFormat.short(Decimal(string: "0.006")!, currency: "USD"), "$0.01")
+            XCTAssertEqual(MoneyFormat.short(0, currency: "USD"), "$0.00")
+            XCTAssertEqual(MoneyFormat.short(Decimal(string: "-0.004")!, currency: "USD"), "$0.00", "no minus before nothing")
+        }
+        L10n.setLanguage(.system)
+    }
 }

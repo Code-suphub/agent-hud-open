@@ -60,8 +60,7 @@ struct TokenConsumptionChart: View {
                     .font(.ui(13, .semibold))
                 Spacer()
                 if context == .island {
-                    Text(store.report == nil ? "24h · —"
-                         : "24h · \(TokenFormat.short(columns.reduce(0) { $0 + $1.total })) tok")
+                    Text(Self.dayTotal(store.report == nil ? nil : columns))
                         .font(.tabular(12))
                         .foregroundStyle(theme.secondary)
                 } else {
@@ -130,6 +129,13 @@ struct TokenConsumptionChart: View {
                 .padding(.horizontal, context == .stats ? 12 : 6)
             }
         }
+    }
+
+    /// What stands beside the name of an island chart of the last day: the tokens its columns hold, or a dash for
+    /// `nil`, while there is no report to count from.
+    nonisolated static func dayTotal(_ columns: [TokenColumn]?) -> String {
+        guard let columns else { return "24h · —" }
+        return "24h · \(TokenFormat.short(columns.reduce(0) { $0 + $1.total })) tok"
     }
 
     nonisolated static func modelTotals(consumers: [AgentDescriptor], columns: [TokenColumn]) -> [ModelTokens] {

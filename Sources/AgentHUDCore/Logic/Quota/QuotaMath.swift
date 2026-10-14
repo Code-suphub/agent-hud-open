@@ -125,3 +125,14 @@ public struct QuotaListCost: Hashable, Sendable {
         amounts[currency].map { $0 / Decimal(hours) }
     }
 }
+
+public extension ReportView {
+    /// What this quota window's tokens over the observed part of its current cycle would cost at list price: an
+    /// estimate, since a subscription is not billed by the token.
+    func listCost(for agentId: String) -> QuotaListCost? {
+        guard counts(agentId), let report, let snapshot = report.snapshot(for: agentId),
+              let consumers = report.consumerIdsByQuota[agentId] else { return nil }
+        return QuotaMath.listCost(snapshot: snapshot, consumers: consumers, usage: report.usage,
+                                  regions: PriceRegions(report: report), now: now)
+    }
+}

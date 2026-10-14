@@ -26,7 +26,6 @@ final class PanelLayoutPersistenceTests: XCTestCase {
         return PanelLayoutStore(defaults: defaults)
     }
 
-
     func testTheSavedLayoutsAreReadByTheNextStoreOnTheSameDefaults() {
         let defaults = makeDefaults()
         let first = PanelLayoutStore(defaults: defaults)

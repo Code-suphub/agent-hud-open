@@ -32,13 +32,14 @@ struct IslandPane: View {
                     // where an agent's change waits in the panel to be saved.
                     SettingRow(label: L10n.text("布局", "Layout"), subtitle: layoutStatus) {
                         HStack(spacing: 8) {
-                            Button(L10n.text("恢复上一版", "Revert to previous")) { settings.panelLayout.revert() }
+                            Button(L10n.text("恢复上一版", "Revert to Previous")) { settings.panelLayout.revert() }
                                 .disabled(!settings.panelLayout.canRevert)
                                 .accessibilityIdentifier("settings-layout-revert")
-                            Button(L10n.text("恢复默认", "Reset to default")) { settings.panelLayout.reset() }
+                            Button(L10n.text("恢复默认", "Reset to Default")) { settings.panelLayout.reset() }
                                 .disabled(settings.panelLayout.current.isDefault && !settings.panelLayout.hasDraft)
                                 .accessibilityIdentifier("settings-layout-reset")
                         }
+                        .controlSize(.small)
                     }
                 }
             SettingsSection(title: L10n.text("Logo", "Logos"), theme: theme) {

@@ -28,7 +28,7 @@ final class PanelLayoutPlanTests: XCTestCase {
             PanelBlockPlan(key: "api:DeepSeek", kind: .billing, widget: .number, measure: .quota, measures: [.quota]),
         ])
         XCTAssertEqual(planned.sections, [.blocks, .tokens, .sessions])
-        XCTAssertEqual(planned.blocks.map(\.id), blocks.map(\.key))
+        XCTAssertEqual(planned.blocks.map(\.key), blocks.map(\.key))
         XCTAssertEqual(planned, PanelLayoutPlan(layout: PanelLayout(blocks: ["Claude": PanelLayout.Block()], order: [""]), blocks: blocks),
                        "a layout that normalizes to the default plans as the default")
         XCTAssertEqual(PanelLayoutPlan(layout: PanelLayout(), blocks: []).blocks, [])

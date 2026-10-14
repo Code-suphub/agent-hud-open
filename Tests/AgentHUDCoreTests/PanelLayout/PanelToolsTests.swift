@@ -7,26 +7,31 @@ import XCTest
 /// balance.
 @MainActor
 final class PanelToolsTests: XCTestCase {
-    private var suite = ""
-    private var settings: SettingsStore!
-    private var store: UsageStore!
-    private var tools: PanelTools!
+    private let suite = "app.agenthud.tests.panel-tools.\(UUID().uuidString)"
     private var changes = 0
-
-    override func setUp() async throws {
-        L10n.setLanguage(.en)
-        suite = "app.agenthud.tests.panel-tools.\(UUID().uuidString)"
-        settings = SettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suite)), defaultAgents: DemoData.agents)
-        store = UsageStore(provider: DemoUsageProvider(), settings: settings, clock: { DemoClock.now })
+    /// The sample's store over settings of its own, made when a test first reaches for either.
+    private lazy var store: UsageStore = {
+        let suite = suite
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(defaults: UserDefaults(suiteName: suite)!, defaultAgents: DemoData.agents)
+        let store = UsageStore(provider: DemoUsageProvider(), settings: settings, clock: { DemoClock.now })
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: 48, now: DemoClock.now, stage: nil))
-        tools = PanelTools(store: store)
-        changes = 0
+        // In place of the store's own listener, which would wake collection: the tests count what the settings say.
         settings.onChange = { [weak self] _ in self?.changes += 1 }
+        return store
+    }()
+    private var settings: SettingsStore { store.settings }
+    /// Revisions counted from 0, so that the tests can name them; the application's own start from a drawn number.
+    private lazy var tools = PanelTools(store: store, launch: 0)
+
+    override func setUp() {
+        super.setUp()
+        L10n.setLanguage(.en)
     }
 
-    override func tearDown() async throws {
-        UserDefaults.standard.removePersistentDomain(forName: suite)
+    override func tearDown() {
         L10n.setLanguage(.system)
+        super.tearDown()
     }
 
     private var layout: PanelLayoutStore { settings.panelLayout }
@@ -113,6 +118,24 @@ final class PanelToolsTests: XCTestCase {
         XCTAssertEqual(tokens["onInSettings"], .bool(false))
     }
 
+    /// A window's name is how the person who looks at the panel calls the row, so it follows the application's
+    /// language as the panel does; keys, notes and refusals do not.
+    func testARowIsNamedAsThePanelNamesItInTheApplicationsLanguage() throws {
+        func claude() throws -> [[String: JSONValue]] {
+            (try block("Claude", in: try result(MCPTools.getPanel))["rows"]?.arrayValue ?? []).compactMap(\.objectValue)
+        }
+        XCTAssertEqual(try claude().map { $0["name"] },
+                       [.string("Current session"), .string("Weekly limit · All models"), .string("Weekly limit · Fable")])
+        let keys = try claude().map { $0["key"] }
+        L10n.setLanguage(.zhHans)
+        XCTAssertEqual(try claude().map { $0["name"] }, [.string("当前会话"), .string("每周限制 · 所有模型"), .string("每周限制 · Fable")])
+        XCTAssertEqual(try claude().map { $0["key"] }, keys)
+        XCTAssertEqual(try claude().compactMap { $0["name"]?.stringValue },
+                       (store.rowGroups.first { $0.vendor == "Claude" }?.rows ?? []).map(\.agent.name), "as the panel's rows are named")
+        XCTAssertEqual(try result(MCPTools.discardPanelDraft)["note"], .string("There is no draft now. The panel shows the saved layout."))
+        XCTAssertTrue(try refusal(["order": .array([.string("Zed")])]).contains("No block has the key \"Zed\""))
+    }
+
     // MARK: Proposing
 
     func testAProposalIsADraftThatNothingSavesAndNothingElseHears() throws {
@@ -152,6 +175,80 @@ final class PanelToolsTests: XCTestCase {
         XCTAssertTrue(panel["note"]?.stringValue?.contains("already saved") == true)
     }
 
+    /// An agent reads every block's widget and measure and may send them all back. Spelled out, the saved layout is
+    /// still the saved layout: nothing waits to be saved, and a default view that is saved is the default layout.
+    func testAProposalThatDrawsWhatIsSavedLeavesNoDraft() throws {
+        let everyKey = JSONValue.array(["Claude", "Codex", "api:DeepSeek"].map(JSONValue.string))
+        let spelled = try result(MCPTools.setPanelLayout, [
+            "order": everyKey,
+            "blocks": .object(["Claude": .object(["widget": .string("bar"), "measure": .string("quota"), "hidden": .bool(false)]),
+                               "api:DeepSeek": .object(["widget": .string("number")])]),
+        ])
+        XCTAssertEqual(spelled["unsaved"], .bool(false))
+        XCTAssertTrue(spelled["note"]?.stringValue?.contains("already saved") == true)
+        XCTAssertFalse(layout.hasDraft)
+        XCTAssertEqual(layout.revision, 0)
+
+        _ = try result(MCPTools.setPanelLayout, ["blocks": .object(["Codex": .object(["widget": .string("ring")])]),
+                                                 "order": .array([.string("Codex"), .string("Claude")])])
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Codex": PanelLayout.Block(widget: .ring)], order: ["Codex"]),
+                       "a draft holds only what it changes")
+        layout.save()
+        let again = try result(MCPTools.setPanelLayout, [
+            "blocks": .object(["Codex": .object(["widget": .string("ring"), "measure": .string("quota")]),
+                               "Claude": .object(["widget": .string("bar")])]),
+            "order": .array(["Codex", "Claude", "api:DeepSeek"].map(JSONValue.string)),
+        ])
+        XCTAssertEqual(again["unsaved"], .bool(false), "the saved layout, with every default written out")
+        XCTAssertEqual(again["layout"], try result(MCPTools.getPanel)["layout"])
+
+        _ = try result(MCPTools.setPanelLayout, ["blocks": .object(["Codex": .object(["widget": .string("bar")])]), "order": everyKey])
+        XCTAssertEqual(layout.draft, PanelLayout(), "the default view written out is the default layout")
+        layout.save()
+        XCTAssertTrue(layout.current.isDefault)
+    }
+
+    /// A layout keeps what it holds for a block or a row that is away. What `get_panel` returned can be sent back
+    /// with them, and a person's Save then loses nothing of it.
+    func testTheLayoutThatWasReadCanBeSentBackWithWhatItHoldsForWhatIsAway() throws {
+        layout.propose(PanelLayout(blocks: ["Codex": PanelLayout.Block(widget: .ring),
+                                            "Claude": PanelLayout.Block(hiddenRows: ["claude-weekly-fable"])], order: ["Codex", "Claude"]))
+        layout.save()
+        // Switched off in Settings: Codex's windows, and the one window of Claude's that the layout hides.
+        let away = settings.agents.filter { $0.vendor == "Codex" || $0.windowKey == "claude-weekly-fable" }
+        for agent in away { settings.setAgent(id: agent.id, enabled: false) }
+        let read = try result(MCPTools.getPanel)
+        XCTAssertEqual(blocks(read).map { $0["key"] }, [.string("Claude"), .string("api:DeepSeek")])
+        let held = try XCTUnwrap(read["layout"]?.objectValue)
+        XCTAssertEqual(held["order"], .array([.string("Codex"), .string("Claude")]))
+
+        XCTAssertEqual(try result(MCPTools.setPanelLayout, held)["unsaved"], .bool(false), "sent back as it was read, it is the saved layout")
+        var changed = held
+        changed["hiddenSections"] = .array([.string("tokens")])
+        let panel = try result(MCPTools.setPanelLayout, changed)
+        XCTAssertEqual(panel["unsaved"], .bool(true))
+        let draft = try XCTUnwrap(layout.draft)
+        XCTAssertEqual(draft.blocks, layout.current.blocks, "what is held for Codex and for Claude's window is in the draft")
+        XCTAssertEqual(draft.order.first, "Codex")
+        XCTAssertEqual(draft.hiddenSections, [.tokens])
+
+        // Changing what is held for a block that is away is asking for something the panel cannot weigh.
+        var rewritten = changed
+        rewritten["blocks"] = .object(["Codex": .object(["widget": .string("chart"), "measure": .string("cost")])])
+        XCTAssertTrue(try refusal(rewritten).contains("blocks.Codex: No block has the key \"Codex\" now. The layout holds it"))
+        XCTAssertTrue(try refusal(["blocks": .object(["Claude": .object(["hiddenRows": .array([.string("claude-monthly")])])])])
+            .contains("blocks.Claude.hiddenRows[0]:"))
+
+        layout.save()
+        for agent in away { settings.setAgent(id: agent.id, enabled: true) }
+        let back = try result(MCPTools.getPanel)
+        XCTAssertEqual(blocks(back).first?["key"], .string("Codex"), "Codex is first again")
+        XCTAssertEqual(try block("Codex", in: back)["widget"], .string("ring"))
+        let fable = try XCTUnwrap(try block("Claude", in: back)["rows"]?.arrayValue?.compactMap(\.objectValue)
+            .first { $0["key"] == .string("claude-weekly-fable") })
+        XCTAssertEqual(fable["shown"], .bool(false))
+    }
+
     func testTheBuiltInAndThePreviousLayoutCanBeProposed() throws {
         XCTAssertTrue(try refusal(["from": .string("previous")]).contains("no previous saved layout"))
         layout.propose(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring)]))
@@ -163,6 +260,11 @@ final class PanelToolsTests: XCTestCase {
         XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring)]))
         XCTAssertTrue(try refusal(["from": .string("last")]).contains("\"default\" or \"previous\""))
         XCTAssertTrue(try refusal(["from": .string("default"), "order": .array([])]).contains("either from or a layout"))
+        // A key given as null is not given: this proposes the default view, which is what is saved, so the draft goes.
+        XCTAssertTrue(layout.hasDraft)
+        let nulls: [String: JSONValue] = ["from": .string("default"), "order": .null, "blocks": .null, "revision": .null]
+        XCTAssertEqual(try result(MCPTools.setPanelLayout, nulls)["unsaved"], .bool(false))
+        XCTAssertFalse(layout.hasDraft)
     }
 
     func testARevisionThatIsNoLongerCurrentIsRefused() throws {
@@ -171,6 +273,31 @@ final class PanelToolsTests: XCTestCase {
         XCTAssertTrue(try refusal(["order": .array([.string("Claude")]), "revision": .integer(0)]).contains("revision is now 1"))
         XCTAssertTrue(try refusal(["revision": .string("1")]).contains("whole number"))
         _ = try result(MCPTools.setPanelLayout, ["order": .array([.string("Claude")]), "revision": .integer(1)])
+    }
+
+    /// The store counts its changes from 0 at every launch. The revisions an agent is given start from a number drawn
+    /// at launch, so one read before a relaunch does not pass for the current one after it.
+    func testARevisionReadBeforeARelaunchIsNotCurrentAfterIt() throws {
+        let before = PanelTools(store: store, launch: 482_000)
+        guard case .result(let read) = before.answer(MCPToolRequest(tool: MCPTools.getPanel)) else { return XCTFail("get_panel was refused") }
+        XCTAssertEqual(read["revision"], .integer(482_000))
+
+        let relaunched = SettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suite)), defaultAgents: DemoData.agents)
+        let later = UsageStore(provider: DemoUsageProvider(), settings: relaunched, clock: { DemoClock.now })
+        later.replace(report: DemoUsageProvider.report(agents: relaunched.agents, historyHours: 48, now: DemoClock.now, stage: nil))
+        XCTAssertEqual(relaunched.panelLayout.revision, layout.revision, "both stores have counted no change")
+        let after = PanelTools(store: later, launch: 917_000)
+        let stale = MCPToolRequest(tool: MCPTools.setPanelLayout, arguments: ["order": .array([.string("Codex")]), "revision": .integer(482_000)])
+        guard case .failure(let sentence) = after.answer(stale) else { return XCTFail("a revision of another launch passed") }
+        XCTAssertTrue(sentence.contains("revision is now 917000"), sentence)
+        XCTAssertFalse(relaunched.panelLayout.hasDraft)
+        guard case .result = before.answer(stale) else { return XCTFail("the launch that gave the revision takes it") }
+
+        // The application's own tools do not count from 0.
+        guard case .result(let own) = PanelTools(store: store).answer(MCPToolRequest(tool: MCPTools.getPanel)),
+              case .integer(let revision)? = own["revision"] else { return XCTFail("get_panel gave no revision") }
+        XCTAssertGreaterThanOrEqual(revision, 1_000)
+        XCTAssertEqual(revision % 1_000, Int64(layout.revision))
     }
 
     /// What stored layouts forgive, an agent is told: a forgiven name would be a change that silently did not happen.
@@ -193,6 +320,13 @@ final class PanelToolsTests: XCTestCase {
                      "blocks.Codex.hiddenRows[0]:"] {
             XCTAssertTrue(rules.contains(part), "\(part) — \(rules)")
         }
+        // Both kinds in one answer: a name that would be forgiven, and what the rest asks that the panel cannot do.
+        let both = try refusal(["blocks": .object(["Claude": .object(["widget": .string("gauge")]),
+                                                   "api:DeepSeek": .object(["measure": .string("cost")])]),
+                                "order": .array([.string("Zed")])])
+        for part in ["blocks.Claude.widget is one of", "blocks.api:DeepSeek.measure:", "order[0]: No block has the key \"Zed\""] {
+            XCTAssertTrue(both.contains(part), "\(part) — \(both)")
+        }
     }
 
     func testDiscardingDropsTheDraftAndAnUnknownToolIsRefused() throws {
@@ -204,6 +338,17 @@ final class PanelToolsTests: XCTestCase {
         XCTAssertEqual(tools.answer(MCPToolRequest(tool: "save_panel_layout")), .failure("Agent HUD has no tool named \"save_panel_layout\"."))
     }
 
+    /// An argument a tool does not take is something its caller believes was heeded: a revision that nothing checked.
+    func testAToolThatTakesNoArgumentsRefusesAny() throws {
+        layout.propose(PanelLayout(order: ["Codex"]))
+        XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.discardPanelDraft, arguments: ["revision": .integer(999), "junk": .bool(true)])),
+                       .failure("Nothing was changed. discard_panel_draft takes no arguments. Unknown: \"junk\", \"revision\"."))
+        XCTAssertTrue(layout.hasDraft, "the draft a refused call was to drop is still there")
+        XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.getPanel, arguments: ["junk": .bool(true)])),
+                       .failure("get_panel takes no arguments. Unknown: \"junk\"."))
+        XCTAssertEqual(try result(MCPTools.discardPanelDraft)["unsaved"], .bool(false))
+    }
+
     // MARK: Through the channel
 
     /// A line a client writes to the `--mcp` process reaches the tools in the application over the socket, and the
@@ -212,7 +357,7 @@ final class PanelToolsTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("pt-" + UUID().uuidString.prefix(8))
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
-        let tools = try XCTUnwrap(tools)
+        let tools = tools
         let channel = MCPAppChannel(directory: directory) { tools.answer($0) }
         XCTAssertTrue(channel.start())
         addTeardownBlock { await channel.stop() }

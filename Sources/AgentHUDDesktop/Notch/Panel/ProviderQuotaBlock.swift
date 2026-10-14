@@ -12,9 +12,8 @@ enum IslandRowLayout {
     static let headingVerticalPadding: CGFloat = 1
 }
 
-/// The measures a block's picker flips between. The Mac uses direct buttons where the phone uses a horizontal swipe.
-typealias IslandQuotaMetric = PanelMeasure
-
+/// How a block's picker names and draws the measures it flips between. The Mac uses direct buttons where the phone
+/// uses a horizontal swipe.
 extension PanelMeasure {
     var label: String {
         switch self {
@@ -37,7 +36,7 @@ extension PanelMeasure {
 
 /// Compact, direct measure selection for a provider block, over the measures its widget offers.
 struct IslandQuotaMetricPicker: View {
-    @Binding var selection: IslandQuotaMetric
+    @Binding var selection: PanelMeasure
     var measures = PanelBlockKind.quota.measures(under: .bar)
     var theme: Theme = .island
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -74,23 +73,27 @@ struct IslandQuotaMetricPicker: View {
 /// or another measure first, and the picker starts from that measure again.
 struct ProviderQuotaBlock: View {
     let store: UsageStore
-    let vendor: String
     let rows: [AgentRow]
     let plan: PanelBlockPlan
-    @State private var metric: IslandQuotaMetric
+    @State private var metric: PanelMeasure
     private let theme = Theme.island
 
-    init(store: UsageStore, vendor: String, rows: [AgentRow], plan: PanelBlockPlan? = nil) {
-        let plan = plan ?? PanelBlockPlan(key: vendor, kind: .quota, widget: .bar, measure: .quota,
-                                          measures: PanelBlockKind.quota.measures(under: .bar))
+    init(store: UsageStore, rows: [AgentRow], plan: PanelBlockPlan) {
         self.store = store
-        self.vendor = vendor
         self.rows = rows
         self.plan = plan
         _metric = State(initialValue: plan.measure)
     }
 
+    /// A quota block's key is its vendor's id.
+    private var vendor: String { plan.key }
+
     var body: some View {
+        // A chart draws the models this vendor's windows count in place of the windows: their tokens over the panel's
+        // last day, in the quarter hours and the colours of the panel's own token chart.
+        let charted = plan.widget == .chart
+        let chartConsumers: [AgentDescriptor] = charted ? store.consumers.filter { $0.displayVendor == vendor } : []
+        let chartColumns: [TokenColumn] = charted ? store.hudTokenColumns(consumerIDs: Set(chartConsumers.map(\.id))) : []
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 AgentLogo(vendor: vendor, size: 14)
@@ -107,7 +110,7 @@ struct ProviderQuotaBlock: View {
                     IslandQuotaMetricPicker(selection: $metric, measures: plan.measures, theme: theme)
                         .padding(.trailing, 2)
                 } else if plan.widget == .chart {
-                    Text(store.report == nil ? "24h · —" : "24h · \(TokenFormat.short(chartColumns.reduce(0) { $0 + $1.total })) tok")
+                    Text(TokenConsumptionChart.dayTotal(store.report == nil ? nil : chartColumns))
                         .font(.tabular(12))
                         .padding(.trailing, IslandRowLayout.inset)
                 }
@@ -151,11 +154,6 @@ struct ProviderQuotaBlock: View {
             }
         }
     }
-
-    /// The models this vendor's windows count, which a chart draws in place of the windows: their tokens over the
-    /// panel's last day, in the quarter hours and the colours of the panel's own token chart.
-    private var chartConsumers: [AgentDescriptor] { store.consumers.filter { $0.displayVendor == vendor } }
-    private var chartColumns: [TokenColumn] { store.hudTokenColumns(consumerIDs: Set(chartConsumers.map(\.id))) }
 
     /// An account's quota windows as the block's widget draws them.
     @ViewBuilder

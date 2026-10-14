@@ -15,12 +15,12 @@ public final class PanelLayoutStore {
     /// The saved layout, normalized.
     public private(set) var current: PanelLayout
     /// The layout that was saved before `current`, normalized; nil while there has been none.
-    public private(set) var previous: PanelLayout?
+    private(set) var previous: PanelLayout?
     /// An agent's change waiting for a person to save or discard it, normalized and never equal to `current`.
-    public private(set) var draft: PanelLayout?
+    private(set) var draft: PanelLayout?
     /// Counts the changes since launch, from 0: one more each time `current`, `previous` or `draft` changes, so a
     /// caller can tell that something changed since it last read.
-    public private(set) var revision = 0
+    private(set) var revision = 0
 
     private let defaults: UserDefaults
     private let encoder = RecordCoding.encoder()
@@ -61,11 +61,11 @@ public final class PanelLayoutStore {
 
     /// Proposes the default view.
     @discardableResult
-    public func proposeDefault() -> Bool { propose(PanelLayout()) }
+    func proposeDefault() -> Bool { propose(PanelLayout()) }
 
     /// Proposes the previous layout. False, with nothing changed, when there is none.
     @discardableResult
-    public func proposePrevious() -> Bool {
+    func proposePrevious() -> Bool {
         guard let previous else { return false }
         return propose(previous)
     }

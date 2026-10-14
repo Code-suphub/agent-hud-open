@@ -1,7 +1,7 @@
 import Foundation
 
 /// One block as the hover panel draws it under a layout.
-public struct PanelBlockPlan: Hashable, Sendable, Identifiable {
+public struct PanelBlockPlan: Hashable, Sendable {
     public let key: String
     public let kind: PanelBlockKind
     /// The widget that draws the block: the one the layout asks for where the block's kind accepts it, else the kind's
@@ -14,8 +14,6 @@ public struct PanelBlockPlan: Hashable, Sendable, Identifiable {
     public let measures: [PanelMeasure]
     /// The rows of the block that are left out, by row key. Never all of them: such a block is left out whole.
     public let hiddenRows: Set<String>
-
-    public var id: String { key }
 
     public init(key: String, kind: PanelBlockKind, widget: PanelWidget, measure: PanelMeasure, measures: [PanelMeasure],
                 hiddenRows: Set<String> = []) {

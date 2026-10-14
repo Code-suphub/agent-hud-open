@@ -56,7 +56,8 @@ public struct ReportView: Sendable {
     /// same last event are ordered by vendor, then id.
     public let sessions: [Session]
 
-    private let report: UsageReport?
+    /// The report the view is made over, which the calculations kept beside their own types read (`QuotaMath.swift`).
+    let report: UsageReport?
     private let settings: Settings
     private let index: Index
     /// Why the last pass failed when every source failed to read; every reading then counts as failed.
@@ -170,7 +171,7 @@ public struct ReportView: Sendable {
 
     /// Whether a window's reading enters calculations: only the reading of a row that shows a level does. Any other is
     /// shown greyed, without a forecast.
-    private func counts(_ agentId: String) -> Bool { rows.contains { $0.id == agentId && $0.assessment.showsLevel } }
+    func counts(_ agentId: String) -> Bool { rows.contains { $0.id == agentId && $0.assessment.showsLevel } }
 
     /// Plans of the vendors that have an enabled row.
     public var subscriptions: [String: String] {
@@ -247,15 +248,6 @@ public struct ReportView: Sendable {
         guard counts(agentId), let report, let snapshot = report.snapshot(for: agentId),
               let consumers = report.consumerIdsByQuota[agentId] else { return nil }
         return QuotaMath.tokensPerHour(snapshot: snapshot, consumers: consumers, usage: report.usage, now: now)
-    }
-
-    /// What this quota window's tokens over the observed part of its current cycle would cost at list price: an
-    /// estimate, since a subscription is not billed by the token.
-    public func listCost(for agentId: String) -> QuotaListCost? {
-        guard counts(agentId), let report, let snapshot = report.snapshot(for: agentId),
-              let consumers = report.consumerIdsByQuota[agentId] else { return nil }
-        return QuotaMath.listCost(snapshot: snapshot, consumers: consumers, usage: report.usage,
-                                  regions: PriceRegions(report: report), now: now)
     }
 
     /// What the window's reading and recent pace say about the rest of its cycle.

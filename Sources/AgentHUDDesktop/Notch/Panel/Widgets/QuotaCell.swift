@@ -42,7 +42,7 @@ struct QuotaCell: View {
 
     let row: AgentRow
     let metrics: QuotaRowMetrics
-    let metric: IslandQuotaMetric
+    let metric: PanelMeasure
     let style: Style
     let showReset: Bool
     var forecastHint: String?
@@ -59,7 +59,14 @@ struct QuotaCell: View {
         .help(forecastHint ?? "")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(row.agent.name)
-        .accessibilityValue([metrics.value(metric), caption].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityValue(spokenValue)
+    }
+
+    /// What the cell says in place of its parts: everything it shows. A ring shows the share used whatever the
+    /// measure, so that comes first, before the selected measure and its caption.
+    var spokenValue: String {
+        let share = style == .ring && metric != .quota ? metrics.value(.quota) : nil
+        return [share, metrics.value(metric), caption].compactMap { $0 }.joined(separator: ", ")
     }
 
     private var levelColor: Color { theme.status(row.level ?? .ok) }

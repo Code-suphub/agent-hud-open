@@ -14,14 +14,6 @@ public extension PanelBlockKind {
         }
     }
 
-    /// The widget of the default view: bars for quota windows, a number for a balance.
-    var defaultWidget: PanelWidget {
-        switch self {
-        case .quota: .bar
-        case .billing: .number
-        }
-    }
-
     /// The measures the kind offers under a widget, in picker order; none under a widget it does not accept. A chart of
     /// quota windows draws the history the panel holds, tokens. A balance's number offers `quota` alone: its card shows
     /// the balance and the estimated cost together.
@@ -31,6 +23,16 @@ public extension PanelBlockKind {
         case (.quota, .chart): [.tokens]
         case (.billing, .number): [.quota]
         case (.billing, _): []
+        }
+    }
+}
+
+extension PanelBlockKind {
+    /// The widget of the default view: bars for quota windows, a number for a balance.
+    var defaultWidget: PanelWidget {
+        switch self {
+        case .quota: .bar
+        case .billing: .number
         }
     }
 
@@ -90,44 +92,56 @@ public extension ReportView {
 }
 
 /// One thing a proposed layout asks for that the panel cannot do as asked, worded for the agent that proposed it.
-public struct PanelLayoutIssue: Hashable, Sendable {
+struct PanelLayoutIssue: Hashable, Sendable {
     /// Where in the layout's JSON: its keys from the root joined by dots, a list's element by its index in brackets,
     /// such as `blocks.Claude.widget` or `order[2]`.
-    public let path: String
+    let path: String
     /// An English sentence an agent can relay: what is wrong, and what the panel has or accepts instead.
-    public let message: String
-
-    public init(path: String, message: String) {
-        self.path = path
-        self.message = message
-    }
+    let message: String
 }
 
-public extension PanelLayout {
+extension PanelLayout {
     /// Every issue of the layout against the blocks the panel has now, blocks by key and then `order` by position: a
     /// block key or an order entry that names no block, a widget its block's kind does not accept, a measure that is
     /// not offered under the widget the block is drawn with, and a hidden row its block does not have. A layout with
     /// issues still resolves (`PanelLayoutPlan`): what cannot be done as asked falls back or waits.
-    func issues(against existing: [PanelBlockInfo]) -> [PanelLayoutIssue] {
+    ///
+    /// What one of the `held` layouts already holds for a block or a row that is away is no issue when it comes back
+    /// as it is held: the block's own entry unchanged, its key in `order`, the row among its block's hidden rows. A
+    /// layout keeps those until the block or row returns, so a proposal built on a layout that was read may carry them.
+    func issues(against existing: [PanelBlockInfo], holding held: [PanelLayout] = []) -> [PanelLayoutIssue] {
         var known: [String: PanelBlockInfo] = [:]
         for block in existing where known[block.key] == nil { known[block.key] = block }
         let unknownKey = existing.isEmpty ? "The panel has no blocks now."
             : "The panel's blocks now: \(Self.quoted(existing.map(\.key).withoutRepeats))."
         var issues: [PanelLayoutIssue] = []
         for key in blocks.keys.sorted() {
-            guard let block = known[key] else {
+            let change = blocks[key] ?? Block()
+            let heldAs: [Block] = held.compactMap { $0.blocks[key]?.normalized() }
+            if let block = known[key] {
+                var heldRows = Set<String>()
+                for kept in heldAs { heldRows.formUnion(kept.hiddenRows) }
+                issues += Self.issues(of: change, in: block, holding: heldRows)
+            } else if heldAs.isEmpty {
                 issues.append(PanelLayoutIssue(path: "blocks.\(key)", message: "No block has the key \"\(key)\". \(unknownKey)"))
-                continue
+            } else if !heldAs.contains(change.normalized()) {
+                let message = "No block has the key \"\(key)\" now. The layout holds it for a block that is away: "
+                    + "send it back as it is, or leave it out. \(unknownKey)"
+                issues.append(PanelLayoutIssue(path: "blocks.\(key)", message: message))
             }
-            issues += Self.issues(of: blocks[key] ?? Block(), in: block)
         }
-        for (index, key) in order.enumerated() where known[key] == nil {
+        var heldKeys = Set<String>()
+        for layout in held {
+            heldKeys.formUnion(layout.blocks.keys)
+            heldKeys.formUnion(layout.order)
+        }
+        for (index, key) in order.enumerated() where known[key] == nil && !heldKeys.contains(key) {
             issues.append(PanelLayoutIssue(path: "order[\(index)]", message: "No block has the key \"\(key)\". \(unknownKey)"))
         }
         return issues
     }
 
-    private static func issues(of change: Block, in block: PanelBlockInfo) -> [PanelLayoutIssue] {
+    private static func issues(of change: Block, in block: PanelBlockInfo, holding heldRows: Set<String>) -> [PanelLayoutIssue] {
         let kind = block.kind, path = "blocks.\(block.key)"
         var issues: [PanelLayoutIssue] = []
         if let widget = change.widget, !kind.widgets.contains(widget) {
@@ -142,7 +156,7 @@ public extension PanelLayout {
             issues.append(PanelLayoutIssue(path: path + ".measure", message: "\(message) It offers: \(quoted(offered.map(\.rawValue)))."))
         }
         let rows = block.rowKeys.isEmpty ? "It has no rows to hide." : "Its rows: \(quoted(block.rowKeys))."
-        for (index, row) in change.hiddenRows.enumerated() where !block.rowKeys.contains(row) {
+        for (index, row) in change.hiddenRows.enumerated() where !block.rowKeys.contains(row) && !heldRows.contains(row) {
             issues.append(PanelLayoutIssue(path: path + ".hiddenRows[\(index)]",
                                            message: "\"\(block.key)\" has no row \"\(row)\". \(rows)"))
         }
@@ -162,7 +176,34 @@ public extension PanelLayout {
     }
 
     /// Names in quotes, separated by commas.
-    private static func quoted(_ names: [String]) -> String {
+    static func quoted(_ names: [String]) -> String {
         names.map { "\"\($0)\"" }.joined(separator: ", ")
+    }
+
+    // MARK: What a layout changes
+
+    /// The layout reduced to what it changes about the blocks the panel has now, so that two layouts that draw those
+    /// blocks alike are the same layout: a block's widget is left out where it is its kind's default, its measure where
+    /// it is the one its widget shows first, and a block's key at the end of `order` where the block would come there
+    /// anyway. What it holds for a block that is away stays as written. A proposal that spells out the default view is
+    /// then the default layout, and one that spells out the saved layout is the saved one.
+    func reduced(against existing: [PanelBlockInfo]) -> PanelLayout {
+        var known: [String: PanelBlockInfo] = [:]
+        for block in existing where known[block.key] == nil { known[block.key] = block }
+        var layout = normalized()
+        for (key, change) in layout.blocks {
+            guard let kind = known[key]?.kind else { continue }
+            var change = change
+            if change.widget == kind.defaultWidget { change.widget = nil }
+            if change.measure == kind.defaultMeasure(under: kind.widget(for: change.widget)) { change.measure = nil }
+            layout.blocks[key] = change
+        }
+        let inDefaultOrder = existing.map(\.key)
+        func shown(_ order: [String]) -> [String] { (order.filter { known[$0] != nil } + inDefaultOrder).withoutRepeats }
+        let asAsked = shown(layout.order)
+        while let last = layout.order.last, known[last] != nil, shown(Array(layout.order.dropLast())) == asAsked {
+            layout.order.removeLast()
+        }
+        return layout.normalized()
     }
 }

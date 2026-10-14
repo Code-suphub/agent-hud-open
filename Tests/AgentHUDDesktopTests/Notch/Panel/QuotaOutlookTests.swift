@@ -110,8 +110,8 @@ final class QuotaOutlookTests: XCTestCase {
         try withStore([grid[9], far]) { store in
             let row = try metrics("exhaustsBeforeReset", in: store)
             // The model the windows count has no list price, so the cycle has no cost.
-            XCTAssertEqual(IslandQuotaMetric.allCases.map { row.value($0) }, ["90%", "10.0%/h", "1.0k/h", nil])
-            XCTAssertEqual(IslandQuotaMetric.allCases.map { row.detail($0, isLoading: false) }, ["2h 00m", ChartData.weekdayTime(now.addingTimeInterval(hour)), "24k / day", "—"])
+            XCTAssertEqual(PanelMeasure.allCases.map { row.value($0) }, ["90%", "10.0%/h", "1.0k/h", nil])
+            XCTAssertEqual(PanelMeasure.allCases.map { row.detail($0, isLoading: false) }, ["2h 00m", ChartData.weekdayTime(now.addingTimeInterval(hour)), "24k / day", "—"])
             let date = now.addingTimeInterval(10 * 86400)
             XCTAssertEqual(try metrics("monthly", in: store).exhaustionTimeLabel, date.formatted(Date.FormatStyle().month(.abbreviated).day()
                 .hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "en_GB"))))
@@ -125,8 +125,8 @@ final class QuotaOutlookTests: XCTestCase {
         try withStore([grid[9]], quotaNotices: ["Codex": "Codex quota could not be read"]) { store in
             let row = try metrics("exhaustsBeforeReset", in: store)
             XCTAssertNil(row.row.level)
-            XCTAssertEqual(IslandQuotaMetric.allCases.map { row.value($0) }, ["90%", nil, nil, nil])
-            XCTAssertEqual(IslandQuotaMetric.allCases.map { row.detail($0, isLoading: false) }, ["2h 00m", "—", "—", "—"])
+            XCTAssertEqual(PanelMeasure.allCases.map { row.value($0) }, ["90%", nil, nil, nil])
+            XCTAssertEqual(PanelMeasure.allCases.map { row.detail($0, isLoading: false) }, ["2h 00m", "—", "—", "—"])
             XCTAssertNil(row.exhaustsBeforeReset)
             XCTAssertNil(row.projectedAtReset)
             XCTAssertNil(store.quotaForecastHint(for: "exhaustsBeforeReset"))
@@ -149,7 +149,7 @@ final class QuotaOutlookTests: XCTestCase {
                 weeklyWaitTotal: 0, weeklyWaitLongest: 0, weeklyWaitLongestAt: nil)]))
         store.now = now
         let unknown = try metrics(agent.id, in: store)
-        XCTAssertEqual(IslandQuotaMetric.allCases.map { unknown.value($0) }, ["N/A", nil, nil, nil])
+        XCTAssertEqual(PanelMeasure.allCases.map { unknown.value($0) }, ["N/A", nil, nil, nil])
         XCTAssertEqual(unknown.detail(.quota, isLoading: false), "2h 00m")
         XCTAssertNil(unknown.row.usedPct)
         XCTAssertNil(unknown.row.level)
