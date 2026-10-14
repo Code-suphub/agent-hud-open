@@ -32,6 +32,9 @@ public final class PermissionRequests {
     }
     @ObservationIgnored private var channel: UnixSocketListener?
     @ObservationIgnored private var counter: UInt64 = 0
+    /// Whether the user reviews the turn a Codex request belongs to. Codex asks its hook before choosing between the
+    /// user and its automatic review, so a request for any other turn is let go at once, back to Codex's own flow.
+    @ObservationIgnored var codexReviewer: @Sendable (JSONValue) async -> Bool = { await CodexPermissionReviewer.isUser(payload: $0) }
 
     init() {}
 
@@ -65,6 +68,20 @@ public final class PermissionRequests {
     private func register(_ data: Data, connection: NWConnection) {
         // The hook names its own client; a payload that arrives on this socket without one cannot be placed.
         guard let source = source(of: data), source.usesHook else { return connection.cancel() }
+        guard source == .codex else { return present(data, source: source, connection: connection) }
+        let payload = (try? ProviderJSON.read(data)) ?? .null, reviewer = codexReviewer
+        Task { [weak self] in
+            guard await reviewer(payload), let self else { return connection.cancel() }
+            present(data, source: source, connection: connection)
+        }
+    }
+
+    private func present(_ data: Data, source: PermissionHooks.Source, connection: NWConnection) {
+        // A client that gave up while its request was being placed has no question left.
+        switch connection.state {
+        case .cancelled, .failed: return
+        default: break
+        }
         counter &+= 1
         let id = "\(source.rawValue)-\(counter)"
         guard let request = try? PermissionRequest.parse(data, source: source, id: id, now: Date()) else {

@@ -117,6 +117,10 @@ public struct CodexTranscript: Codable, Sendable {
         }
         if type == "turn_context" {
             if let value = payload["model"] as? String { model = value }
+            // Who reviews the turn is asked when it wants an approval; the record that says so passes here as the turn begins.
+            if let turn = payload["turn_id"] as? String, !turn.isEmpty {
+                CodexTurnReviewers.shared.note(turn: turn, reviewer: payload["approvals_reviewer"] as? String)
+            }
             return
         }
         // Forks copy earlier history. Read its cumulative baseline but do not count it again.
