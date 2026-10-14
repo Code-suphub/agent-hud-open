@@ -343,6 +343,25 @@ final class PermissionHookTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(try forwarded(), "without this turn's context Codex keeps ownership of the request")
     }
 
+    func testCodexReviewerIsFoundFromTheEndOfALogOfAnyLength() throws {
+        // Longer than a log may be read from its start: a conversation's screenshots take a log there within days.
+        let transcript = try directory().appendingPathComponent("rollout.jsonl")
+        FileManager.default.createFile(atPath: transcript.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: transcript)
+        try handle.truncate(atOffset: UInt64(ProviderFiles.linesLimit) + 1024 * 1024)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(("\n" + #"{"type":"turn_context","payload":{"turn_id":"turn","approvals_reviewer":"user"}}"#
+            + "\n" + #"{"type":"response_item","payload":{"type":"message"}}"# + "\n").utf8))
+        try handle.close()
+        var body = payload()
+        body["turn_id"] = "turn"
+        body["transcript_path"] = transcript.path
+        let started = Date()
+        XCTAssertNotNil(PermissionHookClient.tagged(try JSONSerialization.data(withJSONObject: body), source: .codex),
+                        "the turn's own context is near the end, whatever the conversation before it weighs")
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1, "a request waits on its own turn's lines only")
+    }
+
     func testAnUnknownCodexReviewerLeavesApprovalToCodex() throws {
         let transcript = try directory().appendingPathComponent("rollout.jsonl")
         var body = payload()
