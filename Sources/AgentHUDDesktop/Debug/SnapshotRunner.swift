@@ -747,6 +747,9 @@ public enum SnapshotRunner {
         if let last = quota.last, quota.count > 1 { blocks[last.key] = PanelLayout.Block(widget: .number, measure: .burnRate) }
         layout.propose(PanelLayout(blocks: blocks, order: quota.last.map { [$0.key] } ?? [], hiddenSections: [.tokens]))
         save("panel-layout-draft", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("panel-layout-settings-dark", SettingsView(settings: settings, store: store, initialTab: .display)
+            .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark,
+             scrollToBottom: true)
         layout.discard()
         layout.reset()
     }
