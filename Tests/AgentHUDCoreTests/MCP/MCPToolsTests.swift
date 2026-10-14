@@ -80,7 +80,8 @@ final class MCPToolsTests: XCTestCase {
         let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("set_panel_layout") })["inputSchema"]
         let properties = try XCTUnwrap(schema["properties"].objectValue)
         XCTAssertEqual(properties.keys.sorted(),
-                       ["blocks", "from", "hiddenSections", "hud", "order", "revision", "screen", "sections", "style"])
+                       ["blocks", "from", "hiddenSections", "hud", "order", "revision", "screen", "sections", "sessions", "style",
+                        "tokens"])
         XCTAssertNil(schema.objectValue?["required"], "every property is optional")
         func choices(_ node: JSONValue) -> [String] { node["enum"].arrayValue?.compactMap(\.stringValue) ?? [] }
 
@@ -107,6 +108,19 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(style["properties"]["width"]["type"], .string("integer"))
         XCTAssertEqual(style["properties"]["width"]["description"].stringValue,
                        "The whole panel's width, 480 to 720 points; 540 if left out.")
+
+        let sessions = schema["properties"]["sessions"]
+        XCTAssertEqual(sessions["additionalProperties"], .bool(false))
+        XCTAssertEqual(sessions["properties"].objectValue?.keys.sorted(), ["agents", "limit", "states"])
+        XCTAssertEqual(sessions["properties"]["limit"]["type"], .string("integer"))
+        XCTAssertEqual(sessions["properties"]["limit"]["description"].stringValue, "Rows at most, 1 to 10; 5 if left out.")
+        XCTAssertEqual(sessions["properties"]["agents"]["items"], .object(["type": .string("string")]))
+        XCTAssertEqual(choices(sessions["properties"]["states"]["items"]), ["waiting", "running", "ended"])
+        let tokens = schema["properties"]["tokens"]
+        XCTAssertEqual(tokens["additionalProperties"], .bool(false))
+        XCTAssertEqual(tokens["properties"].objectValue?.keys.sorted(), ["agents", "period"])
+        XCTAssertEqual(choices(tokens["properties"]["period"]), ["day", "week", "month"])
+        XCTAssertEqual(tokens["properties"]["agents"]["items"], .object(["type": .string("string")]))
 
         XCTAssertEqual(schema["properties"]["order"]["items"], .object(["type": .string("string")]))
         for name in ["sections", "hiddenSections"] {
@@ -159,6 +173,9 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(choices(block["ringSize"]), PanelRingSize.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["style"]["properties"]["spacing"]), PanelSpacing.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["sections"]["items"]), PanelSection.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(schema["properties"]["sessions"]["properties"]["states"]["items"]),
+                       PanelSessionState.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(schema["properties"]["tokens"]["properties"]["period"]), PanelTokenPeriod.allCases.map(\.rawValue))
         let hud = schema["properties"]["hud"]["properties"]
         XCTAssertEqual(choices(hud["mode"]), HUDMode.allCases.map(\.agentName))
         XCTAssertEqual(choices(hud["edge"]), HUDEdge.allCases.map(\.rawValue))
@@ -171,12 +188,12 @@ final class MCPToolsTests: XCTestCase {
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {
         let tools = Dictionary(uniqueKeysWithValues: MCPTools.definitions.map { ($0["name"].stringValue ?? "", $0) })
         XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
-                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; and the attached screens, each with its resting HUD's style and the agents it can show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
+                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists and its token chart's period and total; and the attached screens, each with its resting HUD's style and the agents it can show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
         XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
                        "Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with account names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now. Use it to check how a change looks; get_panel reads the same as data.")
         XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
         XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
-                       "Propose a layout for the Agent HUD hover panel: its blocks, sections and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead, for a screen with the resting HUD style that goes with it, or 'shared' to have a screen use the shared layout again.")
+                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead, for a screen with the resting HUD style that goes with it, or 'shared' to have a screen use the shared layout again.")
         XCTAssertEqual(tools["discard_panel_draft"]?["description"].stringValue,
                        "Drop the unsaved draft so the Agent HUD panel returns to the saved layout and, for a screen, its resting HUD to its saved style.")
 

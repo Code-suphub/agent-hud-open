@@ -43,7 +43,8 @@ public struct PanelBlockPlan: Hashable, Sendable {
 /// passed over here and stays in the document.
 ///
 /// With the default layout the plan is the default view: every block in the order given, each with its kind's default
-/// widget and every measure that widget offers, the three sections in their default order, and the default style.
+/// widget and every measure that widget offers, the three sections in their default order, the default style, five
+/// session rows of every session, and the token chart of every agent over the latest 24 hours.
 public struct PanelLayoutPlan: Hashable, Sendable {
     /// The blocks shown, in order: those `PanelLayout.order` names first, in that order, then the others in default
     /// order. A block is left out when the layout hides it, or hides every row it has.
@@ -53,6 +54,12 @@ public struct PanelLayoutPlan: Hashable, Sendable {
     public let sections: [PanelSection]
     /// How the whole panel is set: the layout's style.
     public let style: PanelStyle
+    /// Which sessions the session rows list, and how many: the layout's, which the panel's own agent narrows further on
+    /// a dock that separates its agents.
+    public let sessions: PanelSessionFilter
+    /// The period the token chart starts from and whose tokens it draws: the layout's, joined with the panel's own agent
+    /// on a dock that separates its agents.
+    public let tokens: PanelTokenFilter
 
     /// - blocks: the blocks the panel has, in default order (`ReportView.panelBlocks`).
     public init(layout: PanelLayout, blocks: [PanelBlockInfo]) {
@@ -66,6 +73,8 @@ public struct PanelLayoutPlan: Hashable, Sendable {
         let hidden = Set(layout.hiddenSections)
         sections = (layout.sections + PanelSection.allCases).withoutRepeats.filter { !hidden.contains($0) }
         style = layout.style
+        sessions = PanelSessionFilter(layout.sessions)
+        tokens = PanelTokenFilter(layout.tokens)
     }
 
     /// A block as a layout's change draws it; nil when the change leaves it out. A block without rows, such as a

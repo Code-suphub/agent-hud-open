@@ -155,7 +155,7 @@ public struct PanelTools {
 
     // MARK: Proposing
 
-    private static let layoutKeys = ["blocks", "order", "sections", "hiddenSections", "style", "hud"]
+    private static let layoutKeys = ["blocks", "order", "sections", "hiddenSections", "style", "hud", "sessions", "tokens"]
     private static let draftNote = "Shown in the panel as an unsaved draft. The user keeps it by hovering the Agent HUD and "
         + "pressing Save in the panel; it is dropped when Agent HUD restarts."
     private static let savedNote = "This is the layout already saved, so there is no draft."
@@ -220,7 +220,7 @@ public struct PanelTools {
             return .result(panel(scope, among: attached, note: note))
         }
         let document = JSONValue.object(arguments.filter { Self.layoutKeys.contains($0.key) })
-        let existing = store.view.panelBlocks
+        let view = store.view, existing = view.panelBlocks
         let saved = savedLayout(scope)
         let held = [effective(scope), saved]
         // Every reason at once: what the reading would forgive, then what the rest of the layout asks that the panel
@@ -230,6 +230,8 @@ public struct PanelTools {
         let proposal = PanelLayout(json: document) ?? PanelLayout()
         let style = StyleProposal(hud: arguments["hud"]?.objectValue ?? [:], scope: scope, among: attached, tools: self)
         reasons += proposal.issues(against: existing, holding: held).map { "\($0.path): \($0.message)" }
+        reasons += proposal.filterIssues(sessionAgents: view.panelSessionAgents, tokenAgents: view.panelTokenAgents,
+                                         holding: held).map { "\($0.path): \($0.message)" }
         reasons += style.reasons
         reasons += proposal.hudIssues(against: agents(for: scope, among: attached, in: style.mode),
                                       whose: whose(scope, among: attached), holding: held).map { "\($0.path): \($0.message)" }

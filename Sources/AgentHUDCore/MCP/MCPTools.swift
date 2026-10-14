@@ -22,9 +22,10 @@ public enum MCPTools {
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
         with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
-        widgets and measures each block accepts; and the attached screens, each with its resting HUD's style and the \
-        agents it can show. Call it before changing the layout; block, row and screen keys come from here. Names are \
-        written as the panel shows them, in the application's language.
+        widgets and measures each block accepts; how many sessions it lists and its token chart's period and total; \
+        and the attached screens, each with its resting HUD's style and the agents it can show. Call it before \
+        changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in \
+        the application's language.
         """
 
     private static let getPanelImageDescription = """
@@ -34,13 +35,14 @@ public enum MCPTools {
         """
 
     private static let setPanelLayoutDescription = """
-        Propose a layout for the Agent HUD hover panel: its blocks, sections and style, its width included, and the \
-        screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes and glow. Send the whole \
-        layout you want; anything left out uses the default, and a HUD style field left out stays as saved. What the \
-        layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows \
-        at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD \
-        restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead, for \
-        a screen with the resting HUD style that goes with it, or 'shared' to have a screen use the shared layout again.
+        Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its \
+        width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes \
+        and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out \
+        stays as saved. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent \
+        back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is \
+        dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last \
+        saved one instead, for a screen with the resting HUD style that goes with it, or 'shared' to have a screen use \
+        the shared layout again.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
@@ -90,6 +92,21 @@ public enum MCPTools {
             "width": described("integer", "The whole panel's width, \(PanelStyle.widthRange.lowerBound) to "
                                + "\(PanelStyle.widthRange.upperBound) points; \(PanelStyle.defaultWidth) if left out."),
         ], description: "How the whole panel is set.")
+        let limits = PanelLayout.Sessions.limitRange
+        let sessions = object([
+            "limit": described("integer", "Rows at most, \(limits.lowerBound) to \(limits.upperBound); "
+                               + "\(PanelLayout.Sessions.defaultLimit) if left out."),
+            "agents": list("Only these agents' sessions, names from get_panel's sessions.offeredAgents; none for every "
+                           + "agent.", of: key),
+            "states": list("Only sessions in these states; none for all.",
+                           of: text("A session's state.", oneOf: PanelSessionState.allCases.map(\.rawValue))),
+        ], description: "Which sessions the session rows list.")
+        let tokens = object([
+            "period": text("What the token chart shows when the panel opens: the last 24 hours, 7 days or 30 days; day if "
+                           + "left out.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
+            "agents": list("Only these agents' tokens, names from get_panel's tokens.offeredAgents; none for every "
+                           + "agent.", of: key),
+        ], description: "The token chart's period and agents.")
         let hud = object([
             "agents": list("Agents it shows, in order, by name from get_panel's screens; none shows every agent.", of: key),
             "mode": text("For one screen only, as is every field but agents. notch needs a screen with a notch.",
@@ -126,6 +143,8 @@ public enum MCPTools {
             "sections": list("The panel's sections, in the order it shows them.", of: section),
             "hiddenSections": list("The panel's sections to hide.", of: section),
             "style": style,
+            "sessions": sessions,
+            "tokens": tokens,
             "hud": hud,
             "from": text("Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of "
                          + "the one described here.", oneOf: ["default", "previous", "shared"]),

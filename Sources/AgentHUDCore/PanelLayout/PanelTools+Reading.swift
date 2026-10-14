@@ -20,7 +20,8 @@ extension PanelTools {
     /// The panel as an agent reads it: which screen, the layout in effect there, with a screen's style draft in its
     /// hud, and the style it sets, its width among it, the panel's height on that display and whether it scrolls there,
     /// whether Settings shows reset countdowns, every section and every block the panel has, shown or hidden, with the
-    /// readings of each block's rows, and the attached screens.
+    /// readings of each block's rows, the session rows and the token chart as the layout filters them, and the attached
+    /// screens.
     func panel(_ scope: PanelLayoutScope, among attached: [PanelScreen], note: String? = nil) -> [String: JSONValue] {
         let effective = effective(scope), existing = store.view.panelBlocks
         let plan = PanelLayoutPlan(layout: effective, blocks: existing)
@@ -46,6 +47,8 @@ extension PanelTools {
                          "onInSettings": .bool(switches[section] ?? true)])
             }),
             "blocks": .array(drawn.map { block(of: $0, shown: shown.contains($0.key)) }),
+            "sessions": sessions(plan.sessions, listing: effective.sessions.normalized().agents),
+            "tokens": tokens(plan.tokens, listing: effective.tokens.normalized().agents),
             "screens": .array(attached.map(listing)),
         ]
         if case .screen(let key) = scope { result["usesSharedLayout"] = .bool(layout.usesShared(key)) }
@@ -110,6 +113,37 @@ extension PanelTools {
             })
         }
         return .object(block)
+    }
+
+    /// The session rows as an agent reads them: the limit, the agents and the states in effect, the agents that have
+    /// sessions now, how many rows are shown and how many more the filter lists, and how many sessions of the last day
+    /// each state has before the filter. Counts and names of agents only: no title, prompt, project, path or session id.
+    private func sessions(_ filter: PanelSessionFilter, listing agents: [String]) -> JSONValue {
+        let view = store.view, rows = view.panelSessions(filter)
+        let states = filter.states.isEmpty ? PanelSessionState.allCases : PanelSessionState.allCases.filter(filter.states.contains)
+        return .object([
+            "limit": .integer(Int64(filter.limit)),
+            "agents": .array(agents.map(JSONValue.string)),
+            "states": .array(states.map { .string($0.rawValue) }),
+            "offeredAgents": .array(view.panelSessionAgents.map(JSONValue.string)),
+            "shown": .integer(Int64(rows.shown.count)),
+            "more": .integer(Int64(rows.more)),
+            "byState": .object(Dictionary(uniqueKeysWithValues: PanelSessionState.allCases.map {
+                ($0.rawValue, JSONValue.integer(Int64(rows.counts[$0] ?? 0)))
+            })),
+        ])
+    }
+
+    /// The token chart as an agent reads it: the period it opens with, the agents in effect, the agents whose models it
+    /// can draw now, and the tokens it counts over that period.
+    private func tokens(_ filter: PanelTokenFilter, listing agents: [String]) -> JSONValue {
+        let columns = store.hudTokenColumns(consumerIDs: store.panelTokenConsumers(filter), period: filter.period)
+        return .object([
+            "period": .string(filter.period.rawValue),
+            "agents": .array(agents.map(JSONValue.string)),
+            "offeredAgents": .array(store.view.panelTokenAgents.map(JSONValue.string)),
+            "total": .integer(Int64(columns.reduce(0) { $0 + $1.total })),
+        ])
     }
 
     /// One quota window's reading: numbers and times only, with no account name. Its name is the window's as the panel

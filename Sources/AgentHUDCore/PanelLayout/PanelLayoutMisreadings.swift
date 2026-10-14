@@ -3,8 +3,9 @@ import Foundation
 
 extension PanelLayout {
     /// What reading a layout's JSON would forgive, as sentences for the agent that sent it: a value of the wrong type,
-    /// a name this build does not know, columns outside 2 to 6, a width outside 480 to 720, a hud style value outside
-    /// its range, a property a block, the style, the hud or its glow does not have.
+    /// a name this build does not know, columns outside 2 to 6, a width outside 480 to 720, a session limit outside 1
+    /// to 10, a hud style value outside its range, a property a block, the style, the sessions, the tokens, the hud or
+    /// its glow does not have.
     /// Stored layouts are read forgivingly so that a newer build's layout still loads; an agent's proposal is told
     /// instead, since a forgiven name is a change that silently did not happen.
     static func misreadings(of json: JSONValue) -> [String] {
@@ -14,6 +15,7 @@ extension PanelLayout {
         found += names(fields["hiddenSections"], at: "hiddenSections", among: PanelSection.allCases.map(\.rawValue))
         found += misreadings(ofStyle: fields["style"] ?? .null)
         found += misreadings(ofHUD: fields["hud"] ?? .null)
+        found += misreadings(ofSessions: fields["sessions"] ?? .null, tokens: fields["tokens"] ?? .null)
         guard let blocks = fields["blocks"], blocks != .null else { return found }
         guard let blocks = blocks.objectValue else { return found + ["blocks is an object keyed by block key."] }
         for key in blocks.keys.sorted() {
@@ -96,7 +98,7 @@ extension PanelLayout {
     }
 
     /// What is wrong with a list of names: not a list, an entry that is not a string, or one that is not `allowed`.
-    private static func names(_ value: JSONValue?, at path: String, among allowed: [String]?) -> [String] {
+    static func names(_ value: JSONValue?, at path: String, among allowed: [String]?) -> [String] {
         guard let value, value != .null else { return [] }
         guard let items = value.arrayValue else { return ["\(path) is a list."] }
         var found: [String] = []
@@ -109,7 +111,7 @@ extension PanelLayout {
         return found
     }
 
-    private static func misnamed(_ value: JSONValue, at path: String, among allowed: [String]) -> [String] {
+    static func misnamed(_ value: JSONValue, at path: String, among allowed: [String]) -> [String] {
         if value == .null { return [] }
         guard let name = value.stringValue, allowed.contains(name) else {
             return ["\(path) is one of \(quoted(allowed))."]

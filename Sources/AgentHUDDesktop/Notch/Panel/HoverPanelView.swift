@@ -65,8 +65,18 @@ struct HoverPanelView: View {
     private var quotaGroups: [(vendor: String, rows: [AgentRow])] { store.rowGroups.filter { focused($0.vendor) } }
     private var billing: [APIBilling] { store.enabledBilling.filter { focused($0.vendor) } }
     private var consumers: [AgentDescriptor] { store.consumers.filter { focused($0.vendor) } }
-    private var tokenFilter: TokenModelFilter {
-        focusVendor == nil ? TokenModelFilter() : TokenModelFilter(consumerIDs: Set(consumers.map(\.id)))
+
+    /// The models the token chart draws: those of the agents the layout names, and on an agent's own panel only that
+    /// agent's among them, as the report holds them on this pass.
+    private func tokenFilter(_ tokens: PanelTokenFilter) -> TokenModelFilter {
+        TokenModelFilter(consumerIDs: store.panelTokenConsumers(tokens, vendor: focusVendor))
+    }
+
+    /// What makes the token chart another chart: its picker starts again from the layout's period when the panel's
+    /// agent or the layout's tokens change.
+    private struct TokenChartIdentity: Hashable {
+        let vendor: String?
+        let tokens: PanelTokenFilter
     }
 
     let theme = Theme.island
@@ -191,14 +201,15 @@ struct HoverPanelView: View {
                 case .blocks:
                     blockList(blocks, separated: index > 0, spacing: spacing, divider: divider)
                 case .tokens:
-                    TokenConsumptionChart(store: store, theme: theme, context: .island, modelFilter: tokenFilter,
-                                          compact: true, onOpenStats: onOpenStats)
-                        // The chart keeps its filter as state, so another agent's panel is another chart.
-                        .id(focusVendor)
+                    TokenConsumptionChart(store: store, theme: theme, context: .island, modelFilter: tokenFilter(plan.tokens),
+                                          period: plan.tokens.period, compact: true, onOpenStats: onOpenStats)
+                        // The chart keeps its period as state, so another agent's panel, or another layout's tokens,
+                        // is another chart; its models it is handed on every pass.
+                        .id(TokenChartIdentity(vendor: focusVendor, tokens: plan.tokens))
                         .padding(.top, spacing.divided)
                         .topDivider(divider)
                 case .sessions:
-                    sessionLine(hasAbove: index > 0 || hasHeader, spacing: spacing, divider: divider)
+                    sessionLine(plan.sessions, hasAbove: index > 0 || hasHeader, spacing: spacing, divider: divider)
                 }
             }
         }

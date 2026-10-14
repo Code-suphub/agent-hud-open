@@ -115,7 +115,7 @@ struct ProviderQuotaBlock: View {
                     IslandQuotaMetricPicker(selection: $metric, measures: plan.measures, theme: theme)
                         .padding(.trailing, 2)
                 } else if plan.widget == .chart {
-                    Text(TokenConsumptionChart.dayTotal(store.report == nil ? nil : chartColumns))
+                    Text(TokenConsumptionChart.total(store.report == nil ? nil : chartColumns))
                         .font(.tabular(12))
                         .padding(.trailing, IslandRowLayout.inset)
                 }

@@ -103,8 +103,9 @@ public struct PanelStyle: Hashable, Codable, Sendable {
 ///
 /// The JSON is also what an agent sends, so reading forgives field by field: a widget, ring size or spacing name this
 /// build does not know leaves that field unset, a measure or section it does not know is left out of its list,
-/// columns outside 2 to 6 and a width outside 480 to 720 count as not given, a block, a style or a hud that is not an
-/// object is left out, a value of the wrong type counts as not given, and keys it does not know are ignored, the style
+/// columns outside 2 to 6, a width outside 480 to 720 and a session limit outside 1 to 10 count as not given, a block,
+/// a style, the sessions, the tokens or a hud that is not an object is left out, a value of the wrong type counts as not
+/// given, and keys it does not know are ignored, the style
 /// fields an agent sends in `hud` among them (`HUDStyle`), which are a screen's settings and no part of a layout. Only
 /// JSON that is not an object fails.
 /// Writing leaves out what is unset, empty or the default, so with sorted keys (`RecordCoding.encoder()`) equal layouts
@@ -204,15 +205,22 @@ public struct PanelLayout: Hashable, Codable, Sendable {
     public var style: PanelStyle
     /// Which agents the resting HUD of a screen that draws this layout shows, and in what order.
     public var hud: HUD
+    /// Which sessions the session rows list, and how many.
+    public var sessions: Sessions
+    /// The token chart's period and whose tokens it draws.
+    public var tokens: Tokens
 
     public init(blocks: [String: Block] = [:], order: [String] = [], sections: [PanelSection] = [],
-                hiddenSections: [PanelSection] = [], style: PanelStyle = PanelStyle(), hud: HUD = HUD()) {
+                hiddenSections: [PanelSection] = [], style: PanelStyle = PanelStyle(), hud: HUD = HUD(),
+                sessions: Sessions = Sessions(), tokens: Tokens = Tokens()) {
         self.blocks = blocks
         self.order = order
         self.sections = sections
         self.hiddenSections = hiddenSections
         self.style = style
         self.hud = hud
+        self.sessions = sessions
+        self.tokens = tokens
     }
 
     // MARK: The same layout
@@ -222,7 +230,8 @@ public struct PanelLayout: Hashable, Codable, Sendable {
     /// normalized (`Block.normalized()`); `sections` as the whole order it gives, or empty when that is the default
     /// order; and `hiddenSections` once each, in default order. A hidden section keeps its place in `sections`, which
     /// it takes again when it is shown. The style's width is left out at 540 (`PanelStyle.normalized()`), and the HUD's
-    /// agents are normalized too (`HUD.normalized()`).
+    /// agents, the sessions and the tokens are normalized too (`HUD.normalized()`, `Sessions.normalized()`,
+    /// `Tokens.normalized()`).
     func normalized() -> PanelLayout {
         var kept: [String: Block] = [:]
         for (key, block) in blocks {
@@ -233,7 +242,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         return PanelLayout(blocks: kept, order: order.filter { !$0.isEmpty }.withoutRepeats,
                            sections: sectionOrder == PanelSection.allCases ? [] : sectionOrder,
                            hiddenSections: PanelSection.allCases.filter(hiddenSections.contains), style: style.normalized(),
-                           hud: hud.normalized())
+                           hud: hud.normalized(), sessions: sessions.normalized(), tokens: tokens.normalized())
     }
 
     /// Whether the layout is the default view: nothing is left of it once normalized.
@@ -241,7 +250,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
 
     // MARK: Coding
 
-    private enum CodingKeys: String, CodingKey { case blocks, order, sections, hiddenSections, style, hud }
+    private enum CodingKeys: String, CodingKey { case blocks, order, sections, hiddenSections, style, hud, sessions, tokens }
 
     /// Nil when the value is not an object.
     init?(json: JSONValue) {
@@ -254,7 +263,9 @@ public struct PanelLayout: Hashable, Codable, Sendable {
                   sections: Self.strings(fields["sections"]).compactMap(PanelSection.init(rawValue:)),
                   hiddenSections: Self.strings(fields["hiddenSections"]).compactMap(PanelSection.init(rawValue:)),
                   style: fields["style"].flatMap(PanelStyle.init(json:)) ?? PanelStyle(),
-                  hud: fields["hud"].flatMap(HUD.init(json:)) ?? HUD())
+                  hud: fields["hud"].flatMap(HUD.init(json:)) ?? HUD(),
+                  sessions: fields["sessions"].flatMap(Sessions.init(json:)) ?? Sessions(),
+                  tokens: fields["tokens"].flatMap(Tokens.init(json:)) ?? Tokens())
     }
 
     public init(from decoder: Decoder) throws {
@@ -273,6 +284,8 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         if !hiddenSections.isEmpty { try c.encode(hiddenSections, forKey: .hiddenSections) }
         if !style.isDefault { try c.encode(style, forKey: .style) }
         if !hud.isDefault { try c.encode(hud, forKey: .hud) }
+        if !sessions.isDefault { try c.encode(sessions, forKey: .sessions) }
+        if !tokens.isDefault { try c.encode(tokens, forKey: .tokens) }
     }
 
     /// The strings of a list, in its order; what is not a string is left out, and what is not a list gives none.
