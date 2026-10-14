@@ -125,7 +125,8 @@ struct HoverPanelView: View {
     private var quotaBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(quotaGroups.enumerated()), id: \.element.vendor) { index, group in
-                ProviderQuotaBlock(store: store, vendor: group.vendor, rows: group.rows)
+                ProviderQuotaBlock(store: store, vendor: group.vendor, rows: group.rows,
+                                   onOpenAgent: Self.latestDestination(store, vendor: group.vendor).map { id in { onOpenListedSession(id) } })
                 .padding(.top, index > 0 ? 8 : 0)
                 .topDivider(index > 0 ? theme.divider : .clear)
             }
@@ -342,6 +343,16 @@ struct HoverPanelView: View {
         store.focusedSessionID = id
         store.statsTab = .sessions
         onOpenStats()
+    }
+
+    /// The vendor's newest session, among those of the past week drawn with its mark, that its client names a destination
+    /// for: where the vendor's logo and name in the quota list lead. Nil when none does.
+    static func latestDestination(_ store: UsageStore, vendor: String) -> String? {
+        let mark = AgentArtwork.markKey(vendor)
+        return store.view.recentSessions.first {
+            !$0.session.accountWide && $0.session.navigationTarget != nil
+                && ($0.source.agentVendor ?? $0.source.vendor).map(AgentArtwork.markKey) == mark
+        }?.id
     }
 
     /// The island's summary: local work in flight and sessions last active in the past day, with waiting before

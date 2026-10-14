@@ -73,17 +73,22 @@ struct ProviderQuotaBlock: View {
     let store: UsageStore
     let vendor: String
     let rows: [AgentRow]
+    /// Back to the vendor's latest session; nil when no session of it names a destination.
+    var onOpenAgent: (() -> Void)? = nil
     @State private var metric = IslandQuotaMetric.quota
     private let theme = Theme.island
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                AgentLogo(vendor: vendor, size: 14)
-                    .frame(width: IslandRowLayout.inset * 2 + IslandRowLayout.markerWidth)
-                Text(VendorCatalog.name(vendor))
-                    .font(IslandRowLayout.headingFont)
-                    .foregroundStyle(theme.text)
+                HStack(spacing: 6) {
+                    AgentLogo(vendor: vendor, size: 14)
+                        .frame(width: IslandRowLayout.inset * 2 + IslandRowLayout.markerWidth)
+                    Text(VendorCatalog.name(vendor))
+                        .font(IslandRowLayout.headingFont)
+                        .foregroundStyle(theme.text)
+                }
+                .clickTarget(onOpenAgent, help: L10n.text("回到最近的会话", "Back to the latest session"))
                 if store.isLoading {
                     LoadingSpinner(color: theme.secondary)
                         .accessibilityLabel(L10n.text("正在读取额度", "Loading quota"))
