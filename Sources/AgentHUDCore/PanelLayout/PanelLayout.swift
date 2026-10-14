@@ -6,7 +6,11 @@ public enum PanelWidget: String, Codable, CaseIterable, Sendable { case bar, rin
 
 /// What a block shows, the reading its picker flips in place: a quota window's share, or an API account's balance
 /// (`quota`), how fast that goes (`burnRate`, written `burn`), tokens, or cost.
-public enum PanelMeasure: String, Codable, CaseIterable, Sendable { case quota, burnRate = "burn", tokens, cost }
+public enum PanelMeasure: String, Codable, CaseIterable, Sendable, Identifiable {
+    case quota, burnRate = "burn", tokens, cost
+
+    public var id: Self { self }
+}
 
 /// A part of the hover panel, in the panel's default order: the agents' blocks, the token chart, the sessions.
 public enum PanelSection: String, Codable, CaseIterable, Sendable { case blocks, tokens, sessions }

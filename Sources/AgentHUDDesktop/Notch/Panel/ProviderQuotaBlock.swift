@@ -12,17 +12,16 @@ enum IslandRowLayout {
     static let headingVerticalPadding: CGFloat = 1
 }
 
-/// The three readings a quota block can show. The Mac uses direct buttons where the phone uses a horizontal swipe.
-enum IslandQuotaMetric: CaseIterable, Identifiable {
-    case quota, burnRate, tokens
+/// The measures a block's picker flips between. The Mac uses direct buttons where the phone uses a horizontal swipe.
+typealias IslandQuotaMetric = PanelMeasure
 
-    var id: Self { self }
-
+extension PanelMeasure {
     var label: String {
         switch self {
         case .quota: L10n.text("额度", "Quota")
         case .burnRate: L10n.text("消耗速率", "Burn rate")
         case .tokens: L10n.text("Token 速率", "Tokens / h")
+        case .cost: L10n.text("费用估算", "Est. cost")
         }
     }
 
@@ -31,19 +30,21 @@ enum IslandQuotaMetric: CaseIterable, Identifiable {
         case .quota: "percent"
         case .burnRate: "flame.fill"
         case .tokens: "number"
+        case .cost: "dollarsign"
         }
     }
 }
 
-/// Compact, direct metric selection for a provider block.
+/// Compact, direct measure selection for a provider block, over the measures its widget offers.
 struct IslandQuotaMetricPicker: View {
     @Binding var selection: IslandQuotaMetric
+    var measures = PanelBlockKind.quota.measures(under: .bar)
     var theme: Theme = .island
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(IslandQuotaMetric.allCases) { metric in
+            ForEach(measures) { metric in
                 Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { selection = metric }
                 } label: {
@@ -68,13 +69,26 @@ struct IslandQuotaMetricPicker: View {
     }
 }
 
-/// One independently switchable provider block. Refreshes keep its selected metric because the vendor is its identity.
+/// One independently switchable provider block, drawn by the widget its plan names. Refreshes keep its selected
+/// measure because the vendor is its identity; the panel gives it a new identity when its plan asks for another widget
+/// or another measure first, and the picker starts from that measure again.
 struct ProviderQuotaBlock: View {
     let store: UsageStore
     let vendor: String
     let rows: [AgentRow]
-    @State private var metric = IslandQuotaMetric.quota
+    let plan: PanelBlockPlan
+    @State private var metric: IslandQuotaMetric
     private let theme = Theme.island
+
+    init(store: UsageStore, vendor: String, rows: [AgentRow], plan: PanelBlockPlan? = nil) {
+        let plan = plan ?? PanelBlockPlan(key: vendor, kind: .quota, widget: .bar, measure: .quota,
+                                          measures: PanelBlockKind.quota.measures(under: .bar))
+        self.store = store
+        self.vendor = vendor
+        self.rows = rows
+        self.plan = plan
+        _metric = State(initialValue: plan.measure)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -89,8 +103,14 @@ struct ProviderQuotaBlock: View {
                         .accessibilityLabel(L10n.text("正在读取额度", "Loading quota"))
                 }
                 Spacer()
-                IslandQuotaMetricPicker(selection: $metric, theme: theme)
-                    .padding(.trailing, 2)
+                if plan.measures.count > 1 {
+                    IslandQuotaMetricPicker(selection: $metric, measures: plan.measures, theme: theme)
+                        .padding(.trailing, 2)
+                } else if plan.widget == .chart {
+                    Text(store.report == nil ? "24h · —" : "24h · \(TokenFormat.short(chartColumns.reduce(0) { $0 + $1.total })) tok")
+                        .font(.tabular(12))
+                        .padding(.trailing, IslandRowLayout.inset)
+                }
             }
             .font(.ui(11))
             .foregroundStyle(theme.secondary)
@@ -98,35 +118,78 @@ struct ProviderQuotaBlock: View {
 
             let sections = store.accountSections(rows)
             ForEach(sections) { section in
-                if let account = section.account {
-                    let warning = store.view.assessment(of: account).status.reason
-                    let details = store.view.accountSourceNotice(for: section)
-                    AccountSectionHeader(account: account, label: store.accountLabel(for: account),
-                                         notice: details, warning: warning)
-                }
-                ForEach(section.rows) { row in
-                    ModelUsageRow(row: row, now: store.now, metric: metric,
-                                  showReset: store.settings.settings.showResetCountdown, showVendor: false,
-                                  insights: store.report?.insightsByAgent[row.id],
-                                  outlook: store.view.outlook(for: row.id),
-                                  tokensPerHour: store.quotaTokensPerHour(for: row.id),
-                                  forecastHint: store.quotaForecastHint(for: row.id),
-                                  isLoading: store.isLoading)
+                let shown = section.rows.filter { !plan.hiddenRows.contains($0.agent.windowKey) }
+                let wallets = section.account?.wallets ?? []
+                // Earned resets belong to the signed-in Codex account.
+                let resets = section.isCurrent && section.rows.contains(where: { $0.agent.vendor == "Codex" })
+                    ? store.report?.resetCredits(for: section.id) : nil
+                if !shown.isEmpty || !wallets.isEmpty || resets != nil {
+                    if let account = section.account {
+                        let warning = store.view.assessment(of: account).status.reason
+                        let details = store.view.accountSourceNotice(for: section)
+                        AccountSectionHeader(account: account, label: store.accountLabel(for: account),
+                                             notice: details, warning: warning)
+                    }
+                    windows(shown)
                         .opacity(section.isCurrent ? 1 : 0.55)
-                }
-                if let wallets = section.account?.wallets {
                     ForEach(wallets) { wallet in
                         AccountWalletRow(wallet: wallet)
                             .opacity(section.isCurrent ? 1 : 0.55)
                     }
-                }
-                // Earned resets belong to the signed-in Codex account.
-                if section.isCurrent, section.rows.contains(where: { $0.agent.vendor == "Codex" }),
-                   let resets = store.report?.resetCredits(for: section.id) {
-                    CodexResetCreditsView(resets: resets, showExpiry: store.settings.settings.showResetCountdown)
+                    if let resets {
+                        CodexResetCreditsView(resets: resets, showExpiry: store.settings.settings.showResetCountdown)
+                    }
                 }
             }
+            if plan.widget == .chart {
+                TokenBarsChart(columns: chartColumns, interval: store.hudTokenInterval,
+                               colors: chartConsumers.map { AgentPalette.swiftUIColor(index: store.consumerPaletteIndex($0.id)) },
+                               consumers: chartConsumers, theme: theme, isLoading: store.report == nil, compact: true)
+                    .frame(height: 40)
+                    .padding(.horizontal, IslandRowLayout.inset)
+                    .padding(.top, 4)
+            }
         }
+    }
+
+    /// The models this vendor's windows count, which a chart draws in place of the windows: their tokens over the
+    /// panel's last day, in the quarter hours and the colours of the panel's own token chart.
+    private var chartConsumers: [AgentDescriptor] { store.consumers.filter { $0.displayVendor == vendor } }
+    private var chartColumns: [TokenColumn] { store.hudTokenColumns(consumerIDs: Set(chartConsumers.map(\.id))) }
+
+    /// An account's quota windows as the block's widget draws them.
+    @ViewBuilder
+    private func windows(_ rows: [AgentRow]) -> some View {
+        let showReset = store.settings.settings.showResetCountdown
+        switch plan.widget {
+        case .ring, .number:
+            QuotaCellGrid(rows: rows) { row in
+                QuotaCell(row: row, metrics: metrics(row), metric: metric, style: plan.widget == .ring ? .ring : .number,
+                          showReset: showReset, forecastHint: store.quotaForecastHint(for: row.id), isLoading: store.isLoading)
+            }
+        case .chart:
+            // The chart under the accounts stands for the windows.
+            EmptyView()
+        case .bar:
+            ForEach(rows) { row in
+                ModelUsageRow(row: row, now: store.now, metric: metric, showReset: showReset, showVendor: false,
+                              insights: store.report?.insightsByAgent[row.id],
+                              outlook: store.view.outlook(for: row.id),
+                              tokensPerHour: store.quotaTokensPerHour(for: row.id),
+                              forecastHint: store.quotaForecastHint(for: row.id),
+                              cost: cost(row), isLoading: store.isLoading)
+            }
+        }
+    }
+
+    private func metrics(_ row: AgentRow) -> QuotaRowMetrics {
+        QuotaRowMetrics(row: row, insights: store.report?.insightsByAgent[row.id], outlook: store.view.outlook(for: row.id),
+                        now: store.now, tokensPerHour: store.quotaTokensPerHour(for: row.id), cost: cost(row))
+    }
+
+    /// The cycle's list cost is priced from every bucket of the window, so only the measure that shows it asks for it.
+    private func cost(_ row: AgentRow) -> QuotaListCost? {
+        metric == .cost ? store.view.listCost(for: row.id) : nil
     }
 }
 

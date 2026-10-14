@@ -23,12 +23,12 @@ public extension PanelBlockKind {
     }
 
     /// The measures the kind offers under a widget, in picker order; none under a widget it does not accept. A chart of
-    /// quota windows draws what has a history here, tokens and cost. A balance's number offers `quota` alone: its card
-    /// shows the balance and the estimated cost together.
+    /// quota windows draws the history the panel holds, tokens. A balance's number offers `quota` alone: its card shows
+    /// the balance and the estimated cost together.
     func measures(under widget: PanelWidget) -> [PanelMeasure] {
         switch (self, widget) {
         case (.quota, .bar), (.quota, .ring), (.quota, .number): [.quota, .burnRate, .tokens, .cost]
-        case (.quota, .chart): [.tokens, .cost]
+        case (.quota, .chart): [.tokens]
         case (.billing, .number): [.quota]
         case (.billing, _): []
         }

@@ -36,7 +36,7 @@ final class PanelLayoutRulesTests: XCTestCase {
         for widget in [PanelWidget.bar, .ring, .number] {
             XCTAssertEqual(PanelBlockKind.quota.measures(under: widget), [.quota, .burnRate, .tokens, .cost], "\(widget)")
         }
-        XCTAssertEqual(PanelBlockKind.quota.measures(under: .chart), [.tokens, .cost])
+        XCTAssertEqual(PanelBlockKind.quota.measures(under: .chart), [.tokens])
         XCTAssertEqual(PanelBlockKind.billing.measures(under: .number), [.quota])
         for widget in [PanelWidget.bar, .ring, .chart] {
             XCTAssertEqual(PanelBlockKind.billing.measures(under: widget), [], "\(widget) is not a balance's widget")
@@ -124,7 +124,7 @@ final class PanelLayoutRulesTests: XCTestCase {
         XCTAssertEqual(PanelLayout().issues(against: blocks), [])
         let layout = PanelLayout(blocks: [
             "Claude": PanelLayout.Block(widget: .ring, measure: .burnRate, hiddenRows: ["claude-weekly"]),
-            "Codex": PanelLayout.Block(widget: .chart, measure: .cost, hidden: true),
+            "Codex": PanelLayout.Block(widget: .chart, measure: .tokens, hidden: true),
             "api:DeepSeek": PanelLayout.Block(widget: .number, measure: .quota),
         ], order: ["api:DeepSeek", "Codex", "Codex"], sections: [.sessions], hiddenSections: [.tokens])
         XCTAssertEqual(layout.issues(against: blocks), [])
@@ -170,7 +170,7 @@ final class PanelLayoutRulesTests: XCTestCase {
         }
         XCTAssertEqual(issues("Claude", PanelLayout.Block(widget: .chart, measure: .burnRate)), [
             PanelLayoutIssue(path: "blocks.Claude.measure", message:
-                #"The "chart" widget of "Claude" does not offer the measure "burn". It offers: "tokens", "cost"."#),
+                #"The "chart" widget of "Claude" does not offer the measure "burn". It offers: "tokens"."#),
         ])
         XCTAssertEqual(issues("Claude", PanelLayout.Block(widget: .chart, measure: .tokens)), [])
         XCTAssertEqual(issues("Claude", PanelLayout.Block(measure: .cost)), [], "without a widget the default one decides")

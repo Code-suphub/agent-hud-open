@@ -202,6 +202,9 @@ final class ScreenHUD {
         let report: UsageReport?
         let settings: AgentHUDCore.Settings
         let agents: [AgentDescriptor]
+        /// The panel layout in effect, and whether it is an unsaved draft, which adds the bar that says so.
+        let layout: PanelLayout
+        let draft: Bool
         let hookTurns: [String: SessionPhase.HookTurn]
         let now: Date
         let dataDate: Date
@@ -246,6 +249,7 @@ final class ScreenHUD {
 
     private var panelInputs: PanelInputs {
         PanelInputs(report: store.report, settings: settings.settings, agents: settings.agents,
+                      layout: settings.panelLayout.effective, draft: settings.panelLayout.hasDraft,
                       hookTurns: store.hookTurns, now: store.now, dataDate: store.dataDate,
                       error: store.lastError, loading: store.isLoading, range: store.statsRange,
                       bucketSize: store.tokenBucketSize, dimensions: store.tokenDimensions,

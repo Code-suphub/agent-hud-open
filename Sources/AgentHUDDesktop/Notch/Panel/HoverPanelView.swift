@@ -10,7 +10,8 @@ struct PanelHeightKey: PreferenceKey {
     }
 }
 
-/// The selected quota rows and a compact token chart, then the local session summary.
+/// The agents' blocks, a compact token chart and the local session summary, as this Mac's panel layout arranges them:
+/// by default the quota rows, then the chart, then the sessions.
 struct HoverPanelView: View {
     let store: UsageStore
     let onOpenStats: () -> Void
@@ -52,6 +53,53 @@ struct HoverPanelView: View {
 
     private let theme = Theme.island
     private let spacing: CGFloat = 10
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var layout: PanelLayoutStore { store.settings.panelLayout }
+
+    /// The panel under the layout in effect, a draft included. The Settings switches decide what exists; the layout
+    /// hides, orders and draws what they leave.
+    private var plan: PanelLayoutPlan { PanelLayoutPlan(layout: layout.effective, blocks: store.view.panelBlocks) }
+
+    /// One block of the panel with what it draws: a vendor's quota rows, or the API accounts under one key.
+    private enum Block: Identifiable {
+        case quota(PanelBlockPlan, rows: [AgentRow])
+        case billing(PanelBlockPlan, accounts: [APIBilling])
+
+        var plan: PanelBlockPlan {
+            switch self {
+            case .quota(let plan, _), .billing(let plan, _): plan
+            }
+        }
+
+        /// A block that asks for another widget, or another measure first, is another view: its picker starts again.
+        var id: String { "\(plan.key)|\(plan.widget.rawValue)|\(plan.measure.rawValue)" }
+        var isQuota: Bool { plan.kind == .quota }
+    }
+
+    private func blocks(_ plan: PanelLayoutPlan) -> [Block] {
+        guard store.settings.settings.showIslandQuota else { return [] }
+        let groups = Dictionary(quotaGroups.map { ($0.vendor, $0.rows) }, uniquingKeysWith: { first, _ in first })
+        let accounts = Dictionary(grouping: billing, by: \.panelBlockKey)
+        return plan.blocks.compactMap { block in
+            switch block.kind {
+            case .quota: groups[block.key].map { .quota(block, rows: $0) }
+            case .billing: accounts[block.key].map { .billing(block, accounts: $0) }
+            }
+        }
+    }
+
+    /// The sections that have something to show, in the layout's order.
+    private func sections(_ plan: PanelLayoutPlan, blocks: [Block]) -> [PanelSection] {
+        let settings = store.settings.settings
+        return plan.sections.filter { section in
+            switch section {
+            case .blocks: !blocks.isEmpty
+            case .tokens: settings.showIslandTokens && (store.isLoading || store.isIndexing || !consumers.isEmpty)
+            case .sessions: settings.showIslandSessions
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: spacing) {
@@ -60,16 +108,24 @@ struct HoverPanelView: View {
             } else {
                 measuredContent
             }
-            footer
-                .fixedSize(horizontal: false, vertical: true)
-                .background(GeometryReader { proxy in
-                    Color.clear.preference(key: PanelHeightKey.self,
-                                           value: proxy.size.height + insets.top + insets.bottom + spacing)
-                })
+            // An unsaved layout is said above the footer, outside the scrolling content, and counts in the height.
+            VStack(alignment: .leading, spacing: spacing) {
+                if layout.hasDraft {
+                    PanelDraftBar(layout: layout).transition(.opacity)
+                }
+                footer
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: PanelHeightKey.self,
+                                       value: proxy.size.height + insets.top + insets.bottom + spacing)
+            })
         }
         .padding(insets)
         .frame(height: height, alignment: .top)
         .foregroundStyle(theme.text)
+        .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.effective)
+        .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.hasDraft)
     }
 
     private var measuredContent: some View {
@@ -81,7 +137,14 @@ struct HoverPanelView: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: spacing) {
+        let plan = plan
+        let blocks = blocks(plan)
+        let sections = sections(plan, blocks: blocks)
+        let inlineAlert = alert.map { !$0.isSessionEvent } == true
+        // A quota block names its agent; without one the panel still has to say whose it is.
+        let titled = focusVendor != nil && !blocks.contains(where: \.isQuota)
+        let hasHeader = store.lastError != nil || inlineAlert || focusVendor != nil
+        return VStack(alignment: .leading, spacing: spacing) {
             if let error = store.lastError {
                 Text(L10n.text("刷新失败：", "Refresh failed: ") + error)
                     .font(.ui(11)).foregroundStyle(theme.secondary)
@@ -94,45 +157,47 @@ struct HoverPanelView: View {
                                       waitingRequests: waitingRequests).id(alert.id)
                     .padding(.bottom, 4)
             }
-            // The quota block names its agent; without one the panel still has to say whose it is.
-            if let focusVendor, !store.settings.settings.showIslandQuota || quotaGroups.isEmpty {
+            if let focusVendor, titled {
                 Text(focusVendor).font(.ui(13, .semibold))
             }
-            if store.settings.settings.showIslandQuota, !quotaGroups.isEmpty {
-                quotaBlock
-            }
-            if store.settings.settings.showIslandQuota {
-                ForEach(billing) { billing in
-                    APIBillingCard(billing: billing, store: store, theme: theme, compact: true)
+            ForEach(Array(sections.enumerated()), id: \.element) { index, section in
+                switch section {
+                case .blocks:
+                    blockList(blocks, separated: index > 0)
+                case .tokens:
+                    TokenConsumptionChart(store: store, theme: theme, context: .island, modelFilter: tokenFilter,
+                                          compact: true, onOpenStats: onOpenStats)
+                        // The chart keeps its filter as state, so another agent's panel is another chart.
+                        .id(focusVendor)
                         .padding(.top, 8)
                         .topDivider(theme.divider)
+                case .sessions:
+                    sessionLine(hasAbove: index > 0 || hasHeader)
                 }
-            }
-            if store.settings.settings.showIslandTokens, store.isLoading || store.isIndexing || !consumers.isEmpty {
-                TokenConsumptionChart(store: store, theme: theme, context: .island, modelFilter: tokenFilter,
-                                      compact: true, onOpenStats: onOpenStats)
-                    // The chart keeps its filter as state, so another agent's panel is another chart.
-                    .id(focusVendor)
-                    .padding(.top, 8)
-                    .topDivider(theme.divider)
-            }
-            if store.settings.settings.showIslandSessions {
-                sessionLine
             }
         }
     }
 
-    private var quotaBlock: some View {
+    /// The blocks in the layout's order, each under a divider but the first, which has one only below another section.
+    private func blockList(_ blocks: [Block], separated: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(quotaGroups.enumerated()), id: \.element.vendor) { index, group in
-                ProviderQuotaBlock(store: store, vendor: group.vendor, rows: group.rows)
-                .padding(.top, index > 0 ? 8 : 0)
-                .topDivider(index > 0 ? theme.divider : .clear)
-            }
-            if store.rows.isEmpty {
-                Text(L10n.text("暂无额度数据", "No quota data yet"))
-                    .font(.ui(12))
-                    .foregroundStyle(theme.secondary)
+            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+                let divided = index > 0 || separated
+                Group {
+                    switch block {
+                    case .quota(let plan, let rows):
+                        ProviderQuotaBlock(store: store, vendor: plan.key, rows: rows, plan: plan)
+                    case .billing(_, let accounts):
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(accounts) { account in
+                                APIBillingCard(billing: account, store: store, theme: theme, compact: true)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, divided ? 8 : 0)
+                .topDivider(divided ? theme.divider : .clear)
+                .transition(.opacity)
             }
         }
     }
@@ -143,12 +208,9 @@ struct HoverPanelView: View {
     /// range belongs to the session card, which answers a different question. The header opens the session list; each
     /// row's title returns to its agent, or opens its session page where the client names no destination, and its
     /// token count opens usage.
-    private var sessionLine: some View {
+    private func sessionLine(hasAbove: Bool) -> some View {
         let rows = Self.sessionRows(store, vendor: focusVendor)
         let running = rows.running, shown = rows.shown
-        let hasAbove = store.lastError != nil || alert.map { !$0.isSessionEvent } == true || focusVendor != nil
-            || (store.settings.settings.showIslandQuota && (!quotaGroups.isEmpty || !billing.isEmpty))
-            || (store.settings.settings.showIslandTokens && (store.isLoading || store.isIndexing || !consumers.isEmpty))
         return VStack(alignment: .leading, spacing: 6) {
             Button { openSessions() } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {

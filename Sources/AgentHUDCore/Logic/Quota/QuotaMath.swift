@@ -85,4 +85,43 @@ public enum QuotaMath {
         }
         return (Double(tokens) / hours).rounded()
     }
+
+    /// What the tokens the window's consumers spent over the observed part of its current cycle would cost at list
+    /// price, currency by currency. An estimate: a subscription is not billed by the token, and a model without a list
+    /// price is left out. Nil when the cycle is unknown or nothing priced was spent in it.
+    public static func listCost(snapshot: UsageSnapshot, consumers: Set<String>, usage: [UsageBucket], regions: PriceRegions,
+                                now: Date) -> QuotaListCost? {
+        guard !consumers.isEmpty, let cycle = snapshot.cycle, let oldest = usage.first?.start else { return nil }
+        let start = max(cycle.start, oldest)
+        let hours = now.timeIntervalSince(start) / 3600
+        guard hours > 0 else { return nil }
+        var amounts: [String: Decimal] = [:]
+        for bucket in usage where consumers.contains(bucket.agentId) && bucket.start >= start && bucket.start < now {
+            guard let cost = ModelCatalog.cost(of: bucket, regions: regions) else { continue }
+            amounts[cost.currency, default: 0] += cost.total
+        }
+        return amounts.isEmpty ? nil : QuotaListCost(amounts: amounts, hours: hours)
+    }
+}
+
+/// The list price of what a quota window's consumers spent over the observed part of its current cycle. Currencies
+/// stay apart and are never converted or added.
+public struct QuotaListCost: Hashable, Sendable {
+    /// The amount in each currency that had priced tokens.
+    public let amounts: [String: Decimal]
+    /// How long the observed part of the cycle is, in hours; above zero.
+    public let hours: Double
+
+    public init(amounts: [String: Decimal], hours: Double) {
+        self.amounts = amounts
+        self.hours = hours
+    }
+
+    /// The currencies in code order, so the one shown first does not change from pass to pass.
+    public var currencies: [String] { amounts.keys.sorted() }
+
+    /// The amount spent per hour in a currency over the observed part of the cycle.
+    public func perHour(_ currency: String) -> Decimal? {
+        amounts[currency].map { $0 / Decimal(hours) }
+    }
 }

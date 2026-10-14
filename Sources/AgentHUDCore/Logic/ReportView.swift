@@ -249,6 +249,15 @@ public struct ReportView: Sendable {
         return QuotaMath.tokensPerHour(snapshot: snapshot, consumers: consumers, usage: report.usage, now: now)
     }
 
+    /// What this quota window's tokens over the observed part of its current cycle would cost at list price: an
+    /// estimate, since a subscription is not billed by the token.
+    public func listCost(for agentId: String) -> QuotaListCost? {
+        guard counts(agentId), let report, let snapshot = report.snapshot(for: agentId),
+              let consumers = report.consumerIdsByQuota[agentId] else { return nil }
+        return QuotaMath.listCost(snapshot: snapshot, consumers: consumers, usage: report.usage,
+                                  regions: PriceRegions(report: report), now: now)
+    }
+
     /// What the window's reading and recent pace say about the rest of its cycle.
     public func outlook(for agentId: String) -> QuotaOutlook? {
         guard counts(agentId), let report, let snapshot = report.snapshot(for: agentId) else { return nil }

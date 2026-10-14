@@ -15,6 +15,15 @@ public enum MoneyFormat {
         return amount.formatted(format)
     }
 
+    /// An amount for a narrow column: whole units from a hundred up ("$412", "$1,234"), two decimals below ("$3.10").
+    public static func short(_ amount: Decimal, currency: String) -> String {
+        let format = Decimal.FormatStyle.Currency(code: currency)
+            .presentation(.narrow)
+            .locale(Locale(identifier: L10n.resolved == .zhHans ? "zh_CN" : "en_US"))
+            .precision(.fractionLength(abs(amount) >= 100 ? 0 : 2))
+        return amount.formatted(format)
+    }
+
     /// A price someone pays, written as the website writes it in either language: the ISO code, a space and two
     /// decimals, such as "USD 2.99". The number is grouped and rounded as `Intl.NumberFormat` does in English, whatever
     /// the Mac's region, and the space is a plain one.

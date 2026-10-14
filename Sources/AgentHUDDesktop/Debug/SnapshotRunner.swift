@@ -169,6 +169,7 @@ public enum SnapshotRunner {
         settings.update { $0.glowStyle = .blur; $0.glowEffect = .breathe }
         save("island-expanded-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
         save("island-expanded-light", IslandScene(store: store, settings: settings, open: true, light: true), folder: folder, scheme: .light)
+        saveLayouts(settings: settings, store: store, folder: folder)
         // Session titles and token counts remain separate controls, including unavailable and failed returns.
         if let codex = settings.agents.first(where: { $0.vendor == "Codex" }) {
             let saved = settings.settings
@@ -722,6 +723,32 @@ public enum SnapshotRunner {
             let overflow = document.bounds.height - scroll.contentView.bounds.height
             print("snapshot adaptive \(abs(overflow) < 2 ? "PASS" : "FAILED"): content restored height=\(window.frame.height) overflow=\(overflow)")
         }
+    }
+
+    /// The hover panel under layouts an agent might propose: each widget with each measure first, then an unsaved
+    /// draft that mixes widgets, reorders the blocks and hides a section. The layout is the default again afterwards.
+    private static func saveLayouts(settings: SettingsStore, store: UsageStore, folder: URL) {
+        let layout = settings.panelLayout
+        let quota = store.view.panelBlocks.filter { $0.kind == .quota }
+        func every(_ widget: PanelWidget, _ measure: PanelMeasure) -> PanelLayout {
+            PanelLayout(blocks: Dictionary(uniqueKeysWithValues: quota.map { ($0.key, PanelLayout.Block(widget: widget, measure: measure)) }))
+        }
+        for widget in PanelBlockKind.quota.widgets {
+            for measure in PanelBlockKind.quota.measures(under: widget) where !(widget == .bar && measure != .cost) {
+                layout.propose(every(widget, measure))
+                layout.save()
+                save("panel-layout-\(widget.rawValue)-\(measure.rawValue)",
+                     IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+            }
+        }
+        layout.reset()
+        var blocks: [String: PanelLayout.Block] = [:]
+        if let first = quota.first { blocks[first.key] = PanelLayout.Block(widget: .ring) }
+        if let last = quota.last, quota.count > 1 { blocks[last.key] = PanelLayout.Block(widget: .number, measure: .burnRate) }
+        layout.propose(PanelLayout(blocks: blocks, order: quota.last.map { [$0.key] } ?? [], hiddenSections: [.tokens]))
+        save("panel-layout-draft", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        layout.discard()
+        layout.reset()
     }
 
     /// A store of sample data on the demo's clock, the one every report here is built on.

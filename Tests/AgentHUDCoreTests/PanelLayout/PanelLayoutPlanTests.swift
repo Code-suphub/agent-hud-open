@@ -81,7 +81,7 @@ final class PanelLayoutPlanTests: XCTestCase {
     }
 
     func testAMeasureTheWidgetDoesNotOfferFallsBackToTheWidgetsDefault() {
-        let ofAChart: [PanelMeasure] = [.tokens, .cost]
+        let ofAChart: [PanelMeasure] = [.tokens]
         func expect(_ key: String, _ change: PanelLayout.Block, shows measure: PanelMeasure, among measures: [PanelMeasure],
                     line: UInt = #line) {
             let planned = block(key, in: PanelLayout(blocks: [key: change]))
@@ -91,7 +91,7 @@ final class PanelLayoutPlanTests: XCTestCase {
         expect("Claude", PanelLayout.Block(widget: .ring, measure: .cost), shows: .cost, among: everyMeasure)
         expect("Claude", PanelLayout.Block(measure: .burnRate), shows: .burnRate, among: everyMeasure)
         expect("Claude", PanelLayout.Block(widget: .chart), shows: .tokens, among: ofAChart)
-        expect("Claude", PanelLayout.Block(widget: .chart, measure: .cost), shows: .cost, among: ofAChart)
+        expect("Claude", PanelLayout.Block(widget: .chart, measure: .cost), shows: .tokens, among: ofAChart)
         expect("Claude", PanelLayout.Block(widget: .chart, measure: .quota), shows: .tokens, among: ofAChart)
         expect("Claude", PanelLayout.Block(widget: .chart, measure: .burnRate), shows: .tokens, among: ofAChart)
         expect("api:DeepSeek", PanelLayout.Block(measure: .cost), shows: .quota, among: [.quota])

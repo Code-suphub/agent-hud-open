@@ -12,6 +12,7 @@ struct ModelUsageRow: View {
     var outlook: QuotaOutlook?
     var tokensPerHour: Double?
     var forecastHint: String?
+    var cost: QuotaListCost?
     var theme: Theme = .island
     var isLoading = false
     @State private var isHovered = false
@@ -36,7 +37,7 @@ struct ModelUsageRow: View {
         let metricColor = switch metric {
         case .quota: color
         case .burnRate: runsOut ? theme.status(.warning) : theme.status(.ok)
-        case .tokens: theme.status(.ok)
+        case .tokens, .cost: theme.status(.ok)
         }
         let valueColor = row.level == nil ? theme.secondary : metricColor
         let markerColor = row.level == nil || value == nil ? theme.tertiary : metricColor
@@ -82,7 +83,7 @@ struct ModelUsageRow: View {
     }
 
     private var metrics: QuotaRowMetrics {
-        QuotaRowMetrics(row: row, insights: insights, outlook: outlook, now: now, tokensPerHour: tokensPerHour)
+        QuotaRowMetrics(row: row, insights: insights, outlook: outlook, now: now, tokensPerHour: tokensPerHour, cost: cost)
     }
 
     private var metricValue: String? { metrics.value(metric) }
@@ -115,23 +116,27 @@ struct ModelUsageRow: View {
     }
 }
 
-/// What a quota row's measures read at `now`: the share used, the burn rate from its window's insights and the rate
-/// tokens are spent at, each with the detail shown beside it. The burn rate's detail, colour and projection follow the
-/// window's outlook as Core weighs it (`ReportView.outlook(for:)`), so the row and the hover hint agree. A row whose
-/// reading shows no level has no burn rate, outlook, projection or token rate.
+/// What a quota row's measures read at `now`: the share used, the burn rate from its window's insights, the rate
+/// tokens are spent at and what the cycle's tokens would cost at list price, each with the detail shown beside it. The
+/// burn rate's detail, colour and projection follow the window's outlook as Core weighs it
+/// (`ReportView.outlook(for:)`), so the row and the hover hint agree. A row whose reading shows no level has no burn
+/// rate, outlook, projection, token rate or cost.
 struct QuotaRowMetrics {
     let row: AgentRow
     let insights: UsageInsights?
     let outlook: QuotaOutlook?
     let now: Date
     let tokensPerHour: Double?
+    let cost: QuotaListCost?
 
-    init(row: AgentRow, insights: UsageInsights?, outlook: QuotaOutlook?, now: Date, tokensPerHour: Double?) {
+    init(row: AgentRow, insights: UsageInsights?, outlook: QuotaOutlook?, now: Date, tokensPerHour: Double?,
+         cost: QuotaListCost? = nil) {
         self.row = row
         self.insights = row.assessment.showsLevel ? insights : nil
         self.outlook = row.assessment.showsLevel ? outlook : nil
         self.now = now
         self.tokensPerHour = row.assessment.showsLevel ? tokensPerHour : nil
+        self.cost = row.assessment.showsLevel ? cost : nil
     }
 
     func value(_ metric: IslandQuotaMetric) -> String? {
@@ -142,6 +147,9 @@ struct QuotaRowMetrics {
             insights?.burnRatePctPerHour.map { String(format: "%.1f%%/h", $0) }
         case .tokens:
             tokensPerHour.map { TokenFormat.short(Int($0.rounded())) + "/h" }
+        case .cost:
+            // The first currency in code order; a second one, which is rare, is the detail.
+            cost.flatMap { cost in cost.currencies.first.map { MoneyFormat.short(cost.amounts[$0] ?? 0, currency: $0) } }
         }
     }
 
@@ -159,6 +167,11 @@ struct QuotaRowMetrics {
             return QuotaForecast.text(of: outlook, projectedUsedAtReset: projectedAtReset) ?? "—"
         case .tokens:
             return tokensPerHour.map { TokenFormat.short(Int(($0 * 24).rounded())) + L10n.text(" / 天", " / day") } ?? "—"
+        case .cost:
+            guard let cost, let first = cost.currencies.first else { return "—" }
+            let others = cost.currencies.dropFirst().map { MoneyFormat.short(cost.amounts[$0] ?? 0, currency: $0) }
+            if !others.isEmpty { return "+ " + others.joined(separator: " + ") }
+            return cost.perHour(first).map { MoneyFormat.short($0, currency: first) + "/h" } ?? "—"
         }
     }
 
