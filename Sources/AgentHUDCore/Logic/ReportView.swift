@@ -70,8 +70,10 @@ public struct ReportView: Sendable {
     ///   the report gives wherever the hooks saw more (`SessionPhase.hookPrevails(_:over:lastEventAt:)`), unless it is out
     ///   of date while the report has the session in flight.
     /// - failure: the error of the last pass when every source failed to read it.
+    /// - waiting: sessions whose client says it waits on its user, with when it began to, beside the ones `approvals`
+    ///   holds a card for.
     public init(report: UsageReport?, agents: [AgentDescriptor], settings: Settings, approvals: [PermissionRequest] = [],
-                hookTurns: [String: SessionPhase.HookTurn] = [:], now: Date, failure: String? = nil) {
+                waiting: [String: Date] = [:], hookTurns: [String: SessionPhase.HookTurn] = [:], now: Date, failure: String? = nil) {
         let visible = agents.filter { Self.isPresent($0, in: report) }
         let enabled = visible.filter(\.enabled)
         let shown = enabled.filter { settings.accountVisible($0.displayAccountID) }
@@ -114,7 +116,7 @@ public struct ReportView: Sendable {
             if groups[vendor] == nil { order.append(vendor) }
             groups[vendor, default: []].append(row)
         }
-        let index = Index(report: report, agents: agents, approvals: approvals, hookTurns: hookTurns)
+        let index = Index(report: report, agents: agents, approvals: approvals, waiting: waiting, hookTurns: hookTurns)
         self.failure = failure
         self.report = report
         self.settings = settings
@@ -349,7 +351,8 @@ public struct ReportView: Sendable {
         let hooks: [String: SessionPhase.HookTurn]
 
         /// A vendor comes from the consumers, then the settings rows, then the report's own rows.
-        init(report: UsageReport?, agents: [AgentDescriptor], approvals: [PermissionRequest], hookTurns: [String: SessionPhase.HookTurn]) {
+        init(report: UsageReport?, agents: [AgentDescriptor], approvals: [PermissionRequest], waiting: [String: Date] = [:],
+             hookTurns: [String: SessionPhase.HookTurn]) {
             hooks = hookTurns
             for agent in (report?.consumers ?? []) + agents + (report?.discoveredAgents ?? []) where vendors[agent.id] == nil {
                 vendors[agent.id] = agent.vendor
@@ -362,6 +365,7 @@ public struct ReportView: Sendable {
             for request in approvals where request.at > requests[request.sessionID] ?? .distantPast {
                 requests[request.sessionID] = request.at
             }
+            for (session, since) in waiting where since > requests[session] ?? .distantPast { requests[session] = since }
         }
     }
 

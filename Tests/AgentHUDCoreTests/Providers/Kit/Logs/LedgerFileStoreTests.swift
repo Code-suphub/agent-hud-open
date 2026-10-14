@@ -10,7 +10,7 @@ final class LedgerFileStoreTests: XCTestCase, @unchecked Sendable {
         static let summaryKey = "keys"
         static let version = 1
         static func summary(for url: URL) -> [String] { [] }
-        static func ingest(_ lines: Data, into keys: inout [String]) -> [UsageLedger.Event] {
+        static func ingest(_ lines: Data, at offset: Int, into keys: inout [String]) -> [UsageLedger.Event] {
             lines.split(separator: 0x0A).map { line in
                 let parts = String(decoding: line, as: UTF8.self).split(separator: " ").map(String.init)
                 keys.append(parts[0])
@@ -25,8 +25,8 @@ final class LedgerFileStoreTests: XCTestCase, @unchecked Sendable {
         static let summaryKey = Requests.summaryKey
         static let version = 2
         static func summary(for url: URL) -> [String] { [] }
-        static func ingest(_ lines: Data, into keys: inout [String]) -> [UsageLedger.Event] {
-            Requests.ingest(Data(lines.split(separator: 0x0A).filter { $0.first != UInt8(ascii: "x") }.joined(separator: [0x0A])), into: &keys)
+        static func ingest(_ lines: Data, at offset: Int, into keys: inout [String]) -> [UsageLedger.Event] {
+            Requests.ingest(Data(lines.split(separator: 0x0A).filter { $0.first != UInt8(ascii: "x") }.joined(separator: [0x0A])), at: offset, into: &keys)
         }
     }
 
