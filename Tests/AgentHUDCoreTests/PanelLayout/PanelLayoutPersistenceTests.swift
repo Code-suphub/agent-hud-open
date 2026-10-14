@@ -62,10 +62,12 @@ final class PanelLayoutPersistenceTests: XCTestCase {
 
         // A side written by a newer build loses only what this build does not know, and is read normalized.
         let newer = load("""
-            {"current": {"blocks": {"Claude": {"widget": "gauge", "measure": "cost"}, "Codex": {}}, "order": ["a", "a"]},
+            {"current": {"blocks": {"Claude": {"widget": "gauge", "measures": ["cost", "pace"], "columns": 8}, "Codex": {}},
+                         "order": ["a", "a"], "style": {"spacing": "airy", "separators": false}},
              "previous": {"sections": ["weather", "sessions"]}, "next": {}}
             """)
-        XCTAssertEqual(newer.current, PanelLayout(blocks: ["Claude": PanelLayout.Block(measure: .cost)], order: ["a"]))
+        XCTAssertEqual(newer.current, PanelLayout(blocks: ["Claude": PanelLayout.Block(measures: [.cost])], order: ["a"],
+                                                  style: PanelStyle(separators: false)))
         XCTAssertEqual(newer.previous, PanelLayout(sections: [.sessions, .blocks, .tokens]))
 
         for unreadable in ["", "not json", "[]", #""{}""#, "{"] {

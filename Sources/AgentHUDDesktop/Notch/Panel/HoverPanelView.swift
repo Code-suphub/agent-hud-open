@@ -10,8 +10,8 @@ struct PanelHeightKey: PreferenceKey {
     }
 }
 
-/// The agents' blocks, a compact token chart and the local session summary, as this Mac's panel layout arranges them:
-/// by default the quota rows, then the chart, then the sessions.
+/// The agents' blocks, a compact token chart and the local session summary, as this Mac's panel layout arranges and
+/// sets them: by default the quota rows, then the chart, then the sessions, at regular spacing with dividers between.
 struct HoverPanelView: View {
     let store: UsageStore
     let onOpenStats: () -> Void
@@ -52,7 +52,8 @@ struct HoverPanelView: View {
     }
 
     let theme = Theme.island
-    private let spacing: CGFloat = 10
+    /// Above the draft bar and the footer, which keep their room whatever the layout's spacing.
+    private let footerSpacing: CGFloat = 10
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var layout: PanelLayoutStore { store.settings.panelLayout }
@@ -72,8 +73,8 @@ struct HoverPanelView: View {
             }
         }
 
-        /// A block that asks for another widget, or another measure first, is another view: its picker starts again.
-        var id: String { "\(plan.key)|\(plan.widget.rawValue)|\(plan.measure.rawValue)" }
+        /// A block that asks for another widget, or other measures, is another view: its picker starts again.
+        var id: String { "\(plan.key)|\(plan.widget.rawValue)|" + plan.measures.map(\.rawValue).joined(separator: ",") }
         var isQuota: Bool { plan.kind == .quota }
     }
 
@@ -102,14 +103,14 @@ struct HoverPanelView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: spacing) {
+        VStack(alignment: .leading, spacing: footerSpacing) {
             if height != nil {
                 ScrollView(.vertical) { measuredContent }
             } else {
                 measuredContent
             }
             // An unsaved layout is said above the footer, outside the scrolling content, and counts in the height.
-            VStack(alignment: .leading, spacing: spacing) {
+            VStack(alignment: .leading, spacing: footerSpacing) {
                 if layout.hasDraft {
                     PanelDraftBar(layout: layout).transition(.opacity)
                 }
@@ -118,7 +119,7 @@ struct HoverPanelView: View {
             .fixedSize(horizontal: false, vertical: true)
             .background(GeometryReader { proxy in
                 Color.clear.preference(key: PanelHeightKey.self,
-                                       value: proxy.size.height + insets.top + insets.bottom + spacing)
+                                       value: proxy.size.height + insets.top + insets.bottom + footerSpacing)
             })
         }
         .padding(insets)
@@ -144,7 +145,9 @@ struct HoverPanelView: View {
         // A quota block names its agent; where none is drawn, the panel still has to say whose it is.
         let titled = focusVendor != nil && !(sections.contains(.blocks) && blocks.contains(where: \.isQuota))
         let hasHeader = store.lastError != nil || inlineAlert || titled
-        return VStack(alignment: .leading, spacing: spacing) {
+        let spacing = PanelSpacingMetrics(plan.style.spacing)
+        let divider = plan.style.separators ? theme.divider : Color.clear
+        return VStack(alignment: .leading, spacing: spacing.sections) {
             if let error = store.lastError {
                 Text(L10n.text("刷新失败：", "Refresh failed: ") + error)
                     .font(.ui(11)).foregroundStyle(theme.secondary)
@@ -163,40 +166,42 @@ struct HoverPanelView: View {
             ForEach(Array(sections.enumerated()), id: \.element) { index, section in
                 switch section {
                 case .blocks:
-                    blockList(blocks, separated: index > 0)
+                    blockList(blocks, separated: index > 0, spacing: spacing, divider: divider)
                 case .tokens:
                     TokenConsumptionChart(store: store, theme: theme, context: .island, modelFilter: tokenFilter,
                                           compact: true, onOpenStats: onOpenStats)
                         // The chart keeps its filter as state, so another agent's panel is another chart.
                         .id(focusVendor)
-                        .padding(.top, 8)
-                        .topDivider(theme.divider)
+                        .padding(.top, spacing.divided)
+                        .topDivider(divider)
                 case .sessions:
-                    sessionLine(hasAbove: index > 0 || hasHeader)
+                    sessionLine(hasAbove: index > 0 || hasHeader, spacing: spacing, divider: divider)
                 }
             }
         }
+        .environment(\.panelSpacing, spacing)
     }
 
     /// The blocks in the layout's order. A quota block comes under a divider unless it is the first, which has one only
     /// below another section. An API account's card is always under its own divider, the first one too, as it has been
-    /// since before there were layouts, so a panel of balances alone is the panel it was.
-    private func blockList(_ blocks: [Block], separated: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    /// since before there were layouts, so a panel of balances alone is the panel it was. Without separators each
+    /// divider's room stays and its line goes.
+    private func blockList(_ blocks: [Block], separated: Bool, spacing: PanelSpacingMetrics, divider: Color) -> some View {
+        VStack(alignment: .leading, spacing: spacing.blocks) {
             ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
                 Group {
                     switch block {
                     case .quota(let plan, let rows):
                         let divided = index > 0 || separated
                         ProviderQuotaBlock(store: store, rows: rows, plan: plan)
-                            .padding(.top, divided ? 8 : 0)
-                            .topDivider(divided ? theme.divider : .clear)
+                            .padding(.top, divided ? spacing.divided : 0)
+                            .topDivider(divided ? divider : .clear)
                     case .billing(_, let accounts):
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: spacing.blocks) {
                             ForEach(accounts) { account in
                                 APIBillingCard(billing: account, store: store, theme: theme, compact: true)
-                                    .padding(.top, 8)
-                                    .topDivider(theme.divider)
+                                    .padding(.top, spacing.divided)
+                                    .topDivider(divider)
                             }
                         }
                     }

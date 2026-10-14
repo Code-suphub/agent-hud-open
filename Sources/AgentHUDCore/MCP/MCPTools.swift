@@ -46,24 +46,33 @@ public enum MCPTools {
     private static var layout: JSONValue {
         let key: JSONValue = .object(["type": .string("string")])
         let section = text("One of the panel's sections.", oneOf: ["blocks", "tokens", "sessions"])
+        let measure: JSONValue = .object(["type": .string("string"), "enum": names(PanelMeasure.allCases.map(\.rawValue))])
         let block = object([
             "widget": text("How the block is drawn: bar rows, a ring, a number or a chart.",
                            oneOf: ["bar", "ring", "number", "chart"]),
-            "measure": text("The measure the block shows first: quota (an API account's balance), burn-down, tokens or cost.",
-                            oneOf: ["quota", "burn", "tokens", "cost"]),
+            "measures": list("What its picker offers, in order, the first shown first: quota (an API account's balance), burn, "
+                             + "tokens, cost. One means no picker; none means all its widget offers.", of: measure),
             "hidden": described("boolean", "True hides the block."),
             "hiddenRows": list("Keys of the block's rows to hide, from get_panel.", of: key),
+            "countdown": described("boolean", "False hides a quota block's reset times."),
+            "columns": described("integer", "Cells on a line for the ring and number widgets, 2 to 6; 4 if left out."),
+            "ringSize": text("Ring size for the ring widget; medium if left out.", oneOf: ["small", "medium", "large"]),
         ])
         let blocks: [String: JSONValue] = [
             "type": .string("object"),
             "additionalProperties": block,
             "description": .string("What differs from the default for each block, by block key from get_panel."),
         ]
+        let style = object([
+            "spacing": text("Room between sections, blocks and rows; regular if left out.", oneOf: ["compact", "regular", "roomy"]),
+            "separators": described("boolean", "False drops the lines between blocks and sections."),
+        ], description: "How the whole panel is set.")
         return object([
             "blocks": .object(blocks),
             "order": list("Block keys from get_panel, in the order the panel shows them.", of: key),
             "sections": list("The panel's sections, in the order it shows them.", of: section),
             "hiddenSections": list("The panel's sections to hide.", of: section),
+            "style": style,
             "from": text("Propose the built-in layout or the last saved one instead of the one described here.",
                          oneOf: ["default", "previous"]),
             "revision": described("integer", "The revision get_panel returned; when given and no longer current the call is refused."),
@@ -84,9 +93,10 @@ public enum MCPTools {
     }
 
     /// The schema of an object that has `properties`, all optional, and no others.
-    private static func object(_ properties: [String: JSONValue]) -> JSONValue {
+    private static func object(_ properties: [String: JSONValue], description: String? = nil) -> JSONValue {
         var schema: [String: JSONValue] = ["type": .string("object"), "additionalProperties": .bool(false)]
         if !properties.isEmpty { schema["properties"] = .object(properties) }
+        if let description { schema["description"] = .string(description) }
         return .object(schema)
     }
 
@@ -95,8 +105,10 @@ public enum MCPTools {
     }
 
     private static func text(_ description: String, oneOf values: [String]) -> JSONValue {
-        .object(["type": .string("string"), "enum": .array(values.map(JSONValue.string)), "description": .string(description)])
+        .object(["type": .string("string"), "enum": names(values), "description": .string(description)])
     }
+
+    private static func names(_ values: [String]) -> JSONValue { .array(values.map(JSONValue.string)) }
 
     private static func list(_ description: String, of items: JSONValue) -> JSONValue {
         .object(["type": .string("array"), "items": items, "description": .string(description)])

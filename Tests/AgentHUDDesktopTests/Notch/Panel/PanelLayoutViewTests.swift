@@ -39,8 +39,13 @@ final class PanelLayoutViewTests: XCTestCase {
             .fittingSize.height
     }
 
-    private func every(_ widget: PanelWidget, _ measure: PanelMeasure? = nil) -> PanelLayout {
-        PanelLayout(blocks: Dictionary(uniqueKeysWithValues: quotaKeys.map { ($0, PanelLayout.Block(widget: widget, measure: measure)) }))
+    /// Every quota block drawn with `widget`, its picker offering every measure the widget offers with `measure` first.
+    private func every(_ widget: PanelWidget, first measure: PanelMeasure? = nil) -> PanelLayout {
+        let offered = PanelBlockKind.quota.measures(under: widget)
+        let measures: [PanelMeasure] = measure.map { first in [first] + offered.filter { $0 != first } } ?? []
+        return PanelLayout(blocks: Dictionary(uniqueKeysWithValues: quotaKeys.map {
+            ($0, PanelLayout.Block(widget: widget, measures: measures))
+        }))
     }
 
     /// The saved layout becomes `layout`, whatever was saved before.
@@ -60,7 +65,7 @@ final class PanelLayoutViewTests: XCTestCase {
     func testAWidgetIsAsTallInEveryMeasure() {
         for widget in PanelBlockKind.quota.widgets {
             let heights = PanelBlockKind.quota.measures(under: widget).map { measure -> CGFloat in
-                keep(every(widget, measure))
+                keep(every(widget, first: measure))
                 return height()
             }
             XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5, "\(widget) \(heights)")
@@ -71,7 +76,7 @@ final class PanelLayoutViewTests: XCTestCase {
         let bars = height()
         keep(every(.bar))
         XCTAssertEqual(height(), bars, accuracy: 0.5, "bars are the default view of a quota block")
-        keep(every(.number, .cost))
+        keep(every(.number, first: .cost))
         XCTAssertFalse(layout.current.isDefault)
         layout.reset()
         XCTAssertEqual(height(), bars, accuracy: 0.5)

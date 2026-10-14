@@ -73,18 +73,30 @@ final class MCPToolsTests: XCTestCase {
     func testTheLayoutToolTakesTheLayoutAndNothingElse() throws {
         let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("set_panel_layout") })["inputSchema"]
         let properties = try XCTUnwrap(schema["properties"].objectValue)
-        XCTAssertEqual(properties.keys.sorted(), ["blocks", "from", "hiddenSections", "order", "revision", "sections"])
+        XCTAssertEqual(properties.keys.sorted(), ["blocks", "from", "hiddenSections", "order", "revision", "sections", "style"])
         XCTAssertNil(schema.objectValue?["required"], "every property is optional")
         func choices(_ node: JSONValue) -> [String] { node["enum"].arrayValue?.compactMap(\.stringValue) ?? [] }
 
         let block = schema["properties"]["blocks"]["additionalProperties"]
         XCTAssertEqual(schema["properties"]["blocks"]["type"], .string("object"))
         XCTAssertEqual(block["additionalProperties"], .bool(false))
-        XCTAssertEqual(block["properties"].objectValue?.keys.sorted(), ["hidden", "hiddenRows", "measure", "widget"])
+        XCTAssertEqual(block["properties"].objectValue?.keys.sorted(),
+                       ["columns", "countdown", "hidden", "hiddenRows", "measures", "ringSize", "widget"])
         XCTAssertEqual(choices(block["properties"]["widget"]), ["bar", "ring", "number", "chart"])
-        XCTAssertEqual(choices(block["properties"]["measure"]), ["quota", "burn", "tokens", "cost"])
+        XCTAssertEqual(block["properties"]["measures"]["type"], .string("array"))
+        XCTAssertEqual(choices(block["properties"]["measures"]["items"]), ["quota", "burn", "tokens", "cost"])
         XCTAssertEqual(block["properties"]["hidden"]["type"], .string("boolean"))
         XCTAssertEqual(block["properties"]["hiddenRows"]["items"], .object(["type": .string("string")]))
+        XCTAssertEqual(block["properties"]["countdown"]["type"], .string("boolean"))
+        XCTAssertEqual(block["properties"]["columns"]["type"], .string("integer"))
+        XCTAssertEqual(choices(block["properties"]["ringSize"]), ["small", "medium", "large"])
+
+        let style = schema["properties"]["style"]
+        XCTAssertEqual(style["type"], .string("object"))
+        XCTAssertEqual(style["additionalProperties"], .bool(false))
+        XCTAssertEqual(style["properties"].objectValue?.keys.sorted(), ["separators", "spacing"])
+        XCTAssertEqual(choices(style["properties"]["spacing"]), ["compact", "regular", "roomy"])
+        XCTAssertEqual(style["properties"]["separators"]["type"], .string("boolean"))
 
         XCTAssertEqual(schema["properties"]["order"]["items"], .object(["type": .string("string")]))
         for name in ["sections", "hiddenSections"] {
@@ -93,6 +105,18 @@ final class MCPToolsTests: XCTestCase {
         }
         XCTAssertEqual(choices(schema["properties"]["from"]), ["default", "previous"])
         XCTAssertEqual(schema["properties"]["revision"]["type"], .string("integer"))
+    }
+
+    /// The names the schema offers are the names the layout reads, so an agent is never offered one that is refused.
+    func testTheSchemaOffersTheNamesTheLayoutReads() throws {
+        let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("set_panel_layout") })["inputSchema"]
+        func choices(_ node: JSONValue) -> [String] { node["enum"].arrayValue?.compactMap(\.stringValue) ?? [] }
+        let block = schema["properties"]["blocks"]["additionalProperties"]["properties"]
+        XCTAssertEqual(choices(block["widget"]), PanelWidget.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(block["measures"]["items"]), PanelMeasure.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(block["ringSize"]), PanelRingSize.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(schema["properties"]["style"]["properties"]["spacing"]), PanelSpacing.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(schema["properties"]["sections"]["items"]), PanelSection.allCases.map(\.rawValue))
     }
 
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {

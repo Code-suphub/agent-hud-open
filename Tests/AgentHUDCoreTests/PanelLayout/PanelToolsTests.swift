@@ -5,65 +5,7 @@ import XCTest
 
 /// What the MCP tools do in the application, over the sample's panel: Claude and Codex quota blocks and DeepSeek's
 /// balance.
-@MainActor
-final class PanelToolsTests: XCTestCase {
-    private let suite = "app.agenthud.tests.panel-tools.\(UUID().uuidString)"
-    private var changes = 0
-    /// The sample's store over settings of its own, made when a test first reaches for either.
-    private lazy var store: UsageStore = {
-        let suite = suite
-        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
-        let settings = SettingsStore(defaults: UserDefaults(suiteName: suite)!, defaultAgents: DemoData.agents)
-        let store = UsageStore(provider: DemoUsageProvider(), settings: settings, clock: { DemoClock.now })
-        store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: 48, now: DemoClock.now, stage: nil))
-        // In place of the store's own listener, which would wake collection: the tests count what the settings say.
-        settings.onChange = { [weak self] _ in self?.changes += 1 }
-        return store
-    }()
-    private var settings: SettingsStore { store.settings }
-    /// Revisions counted from 0, so that the tests can name them; the application's own start from a drawn number.
-    private lazy var tools = PanelTools(store: store, launch: 0)
-
-    override func setUp() {
-        super.setUp()
-        L10n.setLanguage(.en)
-    }
-
-    override func tearDown() {
-        L10n.setLanguage(.system)
-        super.tearDown()
-    }
-
-    private var layout: PanelLayoutStore { settings.panelLayout }
-
-    private func result(_ tool: String, _ arguments: [String: JSONValue] = [:], line: UInt = #line) throws -> [String: JSONValue] {
-        guard case .result(let result) = tools.answer(MCPToolRequest(tool: tool, arguments: arguments)) else {
-            XCTFail("\(tool) was refused", line: line)
-            throw CancellationError()
-        }
-        return result
-    }
-
-    private func refusal(_ arguments: [String: JSONValue], line: UInt = #line) throws -> String {
-        let before = (layout.revision, layout.draft)
-        guard case .failure(let sentence) = tools.answer(MCPToolRequest(tool: MCPTools.setPanelLayout, arguments: arguments)) else {
-            XCTFail("the proposal was taken", line: line)
-            throw CancellationError()
-        }
-        XCTAssertEqual(layout.revision, before.0, "a refused proposal changes nothing", line: line)
-        XCTAssertEqual(layout.draft, before.1, line: line)
-        XCTAssertTrue(sentence.hasPrefix("Nothing was changed. "), sentence, line: line)
-        return sentence
-    }
-
-    private func blocks(_ panel: [String: JSONValue]) -> [[String: JSONValue]] {
-        (panel["blocks"]?.arrayValue ?? []).compactMap(\.objectValue)
-    }
-
-    private func block(_ key: String, in panel: [String: JSONValue]) throws -> [String: JSONValue] {
-        try XCTUnwrap(blocks(panel).first { $0["key"] == .string(key) })
-    }
-
+final class PanelToolsTests: PanelToolsCase {
     // MARK: Reading
 
     func testThePanelIsReadWithItsBlocksRowsAndWhatEachAccepts() throws {
@@ -72,6 +14,8 @@ final class PanelToolsTests: XCTestCase {
         XCTAssertEqual(panel["unsaved"], .bool(false))
         XCTAssertEqual(panel["hasPrevious"], .bool(false))
         XCTAssertEqual(panel["layout"], .object([:]))
+        XCTAssertEqual(panel["style"], .object(["spacing": .string("regular"), "separators": .bool(true)]))
+        XCTAssertEqual(panel["countdownOnInSettings"], .bool(true))
         XCTAssertNil(panel["note"])
         XCTAssertEqual(blocks(panel).map { $0["key"] }, [.string("Claude"), .string("Codex"), .string("api:DeepSeek")])
         XCTAssertEqual(panel["sections"]?.arrayValue?.compactMap { $0.objectValue?["key"]?.stringValue }, ["blocks", "tokens", "sessions"])
@@ -80,9 +24,13 @@ final class PanelToolsTests: XCTestCase {
         XCTAssertEqual(claude["kind"], .string("quota"))
         XCTAssertEqual(claude["shown"], .bool(true))
         XCTAssertEqual(claude["widget"], .string("bar"))
-        XCTAssertEqual(claude["measure"], .string("quota"))
         XCTAssertEqual(claude["widgets"], .array(["bar", "ring", "number", "chart"].map(JSONValue.string)))
         XCTAssertEqual(claude["measures"], .array(["quota", "burn", "tokens", "cost"].map(JSONValue.string)))
+        XCTAssertEqual(claude["offeredMeasures"], .array(["quota", "burn", "tokens", "cost"].map(JSONValue.string)))
+        XCTAssertEqual(claude["countdown"], .bool(true))
+        XCTAssertNil(claude["measure"], "the measure shown first is the first of measures")
+        XCTAssertNil(claude["columns"], "bars have no cells")
+        XCTAssertNil(claude["ringSize"])
         let rows = (claude["rows"]?.arrayValue ?? []).compactMap(\.objectValue)
         XCTAssertEqual(rows.map { $0["key"] }, [.string("claude-session"), .string("claude-weekly"), .string("claude-weekly-fable")])
         let session = try XCTUnwrap(rows.first)
@@ -95,6 +43,11 @@ final class PanelToolsTests: XCTestCase {
         let deepseek = try block("api:DeepSeek", in: panel)
         XCTAssertEqual(deepseek["kind"], .string("billing"))
         XCTAssertEqual(deepseek["widgets"], .array([.string("number")]))
+        XCTAssertEqual(deepseek["measures"], .array([.string("quota")]))
+        XCTAssertEqual(deepseek["offeredMeasures"], .array([.string("quota")]))
+        for property in ["countdown", "columns", "ringSize"] {
+            XCTAssertNil(deepseek[property], "a balance has no \(property) to set")
+        }
         let balance = try XCTUnwrap(deepseek["balances"]?.arrayValue?.first?.objectValue)
         XCTAssertEqual(balance["currency"], .string("CNY"))
         XCTAssertEqual(balance["amount"], .string("8.85"))
@@ -142,7 +95,7 @@ final class PanelToolsTests: XCTestCase {
         let agents = settings.agents
         changes = 0
         let panel = try result(MCPTools.setPanelLayout, [
-            "blocks": .object(["Claude": .object(["widget": .string("ring"), "measure": .string("burn"),
+            "blocks": .object(["Claude": .object(["widget": .string("ring"), "measures": .array([.string("burn"), .string("quota")]),
                                                   "hiddenRows": .array([.string("claude-weekly-fable")])]),
                                "api:DeepSeek": .object(["hidden": .bool(true)])]),
             "order": .array([.string("Codex")]), "hiddenSections": .array([.string("tokens")]),
@@ -160,7 +113,10 @@ final class PanelToolsTests: XCTestCase {
                        "shown blocks in the layout's order, then the hidden ones")
         let claude = try block("Claude", in: panel)
         XCTAssertEqual(claude["widget"], .string("ring"))
-        XCTAssertEqual(claude["measure"], .string("burn"))
+        XCTAssertEqual(claude["measures"], .array([.string("burn"), .string("quota")]))
+        XCTAssertEqual(claude["offeredMeasures"], .array(["quota", "burn", "tokens", "cost"].map(JSONValue.string)))
+        XCTAssertEqual(claude["columns"], .integer(4))
+        XCTAssertEqual(claude["ringSize"], .string("medium"))
         let fable = try XCTUnwrap(claude["rows"]?.arrayValue?.compactMap(\.objectValue).first { $0["key"] == .string("claude-weekly-fable") })
         XCTAssertEqual(fable["shown"], .bool(false))
         XCTAssertEqual(try block("api:DeepSeek", in: panel)["shown"], .bool(false))
@@ -181,8 +137,10 @@ final class PanelToolsTests: XCTestCase {
         let everyKey = JSONValue.array(["Claude", "Codex", "api:DeepSeek"].map(JSONValue.string))
         let spelled = try result(MCPTools.setPanelLayout, [
             "order": everyKey,
-            "blocks": .object(["Claude": .object(["widget": .string("bar"), "measure": .string("quota"), "hidden": .bool(false)]),
+            "blocks": .object(["Claude": .object(["widget": .string("bar"), "measures": .array(["quota", "burn", "tokens", "cost"].map(JSONValue.string)),
+                                                  "hidden": .bool(false), "countdown": .bool(true)]),
                                "api:DeepSeek": .object(["widget": .string("number")])]),
+            "style": .object(["spacing": .string("regular"), "separators": .bool(true)]),
         ])
         XCTAssertEqual(spelled["unsaved"], .bool(false))
         XCTAssertTrue(spelled["note"]?.stringValue?.contains("already saved") == true)
@@ -195,7 +153,7 @@ final class PanelToolsTests: XCTestCase {
                        "a draft holds only what it changes")
         layout.save()
         let again = try result(MCPTools.setPanelLayout, [
-            "blocks": .object(["Codex": .object(["widget": .string("ring"), "measure": .string("quota")]),
+            "blocks": .object(["Codex": .object(["widget": .string("ring"), "columns": .integer(4), "ringSize": .string("medium")]),
                                "Claude": .object(["widget": .string("bar")])]),
             "order": .array(["Codex", "Claude", "api:DeepSeek"].map(JSONValue.string)),
         ])
@@ -234,7 +192,7 @@ final class PanelToolsTests: XCTestCase {
 
         // Changing what is held for a block that is away is asking for something the panel cannot weigh.
         var rewritten = changed
-        rewritten["blocks"] = .object(["Codex": .object(["widget": .string("chart"), "measure": .string("cost")])])
+        rewritten["blocks"] = .object(["Codex": .object(["widget": .string("chart"), "measures": .array([.string("tokens")])])])
         XCTAssertTrue(try refusal(rewritten).contains("blocks.Codex: No block has the key \"Codex\" now. The layout holds it"))
         XCTAssertTrue(try refusal(["blocks": .object(["Claude": .object(["hiddenRows": .array([.string("claude-monthly")])])])])
             .contains("blocks.Claude.hiddenRows[0]:"))
@@ -304,13 +262,14 @@ final class PanelToolsTests: XCTestCase {
     func testAProposalThePanelCannotDoAsAskedIsRefusedWholeWithEveryReason() throws {
         let unknown = try refusal(["block": .object([:])])
         XCTAssertTrue(unknown.contains("Unknown: \"block\""), unknown)
-        let names = try refusal(["blocks": .object(["Claude": .object(["widget": .string("gauge"), "measure": .string("speed"),
-                                                                     "hide": .bool(true), "hidden": .string("yes")])]),
+        let names = try refusal(["blocks": .object(["Claude": .object(["widget": .string("gauge"), "measures": .array([.string("speed"), .integer(2)]),
+                                                                     "hide": .bool(true), "hidden": .string("yes"), "measure": .string("burn")])]),
                                  "sections": .array([.string("weather")]), "order": .string("Codex")])
         for part in ["blocks.Claude.widget is one of \"bar\", \"ring\", \"number\", \"chart\"",
-                     "blocks.Claude.measure is one of \"quota\", \"burn\", \"tokens\", \"cost\"",
-                     "blocks.Claude has no property \"hide\"", "blocks.Claude.hidden is true or false",
-                     "sections[0]: \"weather\" is not one of", "order is a list"] {
+                     "blocks.Claude.measures[0]: \"speed\" is not one of \"quota\", \"burn\", \"tokens\", \"cost\"",
+                     "blocks.Claude.measures[1] is a string", "blocks.Claude has no property \"hide\"",
+                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, countdown, columns and ringSize.",
+                     "blocks.Claude.hidden is true or false", "sections[0]: \"weather\" is not one of", "order is a list"] {
             XCTAssertTrue(names.contains(part), "\(part) — \(names)")
         }
         let rules = try refusal(["blocks": .object(["api:DeepSeek": .object(["widget": .string("ring")]),
@@ -322,9 +281,9 @@ final class PanelToolsTests: XCTestCase {
         }
         // Both kinds in one answer: a name that would be forgiven, and what the rest asks that the panel cannot do.
         let both = try refusal(["blocks": .object(["Claude": .object(["widget": .string("gauge")]),
-                                                   "api:DeepSeek": .object(["measure": .string("cost")])]),
+                                                   "api:DeepSeek": .object(["measures": .array([.string("cost")])])]),
                                 "order": .array([.string("Zed")])])
-        for part in ["blocks.Claude.widget is one of", "blocks.api:DeepSeek.measure:", "order[0]: No block has the key \"Zed\""] {
+        for part in ["blocks.Claude.widget is one of", "blocks.api:DeepSeek.measures[0]:", "order[0]: No block has the key \"Zed\""] {
             XCTAssertTrue(both.contains(part), "\(part) — \(both)")
         }
     }

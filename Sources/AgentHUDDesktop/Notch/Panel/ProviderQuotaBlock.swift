@@ -68,14 +68,16 @@ struct IslandQuotaMetricPicker: View {
     }
 }
 
-/// One independently switchable provider block, drawn by the widget its plan names. Refreshes keep its selected
-/// measure because the vendor is its identity; the panel gives it a new identity when its plan asks for another widget
-/// or another measure first, and the picker starts from that measure again.
+/// One independently switchable provider block, drawn by the widget its plan names, with a picker over the measures
+/// the plan offers where there is more than one. Refreshes keep its selected measure because the vendor is its
+/// identity; the panel gives it a new identity when its plan asks for another widget or other measures, and the picker
+/// starts from the first of them again.
 struct ProviderQuotaBlock: View {
     let store: UsageStore
     let rows: [AgentRow]
     let plan: PanelBlockPlan
     @State private var metric: PanelMeasure
+    @Environment(\.panelSpacing) private var spacing
     private let theme = Theme.island
 
     init(store: UsageStore, rows: [AgentRow], plan: PanelBlockPlan) {
@@ -88,13 +90,16 @@ struct ProviderQuotaBlock: View {
     /// A quota block's key is its vendor's id.
     private var vendor: String { plan.key }
 
+    /// Whether the block shows reset times: where Settings shows them and the layout does not hide them here.
+    private var showsCountdown: Bool { store.settings.settings.showResetCountdown && plan.countdown }
+
     var body: some View {
         // A chart draws the models this vendor's windows count in place of the windows: their tokens over the panel's
         // last day, in the quarter hours and the colours of the panel's own token chart.
         let charted = plan.widget == .chart
         let chartConsumers: [AgentDescriptor] = charted ? store.consumers.filter { $0.displayVendor == vendor } : []
         let chartColumns: [TokenColumn] = charted ? store.hudTokenColumns(consumerIDs: Set(chartConsumers.map(\.id))) : []
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: spacing.blockParts) {
             HStack(spacing: 6) {
                 AgentLogo(vendor: vendor, size: 14)
                     .frame(width: IslandRowLayout.inset * 2 + IslandRowLayout.markerWidth)
@@ -140,7 +145,7 @@ struct ProviderQuotaBlock: View {
                             .opacity(section.isCurrent ? 1 : 0.55)
                     }
                     if let resets {
-                        CodexResetCreditsView(resets: resets, showExpiry: store.settings.settings.showResetCountdown)
+                        CodexResetCreditsView(resets: resets, showExpiry: showsCountdown)
                     }
                 }
             }
@@ -150,7 +155,7 @@ struct ProviderQuotaBlock: View {
                                consumers: chartConsumers, theme: theme, isLoading: store.report == nil, compact: true)
                     .frame(height: 40)
                     .padding(.horizontal, IslandRowLayout.inset)
-                    .padding(.top, 4)
+                    .padding(.top, spacing.chartTop)
             }
         }
     }
@@ -158,12 +163,13 @@ struct ProviderQuotaBlock: View {
     /// An account's quota windows as the block's widget draws them.
     @ViewBuilder
     private func windows(_ rows: [AgentRow]) -> some View {
-        let showReset = store.settings.settings.showResetCountdown
+        let showReset = showsCountdown
         switch plan.widget {
         case .ring, .number:
-            QuotaCellGrid(rows: rows) { row in
+            QuotaCellGrid(rows: rows, columns: plan.columns) { row in
                 QuotaCell(row: row, metrics: metrics(row), metric: metric, style: plan.widget == .ring ? .ring : .number,
-                          showReset: showReset, forecastHint: store.quotaForecastHint(for: row.id), isLoading: store.isLoading)
+                          showReset: showReset, forecastHint: store.quotaForecastHint(for: row.id), isLoading: store.isLoading,
+                          ringSize: plan.ringSize)
             }
         case .chart:
             // The chart under the accounts stands for the windows.

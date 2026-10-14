@@ -7,31 +7,43 @@ public struct PanelBlockPlan: Hashable, Sendable {
     /// The widget that draws the block: the one the layout asks for where the block's kind accepts it, else the kind's
     /// default.
     public let widget: PanelWidget
-    /// The measure the block shows first: the one the layout asks for where `widget` offers it, else the widget's
-    /// default.
-    public let measure: PanelMeasure
-    /// The measures the block's picker offers under `widget`, in picker order.
+    /// The measures the block's picker offers, in picker order: those the layout lists that `widget` offers, else every
+    /// one it offers. A block with one measure has no picker.
     public let measures: [PanelMeasure]
     /// The rows of the block that are left out, by row key. Never all of them: such a block is left out whole.
     public let hiddenRows: Set<String>
+    /// Whether the layout lets the block show its reset times; false only where it hides a quota block's countdown.
+    /// The Settings switch still decides whether any is shown.
+    public let countdown: Bool
+    /// How many cells stand on a line where the block is drawn in cells: the layout's columns, else four. Four for a
+    /// block without cells.
+    public let columns: Int
+    /// The size of the block's rings where it is drawn with rings: the layout's, else medium. Medium for a block without
+    /// rings.
+    public let ringSize: PanelRingSize
 
-    public init(key: String, kind: PanelBlockKind, widget: PanelWidget, measure: PanelMeasure, measures: [PanelMeasure],
-                hiddenRows: Set<String> = []) {
+    /// The measure shown first when the panel opens: the first one offered.
+    public var measure: PanelMeasure { measures.first ?? .quota }
+
+    public init(key: String, kind: PanelBlockKind, widget: PanelWidget, measures: [PanelMeasure], hiddenRows: Set<String> = [],
+                countdown: Bool = true, columns: Int = 4, ringSize: PanelRingSize = .medium) {
         self.key = key
         self.kind = kind
         self.widget = widget
-        self.measure = measure
         self.measures = measures
         self.hiddenRows = hiddenRows
+        self.countdown = countdown
+        self.columns = columns
+        self.ringSize = ringSize
     }
 }
 
-/// A layout resolved against the blocks the hover panel has now: what the panel shows, in order. A layout can only
-/// hide and reorder what exists and choose how it is drawn; what it names that does not exist is passed over here and
-/// stays in the document.
+/// A layout resolved against the blocks the hover panel has now: what the panel shows, in order, and how it is set. A
+/// layout can only hide and reorder what exists and choose how it is drawn; what it names that does not exist is
+/// passed over here and stays in the document.
 ///
 /// With the default layout the plan is the default view: every block in the order given, each with its kind's default
-/// widget and measure, and the three sections in their default order.
+/// widget and every measure that widget offers, the three sections in their default order, and the default style.
 public struct PanelLayoutPlan: Hashable, Sendable {
     /// The blocks shown, in order: those `PanelLayout.order` names first, in that order, then the others in default
     /// order. A block is left out when the layout hides it, or hides every row it has.
@@ -39,6 +51,8 @@ public struct PanelLayoutPlan: Hashable, Sendable {
     /// The sections shown, in order: those `PanelLayout.sections` names first, in that order, then the others in default
     /// order, without the hidden ones.
     public let sections: [PanelSection]
+    /// How the whole panel is set: the layout's style.
+    public let style: PanelStyle
 
     /// - blocks: the blocks the panel has, in default order (`ReportView.panelBlocks`).
     public init(layout: PanelLayout, blocks: [PanelBlockInfo]) {
@@ -51,6 +65,7 @@ public struct PanelLayoutPlan: Hashable, Sendable {
         }
         let hidden = Set(layout.hiddenSections)
         sections = (layout.sections + PanelSection.allCases).withoutRepeats.filter { !hidden.contains($0) }
+        style = layout.style
     }
 
     /// A block as a layout's change draws it; nil when the change leaves it out. A block without rows, such as a
@@ -65,11 +80,18 @@ public struct PanelLayoutPlan: Hashable, Sendable {
 
 extension PanelBlockPlan {
     /// How a layout's change draws a block, whether or not the change also leaves it out of the panel: what an agent
-    /// is told of a block it has hidden.
+    /// is told of a block it has hidden. What the block has nothing to set for is its default.
     init(_ block: PanelBlockInfo, changed change: PanelLayout.Block) {
-        let widget = block.kind.widget(for: change.widget)
-        self.init(key: block.key, kind: block.kind, widget: widget,
-                  measure: block.kind.measure(for: change.measure, under: widget),
-                  measures: block.kind.measures(under: widget), hiddenRows: Set(block.rowKeys).intersection(change.hiddenRows))
+        let kind = block.kind
+        let widget = kind.widget(for: change.widget)
+        var columns: Int = PanelLayout.Block.defaultColumns
+        if kind.takesColumns(under: widget), let asked = change.columns, PanelLayout.Block.columnRange.contains(asked) {
+            columns = asked
+        }
+        var ringSize: PanelRingSize = .medium
+        if kind.takesRingSize(under: widget), let asked = change.ringSize { ringSize = asked }
+        self.init(key: block.key, kind: kind, widget: widget, measures: kind.measures(change.measures, under: widget),
+                  hiddenRows: Set(block.rowKeys).intersection(change.hiddenRows),
+                  countdown: change.countdown || !kind.takesCountdown, columns: columns, ringSize: ringSize)
     }
 }

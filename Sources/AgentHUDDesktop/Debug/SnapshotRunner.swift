@@ -725,54 +725,13 @@ public enum SnapshotRunner {
         }
     }
 
-    /// The hover panel under layouts an agent might propose: each widget with each measure first, then an unsaved
-    /// draft that mixes widgets, reorders the blocks and hides a section. They are drawn from a settings store of their
-    /// own, with the preferences the other stills have at this point: a layout once saved leaves a previous one behind,
-    /// which every Settings still after these would show as something to revert to.
-    private static func saveLayouts(preferences: AgentHUDCore.Settings, folder: URL) {
-        if let prefix = ProcessInfo.processInfo.environment["AGENTHUD_SNAPSHOT_PREFIX"],
-           !"panel-layout".hasPrefix(prefix) && !prefix.hasPrefix("panel-layout") { return }
-        let suite = "app.agenthud.open.snapshot.layout"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
-        settings.update { $0 = preferences }
-        let store = demoStore(settings)
-        store.sampleTurnCalls = { DemoData.turnCalls(session: $0.id, turn: $1) }
-        store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: DemoClock.now))
-
-        let layout = settings.panelLayout
-        let quota = store.view.panelBlocks.filter { $0.kind == .quota }
-        func every(_ widget: PanelWidget, _ measure: PanelMeasure) -> PanelLayout {
-            PanelLayout(blocks: Dictionary(uniqueKeysWithValues: quota.map { ($0.key, PanelLayout.Block(widget: widget, measure: measure)) }))
-        }
-        for widget in PanelBlockKind.quota.widgets {
-            for measure in PanelBlockKind.quota.measures(under: widget) where !(widget == .bar && measure != .cost) {
-                layout.propose(every(widget, measure))
-                layout.save()
-                save("panel-layout-\(widget.rawValue)-\(measure.rawValue)",
-                     IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
-            }
-        }
-        layout.reset()
-        var blocks: [String: PanelLayout.Block] = [:]
-        if let first = quota.first { blocks[first.key] = PanelLayout.Block(widget: .ring) }
-        if let last = quota.last, quota.count > 1 { blocks[last.key] = PanelLayout.Block(widget: .number, measure: .burnRate) }
-        layout.propose(PanelLayout(blocks: blocks, order: quota.last.map { [$0.key] } ?? [], hiddenSections: [.tokens]))
-        save("panel-layout-draft", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
-        save("panel-layout-settings-dark", SettingsView(settings: settings, store: store, initialTab: .display)
-            .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark,
-             scrollToBottom: true)
-    }
-
     /// A store of sample data on the demo's clock, the one every report here is built on.
-    private static func demoStore(_ settings: SettingsStore) -> UsageStore {
+    static func demoStore(_ settings: SettingsStore) -> UsageStore {
         UsageStore(provider: DemoUsageProvider(), settings: settings, clock: { DemoClock.now })
     }
 
-    private static func save<V: View>(_ name: String, _ view: V, folder: URL, scheme: ColorScheme,
-                                     scrollToBottom: Bool = false, scrollOffset: CGFloat? = nil) {
+    static func save<V: View>(_ name: String, _ view: V, folder: URL, scheme: ColorScheme,
+                              scrollToBottom: Bool = false, scrollOffset: CGFloat? = nil) {
         // Limit visual rechecks to the changed surface, e.g. AGENTHUD_SNAPSHOT_PREFIX=settings-.
         if let prefix = ProcessInfo.processInfo.environment["AGENTHUD_SNAPSHOT_PREFIX"], !name.hasPrefix(prefix) { return }
         // Default sizing options so the hosting view reports SwiftUI's ideal size; then freeze it.

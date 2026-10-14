@@ -144,11 +144,13 @@ public final class DesktopApplication {
             demoScript = DemoScriptRunner.load(name, store: store, island: notch)
         }
         if !options.demo { PermissionRequests.shared.start() } else if demoScript == nil { PermissionRequests.shared.seedDemo() }
-        if !options.demo {
-            // A demo shares the data directory with the real copy and must not take its tool calls, so it serves none.
+        if options.servesTools {
+            // A demo shares the data directory with the real copy, so it takes the tool calls only when asked to.
             let tools = PanelTools(store: store)
             toolChannel = MCPAppChannel { tools.answer($0) }
             toolChannel?.start()
+        }
+        if !options.demo {
             antigravityApprovals.setEnabled(settings.settings.clientHooks)
             deepseekQuestions.setEnabled(settings.settings.clientHooks)
             codexDesktopApprovals.updateSessions(store.report?.sessions ?? [])

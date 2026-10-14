@@ -1,15 +1,17 @@
 import SwiftUI
 import AgentHUDCore
 
-/// API-funded accounts show money directly; there is no percentage quota or reset period.
+/// API-funded accounts show money directly; there is no percentage quota or reset period. In the hover panel, compact,
+/// the card is a block, and its heading stands as far from its rows as a quota block's does under the panel's spacing.
 struct APIBillingCard: View {
     let billing: APIBilling
     let store: UsageStore
     let theme: Theme
     var compact = false
+    @Environment(\.panelSpacing) private var panelSpacing
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 8 : 12) {
+        VStack(alignment: .leading, spacing: compact ? panelSpacing.blockParts : 12) {
             HStack(spacing: compact ? 6 : 7) {
                 AgentLogo(vendor: billing.vendor, size: 14)
                     .frame(width: compact ? IslandRowLayout.inset * 2 + IslandRowLayout.markerWidth : 14)

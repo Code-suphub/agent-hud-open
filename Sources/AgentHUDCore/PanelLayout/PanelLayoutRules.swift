@@ -36,9 +36,6 @@ extension PanelBlockKind {
         }
     }
 
-    /// The measure shown first under a widget: the first one offered.
-    func defaultMeasure(under widget: PanelWidget) -> PanelMeasure { measures(under: widget).first ?? .quota }
-
     /// The widget that draws a block a layout asks to draw with `asked`: that one where the kind accepts it, else the
     /// kind's default.
     func widget(for asked: PanelWidget?) -> PanelWidget {
@@ -46,12 +43,23 @@ extension PanelBlockKind {
         return asked
     }
 
-    /// The measure a block shows first under `widget` when a layout asks for `asked`: that one where it is offered, else
-    /// the widget's default.
-    func measure(for asked: PanelMeasure?, under widget: PanelWidget) -> PanelMeasure {
-        guard let asked, measures(under: widget).contains(asked) else { return defaultMeasure(under: widget) }
-        return asked
+    /// The measures a block's picker offers under `widget` when a layout lists `asked`: those of them the widget
+    /// offers, each once, in the order listed; every measure the widget offers when that leaves none.
+    func measures(_ asked: [PanelMeasure], under widget: PanelWidget) -> [PanelMeasure] {
+        let offered = measures(under: widget)
+        let kept = asked.withoutRepeats.filter(offered.contains)
+        return kept.isEmpty ? offered : kept
     }
+
+    /// Whether a layout can hide the kind's reset times: a quota window resets, a balance does not.
+    var takesCountdown: Bool { self == .quota }
+
+    /// Whether the kind's blocks drawn with `widget` stand in cells a layout sets in columns: quota windows as rings
+    /// or numbers. A balance's number is its card.
+    func takesColumns(under widget: PanelWidget) -> Bool { self == .quota && widget.drawsCells }
+
+    /// Whether the kind's blocks drawn with `widget` have rings a layout sizes: quota windows as rings.
+    func takesRingSize(under widget: PanelWidget) -> Bool { self == .quota && widget == .ring }
 }
 
 /// One block the hover panel has now. A list of them is in the panel's default order.
@@ -103,8 +111,9 @@ struct PanelLayoutIssue: Hashable, Sendable {
 extension PanelLayout {
     /// Every issue of the layout against the blocks the panel has now, blocks by key and then `order` by position: a
     /// block key or an order entry that names no block, a widget its block's kind does not accept, a measure that is
-    /// not offered under the widget the block is drawn with, and a hidden row its block does not have. A layout with
-    /// issues still resolves (`PanelLayoutPlan`): what cannot be done as asked falls back or waits.
+    /// not offered under the widget the block is drawn with, a countdown hidden on a balance, columns or a ring size
+    /// where the block has no cells or no rings, and a hidden row its block does not have. A layout with issues still
+    /// resolves (`PanelLayoutPlan`): what cannot be done as asked falls back or waits.
     ///
     /// What one of the `held` layouts already holds for a block or a row that is away is no issue when it comes back
     /// as it is held: the block's own entry unchanged, its key in `order`, the row among its block's hidden rows. A
@@ -150,10 +159,27 @@ extension PanelLayout {
         }
         let widget = kind.widget(for: change.widget)
         let offered = kind.measures(under: widget)
-        if let measure = change.measure, !offered.contains(measure) {
-            let reason = kind == .billing ? " An API balance shows its balance and its estimated cost together, as \"quota\"." : ""
-            let message = "The \"\(widget.rawValue)\" widget of \"\(block.key)\" does not offer the measure \"\(measure.rawValue)\".\(reason)"
-            issues.append(PanelLayoutIssue(path: path + ".measure", message: "\(message) It offers: \(quoted(offered.map(\.rawValue)))."))
+        let drawn = "The \"\(widget.rawValue)\" widget of \"\(block.key)\""
+        let balance = "\"\(block.key)\" is an API balance"
+        for (index, measure) in change.measures.enumerated() where !offered.contains(measure) {
+            let reason: String = kind == .billing ? " An API balance shows its balance and its estimated cost together, as \"quota\"." : ""
+            let message = "\(drawn) does not offer the measure \"\(measure.rawValue)\".\(reason)"
+            issues.append(PanelLayoutIssue(path: path + ".measures[\(index)]",
+                                           message: "\(message) It offers: \(quoted(offered.map(\.rawValue)))."))
+        }
+        if !change.countdown && !kind.takesCountdown {
+            issues.append(PanelLayoutIssue(path: path + ".countdown",
+                                           message: "\(balance), which has no reset to count down to. countdown applies to quota blocks."))
+        }
+        if change.columns != nil && !kind.takesColumns(under: widget) {
+            let message: String = kind == .billing ? "\(balance), drawn as its card, which has no cells to set in columns."
+                : "\(drawn) draws no cells. columns applies to the \"ring\" and \"number\" widgets."
+            issues.append(PanelLayoutIssue(path: path + ".columns", message: message))
+        }
+        if change.ringSize != nil && !kind.takesRingSize(under: widget) {
+            let message: String = kind == .billing ? "\(balance), which draws no ring."
+                : "\(drawn) draws no ring. ringSize applies to the \"ring\" widget."
+            issues.append(PanelLayoutIssue(path: path + ".ringSize", message: message))
         }
         let rows = block.rowKeys.isEmpty ? "It has no rows to hide." : "Its rows: \(quoted(block.rowKeys))."
         for (index, row) in change.hiddenRows.enumerated() where !block.rowKeys.contains(row) && !heldRows.contains(row) {
@@ -183,10 +209,12 @@ extension PanelLayout {
     // MARK: What a layout changes
 
     /// The layout reduced to what it changes about the blocks the panel has now, so that two layouts that draw those
-    /// blocks alike are the same layout: a block's widget is left out where it is its kind's default, its measure where
-    /// it is the one its widget shows first, and a block's key at the end of `order` where the block would come there
-    /// anyway. What it holds for a block that is away stays as written. A proposal that spells out the default view is
-    /// then the default layout, and one that spells out the saved layout is the saved one.
+    /// blocks alike are the same layout. For a block the panel has, its widget is left out where it is its kind's
+    /// default; its measures are kept to those its widget offers and left out where that is none or every one in the
+    /// widget's own order; and a countdown, columns or a ring size is left out where the block has none to set, and
+    /// columns or a ring size where it is the default. A block's key is left out at the end of `order` where the block
+    /// would come there anyway. What it holds for a block that is away stays as written. A proposal that spells out
+    /// the default view is then the default layout, and one that spells out the saved layout is the saved one.
     func reduced(against existing: [PanelBlockInfo]) -> PanelLayout {
         var known: [String: PanelBlockInfo] = [:]
         for block in existing where known[block.key] == nil { known[block.key] = block }
@@ -195,7 +223,13 @@ extension PanelLayout {
             guard let kind = known[key]?.kind else { continue }
             var change = change
             if change.widget == kind.defaultWidget { change.widget = nil }
-            if change.measure == kind.defaultMeasure(under: kind.widget(for: change.widget)) { change.measure = nil }
+            let widget = kind.widget(for: change.widget)
+            let measures: [PanelMeasure] = kind.measures(change.measures, under: widget)
+            change.measures = measures
+            if measures == kind.measures(under: widget) { change.measures = [] }
+            if !kind.takesCountdown { change.countdown = true }
+            if !kind.takesColumns(under: widget) || change.columns == Block.defaultColumns { change.columns = nil }
+            if !kind.takesRingSize(under: widget) || change.ringSize == .medium { change.ringSize = nil }
             layout.blocks[key] = change
         }
         let inDefaultOrder = existing.map(\.key)

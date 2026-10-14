@@ -16,6 +16,7 @@ struct ModelUsageRow: View {
     var theme: Theme = .island
     var isLoading = false
     @State private var isHovered = false
+    @Environment(\.panelSpacing) private var spacing
 
     var body: some View {
         if let displayedForecastHint {
@@ -79,7 +80,7 @@ struct ModelUsageRow: View {
             }
         }
         .font(.ui(13))
-        .padding(.vertical, 4)
+        .padding(.vertical, spacing.rowPadding)
         .padding(.horizontal, IslandRowLayout.inset)
         .background(RoundedRectangle(cornerRadius: 6).fill(theme.text.opacity(isHovered ? 0.06 : 0)))
         .contentShape(Rectangle())
@@ -154,6 +155,27 @@ struct QuotaRowMetrics {
         case .cost:
             // The first currency in code order; a second one, which is rare, is the detail.
             cost.flatMap { cost in cost.currencies.first.map { MoneyFormat.short(cost.amounts[$0] ?? 0, currency: $0) } }
+        }
+    }
+
+    /// The value in fewer characters, for a cell too narrow for `value(_:)`: a burn rate in whole points, a cost in
+    /// thousands or millions as the interface language writes them (`$12K`, `$1.2万`). Nil where the value is short
+    /// already: a share used, and tokens per hour, at most three figures and a unit.
+    func shortValue(_ metric: PanelMeasure) -> String? {
+        switch metric {
+        case .quota, .tokens:
+            return nil
+        case .burnRate:
+            return insights?.burnRatePctPerHour.map { String(format: "%.0f%%/h", $0) }
+        case .cost:
+            guard let cost, let first = cost.currencies.first else { return nil }
+            // A currency's compact notation needs macOS 15, so the narrow symbol, as `MoneyFormat.short` writes it,
+            // goes before the number's compact notation.
+            let locale = Locale(identifier: L10n.resolved == .zhHans ? "zh_CN" : "en_US")
+            let symbol: String = Decimal(0).formatted(Decimal.FormatStyle.Currency(code: first).presentation(.narrow)
+                .precision(.fractionLength(0)).locale(locale)).replacingOccurrences(of: "0", with: "")
+            let amount: Double = NSDecimalNumber(decimal: cost.amounts[first] ?? 0).doubleValue
+            return symbol + amount.formatted(.number.notation(.compactName).locale(locale))
         }
     }
 

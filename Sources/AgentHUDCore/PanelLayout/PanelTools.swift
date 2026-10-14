@@ -64,7 +64,7 @@ public struct PanelTools {
 
     // MARK: Proposing
 
-    private static let layoutKeys = ["blocks", "order", "sections", "hiddenSections"]
+    private static let layoutKeys = ["blocks", "order", "sections", "hiddenSections", "style"]
     private static let draftNote = "Shown in the panel as an unsaved draft. The user keeps it by hovering the Agent HUD and "
         + "pressing Save in the panel; it is dropped when Agent HUD restarts."
     private static let savedNote = "This is the layout already saved, so there is no draft."
@@ -119,8 +119,9 @@ public struct PanelTools {
 
     // MARK: Reading
 
-    /// The panel as an agent reads it: the layout in effect, then every section and every block the panel has, shown
-    /// or hidden, with the readings of each block's rows.
+    /// The panel as an agent reads it: the layout in effect and the style it sets, whether Settings shows reset
+    /// countdowns, then every section and every block the panel has, shown or hidden, with the readings of each
+    /// block's rows.
     private func panel(note: String? = nil) -> [String: JSONValue] {
         let effective = layout.effective, existing = store.view.panelBlocks
         let plan = PanelLayoutPlan(layout: effective, blocks: existing)
@@ -131,11 +132,14 @@ public struct PanelTools {
         let shown = Set(plan.blocks.map(\.key))
         let drawn = plan.blocks + existing.filter { !shown.contains($0.key) }
             .map { PanelBlockPlan($0, changed: effective.blocks[$0.key] ?? PanelLayout.Block()) }
+        let style: [String: JSONValue] = ["spacing": .string(plan.style.spacing.rawValue), "separators": .bool(plan.style.separators)]
         var result: [String: JSONValue] = [
             "revision": .integer(revision),
             "unsaved": .bool(layout.hasDraft),
             "hasPrevious": .bool(layout.canRevert),
             "layout": (try? JSONValue.from(effective)) ?? .object([:]),
+            "style": .object(style),
+            "countdownOnInSettings": .bool(settings.showResetCountdown),
             "sections": .array(sections.map { section in
                 .object(["key": .string(section.rawValue), "shown": .bool(plan.sections.contains(section)),
                          "onInSettings": .bool(switches[section] ?? true)])
@@ -146,13 +150,21 @@ public struct PanelTools {
         return result
     }
 
+    /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns
+    /// and the ring size are told only where the block has them to set.
     private func block(of plan: PanelBlockPlan, shown: Bool) -> JSONValue {
         var block: [String: JSONValue] = [
             "key": .string(plan.key), "kind": .string(plan.kind.rawValue), "shown": .bool(shown),
-            "widget": .string(plan.widget.rawValue), "measure": .string(plan.measure.rawValue),
+            "widget": .string(plan.widget.rawValue),
             "widgets": .array(plan.kind.widgets.map { .string($0.rawValue) }),
             "measures": .array(plan.measures.map { .string($0.rawValue) }),
+            "offeredMeasures": .array(plan.kind.measures(under: plan.widget).map { .string($0.rawValue) }),
         ]
+        if plan.kind.takesCountdown {
+            block["countdown"] = .bool(plan.countdown && store.settings.settings.showResetCountdown)
+        }
+        if plan.kind.takesColumns(under: plan.widget) { block["columns"] = .integer(Int64(plan.columns)) }
+        if plan.kind.takesRingSize(under: plan.widget) { block["ringSize"] = .string(plan.ringSize.rawValue) }
         switch plan.kind {
         case .quota:
             block["name"] = .string(VendorCatalog.name(plan.key))
@@ -216,46 +228,80 @@ public struct PanelTools {
 
 extension PanelLayout {
     /// What reading a layout's JSON would forgive, as sentences for the agent that sent it: a value of the wrong type,
-    /// a name this build does not know, a property a block does not have. Stored layouts are read forgivingly so that
-    /// a newer build's layout still loads; an agent's proposal is told instead, since a forgiven name is a change
-    /// that silently did not happen.
+    /// a name this build does not know, columns outside 2 to 6, a property a block or the style does not have. Stored
+    /// layouts are read forgivingly so that a newer build's layout still loads; an agent's proposal is told instead,
+    /// since a forgiven name is a change that silently did not happen.
     static func misreadings(of json: JSONValue) -> [String] {
         guard let fields = json.objectValue else { return ["The layout is a JSON object."] }
-        var found: [String] = []
-        func names(_ key: String, among allowed: [String]?) {
-            guard let value = fields[key], value != .null else { return }
-            guard let items = value.arrayValue else { return found.append("\(key) is a list.") }
-            for (index, item) in items.enumerated() {
-                guard let name = item.stringValue else { found.append("\(key)[\(index)] is a string."); continue }
-                if let allowed, !allowed.contains(name) {
-                    found.append("\(key)[\(index)]: \"\(name)\" is not one of \(quoted(allowed)).")
-                }
-            }
-        }
-        names("order", among: nil)
-        names("sections", among: PanelSection.allCases.map(\.rawValue))
-        names("hiddenSections", among: PanelSection.allCases.map(\.rawValue))
+        var found = names(fields["order"], at: "order", among: nil)
+        found += names(fields["sections"], at: "sections", among: PanelSection.allCases.map(\.rawValue))
+        found += names(fields["hiddenSections"], at: "hiddenSections", among: PanelSection.allCases.map(\.rawValue))
+        found += misreadings(ofStyle: fields["style"] ?? .null)
         guard let blocks = fields["blocks"], blocks != .null else { return found }
         guard let blocks = blocks.objectValue else { return found + ["blocks is an object keyed by block key."] }
         for key in blocks.keys.sorted() {
-            let path = "blocks.\(key)"
-            guard let block = blocks[key]?.objectValue else { found.append("\(path) is an object."); continue }
-            for property in block.keys.sorted() {
-                let value = block[property] ?? .null
-                switch property {
-                case "widget":
-                    found += misnamed(value, at: "\(path).widget", among: PanelWidget.allCases.map(\.rawValue))
-                case "measure":
-                    found += misnamed(value, at: "\(path).measure", among: PanelMeasure.allCases.map(\.rawValue))
-                case "hidden":
-                    if value != .null, value.boolValue == nil { found.append("\(path).hidden is true or false.") }
-                case "hiddenRows":
-                    if value != .null, value.arrayValue?.allSatisfy({ $0.stringValue != nil }) != true {
-                        found.append("\(path).hiddenRows is a list of row keys.")
-                    }
-                default:
-                    found.append("\(path) has no property \"\(property)\"; a block takes widget, measure, hidden and hiddenRows.")
+            found += misreadings(ofBlock: blocks[key] ?? .null, at: "blocks.\(key)")
+        }
+        return found
+    }
+
+    private static func misreadings(ofBlock value: JSONValue, at path: String) -> [String] {
+        guard let block = value.objectValue else { return ["\(path) is an object."] }
+        var found: [String] = []
+        for property in block.keys.sorted() {
+            let value = block[property] ?? .null
+            switch property {
+            case "widget":
+                found += misnamed(value, at: "\(path).widget", among: PanelWidget.allCases.map(\.rawValue))
+            case "measures":
+                found += names(value, at: "\(path).measures", among: PanelMeasure.allCases.map(\.rawValue))
+            case "hidden", "countdown":
+                if value != .null, value.boolValue == nil { found.append("\(path).\(property) is true or false.") }
+            case "hiddenRows":
+                if value != .null, value.arrayValue?.allSatisfy({ $0.stringValue != nil }) != true {
+                    found.append("\(path).hiddenRows is a list of row keys.")
                 }
+            case "columns":
+                if value != .null, value.countValue.map({ Block.columnRange.contains($0) }) != true {
+                    found.append("\(path).columns is a whole number from 2 to 6.")
+                }
+            case "ringSize":
+                found += misnamed(value, at: "\(path).ringSize", among: PanelRingSize.allCases.map(\.rawValue))
+            default:
+                found.append("\(path) has no property \"\(property)\"; a block takes widget, measures, hidden, hiddenRows, "
+                             + "countdown, columns and ringSize.")
+            }
+        }
+        return found
+    }
+
+    private static func misreadings(ofStyle value: JSONValue) -> [String] {
+        if value == .null { return [] }
+        guard let style = value.objectValue else { return ["style is an object."] }
+        var found: [String] = []
+        for property in style.keys.sorted() {
+            let value = style[property] ?? .null
+            switch property {
+            case "spacing":
+                found += misnamed(value, at: "style.spacing", among: PanelSpacing.allCases.map(\.rawValue))
+            case "separators":
+                if value != .null, value.boolValue == nil { found.append("style.separators is true or false.") }
+            default:
+                found.append("style has no property \"\(property)\"; the style takes spacing and separators.")
+            }
+        }
+        return found
+    }
+
+    /// What is wrong with a list of names: not a list, an entry that is not a string, or one that is not `allowed`.
+    private static func names(_ value: JSONValue?, at path: String, among allowed: [String]?) -> [String] {
+        guard let value, value != .null else { return [] }
+        guard let items = value.arrayValue else { return ["\(path) is a list."] }
+        var found: [String] = []
+        for (index, item) in items.enumerated() {
+            guard let name = item.stringValue else { found.append("\(path)[\(index)] is a string."); continue }
+            if let allowed, !allowed.contains(name) {
+                found.append("\(path)[\(index)]: \"\(name)\" is not one of \(quoted(allowed)).")
             }
         }
         return found
@@ -268,5 +314,4 @@ extension PanelLayout {
         }
         return []
     }
-
 }

@@ -9,11 +9,11 @@ extension HoverPanelView {
     /// remaining count includes every other session in that summary. The statistics window's range never applies here — that
     /// range belongs to the session card, which answers a different question. The header opens the session list; each
     /// row's title returns to its agent, or opens its session page where the client names no destination, and its
-    /// token count opens usage.
-    func sessionLine(hasAbove: Bool) -> some View {
+    /// token count opens usage. Its gaps follow the layout's spacing, and its divider the layout's separators.
+    func sessionLine(hasAbove: Bool, spacing: PanelSpacingMetrics, divider: Color) -> some View {
         let rows = Self.sessionRows(store, vendor: focusVendor)
         let running = rows.running, shown = rows.shown
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: spacing.sessionRows) {
             Button { openSessions() } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(L10n.text("会话", "Sessions"))
@@ -45,8 +45,8 @@ extension HoverPanelView {
         }
         .buttonStyle(.plain)
         .font(.ui(12))
-        .padding(.top, hasAbove ? 8 : 0)
-        .topDivider(hasAbove ? theme.divider : .clear)
+        .padding(.top, hasAbove ? spacing.divided : 0)
+        .topDivider(hasAbove ? divider : .clear)
     }
 
     private func sessionRow(_ session: LiveSession) -> some View {

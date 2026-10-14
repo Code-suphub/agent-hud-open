@@ -22,12 +22,17 @@ final class PanelLayoutPlanTests: XCTestCase {
     func testTheDefaultLayoutIsTheDefaultView() {
         let planned = plan(PanelLayout())
         XCTAssertEqual(planned.blocks, [
-            PanelBlockPlan(key: "Claude", kind: .quota, widget: .bar, measure: .quota, measures: everyMeasure),
-            PanelBlockPlan(key: "Codex", kind: .quota, widget: .bar, measure: .quota, measures: everyMeasure),
-            PanelBlockPlan(key: "Cursor", kind: .quota, widget: .bar, measure: .quota, measures: everyMeasure),
-            PanelBlockPlan(key: "api:DeepSeek", kind: .billing, widget: .number, measure: .quota, measures: [.quota]),
+            PanelBlockPlan(key: "Claude", kind: .quota, widget: .bar, measures: everyMeasure),
+            PanelBlockPlan(key: "Codex", kind: .quota, widget: .bar, measures: everyMeasure),
+            PanelBlockPlan(key: "Cursor", kind: .quota, widget: .bar, measures: everyMeasure),
+            PanelBlockPlan(key: "api:DeepSeek", kind: .billing, widget: .number, measures: [.quota]),
         ])
+        XCTAssertEqual(planned.blocks.map(\.measure), [.quota, .quota, .quota, .quota])
+        XCTAssertEqual(planned.blocks.map(\.countdown), [true, true, true, true])
+        XCTAssertEqual(planned.blocks.map(\.columns), [4, 4, 4, 4])
+        XCTAssertEqual(planned.blocks.map(\.ringSize), [.medium, .medium, .medium, .medium])
         XCTAssertEqual(planned.sections, [.blocks, .tokens, .sessions])
+        XCTAssertEqual(planned.style, PanelStyle())
         XCTAssertEqual(planned.blocks.map(\.key), blocks.map(\.key))
         XCTAssertEqual(planned, PanelLayoutPlan(layout: PanelLayout(blocks: ["Claude": PanelLayout.Block()], order: [""]), blocks: blocks),
                        "a layout that normalizes to the default plans as the default")
@@ -50,7 +55,7 @@ final class PanelLayoutPlanTests: XCTestCase {
         XCTAssertEqual(PanelLayoutPlan(layout: layout, blocks: returned).blocks.map(\.key), ["Codex", "Kimi", "Claude", "Cursor", "api:DeepSeek"])
         let shown = PanelLayout(blocks: ["Grok": PanelLayout.Block(widget: .ring)], order: ["Grok"])
         XCTAssertEqual(PanelLayoutPlan(layout: shown, blocks: returned).blocks.first,
-                       PanelBlockPlan(key: "Grok", kind: .quota, widget: .ring, measure: .quota, measures: everyMeasure))
+                       PanelBlockPlan(key: "Grok", kind: .quota, widget: .ring, measures: everyMeasure))
     }
 
     func testAHiddenBlockIsLeftOut() {
@@ -80,40 +85,97 @@ final class PanelLayoutPlanTests: XCTestCase {
         }
     }
 
-    func testAMeasureTheWidgetDoesNotOfferFallsBackToTheWidgetsDefault() {
-        let ofAChart: [PanelMeasure] = [.tokens]
-        func expect(_ key: String, _ change: PanelLayout.Block, shows measure: PanelMeasure, among measures: [PanelMeasure],
-                    line: UInt = #line) {
+    /// The picker offers the measures the layout lists, in that order and each once, where the block's widget offers
+    /// them; the first is the one shown when the panel opens.
+    func testThePickerOffersTheListedMeasuresInTheirOrder() {
+        func expect(_ key: String, _ change: PanelLayout.Block, offers measures: [PanelMeasure], line: UInt = #line) {
             let planned = block(key, in: PanelLayout(blocks: [key: change]))
-            XCTAssertEqual(planned?.measure, measure, line: line)
             XCTAssertEqual(planned?.measures, measures, line: line)
+            XCTAssertEqual(planned?.measure, measures.first, "the first is shown first", line: line)
         }
-        expect("Claude", PanelLayout.Block(widget: .ring, measure: .cost), shows: .cost, among: everyMeasure)
-        expect("Claude", PanelLayout.Block(measure: .burnRate), shows: .burnRate, among: everyMeasure)
-        expect("Claude", PanelLayout.Block(widget: .chart), shows: .tokens, among: ofAChart)
-        expect("Claude", PanelLayout.Block(widget: .chart, measure: .cost), shows: .tokens, among: ofAChart)
-        expect("Claude", PanelLayout.Block(widget: .chart, measure: .quota), shows: .tokens, among: ofAChart)
-        expect("Claude", PanelLayout.Block(widget: .chart, measure: .burnRate), shows: .tokens, among: ofAChart)
-        expect("api:DeepSeek", PanelLayout.Block(measure: .cost), shows: .quota, among: [.quota])
-        // The widget falls back first, and the measure is weighed under the widget that results.
-        expect("api:DeepSeek", PanelLayout.Block(widget: .chart, measure: .tokens), shows: .quota, among: [.quota])
+        expect("Claude", PanelLayout.Block(measures: [.cost, .quota]), offers: [.cost, .quota])
+        expect("Claude", PanelLayout.Block(widget: .ring, measures: [.burnRate]), offers: [.burnRate])
+        expect("Claude", PanelLayout.Block(measures: [.tokens, .cost, .tokens, .quota, .cost]), offers: [.tokens, .cost, .quota])
+        expect("Claude", PanelLayout.Block(measures: []), offers: everyMeasure)
+        expect("Claude", PanelLayout.Block(widget: .number, measures: Array(everyMeasure.reversed())), offers: Array(everyMeasure.reversed()))
+    }
+
+    func testAMeasureTheWidgetDoesNotOfferIsLeftOutAndNoneLeftIsEveryOne() {
+        let ofAChart: [PanelMeasure] = [.tokens]
+        func expect(_ key: String, _ change: PanelLayout.Block, offers measures: [PanelMeasure], line: UInt = #line) {
+            XCTAssertEqual(block(key, in: PanelLayout(blocks: [key: change]))?.measures, measures, line: line)
+        }
+        expect("Claude", PanelLayout.Block(widget: .chart), offers: ofAChart)
+        expect("Claude", PanelLayout.Block(widget: .chart, measures: [.cost]), offers: ofAChart)
+        expect("Claude", PanelLayout.Block(widget: .chart, measures: [.quota, .tokens]), offers: ofAChart)
+        expect("Claude", PanelLayout.Block(widget: .chart, measures: [.burnRate, .quota]), offers: ofAChart)
+        expect("api:DeepSeek", PanelLayout.Block(measures: [.cost]), offers: [.quota])
+        expect("api:DeepSeek", PanelLayout.Block(measures: [.cost, .quota]), offers: [.quota])
+        // The widget falls back first, and the measures are weighed under the widget that results.
+        expect("api:DeepSeek", PanelLayout.Block(widget: .chart, measures: [.tokens]), offers: [.quota])
+        expect("Claude", PanelLayout.Block(widget: .chart, measures: [.burnRate]), offers: ofAChart)
     }
 
     func testEveryPlannedMeasureIsOneItsWidgetOffers() {
         var widgets: [PanelWidget?] = [nil]
         widgets.append(contentsOf: PanelWidget.allCases)
-        var measures: [PanelMeasure?] = [nil]
-        measures.append(contentsOf: PanelMeasure.allCases)
+        var lists: [[PanelMeasure]] = [[], PanelMeasure.allCases, Array(PanelMeasure.allCases.reversed())]
+        lists += PanelMeasure.allCases.map { [$0] }
         for widget in widgets {
-            for measure in measures {
-                let change = PanelLayout.Block(widget: widget, measure: measure)
+            for measures in lists {
+                let change = PanelLayout.Block(widget: widget, measures: measures)
                 for planned in plan(PanelLayout(blocks: ["Claude": change, "api:DeepSeek": change])).blocks {
+                    let offered = planned.kind.measures(under: planned.widget)
                     XCTAssertTrue(planned.kind.widgets.contains(planned.widget), "\(planned)")
-                    XCTAssertEqual(planned.measures, planned.kind.measures(under: planned.widget), "\(planned)")
-                    XCTAssertTrue(planned.measures.contains(planned.measure), "\(planned)")
+                    XCTAssertFalse(planned.measures.isEmpty, "\(planned)")
+                    XCTAssertEqual(planned.measures, planned.measures.withoutRepeats, "\(planned)")
+                    XCTAssertTrue(planned.measures.allSatisfy(offered.contains), "\(planned)")
+                    XCTAssertTrue(offered.contains(planned.measure), "\(planned)")
                 }
             }
         }
+    }
+
+    /// A countdown hidden by the layout is told to the panel for a quota block; a balance has none to hide.
+    func testTheCountdownIsHiddenOnlyWhereTheLayoutHidesItOnAQuotaBlock() {
+        XCTAssertEqual(block("Claude", in: PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: false)]))?.countdown, false)
+        XCTAssertEqual(block("Claude", in: PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .chart, countdown: false)]))?.countdown,
+                       false, "a chart's block keeps its earned resets, whose expiry is a countdown")
+        XCTAssertEqual(block("Codex", in: PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: false)]))?.countdown, true)
+        XCTAssertEqual(block("api:DeepSeek", in: PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(countdown: false)]))?.countdown, true)
+    }
+
+    /// Columns and ring sizes reach only the blocks drawn in cells and rings; anywhere else, and where none is given or
+    /// one out of range, the plan has the default view's.
+    func testColumnsAndRingSizesApplyWhereTheBlockHasCellsAndRings() {
+        func planned(_ key: String, _ change: PanelLayout.Block) -> (columns: Int?, ringSize: PanelRingSize?) {
+            let made = block(key, in: PanelLayout(blocks: [key: change]))
+            return (made?.columns, made?.ringSize)
+        }
+        for columns in 2...6 {
+            XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .ring, columns: columns)).columns, columns)
+            XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .number, columns: columns)).columns, columns)
+            XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .bar, columns: columns)).columns, 4)
+            XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .chart, columns: columns)).columns, 4)
+            XCTAssertEqual(planned("api:DeepSeek", PanelLayout.Block(columns: columns)).columns, 4, "a balance's number is its card")
+        }
+        for columns in [0, 1, 7, 40, -2] {
+            XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .ring, columns: columns)).columns, 4, "\(columns)")
+        }
+        for size in PanelRingSize.allCases {
+            XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .ring, ringSize: size)).ringSize, size)
+            XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .number, ringSize: size)).ringSize, .medium)
+            XCTAssertEqual(planned("api:DeepSeek", PanelLayout.Block(widget: .ring, ringSize: size)).ringSize, .medium,
+                           "a balance asked for rings is its card")
+        }
+        XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .ring)).columns, 4)
+        XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .ring)).ringSize, .medium)
+    }
+
+    func testThePlanCarriesTheLayoutsStyle() {
+        let style = PanelStyle(spacing: .roomy, separators: false)
+        XCTAssertEqual(plan(PanelLayout(style: style)).style, style)
+        XCTAssertEqual(plan(PanelLayout(style: style)).blocks, plan(PanelLayout()).blocks, "the style draws the same blocks")
     }
 
     func testSectionsFollowTheSameOrderRuleWithoutTheHiddenOnes() {
