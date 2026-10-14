@@ -87,7 +87,7 @@ A transcript shows that a tool call is pending but not whether the client is run
 
 - The callback only says that the client needs the user; which kind of attention it is comes from the transcript, never from the wording of the message. A turn that is still running is waiting for approval and shows the message; a turn that already finished is waiting for the next prompt, which the transcript already said.
 - A request is answered as soon as the transcript carries a line newer than it. One unanswered request is kept per session, in `attention/<source>/<hashed session id>.json` in the data directory: session id, the client's message up to 2 KB, and the time. Requests are forgotten a day after they were made; a file's own timestamps are never used for that.
-- The handler command is `'<executable path>' --attention-hook <source>` with a 5-second timeout, installed and taken over by the same rules as a completion hook below.
+- The handler command is `'<executable path>' --attention-hook <source>` with a 5-second timeout and `async: true`, installed and taken over by the same rules as a completion hook below. It only reports, so the client runs it without waiting; an older handler of Agent HUD's is given `async` when it is taken over.
 
 ### Completion hooks
 
