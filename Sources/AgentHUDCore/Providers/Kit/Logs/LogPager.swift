@@ -42,6 +42,16 @@ public struct LogPager {
         return 0
     }
 
+    /// The newest line before `end` whose first bytes match, looking back at most `limit` lines; nil when none does.
+    public func lastLine(before end: Int, limit: Int, matching: (_ prefix: Data) -> Bool) throws -> Data? {
+        var lines = LinesBack(handle: handle, end: end, chunkSize: chunkSize), count = 0
+        while count < limit, let line = try lines.next() {
+            count += 1
+            if matching(try read(line.lowerBound..<min(line.upperBound, line.lowerBound + Self.prefixLength))) { return try read(line) }
+        }
+        return nil
+    }
+
     /// Just past the last newline among a log's first `size` bytes: where its complete lines end.
     public func completeEnd(of size: Int) throws -> Int {
         var start = size

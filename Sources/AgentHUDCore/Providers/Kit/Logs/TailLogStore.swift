@@ -31,6 +31,12 @@ protocol TailLog: Sendable {
     static func head(_ lines: Data, into summary: inout Summary)
     /// Takes in what an older page of the same log read, into the summary of everything after it.
     static func merge(older: Summary, into summary: inout Summary)
+    /// Whether a line, judged by its first bytes, carries state the lines after it are read against, such as a running
+    /// total. A page, and a log first read from its newest turn, starts from the newest such line before it, as a read
+    /// from the log's start would have; nil when no line does.
+    static var carriesState: (@Sendable (Data) -> Bool)? { get }
+    /// Takes the state such a line carries, counting nothing.
+    static func seed(_ line: Data, into summary: inout Summary)
     /// The prompts and compactions read since the last call.
     static func drainMarks(_ summary: inout Summary) -> [UsageLedger.Mark]
     /// Runs once a read of the log ends.
@@ -49,6 +55,8 @@ extension TailLog {
     static var startsTurn: LogPager.StartsTurn? { nil }
     static func head(_ lines: Data, into summary: inout Summary) {}
     static func merge(older: Summary, into summary: inout Summary) {}
+    static var carriesState: (@Sendable (Data) -> Bool)? { nil }
+    static func seed(_ line: Data, into summary: inout Summary) {}
 }
 
 /// A place a log that has to be decoded can be read from: the byte of the file and the byte of the decoded text it
@@ -105,6 +113,8 @@ final class TailLogStore<Log: TailLog> {
     static var chunkSize: Int { 4 << 20 }
     /// Lines a page of history holds at least, before it reaches back to the start of a turn.
     static var pageLines: Int { 200 }
+    /// Lines looked back over for the state a page starts from.
+    static var seedLines: Int { 2000 }
     /// How much of a log's start is read for its head.
     static var headLength: Int { 256 << 10 }
 
@@ -296,6 +306,7 @@ final class TailLogStore<Log: TailLog> {
             let pager = LogPager(handle: handle, startsTurn: startsTurn)
             entry.offset = try pager.lastTurnStart(before: try pager.completeEnd(of: file.size))
             entry.back = entry.offset > 0 ? entry.offset : nil
+            try Self.seed(&entry.summary, before: entry.offset, with: pager)
         }
         pass.filesRead += 1
         if let contents {
@@ -342,9 +353,11 @@ final class TailLogStore<Log: TailLog> {
         let url = URL(fileURLWithPath: path)
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
-        let start = try LogPager(handle: handle, startsTurn: startsTurn).pageStart(before: back, minimumLines: Self.pageLines)
+        let pager = LogPager(handle: handle, startsTurn: startsTurn)
+        let start = try pager.pageStart(before: back, minimumLines: Self.pageLines)
         var page = Log.summary(for: url), events: [UsageLedger.Event] = []
         Log.head(try Self.head(of: handle, size: update.entry.size), into: &page)
+        try Self.seed(&page, before: start, with: pager)
         try handle.seek(toOffset: UInt64(start))
         var offset = start, carry = Data()
         while offset + carry.count < back {
@@ -362,6 +375,13 @@ final class TailLogStore<Log: TailLog> {
         update.events += events
         let done = start == 0 || (!events.isEmpty && events.allSatisfy { $0.timestamp < retained })
         update.entry.back = done ? nil : start
+    }
+
+    /// Seeds a summary that starts at `start` with the state the newest line before it carries.
+    private static func seed(_ summary: inout Log.Summary, before start: Int, with pager: LogPager) throws {
+        guard start > 0, let carries = Log.carriesState,
+              let line = try pager.lastLine(before: start, limit: seedLines, matching: carries) else { return }
+        Log.seed(line, into: &summary)
     }
 
     /// The complete lines among a log's first `headLength` bytes.

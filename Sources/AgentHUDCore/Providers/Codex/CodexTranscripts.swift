@@ -15,6 +15,8 @@ public struct CodexTranscript: Codable, Sendable {
         public var reasoning = 0
         /// The model's context window as the rollout states it.
         public var contextWindow: Int? = nil
+        /// Where the line that reported it begins in the rollout, when it was read from a known place.
+        public var offset: Int? = nil
 
         public var event: UsageEvent {
             .init(timestamp: timestamp, agentId: "codex-model:\(model)", tokensIn: input, tokensOut: output, cacheReadTokens: cachedInput,
@@ -77,7 +79,8 @@ public struct CodexTranscript: Codable, Sendable {
 
     public init() {}
 
-    public mutating func ingest(_ line: Data) {
+    /// - offset: where the line begins in its rollout, which keys the usage it reports.
+    public mutating func ingest(_ line: Data, at offset: Int? = nil) {
         // Rollouts can contain multi-MB tool outputs. Inspect the envelope before decoding.
         guard Self.envelopes.contains(where: { line.range(of: $0) != nil }) else { return }
         guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
@@ -154,6 +157,7 @@ public struct CodexTranscript: Codable, Sendable {
             sample.cacheWrite = max(0, writeDelta)
             sample.reasoning = max(0, reasoningDelta)
             sample.contextWindow = info["model_context_window"] as? Int
+            sample.offset = offset
             usage.append(sample)
             inputTokens += sample.input
             outputTokens += sample.output
@@ -228,10 +232,67 @@ public struct CodexTranscript: Codable, Sendable {
             recordedUsage += usage.count
             usage = []
         }
-        return usage.enumerated().map { offset, sample in
-            UsageLedger.Event(key: "u\(recordedUsage + offset)", timestamp: sample.timestamp, agentId: "codex-model:\(sample.model)",
+        return usage.enumerated().map { index, sample in
+            // A line's place in the rollout keys it whichever page is read first; a sample without one keeps its count.
+            UsageLedger.Event(key: sample.offset.map { "o\($0)" } ?? "u\(recordedUsage + index)", timestamp: sample.timestamp,
+                              agentId: "codex-model:\(sample.model)",
                               tokensIn: sample.input, tokensOut: sample.output, cacheReadTokens: sample.cachedInput,
                               cacheWriteTokens: sample.cacheWrite, reasoningTokens: sample.reasoning, contextWindow: sample.contextWindow)
+        }
+    }
+
+    /// Takes what a rollout's first lines say about its session: its metadata, which also marks the history a fork
+    /// copied, and its first prompt as the title, counting none of their usage. A page of history read later carries these
+    /// before its own lines.
+    mutating func readHead(_ lines: Data) {
+        for line in lines.split(separator: 0x0A) {
+            let head = line.prefix(512)
+            if head.range(of: Self.metadataMarker) != nil
+                || (task == nil && (head.range(of: Self.userMessageMarker) != nil
+                    || (head.range(of: Self.itemCompletedMarker) != nil && line.range(of: Self.userItemMarker) != nil))) {
+                ingest(line)
+            }
+        }
+    }
+    private static let metadataMarker = Data("\"session_meta\"".utf8)
+    private static let userMessageMarker = Data("\"user_message\"".utf8)
+    private static let itemCompletedMarker = Data("\"item_completed\"".utf8)
+    private static let userItemMarker = Data("\"UserMessage\"".utf8)
+
+    /// Takes the running totals a `token_count` record carries, counting nothing: a page read on its own starts from the
+    /// totals before it, as a read from the start would, so a record that only repeats them counts nothing here either.
+    mutating func seed(totalsFrom line: Data) {
+        guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+              let info = (object["payload"] as? [String: Any])?["info"] as? [String: Any],
+              let totals = info["total_token_usage"] as? [String: Any],
+              let input = totals["input_tokens"] as? Int, let output = totals["output_tokens"] as? Int else { return }
+        totalInput = input
+        totalOutput = output
+        totalCached = totals["cached_input_tokens"] as? Int ?? 0
+        totalWrite = totals["cache_write_input_tokens"] as? Int ?? 0
+        totalReasoning = totals["reasoning_output_tokens"] as? Int ?? 0
+        hasTotals = true
+    }
+
+    /// Takes in what an older page of the same rollout read: its counts and models add up, its first prompt names the
+    /// session, and its turns and completions come before this summary's own; the newest model and running totals stay.
+    mutating func merge(older: CodexTranscript) {
+        id = id ?? older.id
+        cwd = cwd ?? older.cwd
+        startedAt = [startedAt, older.startedAt].compactMap { $0 }.min()
+        lastActivityAt = [lastActivityAt, older.lastActivityAt].compactMap { $0 }.max()
+        task = older.task ?? task
+        if model == "Unknown" { model = older.model }
+        inputTokens += older.inputTokens
+        outputTokens += older.outputTokens
+        cachedInputTokens += older.cachedInputTokens
+        models.formUnion(older.models)
+        let ids = Set((turns ?? []).compactMap(\.id))
+        let earlier = (older.turns ?? []).filter { $0.id == nil || !ids.contains($0.id!) }
+        if !earlier.isEmpty || turns != nil { turns = Array((earlier + (turns ?? [])).suffix(32)) }
+        if let done = older.completions {
+            let known = Set((completions ?? []).map(\.id))
+            completions = done.filter { !known.contains($0.id) } + (completions ?? [])
         }
     }
 
@@ -374,15 +435,34 @@ public actor CodexTranscriptStore {
 enum CodexRollouts: TailLog {
     static let source = "codex"
     static let summaryKey = "transcript"
-    /// 5: keep the first valid metadata, so copied parent history cannot replace a spawned agent's identity.
-    static let version = 5
+    /// 5: keep the first valid metadata, so copied parent history cannot replace a spawned agent's identity. 6: read from
+    /// the newest turn first and back through the history; usage is keyed by its place in the rollout.
+    static let version = 6
 
     static func summary(for url: URL) -> CodexTranscript { CodexTranscript() }
 
     static func ingest(_ lines: Data, at offset: Int, into transcript: inout CodexTranscript) -> [UsageLedger.Event] {
-        for line in lines.split(separator: 0x0A) { transcript.ingest(line) }
+        var position = offset
+        for line in lines.split(separator: 0x0A, omittingEmptySubsequences: false) {
+            defer { position += line.count + 1 }
+            if !line.isEmpty { transcript.ingest(line, at: position) }
+        }
         return transcript.drainUsage()
     }
+
+    /// A turn starts where Codex starts a task, whether the user's prompt or a phone's started it.
+    static let startsTurn: LogPager.StartsTurn? = { prefix, _ in prefix.range(of: taskStarted) != nil }
+    private static let taskStarted = Data(#""type":"task_started""#.utf8)
+
+    static func head(_ lines: Data, into transcript: inout CodexTranscript) { transcript.readHead(lines) }
+
+    static func merge(older: CodexTranscript, into transcript: inout CodexTranscript) { transcript.merge(older: older) }
+
+    /// Codex counts a call as the change of its running totals, which `token_count` records carry.
+    static let carriesState: (@Sendable (Data) -> Bool)? = { prefix in prefix.range(of: tokenCount) != nil }
+    private static let tokenCount = Data(#""type":"token_count""#.utf8)
+
+    static func seed(_ line: Data, into transcript: inout CodexTranscript) { transcript.seed(totalsFrom: line) }
 
     static func drainMarks(_ transcript: inout CodexTranscript) -> [UsageLedger.Mark] { transcript.drainMarks() }
 
