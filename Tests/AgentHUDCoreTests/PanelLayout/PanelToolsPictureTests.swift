@@ -10,14 +10,18 @@ final class PanelToolsPictureTests: PanelToolsCase {
     private let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01, 0x02])
     private var drawn = 0
     private var measured = 0
+    /// The scopes the renderer and the measurer were asked for, in order.
+    private var scopes: [PanelLayoutScope] = []
 
     /// The tools with a renderer that draws `picture` and a measurer that finds `fit`, counting how often each runs.
     private func tools(picture: PanelPicture?, fit: PanelFit? = nil) -> PanelTools {
-        PanelTools(store: store, launch: 0, picture: { [unowned self] in
+        PanelTools(store: store, launch: 0, picture: { [unowned self] scope in
             drawn += 1
+            scopes.append(scope)
             return picture
-        }, fit: { [unowned self] in
+        }, fit: { [unowned self] scope in
             measured += 1
+            scopes.append(scope)
             return fit
         })
     }
@@ -46,8 +50,10 @@ final class PanelToolsPictureTests: PanelToolsCase {
         XCTAssertEqual(result["note"], .string("The hover panel as the saved layout draws it, 540 by 741 points, with account "
                                                + "names masked, session titles left out and any reading's reason or client's "
                                                + "notice drawn as grey bars."))
-        XCTAssertEqual(result.keys.sorted(), ["height", "note", "pixelsPerPoint", "revision", "scrolls", "unsaved", "width"])
+        XCTAssertEqual(result["screen"], .string("all"), "without a screen, the shared layout")
+        XCTAssertEqual(result.keys.sorted(), ["height", "note", "pixelsPerPoint", "revision", "screen", "scrolls", "unsaved", "width"])
         XCTAssertEqual(drawn, 1)
+        XCTAssertEqual(scopes, [.shared])
         XCTAssertEqual(measured, 0, "the picture carries its own measure")
     }
 
@@ -80,10 +86,10 @@ final class PanelToolsPictureTests: PanelToolsCase {
         XCTAssertFalse(fits["note"]?.stringValue?.contains("scrolls") == true)
     }
 
-    func testThePictureToolTakesNoArguments() {
+    func testThePictureToolTakesOnlyAScreen() {
         let tools = tools(picture: picture(height: 741))
         XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.getPanelImage, arguments: ["scale": .integer(1), "block": .string("Claude")])),
-                       .failure("get_panel_image takes no arguments. Unknown: \"block\", \"scale\"."))
+                       .failure("get_panel_image takes only screen. Unknown: \"block\", \"scale\"."))
         XCTAssertEqual(drawn, 0, "nothing is drawn for a refused call")
     }
 
@@ -108,6 +114,7 @@ final class PanelToolsPictureTests: PanelToolsCase {
         XCTAssertTrue(images.isEmpty, "get_panel draws nothing")
         XCTAssertEqual(drawn, 0)
         XCTAssertEqual(measured, 1)
+        XCTAssertEqual(scopes, [.shared], "the shared layout, measured on the main display")
 
         guard case .result(let proposed, _) = tools.answer(MCPToolRequest(tool: MCPTools.setPanelLayout,
                                                                           arguments: ["order": .array([.string("Codex")])])) else {

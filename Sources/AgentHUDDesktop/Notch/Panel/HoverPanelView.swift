@@ -10,7 +10,7 @@ struct PanelHeightKey: PreferenceKey {
     }
 }
 
-/// The agents' blocks, a compact token chart and the local session summary, as this Mac's panel layout arranges and
+/// The agents' blocks, a compact token chart and the local session summary, as its screen's panel layout arranges and
 /// sets them: by default the quota rows, then the chart, then the sessions, at regular spacing with dividers between.
 struct HoverPanelView: View {
     let store: UsageStore
@@ -39,6 +39,9 @@ struct HoverPanelView: View {
     var focusVendor: String? = nil
     /// Whether a failed refresh is said above the panel's content; a picture of the panel leaves it out.
     var showsRefreshError = true
+    /// The key of the screen whose panel this is, whose layout it draws (`PanelLayoutStore.effective(for:)`); nil draws
+    /// the shared layout.
+    var screen: String? = nil
 
     /// Whether something belongs to the agent this panel is for. Agents that share a mark share a panel.
     private func focused(_ vendor: String?) -> Bool {
@@ -62,9 +65,9 @@ struct HoverPanelView: View {
 
     private var layout: PanelLayoutStore { store.settings.panelLayout }
 
-    /// The panel under the layout in effect, a draft included. The Settings switches decide what exists; the layout
-    /// hides, orders and draws what they leave.
-    private var plan: PanelLayoutPlan { PanelLayoutPlan(layout: layout.effective, blocks: store.view.panelBlocks) }
+    /// The panel under its screen's layout in effect, a draft included. The Settings switches decide what exists; the
+    /// layout hides, orders and draws what they leave.
+    private var plan: PanelLayoutPlan { PanelLayoutPlan(layout: layout.effective(for: screen), blocks: store.view.panelBlocks) }
 
     /// One block of the panel with what it draws: a vendor's quota rows, or the API accounts under one key.
     private enum Block: Identifiable {
@@ -115,8 +118,8 @@ struct HoverPanelView: View {
             }
             // An unsaved layout is said above the footer, outside the scrolling content, and counts in the height.
             VStack(alignment: .leading, spacing: footerSpacing) {
-                if layout.hasDraft {
-                    PanelDraftBar(layout: layout).transition(.opacity)
+                if layout.hasDraft(on: screen) {
+                    PanelDraftBar(layout: layout, screen: screen).transition(.opacity)
                 }
                 footer
             }
@@ -129,8 +132,8 @@ struct HoverPanelView: View {
         .padding(insets)
         .frame(height: height, alignment: .top)
         .foregroundStyle(theme.text)
-        .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.effective)
-        .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.hasDraft)
+        .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.effective(for: screen))
+        .animation(reduceMotion ? nil : IslandAnimation.curve, value: layout.draftScope(on: screen))
     }
 
     private var measuredContent: some View {

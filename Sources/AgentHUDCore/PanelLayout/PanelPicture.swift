@@ -1,11 +1,11 @@
 import Foundation
 
-/// How tall the hover panel is at the width the main display's island gives it, and the tallest it opens there: the
-/// screen's height less 80 points. A panel taller than that scrolls.
+/// How tall the hover panel is at the width a display's island gives it, and the tallest it opens there: the screen's
+/// height less 80 points. A panel taller than that scrolls. The shared layout is measured on the main display.
 public struct PanelFit: Equatable, Sendable {
     /// The panel's natural height in whole points, never below the 80 the island opens to at least.
     public let height: Double
-    /// The tallest the panel opens on the main display, in points.
+    /// The tallest the panel opens on its display, in points.
     public let maximumHeight: Double
 
     public init(height: Double, maximumHeight: Double) {
@@ -13,12 +13,13 @@ public struct PanelFit: Equatable, Sendable {
         self.maximumHeight = maximumHeight
     }
 
-    /// Whether the panel is taller than the main display lets it open, so a person scrolls to see the rest.
+    /// Whether the panel is taller than its display lets it open, so a person scrolls to see the rest.
     public var scrolls: Bool { height > maximumHeight }
 }
 
-/// The hover panel drawn for an agent that checks how a layout looks: the whole panel as the layout in effect draws
-/// it, on the island's black card, as PNG data. It shows no account name and no session title (`IdentityMask`).
+/// The hover panel drawn for an agent that checks how a layout looks: a screen's whole panel as the layout in effect
+/// there draws it, on the island's black card, as PNG data. It shows no account name and no session title
+/// (`IdentityMask`).
 public struct PanelPicture: Equatable, Sendable {
     /// The pixels a point the picture is drawn at, unless that would make it taller than `pixelLimit`.
     public static let pointScale: Double = 2

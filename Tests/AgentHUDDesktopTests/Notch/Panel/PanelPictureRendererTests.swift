@@ -211,6 +211,28 @@ final class PanelPictureRendererTests: XCTestCase {
         XCTAssertEqual(try bitmap(draft).pixelsHigh, Int(draft.fit.height * 2))
     }
 
+    /// A screen with a layout of its own is drawn in it, and one that uses the shared layout in the shared one: the
+    /// renderer draws the screen it is given.
+    func testThePictureOfAScreenIsDrawnInThatScreensLayout() throws {
+        let layout = store.settings.panelLayout
+        layout.propose(.own(PanelLayout(blocks: ["Codex": PanelLayout.Block(hidden: true)])), for: "screen-b")
+        layout.save(.screen("screen-b"))
+        var own = renderer
+        own.screen = "screen-b"
+        var shared = renderer
+        shared.screen = "screen-a"
+        XCTAssertEqual(shared.fit(), renderer.fit(), "a screen without a layout of its own draws the shared one")
+        XCTAssertLessThan(own.fit().height, renderer.fit().height - 20, "the screen's own layout hides Codex's block")
+        let read = try text(of: try XCTUnwrap(own.picture()))
+        XCTAssertFalse(read.contains("Spark"), read)
+        XCTAssertFalse(read.contains("Unsaved layout"), "its saved layout has no bar:\n\(read)")
+
+        layout.propose(.shared, for: "screen-b")
+        let back = try text(of: try XCTUnwrap(own.picture()))
+        XCTAssertTrue(back.contains("Spark"), "a draft to use the shared layout draws the shared layout:\n\(back)")
+        XCTAssertTrue(back.contains("This display only"), "with the bar of the screen's own draft:\n\(back)")
+    }
+
     func testAPanelTallerThanTheDisplayIsDrawnWholeAndSaidToScroll() throws {
         let short = PanelPictureRenderer(store: store, display: .init(insets: HoverPanelView.notchInsets, maximumHeight: 400))
         let picture = try XCTUnwrap(short.picture())
@@ -242,7 +264,7 @@ final class PanelPictureRendererTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         let renderer = renderer
-        let tools = PanelTools(store: store, picture: { renderer.picture() }, fit: { renderer.fit() })
+        let tools = PanelTools(store: store, picture: { _ in renderer.picture() }, fit: { _ in renderer.fit() })
         let channel = MCPAppChannel(directory: directory) { tools.answer($0) }
         XCTAssertTrue(channel.start())
         addTeardownBlock { await channel.stop() }

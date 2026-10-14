@@ -14,6 +14,11 @@ struct GlowPane: View {
 
     private var glow: GlowSettings { settings.settings.glow(on: screen) }
 
+    /// What the screen's resting HUD shows of the agents under its layout, which the preview's colours follow.
+    private var agents: ScreenAgents {
+        ScreenAgents(store: store, listed: settings.panelLayout.effective(for: screen).hud.agents, mode: placement.mode)
+    }
+
     /// Edits one field of the selected screen's glow, leaving the rest of it as stored.
     private func binding<Value>(_ field: WritableKeyPath<GlowSettings, Value>) -> Binding<Value> {
         Binding(
@@ -50,7 +55,7 @@ struct GlowPane: View {
                                              metrics: metrics, screen: screen)
                         } else {
                             GlowPreview(
-                                appearance: store.glowAppearance(light: false, on: screen), settings: current,
+                                appearance: agents.glowAppearance(light: false, on: screen), settings: current,
                                 islandSize: metrics.islandSize, islandRadius: metrics.islandRadius,
                                 previewsMotion: true
                             )
@@ -192,8 +197,14 @@ struct LogoQueuePreview: View {
         return sample
     }
 
+    /// The marks and the backdrop's colours the screen's resting HUD shows under its layout.
+    private var agents: ScreenAgents {
+        ScreenAgents(store: store, listed: settings.panelLayout.effective(for: screen).hud.agents, mode: placement.mode)
+    }
+
     var body: some View {
-        let items = marks ?? LogoQueueItem.queue(rows: store.queueVendors)
+        let agents = agents
+        let items = marks ?? agents.queueItems
         let config = LogoQueueConfig(items: items, placement: samplePlacement, settings: settings.settings)
         let strip = config.stripThickness
         let margin = GlowWindowController.logoEdgeMargin(stripThickness: strip)
@@ -207,7 +218,7 @@ struct LogoQueuePreview: View {
             let stop = margin / width
             ZStack(alignment: .top) {
                 GlowPreview(
-                    appearance: store.glowAppearance(light: false, on: screen),
+                    appearance: agents.glowAppearance(light: false, on: screen),
                     settings: settings.settings.glow(on: screen),
                     islandSize: CGSize(width: width + overhang * 2, height: 2), islandRadius: 0, previewsMotion: true
                 )

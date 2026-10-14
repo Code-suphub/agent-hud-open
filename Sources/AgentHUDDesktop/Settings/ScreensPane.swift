@@ -60,14 +60,13 @@ struct ScreensPane: View {
         )
     }
 
-    /// The panel as this screen's settings draw it, laid along the top edge whichever edge it is parked on.
+    /// The panel as this screen's settings and its layout's agents draw it, laid along the top edge whichever edge it is
+    /// parked on.
     private var previewMeter: SimpleMeterConfig {
         var sample = placement
         sample.edge = .top
-        var items = store.map {
-            SimpleMeterItem.items(rows: $0.rows, balances: SimpleMeterItem.balances($0),
-                                  working: $0.queueVendors.filter(\.isWorking).map(\.vendor))
-        } ?? []
+        let listed = current.map { settings.panelLayout.effective(for: $0.key).hud.agents } ?? []
+        var items = store.map { ScreenAgents(store: $0, listed: listed, mode: .simple).meterItems } ?? []
         if items.isEmpty { items = SimpleMeterItem.samples }
         // The preview shows what the bot switch does even while nothing is running.
         if sample.simpleBots, !items.contains(where: \.isWorking) { items[0].isWorking = true }
@@ -105,6 +104,10 @@ struct ScreensPane: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("hud-reset-position")
                     .disabled(current == nil)
+            }
+            if let current {
+                SettingsDivider(theme: theme)
+                ScreenLayoutRow(layout: settings.panelLayout, screen: current.key)
             }
             if placement.mode.isDocked {
                 SettingsDivider(theme: theme)

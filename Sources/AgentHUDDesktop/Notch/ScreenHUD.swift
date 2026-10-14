@@ -204,7 +204,8 @@ final class ScreenHUD {
         let report: UsageReport?
         let settings: AgentHUDCore.Settings
         let agents: [AgentDescriptor]
-        /// The panel layout in effect, and whether it is an unsaved draft, which adds the bar that says so.
+        /// The layout this screen's panel draws, and whether it shows an unsaved draft, which adds the bar that says so.
+        /// The layout also says which agents the resting HUD shows, which the appearance below follows.
         let layout: PanelLayout
         let draft: Bool
         let hookTurns: [String: SessionPhase.HookTurn]
@@ -251,12 +252,12 @@ final class ScreenHUD {
 
     private var panelInputs: PanelInputs {
         PanelInputs(report: store.report, settings: settings.settings, agents: settings.agents,
-                      layout: settings.panelLayout.effective, draft: settings.panelLayout.hasDraft,
+                      layout: settings.panelLayout.effective(for: key), draft: settings.panelLayout.hasDraft(on: key),
                       hookTurns: store.hookTurns, now: store.now, dataDate: store.dataDate,
                       error: store.lastError, loading: store.isLoading, range: store.statsRange,
                       bucketSize: store.tokenBucketSize, dimensions: store.tokenDimensions,
                       requests: PermissionRequests.shared.pending, geometry: geometry, light: systemIsLight,
-                      appearance: store.glowAppearance(light: systemIsLight, on: key),
+                      appearance: agents.glowAppearance(light: systemIsLight, on: key),
                       alertID: activeAlert?.id, focus: focus, pinned: pinned, alertDetails: alerts.current?.inUsagePanel == false,
                       pendingIDs: alerts.pendingIDs,
                       sessionNavigationFailed: sessionNavigationFailed, failedListedSessionID: failedListedSessionID,
@@ -840,10 +841,13 @@ final class ScreenHUD {
         return config.edge.isHorizontal ? CGSize(width: run, height: config.stripThickness) : CGSize(width: config.stripThickness, height: run)
     }
 
-    /// The marks this screen shows: the watched agents and anything else run in the last day.
-    private var queueItems: [LogoQueueItem] {
-        LogoQueueItem.queue(rows: store.queueVendors)
+    /// What this screen's resting HUD shows of the agents, under the agents the layout it draws lists.
+    var agents: ScreenAgents {
+        ScreenAgents(store: store, listed: settings.panelLayout.effective(for: key).hud.agents, mode: placement.mode)
     }
+
+    /// The marks this screen shows: the watched agents and anything else run in the last day, as its layout lists them.
+    private var queueItems: [LogoQueueItem] { agents.queueItems }
 
     /// A docked mode sizes its strip from what it has to hold.
     private func resolveGeometry() -> NotchGeometry {
@@ -859,11 +863,9 @@ final class ScreenHUD {
         return queueSize(LogoQueueConfig(items: queueItems, placement: placement, settings: settings.settings))
     }
 
-    /// The agents with a quota row, each with its tightest window, then those with only a balance.
-    private var meterItems: [SimpleMeterItem] {
-        SimpleMeterItem.items(rows: store.rows, balances: SimpleMeterItem.balances(store),
-                              working: store.queueVendors.filter(\.isWorking).map(\.vendor))
-    }
+    /// The agents with a quota row, each with its tightest window, then those with only a balance, as its layout lists
+    /// them.
+    private var meterItems: [SimpleMeterItem] { agents.meterItems }
 
     private var simpleMeter: SimpleMeterConfig? {
         guard geometry.mode == .simple else { return nil }
@@ -924,6 +926,8 @@ final class ScreenHUD {
         )
         root.onOpenListedSession = { [weak self] id in Task { await self?.openListedSession(id) } }
         root.failedListedSessionID = failedListedSessionID
+        // The panel draws this screen's layout, and so does the copy the island is measured from.
+        root.panelScreen = key
         root.sessionEvents = alerts.sessionEvents
         root.logoQueue = logoQueue
         root.simpleMeter = simpleMeter
@@ -1065,7 +1069,8 @@ final class ScreenHUD {
         } else {
             alertHoverFloor = 0
         }
-        let appearance = store.glowAppearance(light: systemIsLight, on: key)
+        let agents = agents
+        let appearance = agents.glowAppearance(light: systemIsLight, on: key)
         let previousCanvas = island.panel.frame
         let previousCard = island.rootView.presentationFrame.map {
             CGRect(x: previousCanvas.minX + $0.minX, y: previousCanvas.maxY - $0.maxY,
@@ -1119,7 +1124,7 @@ final class ScreenHUD {
             appearance: appearance,
             animated: animated,
             alert: activeAlert,
-            quotaVendors: store.alertPulseVendors,
+            quotaVendors: agents.pulseVendors,
             pattern: surface.glowSettings.pattern(),
             backdrop: surface.backdrop ? geometry.rect : nil,
             drawsGlow: surface.drawsGlow,

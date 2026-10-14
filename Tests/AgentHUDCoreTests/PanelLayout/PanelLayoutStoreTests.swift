@@ -120,15 +120,15 @@ final class PanelLayoutStoreTests: XCTestCase {
         XCTAssertEqual(store.previous, PanelLayout(), "the default view was the layout before")
         XCTAssertNil(store.draft)
         XCTAssertTrue(store.canRevert)
-        XCTAssertEqual(stored(defaults), #"{"current":{"blocks":{"Claude":{"widget":"ring"}},"order":["Codex"]},"previous":{}}"#)
+        XCTAssertEqual(stored(defaults), #"{"shared":{"current":{"blocks":{"Claude":{"widget":"ring"}},"order":["Codex"]},"previous":{}}}"#)
 
         store.propose(quiet)
         store.save()
         XCTAssertEqual(store.current, quiet)
         XCTAssertEqual(store.previous, rings)
         let both = [
-            #"{"current":{"blocks":{"Codex":{"hidden":true}},"hiddenSections":["sessions"]},"#,
-            #""previous":{"blocks":{"Claude":{"widget":"ring"}},"order":["Codex"]}}"#,
+            #"{"shared":{"current":{"blocks":{"Codex":{"hidden":true}},"hiddenSections":["sessions"]},"#,
+            #""previous":{"blocks":{"Claude":{"widget":"ring"}},"order":["Codex"]}}}"#,
         ].joined()
         XCTAssertEqual(stored(defaults), both, "both sides in one value, keys sorted")
         store.save()
@@ -192,7 +192,7 @@ final class PanelLayoutStoreTests: XCTestCase {
         XCTAssertEqual(store.current, PanelLayout())
         XCTAssertEqual(store.previous, quiet)
         XCTAssertNil(store.draft)
-        XCTAssertEqual(stored(defaults), #"{"current":{},"previous":{"blocks":{"Codex":{"hidden":true}},"hiddenSections":["sessions"]}}"#)
+        XCTAssertEqual(stored(defaults), #"{"shared":{"current":{},"previous":{"blocks":{"Codex":{"hidden":true}},"hiddenSections":["sessions"]}}}"#)
         XCTAssertEqual(PanelLayoutStore(defaults: defaults).previous, quiet)
 
         // Already the default: the previous layout stays, and a draft still goes.

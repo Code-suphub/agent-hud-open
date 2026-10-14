@@ -2,9 +2,13 @@ import SwiftUI
 import AgentHUDCore
 
 /// Says that the panel shows a layout an agent proposed and nobody has saved, and lets a person keep it or drop it.
-/// It sits above the footer, outside the scrolling content, for as long as the draft waits.
+/// It sits above the footer, outside the scrolling content, for as long as the draft waits. It acts on the document the
+/// panel draws (`PanelLayoutStore.draftScope(on:)`): its screen's own draft, or the shared draft, which shows its bar on
+/// every screen that uses it.
 struct PanelDraftBar: View {
     let layout: PanelLayoutStore
+    /// The key of the screen whose panel this is; nil for the shared layout's.
+    let screen: String?
     private let theme = Theme.island
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -16,12 +20,14 @@ struct PanelDraftBar: View {
             Text(L10n.text("布局未保存", "Unsaved layout"))
                 .font(.ui(12, .medium))
                 .foregroundStyle(theme.text)
-            Text(L10n.text("重启后丢弃", "Dropped on restart"))
-                .font(.ui(11))
-                .foregroundStyle(theme.secondary)
-                .lineLimit(1)
+            // An agent's own panel on a separated dock is narrower than the whole panel: where a screen's note does not
+            // fit there, it says only that the draft is this display's.
+            ViewThatFits(in: .horizontal) {
+                noteText(note.full)
+                noteText(note.short)
+            }
             Spacer(minLength: 8)
-            Button { change { layout.discard() } } label: {
+            Button { change { layout.discardPanel(on: screen) } } label: {
                 Text(L10n.text("放弃", "Discard"))
                     .font(.ui(11, .medium)).lineLimit(1)
                     .foregroundStyle(theme.secondary)
@@ -30,7 +36,7 @@ struct PanelDraftBar: View {
                     .contentShape(Rectangle())
             }
             .accessibilityIdentifier("island-layout-discard")
-            Button { change { layout.save() } } label: {
+            Button { change { layout.savePanel(on: screen) } } label: {
                 Text(L10n.text("保存", "Save"))
                     .font(.ui(11, .medium)).lineLimit(1)
                     .foregroundStyle(.black)
@@ -46,6 +52,24 @@ struct PanelDraftBar: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(theme.text.opacity(0.06)))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.text("布局未保存", "Unsaved layout"))
+    }
+
+    /// When the draft goes, and for a screen's own draft that it is this display's alone; `short` where `full` does not
+    /// fit on one line.
+    private var note: (full: String, short: String) {
+        guard case .screen? = layout.draftScope(on: screen) else {
+            let restart = L10n.text("重启后丢弃", "Dropped on restart")
+            return (restart, restart)
+        }
+        return (L10n.text("仅此显示器，重启后丢弃", "This display only, dropped on restart"),
+                L10n.text("仅此显示器", "This display only"))
+    }
+
+    private func noteText(_ text: String) -> some View {
+        Text(text)
+            .font(.ui(11))
+            .foregroundStyle(theme.secondary)
+            .lineLimit(1)
     }
 
     private func change(_ body: () -> Void) {

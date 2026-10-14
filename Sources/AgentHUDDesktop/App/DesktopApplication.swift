@@ -145,13 +145,16 @@ public final class DesktopApplication {
         }
         if !options.demo { PermissionRequests.shared.start() } else if demoScript == nil { PermissionRequests.shared.seedDemo() }
         if options.servesTools {
-            // A demo shares the data directory with the real copy, so it takes the tool calls only when asked to. The
-            // panel is drawn and measured as the main display's island draws it, off screen.
-            let renderer = { @MainActor [weak self] () -> PanelPictureRenderer? in
+            // A demo shares the data directory with the real copy, so it takes the tool calls only when asked to. A
+            // screen's panel is drawn and measured as that display's island draws it, off screen; the shared layout as
+            // the main display's.
+            let renderer = { @MainActor [weak self] (scope: PanelLayoutScope) -> PanelPictureRenderer? in
                 guard let self else { return nil }
-                return PanelPictureRenderer(store: self.store, display: self.notch?.primary?.panelDisplay ?? .main)
+                return PanelPictureRenderer(store: self.store, display: self.notch?.panelDisplay(for: scope.screenKey) ?? .main,
+                                            screen: scope.screenKey)
             }
-            let tools = PanelTools(store: store, picture: { renderer()?.picture() }, fit: { renderer()?.fit() })
+            let tools = PanelTools(store: store, screens: { [weak self] in self?.notch?.panelScreens ?? [] },
+                                   picture: { renderer($0)?.picture() }, fit: { renderer($0)?.fit() })
             toolChannel = MCPAppChannel { tools.answer($0) }
             toolChannel?.start()
         }

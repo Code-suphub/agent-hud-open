@@ -1,9 +1,9 @@
 import AgentHUDSupport
 
 /// The tools Agent HUD's MCP server offers: a fixed list, the same for every client and in the same order, so a
-/// client may cache it. All four act on the hover panel, and none of them saves a layout: saving is the user's click
-/// in the panel. What a tool does with its arguments is the running application's business; only the names and the
-/// shapes are known here.
+/// client may cache it. All four act on the hover panel's layouts, the shared one or a screen's own, and none of them
+/// saves a layout: saving is the user's click in the panel. What a tool does with its arguments is the running
+/// application's business; only the names and the shapes are known here.
 public enum MCPTools {
     /// The tools' names, as a client calls them and as the application is handed them.
     public static let getPanel = "get_panel"
@@ -15,15 +15,16 @@ public enum MCPTools {
     /// What a client's model is told about the server before it has called anything.
     static let instructions = """
         Agent HUD shows AI coding agents' quota, usage and sessions at the Mac's notch. \
-        These tools read what its hover panel shows and rearrange it. \
+        These tools read what its hover panel shows and rearrange it, for every screen or for one. \
         A layout change is a draft until the user presses Save in the panel.
         """
 
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
-        with their latest readings, the layout in effect, the panel's height and whether it scrolls on the main \
-        display, and the widgets and measures each block accepts. Call it before changing the layout; block and row \
-        keys come from here. Names are written as the panel shows them, in the application's language.
+        with their latest readings, the layout in effect, the panel's height and whether it scrolls, and the widgets \
+        and measures each block accepts; and the attached screens, with the agents each one's resting HUD can show. \
+        Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel \
+        shows them, in the application's language.
         """
 
     private static let getPanelImageDescription = """
@@ -33,21 +34,28 @@ public enum MCPTools {
         """
 
     private static let setPanelLayoutDescription = """
-        Propose a layout for the Agent HUD hover panel. Send the whole layout you want; anything left out uses the \
-        default. What the layout from get_panel holds for a block or a row the panel does not list now can be sent \
-        back as it is, and applies again when that returns. It shows in the panel at once as an unsaved draft: the \
-        user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or \
-        'previous' to propose the built-in layout or the last saved one instead.
+        Propose a layout for the Agent HUD hover panel: its blocks, sections and style, and which agents the screen's \
+        resting HUD shows. Send the whole layout you want; anything left out uses the default. What the layout from \
+        get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an \
+        unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from \
+        'default' or 'previous' to propose the built-in layout or the last saved one instead, or 'shared' to have a \
+        screen use the shared layout again.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved layout."
 
+    /// What every tool takes to name the layout it acts on.
+    private static let screenDescription = "A screen key from get_panel for that screen's own layout; 'all', the default, "
+        + "for the shared layout the other screens use."
+
     /// The definitions `tools/list` returns.
     static let definitions: [JSONValue] = [
-        tool(getPanel, getPanelDescription, input: object([:]), changes: false),
-        tool(getPanelImage, getPanelImageDescription, input: object([:]), changes: false),
+        tool(getPanel, getPanelDescription, input: object(["screen": described("string", screenDescription)]), changes: false),
+        tool(getPanelImage, getPanelImageDescription, input: object(["screen": described("string", screenDescription)]),
+             changes: false),
         tool(setPanelLayout, setPanelLayoutDescription, input: layout, changes: true),
-        tool(discardPanelDraft, discardPanelDraftDescription, input: object([:]), changes: true),
+        tool(discardPanelDraft, discardPanelDraftDescription, input: object(["screen": described("string", screenDescription)]),
+             changes: true),
     ]
 
     /// What `set_panel_layout` takes: every property optional, and no others.
@@ -75,14 +83,19 @@ public enum MCPTools {
             "spacing": text("Room between sections, blocks and rows; regular if left out.", oneOf: ["compact", "regular", "roomy"]),
             "separators": described("boolean", "False drops the lines between blocks and sections."),
         ], description: "How the whole panel is set.")
+        let hud = object([
+            "agents": list("Agents it shows, in order, by name from get_panel's screens; none shows every agent.", of: key),
+        ], description: "The screen's resting HUD: the marks of a Dynamic dock, the items of a Simple panel, the glow.")
         return object([
+            "screen": described("string", screenDescription),
             "blocks": .object(blocks),
             "order": list("Block keys from get_panel, in the order the panel shows them.", of: key),
             "sections": list("The panel's sections, in the order it shows them.", of: section),
             "hiddenSections": list("The panel's sections to hide.", of: section),
             "style": style,
-            "from": text("Propose the built-in layout or the last saved one instead of the one described here.",
-                         oneOf: ["default", "previous"]),
+            "hud": hud,
+            "from": text("Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of "
+                         + "the one described here.", oneOf: ["default", "previous", "shared"]),
             "revision": described("integer", "The revision get_panel returned; when given and no longer current the call is refused."),
         ])
     }

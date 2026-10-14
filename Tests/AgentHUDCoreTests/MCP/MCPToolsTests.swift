@@ -66,16 +66,20 @@ final class MCPToolsTests: XCTestCase {
         }
         XCTAssertEqual([MCPTools.getPanel, MCPTools.getPanelImage, MCPTools.setPanelLayout, MCPTools.discardPanelDraft],
                        tools.map { $0["name"].stringValue })
-        XCTAssertNil(tools[0]["inputSchema"].objectValue?["properties"], "get_panel takes no arguments")
-        XCTAssertNil(tools[1]["inputSchema"].objectValue?["properties"], "get_panel_image takes no arguments")
-        XCTAssertNil(tools[3]["inputSchema"].objectValue?["properties"], "discard_panel_draft takes no arguments")
+        for index in [0, 1, 3] {
+            XCTAssertEqual(tools[index]["inputSchema"]["properties"].objectValue?.keys.sorted(), ["screen"],
+                           "\(tools[index]["name"]) takes the screen it acts on and nothing else")
+            XCTAssertEqual(tools[index]["inputSchema"]["properties"]["screen"], tools[2]["inputSchema"]["properties"]["screen"],
+                           "every tool names a screen the same way")
+        }
         XCTAssertFalse(tools.contains { $0["name"].stringValue?.contains("save") == true }, "saving is the user's click in the panel")
     }
 
     func testTheLayoutToolTakesTheLayoutAndNothingElse() throws {
         let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("set_panel_layout") })["inputSchema"]
         let properties = try XCTUnwrap(schema["properties"].objectValue)
-        XCTAssertEqual(properties.keys.sorted(), ["blocks", "from", "hiddenSections", "order", "revision", "sections", "style"])
+        XCTAssertEqual(properties.keys.sorted(),
+                       ["blocks", "from", "hiddenSections", "hud", "order", "revision", "screen", "sections", "style"])
         XCTAssertNil(schema.objectValue?["required"], "every property is optional")
         func choices(_ node: JSONValue) -> [String] { node["enum"].arrayValue?.compactMap(\.stringValue) ?? [] }
 
@@ -105,8 +109,18 @@ final class MCPToolsTests: XCTestCase {
             XCTAssertEqual(schema["properties"][name]["type"], .string("array"))
             XCTAssertEqual(choices(schema["properties"][name]["items"]), ["blocks", "tokens", "sessions"], name)
         }
-        XCTAssertEqual(choices(schema["properties"]["from"]), ["default", "previous"])
+        XCTAssertEqual(choices(schema["properties"]["from"]), ["default", "previous", "shared"])
         XCTAssertEqual(schema["properties"]["revision"]["type"], .string("integer"))
+        XCTAssertEqual(schema["properties"]["screen"]["type"], .string("string"))
+        XCTAssertEqual(schema["properties"]["screen"]["description"].stringValue,
+                       "A screen key from get_panel for that screen's own layout; 'all', the default, for the shared layout the other screens use.")
+
+        let hud = schema["properties"]["hud"]
+        XCTAssertEqual(hud["type"], .string("object"))
+        XCTAssertEqual(hud["additionalProperties"], .bool(false))
+        XCTAssertEqual(hud["properties"].objectValue?.keys.sorted(), ["agents"])
+        XCTAssertEqual(hud["properties"]["agents"]["type"], .string("array"))
+        XCTAssertEqual(hud["properties"]["agents"]["items"], .object(["type": .string("string")]))
     }
 
     /// The names the schema offers are the names the layout reads, so an agent is never offered one that is refused.
@@ -124,12 +138,12 @@ final class MCPToolsTests: XCTestCase {
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {
         let tools = Dictionary(uniqueKeysWithValues: MCPTools.definitions.map { ($0["name"].stringValue ?? "", $0) })
         XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
-                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's height and whether it scrolls on the main display, and the widgets and measures each block accepts. Call it before changing the layout; block and row keys come from here. Names are written as the panel shows them, in the application's language.")
+                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's height and whether it scrolls, and the widgets and measures each block accepts; and the attached screens, with the agents each one's resting HUD can show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
         XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
                        "Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with account names masked and session titles left out. Use it to check how a layout looks; get_panel reads the same panel as data.")
         XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
         XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
-                       "Propose a layout for the Agent HUD hover panel. Send the whole layout you want; anything left out uses the default. What the layout from get_panel holds for a block or a row the panel does not list now can be sent back as it is, and applies again when that returns. It shows in the panel at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead.")
+                       "Propose a layout for the Agent HUD hover panel: its blocks, sections and style, and which agents the screen's resting HUD shows. Send the whole layout you want; anything left out uses the default. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead, or 'shared' to have a screen use the shared layout again.")
         XCTAssertEqual(tools["discard_panel_draft"]?["description"].stringValue,
                        "Drop the unsaved draft so the Agent HUD panel returns to the saved layout.")
 

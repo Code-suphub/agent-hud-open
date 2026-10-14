@@ -9,8 +9,9 @@ public final class SettingsStore {
     public private(set) var settings: Settings
     public private(set) var agents: [AgentDescriptor]
     public private(set) var hasCompletedOnboarding: Bool
-    /// The hover panel's layout, kept in the same defaults under its own key. It changes apart from the settings and the
-    /// agent list: `onChange` hears nothing of it, so a layout change never wakes collection.
+    /// The hover panel's layouts, the shared one and each screen's own, kept in the same defaults under their own key.
+    /// They change apart from the settings and the agent list: `onChange` hears nothing of them, so a layout change never
+    /// wakes collection.
     public let panelLayout: PanelLayoutStore
 
     public enum Change { case settings, agents, discovery }
@@ -26,7 +27,9 @@ public final class SettingsStore {
         public static let settings = "settings.v1"
         public static let agents = "agents.v5"
         public static let onboarding = "onboarding.completed.v1"
-        public static let panelLayout = "panelLayout.v1"
+        /// The saved panel layouts, the shared one and each screen's own (`PanelLayoutStorage`). The first format,
+        /// `panelLayout.v1`, was never released and is not read.
+        public static let panelLayout = "panelLayout.v2"
     }
 
     /// Rows come from providers; `defaultAgents` seeds a store for the demo and tests.

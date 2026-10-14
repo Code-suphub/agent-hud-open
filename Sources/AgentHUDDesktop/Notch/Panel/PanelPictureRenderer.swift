@@ -25,8 +25,9 @@ private struct PictureRedaction: ViewModifier {
 }
 
 /// The hover panel drawn off screen for an agent that checks how a layout looks, and measured the same way for
-/// `get_panel`: the whole panel as the layout in effect draws it, a draft included, at the width the island gives it
-/// and with the main display's insets, on the island's black card with its rounded corners.
+/// `get_panel`: one screen's whole panel as the layout in effect there draws it, a draft included, at the width the
+/// island gives it and with that display's insets, on the island's black card with its rounded corners. The shared
+/// layout is drawn with the main display's insets.
 ///
 /// It is the panel's own view in a hosting view that is never put in a window, measured the way the island measures
 /// it before opening: nothing opens, nothing shows on screen and no read starts. It draws the panel's content alone,
@@ -48,6 +49,8 @@ struct PanelPictureRenderer {
 
     let store: UsageStore
     let display: Display
+    /// The key of the screen whose layout is drawn; nil draws the shared layout.
+    var screen: String? = nil
     /// The tallest picture drawn, in pixels.
     var pixelLimit = PanelPicture.pixelLimit
 
@@ -93,7 +96,7 @@ struct PanelPictureRenderer {
 
     /// The panel's own view as the island draws the whole of it, without an alert or a refresh error.
     func panel(masked: Bool) -> some View {
-        HoverPanelView(store: store, onOpenStats: {}, insets: display.insets, showsRefreshError: false)
+        HoverPanelView(store: store, onOpenStats: {}, insets: display.insets, showsRefreshError: false, screen: screen)
             .frame(width: Self.width, alignment: .top)
             .environment(\.masksIdentity, masked)
     }

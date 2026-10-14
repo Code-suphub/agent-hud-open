@@ -45,54 +45,55 @@ final class PanelLayoutPersistenceTests: XCTestCase {
     }
 
     func testOneUnreadableSideKeepsTheOther() {
-        let lostCurrent = load(#"{"current": "rings", "previous": {"order": ["Codex"]}}"#)
+        let lostCurrent = load(#"{"shared": {"current": "rings", "previous": {"order": ["Codex"]}}}"#)
         XCTAssertEqual(lostCurrent.current, PanelLayout())
         XCTAssertEqual(lostCurrent.previous, PanelLayout(order: ["Codex"]))
         XCTAssertTrue(lostCurrent.canRevert)
 
-        let lostPrevious = load(#"{"current": {"order": ["Codex"]}, "previous": [1, 2]}"#)
+        let lostPrevious = load(#"{"shared": {"current": {"order": ["Codex"]}, "previous": [1, 2]}}"#)
         XCTAssertEqual(lostPrevious.current, PanelLayout(order: ["Codex"]))
         XCTAssertNil(lostPrevious.previous)
 
-        let onlyCurrent = load(#"{"current": {"hiddenSections": ["tokens"]}}"#)
+        let onlyCurrent = load(#"{"shared": {"current": {"hiddenSections": ["tokens"]}}}"#)
         XCTAssertEqual(onlyCurrent.current, PanelLayout(hiddenSections: [.tokens]))
         XCTAssertNil(onlyCurrent.previous)
-        XCTAssertNil(load(#"{"current": {}, "previous": null}"#).previous)
-        XCTAssertEqual(load(#"{"current": {}, "previous": {}}"#).previous, PanelLayout(), "the default view can be the previous layout")
+        XCTAssertNil(load(#"{"shared": {"current": {}, "previous": null}}"#).previous)
+        XCTAssertEqual(load(#"{"shared": {"current": {}, "previous": {}}}"#).previous, PanelLayout(), "the default view can be the previous layout")
 
         // A side written by a newer build loses only what this build does not know, and is read normalized.
         let newer = load("""
-            {"current": {"blocks": {"Claude": {"widget": "gauge", "measures": ["cost", "pace"], "columns": 8}, "Codex": {}},
-                         "order": ["a", "a"], "style": {"spacing": "airy", "separators": false}},
-             "previous": {"sections": ["weather", "sessions"]}, "next": {}}
+            {"shared": {"current": {"blocks": {"Claude": {"widget": "gauge", "measures": ["cost", "pace"], "columns": 8}, "Codex": {}},
+                                    "order": ["a", "a"], "style": {"spacing": "airy", "separators": false}},
+                        "previous": {"sections": ["weather", "sessions"]}, "next": {}},
+             "elsewhere": {}}
             """)
         XCTAssertEqual(newer.current, PanelLayout(blocks: ["Claude": PanelLayout.Block(measures: [.cost])], order: ["a"],
                                                   style: PanelStyle(separators: false)))
         XCTAssertEqual(newer.previous, PanelLayout(sections: [.sessions, .blocks, .tokens]))
 
-        for unreadable in ["", "not json", "[]", #""{}""#, "{"] {
+        for unreadable in ["", "not json", "[]", #""{}""#, "{", #"{"shared": 7}"#, #"{"shared": [{}]}"#] {
             let store = load(unreadable)
             XCTAssertEqual(store.current, PanelLayout(), unreadable)
             XCTAssertNil(store.previous, unreadable)
         }
         let defaults = makeDefaults()
-        defaults.set(#"{"current": {"order": ["Codex"]}}"#, forKey: SettingsStore.Keys.panelLayout)
+        defaults.set(#"{"shared": {"current": {"order": ["Codex"]}}}"#, forKey: SettingsStore.Keys.panelLayout)
         XCTAssertEqual(PanelLayoutStore(defaults: defaults).current, PanelLayout(), "the stored value is data, as the settings are")
     }
 
     func testAnUnreadableValueIsReplacedByTheNextSave() {
         let defaults = makeDefaults()
-        defaults.set(Data(#"{"current": 7, "previous": {"order": ["Codex"]}}"#.utf8), forKey: SettingsStore.Keys.panelLayout)
+        defaults.set(Data(#"{"shared": {"current": 7, "previous": {"order": ["Codex"]}}}"#.utf8), forKey: SettingsStore.Keys.panelLayout)
         let store = PanelLayoutStore(defaults: defaults)
         store.propose(rings)
         store.save()
-        XCTAssertEqual(stored(defaults), #"{"current":{"blocks":{"Claude":{"widget":"ring"}},"order":["Codex"]},"previous":{}}"#)
+        XCTAssertEqual(stored(defaults), #"{"shared":{"current":{"blocks":{"Claude":{"widget":"ring"}},"order":["Codex"]},"previous":{}}}"#)
     }
 
     // MARK: Beside the settings
 
     func testSettingsHoldALayoutStoreOnTheirOwnDefaults() {
-        XCTAssertEqual(SettingsStore.Keys.panelLayout, "panelLayout.v1")
+        XCTAssertEqual(SettingsStore.Keys.panelLayout, "panelLayout.v2")
         let defaults = makeDefaults(), other = makeDefaults()
         let row = AgentDescriptor(id: "claude-session", vendor: "Claude", model: "5h", source: "", enabled: true)
         let settings = SettingsStore(defaults: defaults, defaultAgents: [row])

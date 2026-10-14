@@ -70,11 +70,16 @@ final class IslandController {
         let appearance: GlowAppearance
         let settings: AgentHUDCore.Settings
         let agents: [AgentDescriptor]
+        /// The agents each screen's layout lists for its resting HUD, by screen key, a draft included: a change
+        /// re-applies that screen's closed HUD at once.
+        let hudAgents: [String: [String]]
     }
 
     private var inputs: Inputs {
         Inputs(rows: store.rows, sessions: store.sessions, isPaused: store.isPaused, glowHidden: store.glowHidden,
-               appearance: store.glowAppearance(light: systemIsLight), settings: settings.settings, agents: settings.agents)
+               appearance: store.glowAppearance(light: systemIsLight), settings: settings.settings, agents: settings.agents,
+               hudAgents: Dictionary(order.map { ($0, settings.panelLayout.effective(for: $0).hud.agents) },
+                                     uniquingKeysWith: { first, _ in first }))
     }
 
     // MARK: Screens
@@ -130,6 +135,24 @@ final class IslandController {
     /// The HUD the tests and the menu act on when no screen is named: the main display's.
     var primary: ScreenHUD? {
         NSScreen.main.map { ScreenIdentity.key(for: $0) }.flatMap { huds[$0] } ?? order.first.flatMap { huds[$0] }
+    }
+
+    /// The attached displays as the MCP tools tell an agent of them, in the system's order: by role, with how each
+    /// presents the HUD and the agents its resting HUD would show now.
+    var panelScreens: [PanelScreen] {
+        NSScreen.screens.enumerated().map { index, screen in
+            let placement = ScreenIdentity.placement(for: screen, in: settings.settings)
+            return PanelScreen(key: ScreenIdentity.key(for: screen), name: ScreenIdentity.role(of: screen, at: index),
+                               mode: placement.mode, edge: placement.mode.isDocked ? placement.edge : .top,
+                               hasNotch: ScreenIdentity.hasNotch(screen),
+                               agents: ScreenAgents.available(store: store, mode: placement.mode))
+        }
+    }
+
+    /// How the display of `key` draws the whole panel, for a picture or a measurement made off screen: the main
+    /// display's for the shared layout and for a screen that is not attached.
+    func panelDisplay(for key: String?) -> PanelPictureRenderer.Display {
+        (key.flatMap { huds[$0] } ?? primary)?.panelDisplay ?? .main
     }
 
     /// The HUD on the screen the pointer is on, which is where an alert belongs and which hover acts on.

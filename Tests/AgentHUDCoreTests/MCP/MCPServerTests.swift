@@ -22,7 +22,7 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(result["capabilities"], .object(["tools": .object(["listChanged": .bool(false)])]))
         XCTAssertEqual(result["serverInfo"], .object(["name": .string("agent-hud"), "title": .string("Agent HUD"), "version": .string("1.2.3")]))
         XCTAssertEqual(result["instructions"].stringValue, "Agent HUD shows AI coding agents' quota, usage and sessions at the Mac's notch. "
-                       + "These tools read what its hover panel shows and rearrange it. "
+                       + "These tools read what its hover panel shows and rearrange it, for every screen or for one. "
                        + "A layout change is a draft until the user presses Save in the panel.")
         XCTAssertEqual(result.objectValue?.keys.sorted(), ["capabilities", "instructions", "protocolVersion", "serverInfo"],
                        "a handshake client gets the result its revision defines and nothing else")

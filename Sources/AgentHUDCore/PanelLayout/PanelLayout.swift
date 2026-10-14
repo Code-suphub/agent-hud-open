@@ -65,8 +65,10 @@ public struct PanelStyle: Hashable, Codable, Sendable {
     }
 }
 
-/// How this Mac's hover panel differs from its default view. The default view is a built-in rule, so a layout records
-/// only what was changed: `PanelLayout()` is the default view and its JSON is `{}`.
+/// How a screen's hover panel differs from its default view, and which agents that screen's resting HUD shows. The
+/// default view is a built-in rule, so a layout records only what was changed: `PanelLayout()` is the default view, every
+/// agent on the resting HUD, and its JSON is `{}`. A Mac keeps a shared layout and, for any screen, one of its own
+/// (`PanelLayoutStore`).
 ///
 /// A block is one agent's quota windows or one API account's balance, under the key `PanelBlockInfo` gives it; a row of
 /// a block is a quota window, under its `AgentDescriptor.windowKey`. A key that names nothing the panel has now stays
@@ -74,7 +76,7 @@ public struct PanelStyle: Hashable, Codable, Sendable {
 ///
 /// The JSON is also what an agent sends, so reading forgives field by field: a widget, ring size or spacing name this
 /// build does not know leaves that field unset, a measure or section it does not know is left out of its list,
-/// columns outside 2 to 6 count as not given, a block or a style that is not an object is left out, a value of the
+/// columns outside 2 to 6 count as not given, a block, a style or a hud that is not an object is left out, a value of the
 /// wrong type counts as not given, and keys it does not know are ignored. Only JSON that is not an object fails.
 /// Writing leaves out what is unset, empty or the default, so with sorted keys (`RecordCoding.encoder()`) equal layouts
 /// are the same bytes.
@@ -171,14 +173,17 @@ public struct PanelLayout: Hashable, Codable, Sendable {
     public var hiddenSections: [PanelSection]
     /// How the whole panel is set.
     public var style: PanelStyle
+    /// Which agents the resting HUD of a screen that draws this layout shows, and in what order.
+    public var hud: HUD
 
     public init(blocks: [String: Block] = [:], order: [String] = [], sections: [PanelSection] = [],
-                hiddenSections: [PanelSection] = [], style: PanelStyle = PanelStyle()) {
+                hiddenSections: [PanelSection] = [], style: PanelStyle = PanelStyle(), hud: HUD = HUD()) {
         self.blocks = blocks
         self.order = order
         self.sections = sections
         self.hiddenSections = hiddenSections
         self.style = style
+        self.hud = hud
     }
 
     // MARK: The same layout
@@ -187,7 +192,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
     /// block that changes nothing; each key in `order` once, the first time it is named, and none empty; each block
     /// normalized (`Block.normalized()`); `sections` as the whole order it gives, or empty when that is the default
     /// order; and `hiddenSections` once each, in default order. A hidden section keeps its place in `sections`, which
-    /// it takes again when it is shown.
+    /// it takes again when it is shown. The HUD's agents are normalized too (`HUD.normalized()`).
     func normalized() -> PanelLayout {
         var kept: [String: Block] = [:]
         for (key, block) in blocks {
@@ -197,7 +202,8 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         let sectionOrder = (sections + PanelSection.allCases).withoutRepeats
         return PanelLayout(blocks: kept, order: order.filter { !$0.isEmpty }.withoutRepeats,
                            sections: sectionOrder == PanelSection.allCases ? [] : sectionOrder,
-                           hiddenSections: PanelSection.allCases.filter(hiddenSections.contains), style: style)
+                           hiddenSections: PanelSection.allCases.filter(hiddenSections.contains), style: style,
+                           hud: hud.normalized())
     }
 
     /// Whether the layout is the default view: nothing is left of it once normalized.
@@ -205,7 +211,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
 
     // MARK: Coding
 
-    private enum CodingKeys: String, CodingKey { case blocks, order, sections, hiddenSections, style }
+    private enum CodingKeys: String, CodingKey { case blocks, order, sections, hiddenSections, style, hud }
 
     /// Nil when the value is not an object.
     init?(json: JSONValue) {
@@ -217,7 +223,8 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         self.init(blocks: blocks, order: Self.strings(fields["order"]),
                   sections: Self.strings(fields["sections"]).compactMap(PanelSection.init(rawValue:)),
                   hiddenSections: Self.strings(fields["hiddenSections"]).compactMap(PanelSection.init(rawValue:)),
-                  style: fields["style"].flatMap(PanelStyle.init(json:)) ?? PanelStyle())
+                  style: fields["style"].flatMap(PanelStyle.init(json:)) ?? PanelStyle(),
+                  hud: fields["hud"].flatMap(HUD.init(json:)) ?? HUD())
     }
 
     public init(from decoder: Decoder) throws {
@@ -235,10 +242,11 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         if !sections.isEmpty { try c.encode(sections, forKey: .sections) }
         if !hiddenSections.isEmpty { try c.encode(hiddenSections, forKey: .hiddenSections) }
         if !style.isDefault { try c.encode(style, forKey: .style) }
+        if !hud.isDefault { try c.encode(hud, forKey: .hud) }
     }
 
     /// The strings of a list, in its order; what is not a string is left out, and what is not a list gives none.
-    private static func strings(_ value: JSONValue?) -> [String] {
+    static func strings(_ value: JSONValue?) -> [String] {
         (value?.arrayValue ?? []).compactMap(\.stringValue)
     }
 }

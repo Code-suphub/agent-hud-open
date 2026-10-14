@@ -7,10 +7,10 @@ import AgentHUDCore
 extension SnapshotRunner {
     /// The hover panel under layouts an agent might propose: each widget with each measure first; an unsaved draft that
     /// mixes widgets, reorders the blocks and hides a section; each spacing, the panel without separators, a ring block
-    /// at each size, a block of six windows in two and in six columns, blocks offering two measures and one, and a block
-    /// with its countdown hidden. They are drawn from a settings store of their own, with the preferences the other
-    /// stills have at this point: a layout once saved leaves a previous one behind, which every Settings still after
-    /// these would show as something to revert to.
+    /// at each size, a block of six windows in two and in six columns, blocks offering two measures and one, a block
+    /// with its countdown hidden, and the layouts kept per screen (`saveScreenLayouts`). They are drawn from a settings
+    /// store of their own, with the preferences the other stills have at this point: a layout once saved leaves a
+    /// previous one behind, which every Settings still after these would show as something to revert to.
     static func saveLayouts(preferences: AgentHUDCore.Settings, folder: URL) {
         if let prefix = ProcessInfo.processInfo.environment["AGENTHUD_SNAPSHOT_PREFIX"],
            !"panel-layout".hasPrefix(prefix) && !prefix.hasPrefix("panel-layout") { return }
@@ -57,6 +57,7 @@ extension SnapshotRunner {
                                                            last.key: PanelLayout.Block(widget: .ring, countdown: false)]))
         }
         saveColumns(preferences: preferences, folder: folder)
+        saveScreenLayouts(preferences: preferences, folder: folder)
 
         layout.reset()
         var blocks: [String: PanelLayout.Block] = [:]

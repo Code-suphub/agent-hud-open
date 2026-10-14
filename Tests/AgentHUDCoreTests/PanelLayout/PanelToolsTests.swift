@@ -216,7 +216,9 @@ final class PanelToolsTests: PanelToolsCase {
         layout.save()
         XCTAssertEqual(try result(MCPTools.setPanelLayout, ["from": .string("previous")])["unsaved"], .bool(true))
         XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring)]))
-        XCTAssertTrue(try refusal(["from": .string("last")]).contains("\"default\" or \"previous\""))
+        XCTAssertTrue(try refusal(["from": .string("last")]).contains("\"default\", \"previous\" or \"shared\""))
+        XCTAssertTrue(try refusal(["from": .string("shared")]).contains("from \"shared\" is for a screen"),
+                      "the shared layout cannot be asked to use itself")
         XCTAssertTrue(try refusal(["from": .string("default"), "order": .array([])]).contains("either from or a layout"))
         // A key given as null is not given: this proposes the default view, which is what is saved, so the draft goes.
         XCTAssertTrue(layout.hasDraft)
@@ -298,14 +300,14 @@ final class PanelToolsTests: PanelToolsCase {
     }
 
     /// An argument a tool does not take is something its caller believes was heeded: a revision that nothing checked.
-    func testAToolThatTakesNoArgumentsRefusesAny() throws {
+    func testAToolThatTakesOnlyAScreenRefusesAnyOtherArgument() throws {
         layout.propose(PanelLayout(order: ["Codex"]))
         XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.discardPanelDraft, arguments: ["revision": .integer(999), "junk": .bool(true)])),
-                       .failure("Nothing was changed. discard_panel_draft takes no arguments. Unknown: \"junk\", \"revision\"."))
+                       .failure("Nothing was changed. discard_panel_draft takes only screen. Unknown: \"junk\", \"revision\"."))
         XCTAssertTrue(layout.hasDraft, "the draft a refused call was to drop is still there")
         XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.getPanel, arguments: ["junk": .bool(true)])),
-                       .failure("get_panel takes no arguments. Unknown: \"junk\"."))
-        XCTAssertEqual(try result(MCPTools.discardPanelDraft)["unsaved"], .bool(false))
+                       .failure("get_panel takes only screen. Unknown: \"junk\"."))
+        XCTAssertEqual(try result(MCPTools.discardPanelDraft, ["screen": .string("all")])["unsaved"], .bool(false))
     }
 
     // MARK: Through the channel

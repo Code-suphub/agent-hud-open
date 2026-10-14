@@ -841,6 +841,15 @@ struct IslandScene: View {
     var failedListedSessionID: String? = nil
     /// A fixed effect time for the dot and ASCII glow styles.
     var glowTime: Double? = nil
+    /// The key of the screen whose layout the panel and the glow follow; nil follows the shared layout and every agent.
+    var screen: String? = nil
+
+    /// The glow beside the notch: every agent's, or the agents the screen's layout lists.
+    private var glowAppearance: GlowAppearance {
+        guard let screen else { return store.glowAppearance(light: light) }
+        return ScreenAgents(store: store, listed: settings.panelLayout.effective(for: screen).hud.agents, mode: .notch)
+            .glowAppearance(light: light, on: screen)
+    }
 
     private var panelHeight: CGFloat {
         if showsAlertDetails, let alert {
@@ -860,7 +869,7 @@ struct IslandScene: View {
             return hosting.fittingSize.height
         }
         let hosting = NSHostingView(rootView: HoverPanelView(store: store, onOpenStats: {}, alert: alert,
-                                                            failedListedSessionID: failedListedSessionID)
+                                                            failedListedSessionID: failedListedSessionID, screen: screen)
             .frame(width: IslandController.expandedWidth).fixedSize(horizontal: false, vertical: true))
         return max(80, min(hosting.fittingSize.height, maximumPanelHeight))
     }
@@ -902,26 +911,32 @@ struct IslandScene: View {
             .background(Color(.sRGB, red: 20 / 255, green: 20 / 255, blue: 24 / 255, opacity: 0.55))
 
             GlowPreview(
-                appearance: store.glowAppearance(light: light),
+                appearance: glowAppearance,
                 settings: settings.settings.glow,
                 islandSize: islandSize,
                 islandRadius: radius
             )
             .environment(\.glowFrozenTime, glowTime ?? 0.9)
             .frame(width: 720, alignment: .top)
-            IslandRootView(
-                store: store, isOpen: open,
-                collapsedSize: CGSize(width: cameraWidth + NotchGeometry.collapsedTopRadius * 2, height: closedHeight),
-                collapsedTopRadius: NotchGeometry.collapsedTopRadius, collapsedBottomRadius: 14,
-                lightBorder: light, onOpenStats: {}, alert: alert, failedListedSessionID: failedListedSessionID,
-                waitingRequests: waitingRequests, sessionEvents: sessionEvents,
-                showsAlertDetails: showsAlertDetails, presentationSize: islandSize
-            )
+            island(cameraWidth: cameraWidth, closedHeight: closedHeight, size: islandSize)
                 .frame(width: islandSize.width + flare * 2, height: islandSize.height)
                 .shadow(color: Color.black.opacity(0.35), radius: 15, y: 8)
         }
         .frame(width: 720, height: max(390, islandSize.height + 36))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func island(cameraWidth: CGFloat, closedHeight: CGFloat, size: CGSize) -> IslandRootView {
+        var root = IslandRootView(
+            store: store, isOpen: open,
+            collapsedSize: CGSize(width: cameraWidth + NotchGeometry.collapsedTopRadius * 2, height: closedHeight),
+            collapsedTopRadius: NotchGeometry.collapsedTopRadius, collapsedBottomRadius: 14,
+            lightBorder: light, onOpenStats: {}, alert: alert, failedListedSessionID: failedListedSessionID,
+            waitingRequests: waitingRequests, sessionEvents: sessionEvents,
+            showsAlertDetails: showsAlertDetails, presentationSize: size
+        )
+        root.panelScreen = screen
+        return root
     }
 }
 
@@ -975,10 +990,12 @@ struct LogoQueueScene: View {
     var menuBar: CGFloat = 24
     var marks: [LogoQueueItem]?
     var width: CGFloat = 640
+    /// The key of the screen whose layout's agents the queue and its backdrop follow.
+    var screen: String = ""
 
     var body: some View {
         LogoQueuePreview(settings: settings, store: store, placement: placement,
-                         metrics: ScreenMetrics(menuBar: menuBar, notch: nil), marks: marks)
+                         metrics: ScreenMetrics(menuBar: menuBar, notch: nil), screen: screen, marks: marks)
             // The preview measures itself against the space it is given; a snapshot has to name one.
             .frame(width: width, height: 132)
             .padding(24)

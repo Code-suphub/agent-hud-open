@@ -29,18 +29,9 @@ struct IslandPane: View {
                     }
                     SettingsDivider(theme: theme)
                     // The layout arranges what the switches above leave. A person's click here takes effect at once,
-                    // where an agent's change waits in the panel to be saved.
-                    SettingRow(label: L10n.text("布局", "Layout"), subtitle: layoutStatus) {
-                        HStack(spacing: 8) {
-                            Button(L10n.text("恢复上一版", "Revert to Previous")) { settings.panelLayout.revert() }
-                                .disabled(!settings.panelLayout.canRevert)
-                                .accessibilityIdentifier("settings-layout-revert")
-                            Button(L10n.text("恢复默认", "Reset to Default")) { settings.panelLayout.reset() }
-                                .disabled(settings.panelLayout.current.isDefault && !settings.panelLayout.hasDraft)
-                                .accessibilityIdentifier("settings-layout-reset")
-                        }
-                        .controlSize(.small)
-                    }
+                    // where an agent's change waits in the panel to be saved. A screen with a layout of its own says so
+                    // in its part of Screens above.
+                    SharedLayoutRow(layout: settings.panelLayout, screens: ScreensPane.attached())
                 }
             SettingsSection(title: L10n.text("Logo", "Logos"), theme: theme) {
                 SettingsToggleRow(
@@ -68,13 +59,6 @@ struct IslandPane: View {
                 SliderRow(label: L10n.text("收起延迟", "Collapse delay"), value: settings.doubleBinding(\.collapseDelayMs), range: 0...1500, step: 50, format: { "\(Int($0)) ms" }, theme: theme)
             }
         }
-    }
-
-    /// Which of its three states the panel's layout is in.
-    private var layoutStatus: String {
-        let layout = settings.panelLayout
-        if layout.hasDraft { return L10n.text("面板正显示未保存的布局", "The panel shows an unsaved layout") }
-        return layout.current.isDefault ? L10n.text("默认布局", "Default layout") : L10n.text("自定义布局", "Custom layout")
     }
 
     private var quotaSample: some View {
