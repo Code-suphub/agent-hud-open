@@ -79,6 +79,24 @@ final class CodexDesktopStreamTests: XCTestCase, @unchecked Sendable {
         XCTAssertGreaterThanOrEqual(announced, 3, "each change is announced to whoever listens")
     }
 
+    func testAThreadWhoseOwnerSaysItWaitsOnTheUserIsWaitingWhateverItAsked() async throws {
+        let server = try CodexDesktopTestServer(state: state())
+        defer { server.stop() }
+        let client = try await following(server)
+        XCTAssertTrue(client.snapshot().waitingThreadIDs.isEmpty)
+        for (flags, waits) in [(["waitingOnApproval"], true), (["waitingOnUserInput"], true), ([], false), (["somethingElse"], false)] {
+            server.change([patch("add", [.string("threadRuntimeStatus")],
+                                 .object(["type": .string("active"), "activeFlags": .array(flags.map(JSONValue.string))]))])
+            try await arrived(server, at: client)
+            XCTAssertEqual(client.snapshot().waitingThreadIDs.contains(threadID), waits, "\(flags)")
+            XCTAssertTrue(client.snapshot().pending.isEmpty, "no card is made of a flag: the HUD shows only what it can answer")
+        }
+        server.change([patch("replace", [.string("threadRuntimeStatus")],
+                             .object(["type": .string("idle"), "activeFlags": .array([.string("waitingOnApproval")])]))])
+        try await arrived(server, at: client)
+        XCTAssertFalse(client.snapshot().waitingThreadIDs.contains(threadID), "an idle thread waits on nobody")
+    }
+
     func testAMissedRevisionOrAPatchThatNamesNoPlaceAsksForTheWholeStateAgain() async throws {
         let server = try CodexDesktopTestServer(state: state([request(7)]))
         defer { server.stop() }

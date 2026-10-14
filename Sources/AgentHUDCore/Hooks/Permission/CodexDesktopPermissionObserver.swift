@@ -67,6 +67,7 @@ public final class CodexDesktopPermissionObserver {
     }
 
     func reconcile(_ snapshot: CodexDesktopPermissions.Snapshot) {
+        requests.updateWaitingSessions(snapshot.waitingThreadIDs, source: .codex)
         let current = Dictionary(snapshot.pending.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for item in pending.values where snapshot.observedThreadIDs.contains(item.threadID) && current[item.id] == nil {
             requests.settleNativeRequest(item.id, source: .codex)

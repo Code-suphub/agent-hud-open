@@ -17,7 +17,13 @@ public struct CodexDesktopPermissions: Sendable {
         public let pending: [Pending]
         /// Only threads whose state is known can establish that a previously visible request has disappeared.
         public let observedThreadIDs: Set<String>
+        /// Threads whose owner says their turn waits on the user, for an approval or an answer, whether or not the HUD
+        /// shows a card for what it asked.
+        public var waitingThreadIDs: Set<String> = []
     }
+
+    /// The flags Desktop sets on an active thread while it waits on the user.
+    static let waitingFlags: Set<String> = ["waitingOnApproval", "waitingOnUserInput"]
 
     public enum Failure: Error, Equatable, Sendable {
         case noLongerWaiting, unsupportedDecision
@@ -39,14 +45,19 @@ public struct CodexDesktopPermissions: Sendable {
     /// What the followed threads are waiting on at this moment. A thread whose state is not known, or cannot be read
     /// as this reader expects it, is left out of the observed ones rather than read as waiting on nothing.
     public func snapshot() -> Snapshot {
-        var found: [Pending] = [], observed = Set<String>()
+        var found: [Pending] = [], observed = Set<String>(), waiting = Set<String>()
         for (threadID, thread) in stream.threads {
+            let status = thread.state["threadRuntimeStatus"]
+            if status["type"].stringValue == "active",
+               (status["activeFlags"].arrayValue ?? []).contains(where: { Self.waitingFlags.contains($0.stringValue ?? "") }) {
+                waiting.insert(threadID)
+            }
             guard let requests = try? Self.pending(thread.state, threadID: threadID, ownerClientID: thread.ownerClientID,
                                                    now: clock()) else { continue }
             found += requests
             observed.insert(threadID)
         }
-        return Snapshot(pending: found.sorted { $0.id < $1.id }, observedThreadIDs: observed)
+        return Snapshot(pending: found.sorted { $0.id < $1.id }, observedThreadIDs: observed, waitingThreadIDs: waiting)
     }
 
     /// Confirms the exact owner and request in the thread as it now stands before sending only the option the user selected.

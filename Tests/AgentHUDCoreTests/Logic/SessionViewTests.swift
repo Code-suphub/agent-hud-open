@@ -243,6 +243,27 @@ final class SessionViewTests: XCTestCase {
         XCTAssertEqual(store.view.session("demo-3")?.phase.state, .idle)
     }
 
+    /// A session whose client says it waits on its user waits for approval for as long as it says so, whether or not the
+    /// HUD holds a card for what it asked: Codex Desktop flags a thread so for a request of any kind.
+    @MainActor
+    func testASessionItsClientSaysWaitsOnTheUserWaitsForApproval() throws {
+        let store = try makeStore()
+        let requests = PermissionRequests.shared
+        defer { requests.updateWaitingSessions([], source: .codex) }
+        let thread = session("thread", agent: "codex-model:gpt-5", observed: -30)
+        show([thread], turns: [turn("thread", .running, provider: "codex", started: -600, observed: -200)], in: store)
+        XCTAssertEqual(store.view.session("thread")?.phase.state, .running)
+
+        requests.updateWaitingSessions(["thread"], source: .codex, now: now.addingTimeInterval(-90))
+        XCTAssertEqual(store.view.session("thread")?.phase, SessionPhase(state: .waitingForApproval, since: now.addingTimeInterval(-600), validUntil: nil))
+        XCTAssertEqual(store.view.session("thread")?.lastEventAt, now.addingTimeInterval(-90))
+        requests.updateWaitingSessions(["thread"], source: .codex, now: now)
+        XCTAssertEqual(requests.waitingSessions, ["thread": now.addingTimeInterval(-90)], "a session that stays waiting keeps when it began")
+
+        requests.updateWaitingSessions([], source: .codex)
+        XCTAssertEqual(store.view.session("thread")?.phase.state, .running, "once its client stops waiting the source decides again")
+    }
+
     /// The turns a host's hooks saw take the place of what the logs say wherever the hooks saw more: a Stop hook ends a turn
     /// the log still has running, and a prompt starts one the log has not shown, vouched for half an hour from the prompt.
     /// Work the log saw after the Stop hook keeps the log's phase, a log still vouched for keeps its phase against a hook

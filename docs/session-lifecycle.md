@@ -79,7 +79,7 @@ Pi and OpenCode report through a file Agent HUD keeps in the client's own direct
 
 ### Notification hook
 
-A transcript shows that a tool call is pending but not whether the client is running it or asking the user to allow it, so waiting for approval comes from the client itself: a permission request waiting on the HUD marks its session, and Claude Code's notification callback marks a Claude Code turn, also once a request went back to Claude Code's own dialog and while Claude Code waits for input (`agent_needs_input`). `AttentionHooks` owns the notification hook's configuration, the callback and the local record.
+A transcript shows that a tool call is pending but not whether the client is running it or asking the user to allow it, so waiting for approval comes from the client itself: a permission request waiting on the HUD marks its session, and Claude Code's notification callback marks a Claude Code turn, also once a request went back to Claude Code's own dialog and while Claude Code waits for input (`agent_needs_input`). `AttentionHooks` owns the notification hook's configuration, the callback and the local record. A Codex Desktop thread the HUD follows says it itself: while its `threadRuntimeStatus` is `active` with `waitingOnApproval` or `waitingOnUserInput` among its `activeFlags`, the session waits for approval, whatever the request is and whether or not the HUD shows a card for it (`PermissionRequests.waitingSessions`, from the first time it was seen).
 
 | Source | Configuration | Reported |
 | --- | --- | --- |
