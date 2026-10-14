@@ -62,7 +62,7 @@ extension PanelTools {
                 placedClear = false
                 reasons = fieldsGiven.isEmpty ? [] : ["hud.reset proposes the default style of the resting HUD of "
                     + "\(tools.name(of: key, among: attached)) whole, so the hud takes no other style field with it: "
-                    + "leave out \(HUDStyle.listed(fieldsGiven)), or reset."]
+                    + "leave out \(HUDStyle.listed(fieldsGiven)), or leave out hud.\(HUDStyle.resetName)."]
             } else if let waiting = tools.layout.styleDraft(of: key), asked == waiting {
                 reduced = asked
                 placedClear = false
@@ -84,6 +84,18 @@ extension PanelTools {
             guard let value, value != .null else { return false }
             guard name == "glow", let glow = value.objectValue else { return true }
             return glow.values.contains { $0 != .null }
+        }
+    }
+
+    /// Shows a proposal's style as `key`'s style draft: the screen's default style for `hud.reset`, else what the
+    /// proposal changes. A proposal's style is whole, so one that changes nothing, or a screen that is away, drops the
+    /// style draft. The screen's layout, saved or as a draft, is left as it is.
+    func proposeStyle(_ style: StyleProposal, for key: String) {
+        guard let target = style.target else { return layout.discardStyle(key) }
+        if style.resets {
+            layout.proposeDefaultLook(for: key, hasNotch: target.hasNotch)
+        } else {
+            layout.proposeStyle(style.reduced, for: key, hasNotch: target.hasNotch)
         }
     }
 

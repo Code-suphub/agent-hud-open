@@ -3,7 +3,7 @@ import Foundation
 
 /// What Agent HUD's MCP tools do in the running application: read what the hover panel shows, draw a picture of it or
 /// of a screen's resting HUD, propose a layout for it, and drop a proposal, for the shared layout or for one screen's
-/// own, whose proposal can also change the style of that screen's resting HUD.
+/// own, whose proposal can also change the style of that screen's resting HUD, or change that alone.
 ///
 /// Every answer comes from what the application holds: the last report, the settings and the layout store, the
 /// attached screens, and the panel's own views, which the host measures and draws off screen through the closures it
@@ -239,27 +239,40 @@ public struct PanelTools {
         guard reasons.isEmpty else { return .failure("Nothing was changed. " + reasons.joined(separator: " ")) }
         // A proposal that draws what the saved layout draws is the saved layout, however it is spelled out: it leaves
         // no draft, and nothing a person could save that changes nothing. The same holds for a screen's style, and a
-        // proposal is whole: a style it leaves out is the style the screen has saved.
+        // proposal is whole: a style it leaves out is the style the screen has saved. A call that gives the style alone
+        // is no layout, so the layout stays as it is, saved or as a draft, the screen's own or the shared one; the
+        // layout it would read as, the default, has nothing to check.
+        let styleAlone = Self.givesStyleAlone(arguments)
         let asked = proposal.reduced(against: existing)
         switch scope {
         case .shared:
-            layout.propose(asked == layout.current.reduced(against: existing) ? layout.current : asked)
+            if !styleAlone { layout.propose(asked == layout.current.reduced(against: existing) ? layout.current : asked) }
         case .screen(let key):
-            layout.propose(choice(asked, for: key, against: existing), for: key)
-            if let target = style.target, style.resets {
-                layout.proposeDefaultLook(for: key, hasNotch: target.hasNotch)
-            } else if let target = style.target {
-                layout.proposeStyle(style.reduced, for: key, hasNotch: target.hasNotch)
-            } else {
-                layout.discardStyle(key)
-            }
+            if !styleAlone { layout.propose(choice(asked, for: key, against: existing), for: key) }
+            proposeStyle(style, for: key)
         }
         var note = proposalNote(scope, among: attached)
         if style.placedClear {
             note += " The dock it becomes starts at position 0, the top left, clear of the notch, as Settings places one; "
                 + "another position can be proposed once the user has saved it."
         }
+        if styleAlone {
+            note += scope.screenKey.map { " The layout of the panel on \(name(of: $0, among: attached)) is unchanged" }
+                ?? " The shared layout is unchanged"
+            note += ": a call with only hud style fields leaves the layout as it is."
+        }
         return .result(panel(scope, among: attached, note: note))
+    }
+
+    /// Whether a call gives a screen's style alone: beside `screen` and `revision` it names only a `hud`, every property
+    /// of which is a style field, `reset` included, and none `agents`. A key given as null is not given, so a hud that
+    /// gives nothing, like a call without one, is the default layout.
+    private static func givesStyleAlone(_ arguments: [String: JSONValue]) -> Bool {
+        let taken: Set<String> = ["screen", "revision", "hud"], style = Set(HUDStyle.names + [HUDStyle.resetName])
+        let named = arguments.filter { $0.value != .null }.keys
+        guard named.allSatisfy({ taken.contains($0) }), let hud = arguments["hud"]?.objectValue else { return false }
+        let given = hud.filter { $0.value != .null }.keys
+        return !given.isEmpty && given.allSatisfy { style.contains($0) }
     }
 
     /// What a screen is proposed for a layout sent for it: its saved own layout where the layout draws that; the shared
@@ -310,7 +323,7 @@ public struct PanelTools {
         case .screen(let key):
             let name = name(of: key, among: attached)
             let draft = layout.draft(of: key)
-            if layout.styleDraft(of: key) != nil { return styleNote(name, layout: draft) }
+            if layout.styleDraft(of: key) != nil { return styleNote(name, of: key) }
             guard let draft else {
                 return "This is what \(name) already has saved, so there is no draft for it."
             }
@@ -325,19 +338,23 @@ public struct PanelTools {
     }
 
     /// What a proposal that leaves a screen a style draft did: its resting HUD shows the style at once, beside the
-    /// layout draft it has, if any. A person keeps both with one Save; moving that HUD or changing that display in
-    /// Settings drops the style first.
-    private func styleNote(_ name: String, layout draft: PanelScreenLayout?) -> String {
+    /// layout draft its panel draws, its own or the shared one's, if any. A person keeps both with one Save; moving that
+    /// HUD or changing that display in Settings drops the style first.
+    private func styleNote(_ name: String, of key: String) -> String {
         let dropped = "and the style also when the user moves that HUD or changes that display in Settings."
-        guard let draft else {
-            return "The resting HUD of \(name) shows its style as an unsaved draft; its panel's layout is the one it has "
-                + "saved. The user keeps the style by hovering the Agent HUD on that display and pressing Save in the "
-                + "panel; it is dropped when Agent HUD restarts, " + dropped
+        let both = "The user keeps both by hovering the Agent HUD on that display and pressing Save in the panel; they are "
+            + "dropped when Agent HUD restarts, " + dropped
+        if let draft = layout.draft(of: key) {
+            let what = draft == .shared ? "an unsaved draft that uses the shared layout" : "an unsaved draft of its own"
+            return "Shown on \(name) as \(what), with its resting HUD's style as an unsaved draft too. " + both
         }
-        let what = draft == .shared ? "an unsaved draft that uses the shared layout" : "an unsaved draft of its own"
-        return "Shown on \(name) as \(what), with its resting HUD's style as an unsaved draft too. The user keeps both by "
-            + "hovering the Agent HUD on that display and pressing Save in the panel; they are dropped when Agent HUD "
-            + "restarts, " + dropped
+        guard layout.draftScope(on: key) == nil else {
+            return "The resting HUD of \(name) shows its style as an unsaved draft, and its panel the shared layout's "
+                + "unsaved draft. " + both
+        }
+        return "The resting HUD of \(name) shows its style as an unsaved draft; its panel's layout is the one it has "
+            + "saved. The user keeps the style by hovering the Agent HUD on that display and pressing Save in the "
+            + "panel; it is dropped when Agent HUD restarts, " + dropped
     }
 
     private func discardNote(_ scope: PanelLayoutScope, among attached: [PanelScreen]) -> String {

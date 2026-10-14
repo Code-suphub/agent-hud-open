@@ -95,7 +95,7 @@ final class PanelToolsResetTests: PanelToolsCase {
         let saved = settings.settings
         let panel = try call(["screen": .string(key), "hud": .object(["reset": .bool(true)])])
         XCTAssertNotNil(layout.styleDraft(of: key))
-        XCTAssertNil(layout.draft(of: key), "the layout sent is the shared one the screen draws")
+        XCTAssertNil(layout.draft(of: key), "a call with the style alone leaves the layout as it is")
         XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false), .default(hasNotch: false))
         XCTAssertEqual(settings.effectiveGlow(on: key), settings.settings.glow)
         XCTAssertEqual(settings.settings, saved, "a tool writes nothing")
@@ -155,7 +155,7 @@ final class PanelToolsResetTests: PanelToolsCase {
         XCTAssertEqual(try refused(["screen": .string("SECOND-UUID"), "hud": .object([
             "reset": .bool(true), "simpleSize": .integer(30), "glow": .object(["brightness": .number(0.5)]),
         ])]), "Nothing was changed. hud.reset proposes the default style of the resting HUD of \"Display 2\" whole, so the "
-            + "hud takes no other style field with it: leave out hud.simpleSize and hud.glow, or reset.")
+            + "hud takes no other style field with it: leave out hud.simpleSize and hud.glow, or leave out hud.reset.")
         layout.propose(.own(PanelLayout(order: ["Codex"])), for: "AWAY-UUID")
         XCTAssertEqual(try refused(["screen": .string("AWAY-UUID"), "hud": .object(["reset": .bool(true)])]),
                        "Nothing was changed. hud.reset sets the resting HUD of an attached screen, and the screen "

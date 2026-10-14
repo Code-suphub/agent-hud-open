@@ -38,11 +38,12 @@ public enum MCPTools {
         Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its \
         width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes \
         and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out \
-        stays as saved. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent \
-        back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is \
-        dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for \
-        the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen \
-        use the shared layout again; hud.reset proposes a screen's default HUD style.
+        stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_panel \
+        holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved \
+        draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from \
+        'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the \
+        resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset \
+        proposes a screen's default HUD style.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
