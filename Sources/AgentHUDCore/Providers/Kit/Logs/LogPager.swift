@@ -7,7 +7,7 @@ import Foundation
 public struct LogPager {
     /// Whether a line starts a turn, by the client's own mark: given its first `prefixLength` bytes, and a way to read the
     /// whole line when they are not enough to tell.
-    public typealias StartsTurn = (_ prefix: Data, _ line: () throws -> Data) throws -> Bool
+    public typealias StartsTurn = @Sendable (_ prefix: Data, _ line: () throws -> Data) throws -> Bool
 
     public static let prefixLength = 2048
 
@@ -38,6 +38,17 @@ public struct LogPager {
         while let line = try lines.next() {
             count += 1
             if count >= minimumLines, try starts(line) { return line.lowerBound }
+        }
+        return 0
+    }
+
+    /// Just past the last newline among a log's first `size` bytes: where its complete lines end.
+    public func completeEnd(of size: Int) throws -> Int {
+        var start = size
+        while start > 0 {
+            let from = max(0, start - chunkSize), data = try read(from..<start)
+            if let newline = data.lastIndex(of: 0x0A) { return from + (newline - data.startIndex) + 1 }
+            start = from
         }
         return 0
     }

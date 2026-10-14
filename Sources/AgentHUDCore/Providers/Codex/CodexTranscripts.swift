@@ -119,7 +119,7 @@ public struct CodexTranscript: Codable, Sendable {
             if let value = payload["model"] as? String { model = value }
             // Who reviews the turn is asked when it wants an approval; the record that says so passes here as the turn begins.
             if let turn = payload["turn_id"] as? String, !turn.isEmpty {
-                CodexTurnReviewers.shared.note(turn: turn, reviewer: payload["approvals_reviewer"] as? String)
+                CodexTurnReviewers.shared.note(turn: turn, reviewer: payload["approvals_reviewer"] as? String, at: timestamp)
             }
             return
         }
@@ -379,7 +379,7 @@ enum CodexRollouts: TailLog {
 
     static func summary(for url: URL) -> CodexTranscript { CodexTranscript() }
 
-    static func ingest(_ lines: Data, into transcript: inout CodexTranscript) -> [UsageLedger.Event] {
+    static func ingest(_ lines: Data, at offset: Int, into transcript: inout CodexTranscript) -> [UsageLedger.Event] {
         for line in lines.split(separator: 0x0A) { transcript.ingest(line) }
         return transcript.drainUsage()
     }

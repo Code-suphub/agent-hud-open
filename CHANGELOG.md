@@ -15,6 +15,8 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 - Host API: `CompactWings` and the `compactWings` environment value; the `wings` argument of `IslandRootView.dockCompactSize(edge:collapsedSize:scale:wings:)`.
 - Host API: `IslandRootView.dockScale(mode:placement:)` gives a dock's scale; `IslandRootView.dockCompactHeight` replaces `dockCompactRowHeight`, and `AgentPeek.lineReference` is gone.
 - Host API: `AgentClient`, `ClientDeclaration` and `ClientDeclarations`: one declaration per client of the channel through which its sessions, usage, session phases and requests arrive.
+- A long Claude Code session is current as soon as its newest turn is read. A log seen for the first time, or read again after an update, was read from its first line before its session showed what it is doing, up to 259 MB on the largest log here; it is now read from its newest turn, 0.24 to 13 MB on the six largest logs here, and its history after that, newest first, on 0.1 s of processor time per pass while the statistics say they are indexing. This update reads every Claude Code log of the last 31 days that way once.
+- Host API: `LogPager`; `FastTranscriptParser.parse(_:at:)` and `TranscriptEvent.offset`; `TranscriptAccumulator.readHead(_:)` and `merge(older:)`.
 
 ## 0.5.3 — 2026-10-12
 

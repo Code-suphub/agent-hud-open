@@ -18,7 +18,7 @@ final class LogPagerTests: XCTestCase {
         data.range(of: Data(("\n" + line + "\n").utf8)).map { $0.lowerBound + 1 } ?? (data.starts(with: Data((line + "\n").utf8)) ? 0 : -1)
     }
 
-    private final class Count { var value = 0 }
+    private final class Count: @unchecked Sendable { var value = 0 }
 
     private func pager(_ url: URL, wholeLines: Count = Count()) throws -> LogPager {
         let handle = try FileHandle(forReadingFrom: url)
