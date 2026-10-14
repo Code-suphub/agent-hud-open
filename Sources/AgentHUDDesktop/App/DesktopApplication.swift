@@ -24,6 +24,8 @@ public final class DesktopApplication {
     private let antigravityApprovals = AntigravityPermissionObserver()
     private let deepseekQuestions = DeepSeekQuestionObserver()
     private let codexDesktopApprovals = CodexDesktopPermissionObserver()
+    /// Where the MCP process a client started hands its tool calls to this copy of the application.
+    private var panelTools: MCPAppChannel?
     private var notch: IslandController?
     private var statusItem: StatusItemController?
     private lazy var settingsWindow = SettingsWindowController(
@@ -142,6 +144,12 @@ public final class DesktopApplication {
             demoScript = DemoScriptRunner.load(name, store: store, island: notch)
         }
         if !options.demo { PermissionRequests.shared.start() } else if demoScript == nil { PermissionRequests.shared.seedDemo() }
+        // A demo shares the data directory with the real copy and must not take its tool calls, so it serves none.
+        if !options.demo {
+            let tools = PanelTools(store: store)
+            panelTools = MCPAppChannel { tools.answer($0) }
+            panelTools?.start()
+        }
         if !options.demo {
             antigravityApprovals.setEnabled(settings.settings.clientHooks)
             deepseekQuestions.setEnabled(settings.settings.clientHooks)
@@ -163,6 +171,7 @@ public final class DesktopApplication {
         codexDesktopApprovals.stop()
         // Quitting must never leave a client waiting on an answer that is no longer coming.
         PermissionRequests.shared.stop()
+        panelTools?.stop()
         demoScript?.stop()
         recorder?.finishAndWait()
         store.stop()

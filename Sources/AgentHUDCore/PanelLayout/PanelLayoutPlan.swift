@@ -58,13 +58,20 @@ public struct PanelLayoutPlan: Hashable, Sendable {
     /// A block as a layout's change draws it; nil when the change leaves it out. A block without rows, such as a
     /// balance, is never left out for its hidden rows.
     private static func plan(of block: PanelBlockInfo, changed change: PanelLayout.Block) -> PanelBlockPlan? {
-        let rows = Set(block.rowKeys)
-        let hiddenRows = rows.intersection(change.hiddenRows)
+        let drawn = PanelBlockPlan(block, changed: change)
         if change.hidden { return nil }
-        if !rows.isEmpty && hiddenRows == rows { return nil }
+        if !block.rowKeys.isEmpty && drawn.hiddenRows.count == Set(block.rowKeys).count { return nil }
+        return drawn
+    }
+}
+
+extension PanelBlockPlan {
+    /// How a layout's change draws a block, whether or not the change also leaves it out of the panel: what an agent
+    /// is told of a block it has hidden.
+    init(_ block: PanelBlockInfo, changed change: PanelLayout.Block) {
         let widget = block.kind.widget(for: change.widget)
-        return PanelBlockPlan(key: block.key, kind: block.kind, widget: widget,
-                              measure: block.kind.measure(for: change.measure, under: widget),
-                              measures: block.kind.measures(under: widget), hiddenRows: hiddenRows)
+        self.init(key: block.key, kind: block.kind, widget: widget,
+                  measure: block.kind.measure(for: change.measure, under: widget),
+                  measures: block.kind.measures(under: widget), hiddenRows: Set(block.rowKeys).intersection(change.hiddenRows))
     }
 }
