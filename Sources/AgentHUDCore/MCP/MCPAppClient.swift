@@ -15,8 +15,9 @@ enum MCPAppClient {
 
     /// How long a call may take from connecting to the end of the reply.
     static let timeout: TimeInterval = 10
-    /// The largest reply read; a longer one counts as none.
-    static let replyLimit = 1024 * 1024
+    /// The largest reply read; a longer one counts as none. A picture of the panel travels in the reply, and a PNG of
+    /// 1,080 by 2,400 pixels does not reach it even stored uncompressed and written in base64, about 14 MB.
+    static let replyLimit = 16 * 1024 * 1024
 
     static func call(_ request: MCPToolRequest, socket path: String, timeout: TimeInterval = timeout) -> Answer {
         guard let descriptor = UnixSocket.connect(to: path) else { return .notRunning }
@@ -42,7 +43,7 @@ enum MCPAppClient {
     /// `replyLimit`.
     private static func read(_ descriptor: Int32, until deadline: Date) -> Data? {
         var reply = Data()
-        var buffer = [UInt8](repeating: 0, count: 16 * 1024)
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
         while true {
             let remaining = deadline.timeIntervalSinceNow
             guard remaining > 0 else { return nil }

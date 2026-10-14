@@ -93,6 +93,23 @@ final class MCPAppChannelTests: XCTestCase {
         XCTAssertEqual(gone, .notRunning)
     }
 
+    /// A picture is larger than any request, and larger than every reply the channel carried before there were
+    /// pictures: it has to come back whole, with the result beside it.
+    func testAReplyWithAPictureTravelsBackWhole() async throws {
+        var bytes = [UInt8](repeating: 0, count: 3 * 1024 * 1024)
+        arc4random_buf(&bytes, bytes.count)
+        let png = Data(bytes)
+        let reply = MCPToolReply.result(["width": .integer(540), "height": .integer(1_200), "scrolls": .bool(false)],
+                                        images: [MCPImage(mimeType: "image/png", data: png)])
+        XCTAssertGreaterThan(reply.message.count, 4 * 1024 * 1024)
+        let channel = MCPAppChannel(directory: try directory()) { _ in reply }
+        XCTAssertTrue(channel.start())
+        addTeardownBlock { await channel.stop() }
+        let answered = await call(MCPToolRequest(tool: MCPTools.getPanelImage), at: channel.path)
+        XCTAssertEqual(answered, .reply(reply))
+        XCTAssertLessThanOrEqual(MCPToolRequest.sizeLimit, 1024 * 1024, "only replies carry pictures; a request is no larger than it was")
+    }
+
     func testASecondChannelLeavesTheSocketToTheOneThatServesIt() async throws {
         let directory = try directory()
         let first = MCPAppChannel(directory: directory) { _ in .result(["served": .string("first")]) }
@@ -224,6 +241,20 @@ final class MCPAppChannelTests: XCTestCase {
         XCTAssertEqual(MCPToolReply.read(failure.message), failure)
         for junk in ["", "{}", #"{"ok":true}"#, #"{"ok":true,"result":[1]}"#, #"{"ok":false}"#, #"{"ok":"yes","result":{}}"#, "[]"] {
             XCTAssertNil(MCPToolReply.read(Data(junk.utf8)), junk)
+        }
+        let picture = MCPToolReply.result(["height": .integer(741)], images: [MCPImage(mimeType: "image/png", data: Data([1, 2, 3]))])
+        XCTAssertEqual(try JSONValue.parse(picture.message), .object([
+            "ok": .bool(true), "result": .object(["height": .integer(741)]),
+            "images": .array([.object(["mimeType": .string("image/png"), "data": .string("AQID")])]),
+        ]), "the pictures travel beside the result")
+        XCTAssertEqual(MCPToolReply.read(picture.message), picture)
+        XCTAssertEqual(MCPToolReply.read(Data(#"{"ok":true,"result":{"a":1},"images":null}"#.utf8)), .result(["a": .integer(1)]))
+        XCTAssertEqual(MCPToolReply.read(Data(#"{"ok":true,"result":{},"images":[]}"#.utf8)), .result([:]))
+        for broken in [#"{"ok":true,"result":{},"images":{}}"#, #"{"ok":true,"result":{},"images":[{"data":"AQID"}]}"#,
+                       #"{"ok":true,"result":{},"images":[{"mimeType":"image/png","data":"not base64!"}]}"#,
+                       #"{"ok":true,"result":{},"images":[{"mimeType":"","data":"AQID"}]}"#,
+                       #"{"ok":true,"result":{},"images":["AQID"]}"#] {
+            XCTAssertNil(MCPToolReply.read(Data(broken.utf8)), broken)
         }
         let unwritable = MCPToolReply.result(["share": .number(.infinity)])
         XCTAssertEqual(MCPToolReply.read(unwritable.message), .failure("The result could not be written as JSON."),

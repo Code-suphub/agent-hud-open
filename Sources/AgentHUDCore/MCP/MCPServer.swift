@@ -168,8 +168,10 @@ struct MCPServer {
 
     // MARK: Tools
 
-    /// A call's result is one block of text: what the tool returned as JSON, or, marked as an error, the sentence
-    /// that says why it did not run. A tool the server does not have is the protocol's error instead.
+    /// A call's result is one block of text, what the tool returned as JSON, followed by an image block for each
+    /// picture it drew; or, marked as an error, one block with the sentence that says why it did not run. An image
+    /// block has the same shape in every revision the server answers. A tool the server does not have is the
+    /// protocol's error instead.
     private func toolCall(_ params: [String: JSONValue], id: JSONValue, stateless: Bool) -> JSONValue {
         guard let name = params["name"]?.stringValue else {
             return MCPProtocol.response(.invalidParams, "Invalid params: tools/call needs the tool's name", id: id)
@@ -185,11 +187,13 @@ struct MCPServer {
         }
         let text: String
         var failed = true
+        var pictures: [MCPImage] = []
         switch call(MCPToolRequest(tool: name, arguments: arguments)) {
-        case .reply(.result(let result)):
+        case .reply(.result(let result, let images)):
             if let json = MCPProtocol.line(.object(result)) {
                 text = json
                 failed = false
+                pictures = images
             } else {
                 text = "Agent HUD's answer could not be read. Try again."
             }
@@ -197,7 +201,11 @@ struct MCPServer {
         case .notRunning: text = "Agent HUD is not running. Open Agent HUD and try again."
         case .unanswered: text = "Agent HUD did not answer. Try again."
         }
-        let block: [String: JSONValue] = ["type": .string("text"), "text": .string(text)]
-        return response(["content": .array([.object(block)]), "isError": .bool(failed)], id: id, stateless: stateless)
+        let block: JSONValue = .object(["type": .string("text"), "text": .string(text)])
+        let content = [block] + pictures.map { picture -> JSONValue in
+            .object(["type": .string("image"), "data": .string(picture.data.base64EncodedString()),
+                     "mimeType": .string(picture.mimeType)])
+        }
+        return response(["content": .array(content), "isError": .bool(failed)], id: id, stateless: stateless)
     }
 }

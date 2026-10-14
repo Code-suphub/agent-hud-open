@@ -198,7 +198,9 @@ struct ProviderQuotaBlock: View {
 }
 
 /// Names the account above its windows once a client has more than one, or when it is no longer signed in. A client
-/// that said why it has no current reading says it here, where the stale rows are.
+/// that said why it has no current reading says it here, where the stale rows are. On the panel's picture for an agent
+/// the name is masked, where the reading came from is not said, and the warning and the notice, which their provider
+/// or client wrote, are placeholder bars.
 struct AccountSectionHeader: View {
     let account: AccountObservation
     /// Whether the account is current or when it was last read.
@@ -206,11 +208,12 @@ struct AccountSectionHeader: View {
     var notice: String?
     var warning: String?
     private let theme = Theme.island
+    @Environment(\.masksIdentity) private var masksIdentity
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
-                Text(account.displayName)
+                Text(masksIdentity ? IdentityMask.account(account.displayName) : account.displayName)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .foregroundStyle(theme.text.opacity(account.isCurrent ? 0.85 : 0.6))
@@ -218,11 +221,12 @@ struct AccountSectionHeader: View {
                     Text(plan).foregroundStyle(theme.secondary)
                 }
                 if let sourceDetails {
+                    let said = masksIdentity ? "" : sourceDetails
                     Image(systemName: "info.circle")
                         .foregroundStyle(theme.tertiary)
-                        .help(sourceDetails)
+                        .help(said)
                         .accessibilityLabel(L10n.text("读数来源", "Reading source"))
-                        .accessibilityHint(sourceDetails)
+                        .accessibilityHint(said)
                 }
                 Spacer(minLength: 8)
                 Text(label)
@@ -234,12 +238,14 @@ struct AccountSectionHeader: View {
                     .foregroundStyle(theme.statusText(.warning))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .redactedOnPicture()
             }
             if let notice, notice != warning {
                 Text(notice)
                     .foregroundStyle(theme.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .redactedOnPicture()
             }
         }
         .font(.ui(11))

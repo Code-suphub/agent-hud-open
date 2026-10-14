@@ -43,19 +43,52 @@ public struct MCPToolRequest: Equatable, Sendable {
     }
 }
 
-/// The application's answer to a tool call: what the tool returned, or an English sentence that tells the agent why
-/// it was refused and what to change.
+/// A picture a tool returns beside its result, which the server hands its client as an image block.
+public struct MCPImage: Equatable, Sendable {
+    /// The image's media type, such as `image/png`.
+    public let mimeType: String
+    /// The image file's bytes.
+    public let data: Data
+
+    public init(mimeType: String, data: Data) {
+        self.mimeType = mimeType
+        self.data = data
+    }
+
+    /// The picture as the channel carries it: `{"mimeType": …, "data": "<base64>"}`.
+    var json: JSONValue {
+        .object(["mimeType": .string(mimeType), "data": .string(data.base64EncodedString())])
+    }
+
+    /// The pictures a reply carries: none when it names none, nil when what it names is not a list of pictures.
+    static func list(_ value: JSONValue?) -> [MCPImage]? {
+        guard let value, value != .null else { return [] }
+        guard let items = value.arrayValue else { return nil }
+        var images: [MCPImage] = []
+        for item in items {
+            guard let mimeType = item["mimeType"].stringValue, !mimeType.isEmpty,
+                  let encoded = item["data"].stringValue, let data = Data(base64Encoded: encoded) else { return nil }
+            images.append(MCPImage(mimeType: mimeType, data: data))
+        }
+        return images
+    }
+}
+
+/// The application's answer to a tool call: what the tool returned, with any pictures it drew, or an English sentence
+/// that tells the agent why it was refused and what to change.
 public enum MCPToolReply: Equatable, Sendable {
-    case result([String: JSONValue])
+    case result([String: JSONValue], images: [MCPImage] = [])
     case failure(String)
 
-    /// The reply as the channel carries it: `{"ok": true, "result": {…}}` or `{"ok": false, "error": "…"}`. A result
-    /// JSON cannot hold, such as a number that is not finite, travels as the failure it is.
+    /// The reply as the channel carries it: `{"ok": true, "result": {…}}`, with `"images": [{"mimeType": …, "data": …}]`
+    /// beside the result when the tool drew any, or `{"ok": false, "error": "…"}`. A result JSON cannot hold, such as a
+    /// number that is not finite, travels as the failure it is.
     var message: Data {
         let encoder = RecordCoding.encoder()
-        if case .result(let result) = self,
-           let data = try? encoder.encode(JSONValue.object(["ok": .bool(true), "result": .object(result)])) {
-            return data
+        if case .result(let result, let images) = self {
+            var reply: [String: JSONValue] = ["ok": .bool(true), "result": .object(result)]
+            if !images.isEmpty { reply["images"] = .array(images.map(\.json)) }
+            if let data = try? encoder.encode(JSONValue.object(reply)) { return data }
         }
         var sentence = "The result could not be written as JSON."
         if case .failure(let given) = self { sentence = given }
@@ -63,13 +96,14 @@ public enum MCPToolReply: Equatable, Sendable {
         return (try? encoder.encode(refusal)) ?? Data(#"{"ok":false,"error":"The reply could not be written."}"#.utf8)
     }
 
-    /// Reads a reply off the channel; nil for anything else, an empty answer included.
+    /// Reads a reply off the channel; nil for anything else, an empty answer and a list of pictures that cannot be
+    /// read included.
     static func read(_ message: Data) -> MCPToolReply? {
         guard let object = (try? JSONValue.parse(message))?.objectValue else { return nil }
         switch object["ok"] {
         case .bool(true)?:
-            guard let result = object["result"]?.objectValue else { return nil }
-            return .result(result)
+            guard let result = object["result"]?.objectValue, let images = MCPImage.list(object["images"]) else { return nil }
+            return .result(result, images: images)
         case .bool(false)?:
             guard let sentence = object["error"]?.stringValue else { return nil }
             return .failure(sentence)

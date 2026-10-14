@@ -696,6 +696,14 @@ final class ScreenHUD {
         geometry.screenFrame.height - 80
     }
 
+    /// How this display draws the whole panel, for a picture or a measurement made off screen: the insets its notch or
+    /// its dock gives the content, as `IslandRootView` sets them, and the tallest the panel opens here.
+    var panelDisplay: PanelPictureRenderer.Display {
+        let insets = geometry.mode.isDocked
+            ? IslandRootView.dockInsets(edge: geometry.edge, collapsedSize: geometry.rect.size) : HoverPanelView.notchInsets
+        return PanelPictureRenderer.Display(insets: insets, maximumHeight: maximumContentHeight)
+    }
+
     /// Resizes the open panel to its content (rows come and go as windows are discovered).
     private func updatePanelHeight(_ height: CGFloat) {
         let clamped = max(80, min(height.rounded(), maximumContentHeight))

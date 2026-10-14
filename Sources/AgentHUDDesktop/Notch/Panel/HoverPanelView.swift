@@ -37,6 +37,8 @@ struct HoverPanelView: View {
     var onAnswerSession: (String?) -> Void = { _ in }
     /// Set on a dock that separates its agents: the panel is this one agent's, and shows nothing of the others.
     var focusVendor: String? = nil
+    /// Whether a failed refresh is said above the panel's content; a picture of the panel leaves it out.
+    var showsRefreshError = true
 
     /// Whether something belongs to the agent this panel is for. Agents that share a mark share a panel.
     private func focused(_ vendor: String?) -> Bool {
@@ -55,6 +57,8 @@ struct HoverPanelView: View {
     /// Above the draft bar and the footer, which keep their room whatever the layout's spacing.
     private let footerSpacing: CGFloat = 10
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Set on the panel's picture for an agent, whose session rows then name no session.
+    @Environment(\.masksIdentity) var masksIdentity
 
     private var layout: PanelLayoutStore { store.settings.panelLayout }
 
@@ -144,11 +148,12 @@ struct HoverPanelView: View {
         let inlineAlert = alert.map { !$0.isSessionEvent } == true
         // A quota block names its agent; where none is drawn, the panel still has to say whose it is.
         let titled = focusVendor != nil && !(sections.contains(.blocks) && blocks.contains(where: \.isQuota))
-        let hasHeader = store.lastError != nil || inlineAlert || titled
+        let error = showsRefreshError ? store.lastError : nil
+        let hasHeader = error != nil || inlineAlert || titled
         let spacing = PanelSpacingMetrics(plan.style.spacing)
         let divider = plan.style.separators ? theme.divider : Color.clear
         return VStack(alignment: .leading, spacing: spacing.sections) {
-            if let error = store.lastError {
+            if let error {
                 Text(L10n.text("刷新失败：", "Refresh failed: ") + error)
                     .font(.ui(11)).foregroundStyle(theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)

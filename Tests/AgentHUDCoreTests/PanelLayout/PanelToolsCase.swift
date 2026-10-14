@@ -37,7 +37,7 @@ class PanelToolsCase: XCTestCase {
     var layout: PanelLayoutStore { settings.panelLayout }
 
     func result(_ tool: String, _ arguments: [String: JSONValue] = [:], line: UInt = #line) throws -> [String: JSONValue] {
-        guard case .result(let result) = tools.answer(MCPToolRequest(tool: tool, arguments: arguments)) else {
+        guard case .result(let result, _) = tools.answer(MCPToolRequest(tool: tool, arguments: arguments)) else {
             XCTFail("\(tool) was refused", line: line)
             throw CancellationError()
         }

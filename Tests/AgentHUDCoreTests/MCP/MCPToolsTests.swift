@@ -46,12 +46,12 @@ final class MCPToolsTests: XCTestCase {
         }
     }
 
-    func testTheListHoldsTheThreeToolsWithTheirSchemas() throws {
+    func testTheListHoldsTheFourToolsWithTheirSchemas() throws {
         // Codex 0.162.1 asks with a progress token and nothing else.
         let response = try probe.response(to: #"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"progressToken":0}}}"#)
         XCTAssertEqual(response["result"].objectValue?.keys.sorted(), ["tools"], "a handshake client gets the list and nothing else")
         let tools = try XCTUnwrap(response["result"]["tools"].arrayValue)
-        XCTAssertEqual(tools.map { $0["name"].stringValue }, ["get_panel", "set_panel_layout", "discard_panel_draft"])
+        XCTAssertEqual(tools.map { $0["name"].stringValue }, ["get_panel", "get_panel_image", "set_panel_layout", "discard_panel_draft"])
         XCTAssertEqual(try probe.response(to: #"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)["result"], response["result"],
                        "the same list in the same order every time, so a client may cache it")
 
@@ -64,9 +64,11 @@ final class MCPToolsTests: XCTestCase {
             XCTAssertEqual(tool["inputSchema"]["additionalProperties"], .bool(false), "\(name) takes no property it does not name")
             try assertSchema(tool["inputSchema"], at: name)
         }
-        XCTAssertEqual([MCPTools.getPanel, MCPTools.setPanelLayout, MCPTools.discardPanelDraft], tools.map { $0["name"].stringValue })
+        XCTAssertEqual([MCPTools.getPanel, MCPTools.getPanelImage, MCPTools.setPanelLayout, MCPTools.discardPanelDraft],
+                       tools.map { $0["name"].stringValue })
         XCTAssertNil(tools[0]["inputSchema"].objectValue?["properties"], "get_panel takes no arguments")
-        XCTAssertNil(tools[2]["inputSchema"].objectValue?["properties"], "discard_panel_draft takes no arguments")
+        XCTAssertNil(tools[1]["inputSchema"].objectValue?["properties"], "get_panel_image takes no arguments")
+        XCTAssertNil(tools[3]["inputSchema"].objectValue?["properties"], "discard_panel_draft takes no arguments")
         XCTAssertFalse(tools.contains { $0["name"].stringValue?.contains("save") == true }, "saving is the user's click in the panel")
     }
 
@@ -122,13 +124,17 @@ final class MCPToolsTests: XCTestCase {
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {
         let tools = Dictionary(uniqueKeysWithValues: MCPTools.definitions.map { ($0["name"].stringValue ?? "", $0) })
         XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
-                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, and the widgets and measures each block accepts. Call it before changing the layout; block and row keys come from here. Names are written as the panel shows them, in the application's language.")
+                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's height and whether it scrolls on the main display, and the widgets and measures each block accepts. Call it before changing the layout; block and row keys come from here. Names are written as the panel shows them, in the application's language.")
+        XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
+                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with account names masked and session titles left out. Use it to check how a layout looks; get_panel reads the same panel as data.")
+        XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
         XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
                        "Propose a layout for the Agent HUD hover panel. Send the whole layout you want; anything left out uses the default. What the layout from get_panel holds for a block or a row the panel does not list now can be sent back as it is, and applies again when that returns. It shows in the panel at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' or 'previous' to propose the built-in layout or the last saved one instead.")
         XCTAssertEqual(tools["discard_panel_draft"]?["description"].stringValue,
                        "Drop the unsaved draft so the Agent HUD panel returns to the saved layout.")
 
         XCTAssertEqual(tools["get_panel"]?["annotations"], .object(["readOnlyHint": .bool(true), "openWorldHint": .bool(false)]))
+        XCTAssertEqual(tools["get_panel_image"]?["annotations"], .object(["readOnlyHint": .bool(true), "openWorldHint": .bool(false)]))
         let draft: JSONValue = .object(["readOnlyHint": .bool(false), "destructiveHint": .bool(false),
                                         "idempotentHint": .bool(true), "openWorldHint": .bool(false)])
         XCTAssertEqual(tools["set_panel_layout"]?["annotations"], draft)
@@ -174,6 +180,34 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertFalse(text.contains("\n") || text.contains(": "), "compact, on one line")
         XCTAssertEqual(try JSONValue.parse(Data(text.utf8)), .object(result))
         XCTAssertEqual(probe.calls, [MCPToolRequest(tool: "get_panel")], "arguments left out are none")
+    }
+
+    /// A picture comes after the text that says what it shows, as the image block every revision the server answers
+    /// defines: the PNG in base64 with its media type.
+    func testAPictureTheApplicationDrewComesBackAsAnImageBlockAfterTheText() throws {
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0xFF, 0x00, 0x3E])
+        let result: [String: JSONValue] = ["width": .integer(540), "height": .integer(741), "scrolls": .bool(false)]
+        probe.answer = .reply(.result(result, images: [MCPImage(mimeType: "image/png", data: png)]))
+        let image: JSONValue = .object(["type": .string("image"), "data": .string(png.base64EncodedString()),
+                                        "mimeType": .string("image/png")])
+        for meta in ["", "," + MCPServerProbe.meta] {
+            let response = try call(#"{"name":"get_panel_image","arguments":{}\#(meta)}"#)
+            let content = try XCTUnwrap(response["result"]["content"].arrayValue)
+            XCTAssertEqual(content.count, 2, meta)
+            XCTAssertEqual(content[0]["type"], .string("text"))
+            XCTAssertEqual(try JSONValue.parse(Data(try XCTUnwrap(content[0]["text"].stringValue).utf8)), .object(result))
+            XCTAssertEqual(content[1], image, "the block has its type, its data and its media type, and nothing else")
+            XCTAssertEqual(Data(base64Encoded: content[1]["data"].stringValue ?? ""), png)
+            XCTAssertEqual(response["result"]["isError"], .bool(false))
+            XCTAssertEqual(response["result"]["resultType"], meta.isEmpty ? .null : .string("complete"),
+                           "the newest revision says the result is complete; a handshake client gets the content alone")
+        }
+        XCTAssertEqual(probe.calls, [MCPToolRequest(tool: "get_panel_image"), MCPToolRequest(tool: "get_panel_image")])
+
+        probe.answer = .reply(.failure("This copy of Agent HUD cannot draw the panel."))
+        let refused = try call(#"{"name":"get_panel_image"}"#)
+        XCTAssertEqual(try text(of: refused), "This copy of Agent HUD cannot draw the panel.", "a refusal is its sentence and no picture")
+        XCTAssertEqual(refused["result"]["isError"], .bool(true))
     }
 
     func testArgumentsReachTheApplicationAsTheyCame() throws {

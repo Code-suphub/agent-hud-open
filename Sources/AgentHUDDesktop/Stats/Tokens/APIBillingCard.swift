@@ -21,13 +21,15 @@ struct APIBillingCard: View {
                 Spacer()
             }
             .padding(.vertical, compact ? IslandRowLayout.headingVerticalPadding : 0)
-            // A balance whose read failed keeps its last amount without a colour, and says why.
+            // A balance whose read failed keeps its last amount without a colour, and says why; the panel's picture for
+            // an agent draws the reason, which its provider wrote, as placeholder bars.
             if let reason = store.view.assessment(of: billing).status.reason {
                 Text(reason)
                     .font(.ui(11))
                     .foregroundStyle(theme.statusText(.warning))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .redactedOnPicture()
                     .padding(.leading, compact ? IslandRowLayout.textInset : 0)
             }
             if billing.balances.isEmpty {

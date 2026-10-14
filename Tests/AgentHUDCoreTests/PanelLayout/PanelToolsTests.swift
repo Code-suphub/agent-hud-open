@@ -237,7 +237,7 @@ final class PanelToolsTests: PanelToolsCase {
     /// at launch, so one read before a relaunch does not pass for the current one after it.
     func testARevisionReadBeforeARelaunchIsNotCurrentAfterIt() throws {
         let before = PanelTools(store: store, launch: 482_000)
-        guard case .result(let read) = before.answer(MCPToolRequest(tool: MCPTools.getPanel)) else { return XCTFail("get_panel was refused") }
+        guard case .result(let read, _) = before.answer(MCPToolRequest(tool: MCPTools.getPanel)) else { return XCTFail("get_panel was refused") }
         XCTAssertEqual(read["revision"], .integer(482_000))
 
         let relaunched = SettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suite)), defaultAgents: DemoData.agents)
@@ -252,7 +252,7 @@ final class PanelToolsTests: PanelToolsCase {
         guard case .result = before.answer(stale) else { return XCTFail("the launch that gave the revision takes it") }
 
         // The application's own tools do not count from 0.
-        guard case .result(let own) = PanelTools(store: store).answer(MCPToolRequest(tool: MCPTools.getPanel)),
+        guard case .result(let own, _) = PanelTools(store: store).answer(MCPToolRequest(tool: MCPTools.getPanel)),
               case .integer(let revision)? = own["revision"] else { return XCTFail("get_panel gave no revision") }
         XCTAssertGreaterThanOrEqual(revision, 1_000)
         XCTAssertEqual(revision % 1_000, Int64(layout.revision))

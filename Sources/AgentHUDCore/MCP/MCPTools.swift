@@ -1,15 +1,16 @@
 import AgentHUDSupport
 
 /// The tools Agent HUD's MCP server offers: a fixed list, the same for every client and in the same order, so a
-/// client may cache it. All three act on the hover panel, and none of them saves a layout: saving is the user's click
+/// client may cache it. All four act on the hover panel, and none of them saves a layout: saving is the user's click
 /// in the panel. What a tool does with its arguments is the running application's business; only the names and the
 /// shapes are known here.
 public enum MCPTools {
     /// The tools' names, as a client calls them and as the application is handed them.
     public static let getPanel = "get_panel"
+    public static let getPanelImage = "get_panel_image"
     public static let setPanelLayout = "set_panel_layout"
     public static let discardPanelDraft = "discard_panel_draft"
-    static let names = [getPanel, setPanelLayout, discardPanelDraft]
+    static let names = [getPanel, getPanelImage, setPanelLayout, discardPanelDraft]
 
     /// What a client's model is told about the server before it has called anything.
     static let instructions = """
@@ -20,9 +21,15 @@ public enum MCPTools {
 
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
-        with their latest readings, the layout in effect, and the widgets and measures each block accepts. Call it \
-        before changing the layout; block and row keys come from here. Names are written as the panel shows them, in \
-        the application's language.
+        with their latest readings, the layout in effect, the panel's height and whether it scrolls on the main \
+        display, and the widgets and measures each block accepts. Call it before changing the layout; block and row \
+        keys come from here. Names are written as the panel shows them, in the application's language.
+        """
+
+    private static let getPanelImageDescription = """
+        Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with \
+        account names masked and session titles left out. Use it to check how a layout looks; get_panel reads the \
+        same panel as data.
         """
 
     private static let setPanelLayoutDescription = """
@@ -38,6 +45,7 @@ public enum MCPTools {
     /// The definitions `tools/list` returns.
     static let definitions: [JSONValue] = [
         tool(getPanel, getPanelDescription, input: object([:]), changes: false),
+        tool(getPanelImage, getPanelImageDescription, input: object([:]), changes: false),
         tool(setPanelLayout, setPanelLayoutDescription, input: layout, changes: true),
         tool(discardPanelDraft, discardPanelDraftDescription, input: object([:]), changes: true),
     ]

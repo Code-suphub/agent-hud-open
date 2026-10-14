@@ -9,7 +9,8 @@ extension HoverPanelView {
     /// remaining count includes every other session in that summary. The statistics window's range never applies here — that
     /// range belongs to the session card, which answers a different question. The header opens the session list; each
     /// row's title returns to its agent, or opens its session page where the client names no destination, and its
-    /// token count opens usage. Its gaps follow the layout's spacing, and its divider the layout's separators.
+    /// token count opens usage. Its gaps follow the layout's spacing, and its divider the layout's separators. On the
+    /// panel's picture for an agent a row is named by its place in the list, with no title and no project.
     func sessionLine(hasAbove: Bool, spacing: PanelSpacingMetrics, divider: Color) -> some View {
         let rows = Self.sessionRows(store, vendor: focusVendor)
         let running = rows.running, shown = rows.shown
@@ -32,8 +33,8 @@ extension HoverPanelView {
                 Text(L10n.text("还没有会话", "No sessions yet"))
                     .foregroundStyle(theme.secondary)
             } else {
-                ForEach(shown) { session in
-                    sessionRow(session)
+                ForEach(Array(shown.enumerated()), id: \.element.id) { index, session in
+                    sessionRow(session, position: index + 1)
                 }
                 if rows.more > 0 {
                     Button { openSessions() } label: {
@@ -49,18 +50,25 @@ extension HoverPanelView {
         .topDivider(hasAbove ? divider : .clear)
     }
 
-    private func sessionRow(_ session: LiveSession) -> some View {
+    /// One session's row. Masked, its title, its project and its questions give way to its place in the list, and
+    /// nothing written from them is left: no help, no label, no question card.
+    private func sessionRow(_ session: LiveSession, position: Int) -> some View {
+        let masked = masksIdentity
+        let name = masked ? IdentityMask.session(at: position) : session.task
         let asks = Self.questionRequests(for: session, waiting: waitingRequests)
-        let expanded = answeringSessionID == session.id && !asks.isEmpty
+        let expanded = answeringSessionID == session.id && !asks.isEmpty && !masked
         let failed = failedListedSessionID == session.id
         let tokens = "\(TokenFormat.short(session.tokensIn + session.tokensOut)) tok"
         let dot = Self.sessionDot(session, store: store)
+        let destination: String = session.navigationTarget != nil
+            ? L10n.text("返回会话", "Return to session") : L10n.text("查看会话详情", "Show session details")
+        let help: String = masked ? "" : session.task + "\n" + destination
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Button { open(session) } label: {
                     HStack(spacing: 8) {
                         sessionMark(session, dot: dot)
-                        Text(Self.sessionTitle(session))
+                        Text(masked ? name : Self.sessionTitle(session))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Spacer(minLength: 0)
@@ -68,17 +76,15 @@ extension HoverPanelView {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
-                .help(session.task + "\n" + (session.navigationTarget != nil
-                      ? L10n.text("返回会话", "Return to session")
-                      : L10n.text("查看会话详情", "Show session details")))
-                .accessibilityLabel(L10n.text("打开会话：", "Open session: ") + session.task)
+                .help(help)
+                .accessibilityLabel(L10n.text("打开会话：", "Open session: ") + name)
                 .accessibilityHint(session.navigationTarget != nil
                                    ? L10n.text("在 agent 中打开", "Open in the agent")
                                    : L10n.text("打开此会话的详情页", "Open this session's detail page"))
                 .accessibilityIdentifier("island-session-return-\(session.id)")
 
                 if !asks.isEmpty {
-                    questionBadge(asks, session: session, expanded: expanded)
+                    questionBadge(asks, session: session, name: name, expanded: expanded)
                 }
 
                 Button { openSessions(session.id) } label: {
@@ -87,7 +93,7 @@ extension HoverPanelView {
                         .contentShape(Rectangle())
                 }
                 .help(L10n.text("查看此会话的用量", "View this session's token usage"))
-                .accessibilityLabel(L10n.text("查看会话用量：", "View token usage: ") + session.task)
+                .accessibilityLabel(L10n.text("查看会话用量：", "View token usage: ") + name)
                 .accessibilityValue(tokens)
                 .accessibilityIdentifier("island-session-usage-\(session.id)")
             }
@@ -133,8 +139,9 @@ extension HoverPanelView {
         )
     }
 
-    /// How many questions this session waits on, and where answering them opens.
-    private func questionBadge(_ asks: [PermissionRequest], session: LiveSession, expanded: Bool) -> some View {
+    /// How many questions this session waits on, and where answering them opens. `name` is how the row names the
+    /// session.
+    private func questionBadge(_ asks: [PermissionRequest], session: LiveSession, name: String, expanded: Bool) -> some View {
         Button {
             onAnswerSession(expanded ? nil : session.id)
         } label: {
@@ -154,7 +161,7 @@ extension HoverPanelView {
         .buttonStyle(.plain)
         .help(L10n.text("有 \(asks.count) 个提问待回答，点击在此展开",
                         "\(asks.count) questions waiting for an answer — click to answer here"))
-        .accessibilityLabel(L10n.text("待回答的提问：", "Questions waiting: ") + session.task)
+        .accessibilityLabel(L10n.text("待回答的提问：", "Questions waiting: ") + name)
         .accessibilityValue(L10n.text("\(asks.count) 个", "\(asks.count)"))
         .accessibilityIdentifier("island-session-question-\(session.id)")
         .accessibilityAddTraits(expanded ? [.isSelected] : [])
