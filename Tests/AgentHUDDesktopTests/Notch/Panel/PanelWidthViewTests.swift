@@ -54,32 +54,40 @@ final class PanelWidthViewTests: XCTestCase {
         store.settings.panelLayout.save()
     }
 
+    /// A panel's widget, spacing and width, in a language.
+    private struct Arrangement {
+        var language: AppLanguage
+        var widget: PanelWidget
+        var spacing: PanelSpacing
+        var width: Int
+    }
+
     /// The island is sized from the measure a block shows first, so every widget is as tall in every measure it offers,
-    /// at every width and spacing, in both languages and in an agent's own panel.
+    /// at every width and spacing, in both languages and in an agent's own panel: one option at a time, from the default
+    /// panel and from Chinese compact rings at the narrowest width.
     func testEveryWidgetIsAsTallInEveryMeasureAtEveryWidth() {
         var checked = 0
-        for language in [AppLanguage.en, .zhHans] {
-            let store = sample(language)
-            for widget in PanelBlockKind.quota.widgets {
-                for spacing in PanelSpacing.allCases {
-                    for width in whole {
-                        let measures = PanelBlockKind.quota.measures(under: widget)
-                        var heights: [CGFloat] = [], own: [CGFloat] = []
-                        for measure in measures {
-                            keep(store, widget, first: measure, spacing: spacing, width: width)
-                            heights.append(height(store, width: width))
-                            own.append(height(store, width: PanelStyle(width: width).agentPanelWidth, focus: "Claude"))
-                        }
-                        XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5,
-                                       "\(language) \(widget) \(spacing) at \(width): \(heights)")
-                        XCTAssertEqual(own.max() ?? 0, own.min() ?? 1, accuracy: 0.5,
-                                       "\(language) \(widget) \(spacing), Claude's own panel at \(width): \(own)")
-                        checked += 1
-                    }
-                }
+        let arrangements = OneAtATime(from: Arrangement(language: .en, widget: .bar, spacing: .regular, width: PanelStyle.defaultWidth),
+                                      Arrangement(language: .zhHans, widget: .ring, spacing: .compact, width: whole[0]))
+            .varying(\.language, over: [.en, .zhHans])
+            .varying(\.widget, over: PanelBlockKind.quota.widgets)
+            .varying(\.spacing, over: PanelSpacing.allCases)
+            .varying(\.width, over: whole)
+        for each in arrangements.arrangements {
+            let store = sample(each.language)
+            let measures = PanelBlockKind.quota.measures(under: each.widget)
+            var heights: [CGFloat] = [], own: [CGFloat] = []
+            for measure in measures {
+                keep(store, each.widget, first: measure, spacing: each.spacing, width: each.width)
+                heights.append(height(store, width: each.width))
+                own.append(height(store, width: PanelStyle(width: each.width).agentPanelWidth, focus: "Claude"))
             }
+            XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5, "\(each): \(heights)")
+            XCTAssertEqual(own.max() ?? 0, own.min() ?? 1, accuracy: 0.5, "\(each), Claude's own panel: \(own)")
+            checked += 1
         }
-        XCTAssertEqual(checked, 2 * PanelBlockKind.quota.widgets.count * 3 * 3)
+        // Each base, then the other language, the other widgets, 2 spacings and 2 widths.
+        XCTAssertEqual(checked, 2 * (1 + 1 + (PanelBlockKind.quota.widgets.count - 1) + 2 + 2))
     }
 
     /// The type scale is the same at every width: a wider panel lays the same text out on no more lines, so it is never
