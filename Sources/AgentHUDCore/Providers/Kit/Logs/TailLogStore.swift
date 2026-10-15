@@ -8,7 +8,9 @@ import Foundation
 /// state has another version is read again too, even when it is older than the cutoff, while the ledger still holds its
 /// usage; what that version recorded counts on until this read has covered the same times (`CarriedUsage`). A stored
 /// log missing from the listing leaves the ledger; one that is listed keeps its contribution even when it cannot be
-/// read, and is tried again once its pause is over (`FailedReads`).
+/// read, and is tried again once its pause is over (`FailedReads`). A log its client compressed where it lies is the same
+/// log under another name (`CompressedLogs`): its state and contribution move to that name without a read, and it is
+/// read from its start, through its decoded text, only where the ledger does not hold all of it.
 final class TailLogStore<Log: TailLog> {
     struct Entry {
         var modified: Date
@@ -59,6 +61,9 @@ final class TailLogStore<Log: TailLog> {
     private var stored: [String: UsageLedger.FileState] = [:]
     /// Logs whose stored state has another version or cannot be decoded, to read again, with that state.
     private var outdated: [String: UsageLedger.FileState] = [:]
+    /// Logs whose stored state says their last read stopped before their end, as a time budget or a quit can leave it;
+    /// until read on, which an older log is only from here.
+    private var unfinished: Set<String> = []
     /// Sessions and modification times of grouped logs, for choosing the copy that counts.
     private var groups: [String: String] = [:]
     private var modified: [String: Date] = [:]
@@ -67,6 +72,7 @@ final class TailLogStore<Log: TailLog> {
     /// How long a poll reads history, apart from what logs gained: a small share of the processor while history lasts.
     var historyBudget: TimeInterval = 0.1
     private var failureReasons: [String: any Error] = [:]
+    private var compressed = Log.compressedSuffix.map(CompressedLogs.init(suffix:))
 
     /// - watchesChanges: after the first listing, polls look only at logs a directory watch reports changed.
     init(roots: [URL], ledger: UsageLedger, watchesChanges: Bool, accepts: @escaping (URL) -> Bool) {
@@ -97,26 +103,28 @@ final class TailLogStore<Log: TailLog> {
         if loadedGeneration != generation {
             stored = (try? await ledger.fileStates(source: Log.source)) ?? [:]
             entries = [:]
-            // Only the version is decoded, and only of logs recent enough to matter.
-            outdated = stored.filter {
-                (LedgerCopies.signature($0.value.signature)?.modified ?? .distantPast) >= retained && !Self.isCurrent($0.value)
-            }
+            // Only the version and position are decoded, and only of logs recent enough to matter.
+            let recent = stored.filter { (LedgerCopies.signature($0.value.signature)?.modified ?? .distantPast) >= retained }
+            let progress = recent.mapValues(Self.progress)
+            outdated = recent.filter { progress[$0.key]??.version != Log.version }
+            unfinished = Set(progress.filter { $0.value.map { $0.version == Log.version && $0.offset < $0.committed } == true }.keys)
             groups = stored.compactMapValues(\.group)
             modified = stored.compactMapValues { $0.group == nil ? nil : LedgerCopies.signature($0.signature)?.modified }
             loadedGeneration = generation
             pass.reloaded = true
         }
         pass.gaps = files.refresh(now: started)
-        let listing = Self.counting(files.files)
+        let listing = Self.counting(compressed?.listing(files.files) ?? files.files)
+        let handovers = handOver(listing)
         var changing: [(path: String, file: LogFiles.File)] = []
         for (path, file) in listing where file.modified >= cutoff {
             pass.logs.append((path, file))
             if let entry = entry(path), entry.size == file.size, LedgerCopies.same(entry.modified, file.modified), entry.offset >= entry.committed { continue }
             changing.append((path, file))
         }
-        // An older log whose state another version wrote may hold usage that version counted differently; once read again,
-        // it is read to its end over as many polls as that takes.
-        for path in Set(outdated.keys).union(entries.filter { $0.value.offset < $0.value.committed }.keys) {
+        // An older log whose state another version wrote may hold usage that version counted differently, and one whose
+        // last read stopped short has lines waiting: both are read on over as many polls as that takes.
+        for path in Set(outdated.keys).union(unfinished).union(entries.filter { $0.value.offset < $0.value.committed }.keys) {
             if let file = listing[path], file.modified < cutoff, file.modified >= retained { changing.append((path, file)) }
         }
 
@@ -168,7 +176,7 @@ final class TailLogStore<Log: TailLog> {
         }
 
         let removed = Set(entries.keys).union(stored.keys).union(outdated.keys).filter { listing[$0] == nil }
-        guard !updates.isEmpty || !removed.isEmpty else { return pass }
+        guard !updates.isEmpty || !removed.isEmpty || !handovers.isEmpty else { return pass }
         var nextGroups = groups, nextModified = modified, replaced: [String: [ClosedRange<Int64>]] = [:]
         for path in updates.keys { replaced[path] = Self.replacing(&updates[path]!) }
         for (path, update) in updates {
@@ -184,6 +192,10 @@ final class TailLogStore<Log: TailLog> {
         let source = Log.source, written = Set(updates.keys)
         do {
             try await ledger.write { writer in
+                for move in handovers {
+                    try writer.rename(source: source, contribution: move.from, to: move.to)
+                    try writer.renameFile(source: source, path: move.from, to: move.to)
+                }
                 for write in writes {
                     if write.reset { try writer.remove(source: source, contribution: write.path) }
                     for times in write.replaced { try writer.removeUsage(source: source, contribution: write.path, at: times) }
@@ -202,15 +214,34 @@ final class TailLogStore<Log: TailLog> {
             for (path, update) in updates { entries[path] = update.entry }
             for path in removed { entries[path] = nil; stored[path] = nil }
             for path in written.union(removed) { outdated[path] = nil }
+            unfinished.subtract(written.union(removed))
             groups = nextGroups
             modified = nextModified
-            pass.changed = Array(updates.keys)
-            pass.removed = Array(removed)
+            pass.changed = Array(Set(updates.keys).union(handovers.map(\.to)))
+            pass.removed = Array(removed.union(handovers.map(\.from)))
         } catch {
-            // Positions stay where the ledger has them, so the next poll reads the same bytes again.
+            // Positions stay where the ledger has them, so the next poll reads the same bytes again. Names this store
+            // moved ahead of the ledger are read from it again.
             pass.pending += updates.count
+            if !handovers.isEmpty { loadedGeneration = nil }
         }
         return pass
+    }
+
+    /// Moves the state of each stored log that changed form to its new name, ahead of the ledger write that renames its
+    /// contribution and stored state (`CompressedLogs.handovers`).
+    private func handOver(_ listing: [String: LogFiles.File]) -> [(from: String, to: String)] {
+        guard let compressed else { return [] }
+        let moves = compressed.handovers(stored: Set(entries.keys).union(stored.keys).union(outdated.keys), listing: listing)
+        for (from, to) in moves {
+            entries[to] = entries.removeValue(forKey: from)
+            stored[to] = stored.removeValue(forKey: from)
+            if let state = outdated.removeValue(forKey: from) { outdated[to] = state }
+            if unfinished.remove(from) != nil { unfinished.insert(to) }
+            groups[to] = groups.removeValue(forKey: from)
+            modified[to] = modified.removeValue(forKey: from)
+        }
+        return moves
     }
 
     /// Reads what the log gained since its entry, or, once rewritten, all of it: from its start, or for a log that tells
@@ -224,8 +255,10 @@ final class TailLogStore<Log: TailLog> {
         let last = previous.map { (modified: $0.modified, size: $0.size) } ?? earlier.flatMap { LedgerCopies.signature($0.signature) }
         let rewritten = last.map { file.size < $0.size || (file.size == $0.size && !LedgerCopies.same($0.modified, file.modified)) } == true
         var reset = rewritten || earlier != nil
+        let isCompressed = compressed?.isCompressed(path) == true
         // A log that has to be decoded is decoded from the last place before the first line not read yet.
-        var contents = try await Log.contents(of: url, from: reset ? DecodedPosition() : previous?.restart ?? DecodedPosition())
+        var contents = isCompressed ? nil
+            : try await Log.contents(of: url, from: reset ? DecodedPosition() : previous?.restart ?? DecodedPosition())
         if let previous, !reset, (contents.map { $0.start.decoded + $0.data.count } ?? file.size) < previous.offset {
             // What was read before is no longer there: the log was rewritten.
             reset = true
@@ -239,7 +272,7 @@ final class TailLogStore<Log: TailLog> {
             entry.carried = previous.carried
         } else {
             if earlier != nil, !rewritten { entry.carried = CarriedUsage() }
-            if contents == nil, let startsTurn = Log.startsTurn {
+            if contents == nil, !isCompressed, let startsTurn = Log.startsTurn {
                 let handle = try FileHandle(forReadingFrom: url)
                 defer { try? handle.close() }
                 Log.head(try Self.head(of: handle, size: file.size), into: &entry.summary)
@@ -264,6 +297,15 @@ final class TailLogStore<Log: TailLog> {
                 entry.offset = base + end - data.startIndex
             } while Date() < deadline
             entry.restart = contents.restarts.last { $0.decoded <= entry.offset } ?? contents.start
+        } else if isCompressed {
+            let read = try compressed?.read(path, file: file, from: entry.offset, chunkSize: Self.chunkSize, deadline: deadline) { lines, at in
+                events += try Log.ingest(lines, at: at, into: &entry.summary)
+                marks += Log.drainMarks(&entry.summary)
+            }
+            pass.bytesRead += read?.decoded ?? 0
+            entry.offset = read?.offset ?? entry.offset
+            // Text left after the budget waits as complete lines do; a partial last line waits for the log to change.
+            entry.committed = read?.waiting == true ? max(file.size, entry.offset + 1) : entry.offset
         } else {
             let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
@@ -293,6 +335,21 @@ final class TailLogStore<Log: TailLog> {
     private func readPage(_ path: String, into update: inout Update, retained: Date, pass: inout Pass) throws {
         guard let back = update.entry.back, let startsTurn = Log.startsTurn else { return }
         let url = URL(fileURLWithPath: path)
+        if let compressed, compressed.isCompressed(path) {
+            // A log compressed before its history was read: the rest of its history is one page from its start.
+            var page = Log.summary(for: url), events: [UsageLedger.Event] = [], marks: [UsageLedger.Mark] = []
+            pass.bytesRead += try compressed.readHistory(path, before: back, headLength: Self.headLength, chunkSize: Self.chunkSize,
+                                                         head: { Log.head($0, into: &page) }) { lines, at in
+                events += try Log.ingest(lines, at: at, into: &page)
+                marks += Log.drainMarks(&page)
+            }
+            pass.filesRead += 1
+            Log.merge(older: page, into: &update.entry.summary)
+            update.events += events
+            update.marks += marks
+            update.entry.back = nil
+            return
+        }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         let pager = LogPager(handle: handle, startsTurn: startsTurn)
@@ -361,8 +418,11 @@ final class TailLogStore<Log: TailLog> {
         return result
     }
 
-    private static func isCurrent(_ file: UsageLedger.FileState) -> Bool {
-        file.state.flatMap { try? JSONDecoder().decode(StoredVersion.self, from: $0) }?.version == Log.version
+    /// A stored state's version, and where its last read stopped against the end of the complete lines it saw; nil for a
+    /// state that cannot be decoded.
+    private static func progress(_ file: UsageLedger.FileState) -> (version: Int, offset: Int, committed: Int)? {
+        guard let stored = file.state.flatMap({ try? JSONDecoder().decode(StoredProgress.self, from: $0) }) else { return nil }
+        return (stored.version, stored.offset ?? 0, stored.committedSize ?? LedgerCopies.signature(file.signature)?.size ?? 0)
     }
 
     private static func state(_ entry: Entry) -> UsageLedger.FileState {
@@ -433,7 +493,20 @@ final class TailLogStore<Log: TailLog> {
     }
 }
 
-/// The version of a stored state, read without its summary.
-private struct StoredVersion: Decodable {
+/// The version of a stored state and its position, read without its summary; a carrying state keeps its position under
+/// `carrying`.
+private struct StoredProgress: Decodable {
     let version: Int
+    let offset: Int?
+    let committedSize: Int?
+
+    private enum Keys: String, CodingKey { case version, offset, committedSize, carrying }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: Keys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        let state = container.contains(.carrying) ? try container.nestedContainer(keyedBy: Keys.self, forKey: .carrying) : container
+        offset = try state.decodeIfPresent(Int.self, forKey: .offset)
+        committedSize = try state.decodeIfPresent(Int.self, forKey: .committedSize)
+    }
 }

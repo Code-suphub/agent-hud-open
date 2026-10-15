@@ -19,6 +19,9 @@ protocol TailLog: Sendable {
     /// The decoded log from `start`, for a format that cannot be read from an offset, with the places a later read can
     /// start from; nil reads the file itself from where the last read stopped.
     static func contents(of url: URL, from start: DecodedPosition) async throws -> DecodedLog?
+    /// The suffix the client adds to a log it compresses where it lies, as one Zstandard frame, such as Codex's `.zst`;
+    /// nil for a format whose logs are never compressed. See `CompressedLogs`.
+    static var compressedSuffix: String? { get }
     /// Reads one or more complete lines, each ending in a newline, that begin `offset` bytes into the log (into its
     /// decoded text, for a log that has to be decoded), and returns the usage they added. An event is keyed by what it
     /// is or where it lies, never by the order lines are read in: a log's history is read after its end.
@@ -51,6 +54,7 @@ protocol TailLog: Sendable {
 extension TailLog {
     static func copyName(_ path: String) -> String? { nil }
     static func contents(of url: URL, from start: DecodedPosition) async throws -> DecodedLog? { nil }
+    static var compressedSuffix: String? { nil }
     static func drainMarks(_ summary: inout Summary) -> [UsageLedger.Mark] { [] }
     static func finishRead(_ summary: inout Summary, now: Date) {}
     static func group(_ summary: Summary) -> String? { nil }
