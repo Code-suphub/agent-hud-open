@@ -4,10 +4,10 @@ import XCTest
 @testable import AgentHUDCore
 @testable import AgentHUDDesktop
 
-/// Ring and number cells in every arrangement a layout can ask for: two to six columns, the three ring sizes, the
-/// three spacings, both panels at the default width and at the narrowest and widest a layout sets, and one to six
-/// windows, in English and in Chinese. Measured as the island measures the panel, from a fresh view tree at a fixed
-/// width.
+/// Ring and number cells under every option a layout can ask for: two to six columns, the three ring sizes, the three
+/// spacings, both panels at the default width and at the narrowest and widest a layout sets, and one to six windows, in
+/// English and in Chinese, one option at a time from the default arrangement and from the tightest. Measured as the
+/// island measures the panel, from a fresh view tree at a fixed width.
 @MainActor
 final class QuotaCellLayoutTests: XCTestCase {
     private static let languages: [AppLanguage] = [.en, .zhHans]
@@ -49,6 +49,33 @@ final class QuotaCellLayoutTests: XCTestCase {
     /// The sample's six quota windows in `language`, which the tests set side by side one to six at a time.
     private func sampleWindows(_ language: AppLanguage) -> [AgentRow] {
         Array(sample(language).rows.filter { $0.usedPct != nil }.prefix(6))
+    }
+
+    /// How a block sets out its windows: in which language, at which content width, how many to a line, as rings of
+    /// which size or as numbers, at which spacing, how many of them, with or without the countdown.
+    private struct Arrangement {
+        var language: AppLanguage
+        var width: CGFloat
+        var columns: Int
+        var style = QuotaCell.Style.ring
+        var size: PanelRingSize
+        var spacing = PanelSpacing.regular
+        var count = 6
+        var showReset = true
+    }
+
+    /// The language, the width, the columns, the style and the ring size one at a time, from the default arrangement
+    /// and from the tightest, Chinese large rings six to a line in an agent's own panel, where names wrap and captions
+    /// give way.
+    private var arrangements: OneAtATime<Arrangement> {
+        let widths = widths
+        return OneAtATime(from: Arrangement(language: .en, width: widths[0], columns: PanelLayout.Block.defaultColumns, size: .medium),
+                          Arrangement(language: .zhHans, width: widths[1], columns: PanelLayout.Block.columnRange.upperBound, size: .large))
+            .varying(\.language, over: Self.languages)
+            .varying(\.width, over: widths)
+            .varying(\.columns, over: PanelLayout.Block.columnRange)
+            .varying(\.style, over: [.ring, .number])
+            .varying(\.size, over: PanelRingSize.allCases)
     }
 
     private var readings: [String: QuotaRowMetrics] = [:]
@@ -96,46 +123,29 @@ final class QuotaCellLayoutTests: XCTestCase {
     /// The rule the island is sized by holds under every option: a block is as tall in every measure it offers.
     func testEveryArrangementIsAsTallInEveryMeasure() {
         let measures = PanelBlockKind.quota.measures(under: .ring)
-        var arrangements: [(QuotaCell.Style, PanelRingSize)] = PanelRingSize.allCases.map { (.ring, $0) }
-        arrangements.append((.number, .medium))
         var checked = 0
-        for language in Self.languages {
-            let windows = sampleWindows(language)
-            for width in widths {
-                for columns in PanelLayout.Block.columnRange {
-                    for (style, size) in arrangements {
-                        for spacing in PanelSpacing.allCases {
-                            for count in 1...windows.count {
-                                let rows = Array(windows.prefix(count))
-                                let heights = measures.map { height(rows, $0, style, size: size, columns: columns, spacing: spacing, width: width) }
-                                XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5,
-                                               "\(language) \(style) \(size) \(columns) columns \(spacing) \(count) windows at \(width): \(heights)")
-                                checked += 1
-                            }
-                        }
-                    }
-                }
+        for each in arrangements.varying(\.spacing, over: PanelSpacing.allCases).varying(\.count, over: 1...6).arrangements {
+            let windows = sampleWindows(each.language)
+            XCTAssertEqual(windows.count, 6)
+            let rows = Array(windows.prefix(each.count))
+            let heights = measures.map {
+                height(rows, $0, each.style, size: each.size, columns: each.columns, spacing: each.spacing, width: each.width)
             }
+            XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5, "\(each): \(heights)")
+            checked += 1
         }
-        XCTAssertEqual(checked, 2 * 5 * 5 * 4 * 3 * 6)
+        // Each base, then the other language, 4 widths, 4 column counts, the other style, 2 ring sizes, 2 spacings and 5 counts.
+        XCTAssertEqual(checked, 2 * (1 + 1 + 4 + 4 + 1 + 2 + 2 + 5))
     }
 
     /// While the readings load, a cell keeps the height it has once they are in, so the island does not jump.
     func testACellIsAsTallWhileItsReadingLoads() {
-        var arrangements: [(QuotaCell.Style, PanelRingSize)] = PanelRingSize.allCases.map { (.ring, $0) }
-        arrangements.append((.number, .medium))
-        for language in Self.languages {
-            let rows = sampleWindows(language)
-            for width in widths {
-                for columns in PanelLayout.Block.columnRange {
-                    for (style, size) in arrangements {
-                        for measure in PanelMeasure.allCases {
-                            XCTAssertEqual(height(rows, measure, style, size: size, columns: columns, width: width, loading: true),
-                                           height(rows, measure, style, size: size, columns: columns, width: width), accuracy: 0.5,
-                                           "\(language) \(style) \(size) \(columns) columns, \(measure) at \(width)")
-                        }
-                    }
-                }
+        for each in arrangements.arrangements {
+            let rows = sampleWindows(each.language)
+            for measure in PanelMeasure.allCases {
+                XCTAssertEqual(height(rows, measure, each.style, size: each.size, columns: each.columns, width: each.width, loading: true),
+                               height(rows, measure, each.style, size: each.size, columns: each.columns, width: each.width), accuracy: 0.5,
+                               "\(each), \(measure)")
             }
         }
     }
@@ -143,6 +153,7 @@ final class QuotaCellLayoutTests: XCTestCase {
     /// Windows whose readings show no level, not read yet beside ones that are, keep one height in every measure, with
     /// the countdown shown or hidden.
     func testWindowsWithoutALevelAreAsTallInEveryMeasure() throws {
+        var unreadStores: [AppLanguage: UsageStore] = [:]
         for language in Self.languages {
             let sample = sample(language)
             let report = try XCTUnwrap(sample.report)
@@ -159,27 +170,23 @@ final class QuotaCellLayoutTests: XCTestCase {
                 accounts: report.accounts, sessionUsage: report.sessionUsage, periods: report.periods))
             let rows = Array(store.rows.prefix(6))
             XCTAssertEqual(rows.filter { !$0.assessment.showsLevel || $0.usedPct == nil }.count, 2, "\(rows.map(\.agent.name))")
-            let view = store.view
-            for width in widths {
-                for columns in PanelLayout.Block.columnRange {
-                    for style in [QuotaCell.Style.ring, .number] {
-                        for showReset in [true, false] {
-                            let heights = PanelMeasure.allCases.map { measure -> CGFloat in
-                                let grid = QuotaCellGrid(rows: rows, columns: columns) { row in
-                                    QuotaCell(row: row, metrics: QuotaRowMetrics(
-                                        row: row, insights: store.report?.insightsByAgent[row.id], outlook: view.outlook(for: row.id),
-                                        now: store.now, tokensPerHour: store.quotaTokensPerHour(for: row.id),
-                                        cost: measure == .cost ? view.listCost(for: row.id) : nil),
-                                              metric: measure, style: style, showReset: showReset)
-                                }
-                                return autoreleasepool { NSHostingView(rootView: grid.frame(width: width)).fittingSize.height }
-                            }
-                            XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5,
-                                           "\(language) \(style) \(columns) columns, reset \(showReset), at \(width): \(heights)")
-                        }
-                    }
+            unreadStores[language] = store
+        }
+        for each in arrangements.varying(\.showReset, over: [true, false]).arrangements {
+            L10n.setLanguage(each.language)
+            let store = try XCTUnwrap(unreadStores[each.language])
+            let rows = Array(store.rows.prefix(6)), view = store.view
+            let heights = PanelMeasure.allCases.map { measure -> CGFloat in
+                let grid = QuotaCellGrid(rows: rows, columns: each.columns) { row in
+                    QuotaCell(row: row, metrics: QuotaRowMetrics(
+                        row: row, insights: store.report?.insightsByAgent[row.id], outlook: view.outlook(for: row.id),
+                        now: store.now, tokensPerHour: store.quotaTokensPerHour(for: row.id),
+                        cost: measure == .cost ? view.listCost(for: row.id) : nil),
+                              metric: measure, style: each.style, showReset: each.showReset, ringSize: each.size)
                 }
+                return autoreleasepool { NSHostingView(rootView: grid.frame(width: each.width)).fittingSize.height }
             }
+            XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5, "\(each): \(heights)")
         }
     }
 
