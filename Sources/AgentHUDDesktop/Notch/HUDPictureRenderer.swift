@@ -18,6 +18,8 @@ struct HUDPictureRenderer {
     let screen: String
     /// Whether that screen has a notch, which decides the placement it draws without one of its own.
     let hasNotch: Bool
+    /// The look of that screen's HUD, which the picture draws it in.
+    let look: HUDLook
     /// The screen's measurements, for the island's size beside the notch.
     var metrics = ScreenMetrics.fallback
 
@@ -51,7 +53,7 @@ struct HUDPictureRenderer {
     /// The resting HUD as a PNG at `PanelPicture.pointScale` pixels a point; nil when no bitmap can be made of it.
     func picture() -> HUDPicture? {
         let hosting = NSHostingView(rootView: view())
-        hosting.appearance = NSAppearance(named: .darkAqua)
+        hosting.appearance = NSAppearance(named: look.appearanceName)
         let size = hosting.fittingSize
         guard size.width > 0, size.height > 0 else { return nil }
         let scale = CGFloat(PanelPicture.pointScale)
@@ -82,7 +84,7 @@ struct HUDPictureRenderer {
             .background(Self.backdrop)
             .environment(\.glowFrozenTime, Self.frozenTime)
             .environment(\.masksIdentity, true)
-            .environment(\.colorScheme, .dark)
+            .hudLook(look)
     }
 
     @ViewBuilder
@@ -100,7 +102,7 @@ struct HUDPictureRenderer {
         let island = metrics.islandSize, radius = metrics.islandRadius
         let reach = glow.geometry(islandWidth: island.width, islandHeight: island.height, islandRadius: radius)
         return GlowPreview(appearance: agents.glowAppearance(light: false, on: screen), settings: glow,
-                           islandSize: island, islandRadius: radius)
+                           islandSize: island, islandRadius: radius, look: look)
             .frame(width: max(island.width, reach.width), height: max(island.height, reach.height + reach.topOffset),
                    alignment: .top)
             .clipped()
@@ -112,7 +114,8 @@ struct HUDPictureRenderer {
         let margin = GlowWindowController.logoEdgeMargin(stripThickness: config.stripThickness)
         let glow = settings.effectiveGlow(on: screen)
         let reach = glow.geometry(islandWidth: 2, islandHeight: 2, islandRadius: 0)
-        return LogoQueuePreview(settings: settings, store: store, placement: placement, metrics: metrics, screen: screen)
+        return LogoQueuePreview(settings: settings, store: store, placement: placement, metrics: metrics, screen: screen,
+                                look: look)
             .frame(width: max(120, config.size.width + margin * 2),
                    height: max(config.stripThickness, reach.height + reach.topOffset))
     }

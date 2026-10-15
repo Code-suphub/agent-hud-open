@@ -3,7 +3,8 @@ import AgentHUDCore
 
 struct ResetCreditsDetails: View {
     let resets: CodexResetCredits
-    private let theme = Theme.island
+    /// The tokens of the HUD the row is in, which the popover hands on to its own window (`IslandHoverPopover`).
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -35,7 +36,7 @@ struct ResetCreditsDetails: View {
         .foregroundStyle(theme.text)
         .padding(12)
         .frame(width: 310)
-        .background(RoundedRectangle(cornerRadius: 10).fill(theme.windowBackground))
+        .background(RoundedRectangle(cornerRadius: 10).fill(theme.raisedSurface))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.cardBorder))
         .fixedSize(horizontal: false, vertical: true)
     }

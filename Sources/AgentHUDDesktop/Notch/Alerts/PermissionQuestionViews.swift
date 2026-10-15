@@ -102,6 +102,7 @@ struct PermissionQuestionCard: View {
     let request: PermissionRequest
     let onDecide: (PermissionDecision) -> Void
     @Environment(\.islandTyping) private var islandTyping
+    @Environment(\.permissionColor) private var color
 
     private var draft: QuestionDraft { QuestionDraft.draft(for: request.id) }
     private var questions: [PermissionQuestion] { request.questions }
@@ -114,16 +115,16 @@ struct PermissionQuestionCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
                 if questions.count > 1 {
                     Text("\(page + 1)/\(questions.count)")
-                        .font(.tabular(10, .semibold)).foregroundStyle(PermissionColor.signal)
+                        .font(.tabular(10, .semibold)).foregroundStyle(color.signal)
                         .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(PermissionColor.signal.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
+                        .background(color.signal.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
                 }
                 Text(question.question)
-                    .font(.ui(12, .semibold)).foregroundStyle(PermissionColor.text)
+                    .font(.ui(12, .semibold)).foregroundStyle(color.text)
                     .lineLimit(5).fixedSize(horizontal: false, vertical: true)
             }
             if question.multiSelect {
-                Text(L10n.text("可多选", "Choose any")).font(.ui(10)).foregroundStyle(PermissionColor.tertiary)
+                Text(L10n.text("可多选", "Choose any")).font(.ui(10)).foregroundStyle(color.tertiary)
             }
             VStack(spacing: 3) {
                 ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
@@ -142,10 +143,10 @@ struct PermissionQuestionCard: View {
             HStack(alignment: .top, spacing: 8) {
                 marker(picked).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(option.label).font(.ui(11, .medium)).foregroundStyle(PermissionColor.text)
+                    Text(option.label).font(.ui(11, .medium)).foregroundStyle(color.text)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                     if let description = option.description {
-                        Text(description).font(.ui(10)).foregroundStyle(PermissionColor.secondary)
+                        Text(description).font(.ui(10)).foregroundStyle(color.secondary)
                             .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -153,7 +154,7 @@ struct PermissionQuestionCard: View {
             }
             .padding(.horizontal, 9).padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(picked ? PermissionColor.highlight : PermissionColor.inset, in: RoundedRectangle(cornerRadius: 7))
+            .background(picked ? color.highlight : color.inset, in: RoundedRectangle(cornerRadius: 7))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -169,7 +170,7 @@ struct PermissionQuestionCard: View {
             marker(picked).padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(question.options.isEmpty ? L10n.text("回答", "Answer") : L10n.text("其他", "Other"))
-                    .font(.ui(11, .medium)).foregroundStyle(PermissionColor.text)
+                    .font(.ui(11, .medium)).foregroundStyle(color.text)
                 IslandTextField(
                     text: draft.own[page] ?? "",
                     placeholder: L10n.text("自己输入回答", "Type your own answer"),
@@ -185,7 +186,7 @@ struct PermissionQuestionCard: View {
         }
         .padding(.horizontal, 9).padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(picked ? PermissionColor.highlight : PermissionColor.inset, in: RoundedRectangle(cornerRadius: 7))
+        .background(picked ? color.highlight : color.inset, in: RoundedRectangle(cornerRadius: 7))
         .contentShape(Rectangle())
         .onTapGesture { draft.chooseOwn(of: page, in: question) }
     }
@@ -196,29 +197,29 @@ struct PermissionQuestionCard: View {
                                           : (picked ? "largecircle.fill.circle" : "circle")
         return Image(systemName: symbol)
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(picked ? PermissionColor.text : PermissionColor.tertiary)
+            .foregroundStyle(picked ? color.text : color.tertiary)
             .frame(width: 12)
     }
 
     private var buttons: some View {
         HStack(spacing: 6) {
             QuestionButton(title: L10n.text("跳过", "Skip"), symbol: nil, identifier: "island-question-skip",
-                           fill: .clear, stroke: PermissionColor.border, foreground: PermissionColor.secondary) {
+                           fill: .clear, stroke: color.border, foreground: color.secondary) {
                 draft.skip(page)
                 next()
             }
             Spacer(minLength: 8)
             if page > 0 {
                 QuestionButton(title: L10n.text("返回", "Back"), symbol: "chevron.left", identifier: "island-question-back",
-                               fill: .clear, stroke: PermissionColor.border, foreground: PermissionColor.secondary) {
+                               fill: .clear, stroke: color.border, foreground: color.secondary) {
                     draft.page = page - 1
                 }
             }
             let ready = draft.answer(page, of: question) != nil
             QuestionButton(title: isLast ? L10n.text("提交", "Submit") : L10n.text("继续", "Next"),
                            symbol: isLast ? "checkmark" : "chevron.right", identifier: "island-question-next",
-                           fill: ready ? PermissionColor.allow : PermissionColor.highlight, stroke: .clear,
-                           foreground: ready ? .black : PermissionColor.tertiary, trailing: !isLast, action: advance)
+                           fill: ready ? color.allow : color.highlight, stroke: .clear,
+                           foreground: ready ? color.onAllow : color.tertiary, trailing: !isLast, action: advance)
                 .disabled(!ready)
         }
     }
@@ -270,6 +271,9 @@ private struct QuestionButton: View {
 /// their keys. Clicking into the field is what hands the keyboard to the island, and it goes back the moment
 /// typing ends — the answer is sent, Escape is pressed, or the user clicks somewhere else. Return while an input
 /// method is still composing belongs to the input method; only a finished line is submitted.
+///
+/// Its text is drawn in the ink of the HUD it is on, and follows when that HUD's look changes, even mid-sentence. The
+/// caret and the selection are AppKit's, and follow the island window's appearance.
 struct IslandTextField: NSViewRepresentable {
     let text: String
     let placeholder: String
@@ -287,13 +291,10 @@ struct IslandTextField: NSViewRepresentable {
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = .systemFont(ofSize: 11)
-        field.textColor = NSColor(PermissionColor.text)
         field.lineBreakMode = .byTruncatingTail
         field.cell?.isScrollable = true
         field.cell?.wraps = false
-        field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
-            .foregroundColor: NSColor(PermissionColor.tertiary), .font: NSFont.systemFont(ofSize: 11),
-        ])
+        paint(field, context: context)
         field.stringValue = text
         field.onFocus = { [coordinator = context.coordinator] in coordinator.focused() }
         field.onBlur = { [coordinator = context.coordinator] field in coordinator.blurred(field) }
@@ -302,8 +303,23 @@ struct IslandTextField: NSViewRepresentable {
 
     func updateNSView(_ field: KeyboardField, context: Context) {
         context.coordinator.parent = self
+        paint(field, context: context)
         // The field owns its text while it is being edited; a redraw must not move the caret or break a composition.
         if field.currentEditor() == nil, field.stringValue != text { field.stringValue = text }
+    }
+
+    /// Inks the text and the placeholder for the look of the HUD the field is on, and again only when that look changes.
+    private func paint(_ field: KeyboardField, context: Context) {
+        let look = context.environment.hudLook
+        guard context.coordinator.look != look else { return }
+        context.coordinator.look = look
+        let color = PermissionColor(look.theme)
+        field.textColor = NSColor(color.text)
+        // Text being typed is drawn by the field editor, which took its colour from the field when the typing began.
+        field.currentEditor()?.textColor = field.textColor
+        field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
+            .foregroundColor: NSColor(color.tertiary), .font: NSFont.systemFont(ofSize: 11),
+        ])
     }
 
     static func dismantleNSView(_ field: KeyboardField, coordinator: Coordinator) {
@@ -315,6 +331,8 @@ struct IslandTextField: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: IslandTextField
         var typing = false
+        /// The look the field was last inked for.
+        var look: HUDLook?
 
         init(_ parent: IslandTextField) { self.parent = parent }
 

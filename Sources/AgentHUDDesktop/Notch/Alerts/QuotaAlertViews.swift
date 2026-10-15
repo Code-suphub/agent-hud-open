@@ -9,6 +9,7 @@ struct QuotaAlertCompactView: View {
     let onOpen: () -> Void
     @Environment(\.stripScale) private var scale
     @Environment(\.compactWings) private var wings
+    @Environment(\.hudTheme) private var theme
 
     /// What the reminder says beside its agent, for whoever has to know how wide that is.
     static func status(of alert: QuotaAlert) -> String { QuotaAlertCopy(alert: alert).compactTitle }
@@ -23,14 +24,14 @@ struct QuotaAlertCompactView: View {
                 HStack(spacing: s(8)) {
                     AgentLogo(vendor: alert.agent.vendor, size: s(17))
                     Text(alert.agent.vendorName)
-                        .font(.ui(s(13), .semibold)).foregroundStyle(.white).lineLimit(1)
+                        .font(.ui(s(13), .semibold)).foregroundStyle(theme.alertText).lineLimit(1)
                 }
                 .frame(width: wings?.leading ?? s(IslandController.alertWingWidth), alignment: .leading)
                 Color.clear.frame(width: wings?.gap ?? cameraWidth)
                 HStack(spacing: s(7)) {
                     QuotaEventSymbol(alert: alert, size: s(12))
                     Text(copy.compactTitle)
-                        .font(.tabular(s(12), .medium)).foregroundStyle(.white.opacity(0.92)).lineLimit(1)
+                        .font(.tabular(s(12), .medium)).foregroundStyle(theme.alertText.opacity(0.92)).lineLimit(1)
                 }
                 .frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
             }
@@ -45,10 +46,11 @@ struct QuotaAlertCompactView: View {
     }
 }
 
-/// Hovering a brief event reveals a small detail surface on the island's black background.
+/// Hovering a brief event reveals a small detail surface on the island's own background.
 struct QuotaAlertDetailView: View {
     let alert: QuotaAlert
     let onOpen: () -> Void
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         let copy = QuotaAlertCopy(alert: alert)
@@ -56,8 +58,8 @@ struct QuotaAlertDetailView: View {
             HStack(spacing: 9) {
                 AgentLogo(vendor: alert.agent.vendor, size: 22)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(alert.agent.vendorName).font(.ui(13, .semibold)).foregroundStyle(.white)
-                    Text(alert.agent.name).font(.ui(10)).foregroundStyle(.white.opacity(0.42))
+                    Text(alert.agent.vendorName).font(.ui(13, .semibold)).foregroundStyle(theme.alertText)
+                    Text(alert.agent.name).font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.42))
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 5) {
@@ -66,7 +68,7 @@ struct QuotaAlertDetailView: View {
                         .font(.ui(10, .medium)).foregroundStyle(copy.accent)
                 }
             }
-            Text(copy.title).font(.ui(12)).foregroundStyle(.white.opacity(0.58))
+            Text(copy.title).font(.ui(12)).foregroundStyle(theme.alertText.opacity(0.58))
                 .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 metric(copy.used, label: L10n.text("已用额度", "used"))
@@ -80,9 +82,9 @@ struct QuotaAlertDetailView: View {
                     Spacer()
                     Text(copy.used)
                 }
-                .font(.ui(10)).foregroundStyle(.white.opacity(0.42))
+                .font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.42))
                 ProgressTrack(fraction: (copy.usedPct ?? 0) / 100,
-                              fill: copy.accent, track: .white.opacity(0.12)).frame(height: 4)
+                              fill: copy.accent, track: theme.track).frame(height: 4)
                 if !alert.otherExhaustedWindows.isEmpty {
                     Text(copy.otherLimits).font(.ui(10)).foregroundStyle(copy.accent)
                         .fixedSize(horizontal: false, vertical: true)
@@ -93,7 +95,7 @@ struct QuotaAlertDetailView: View {
                     Text(L10n.text("查看用量统计", "View usage statistics"))
                     Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .semibold))
                 }
-                .font(.ui(12, .semibold)).foregroundStyle(.black.opacity(0.9))
+                .font(.ui(12, .semibold)).foregroundStyle(theme.onAccent.opacity(0.9))
                 .frame(maxWidth: .infinity).frame(height: 30)
                 .background(copy.accent, in: RoundedRectangle(cornerRadius: 7))
             }
@@ -106,9 +108,9 @@ struct QuotaAlertDetailView: View {
 
     private func metric(_ value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(value).font(.tabular(23, .medium)).foregroundStyle(.white)
+            Text(value).font(.tabular(23, .medium)).foregroundStyle(theme.alertText)
                 .lineLimit(1).minimumScaleFactor(0.75)
-            Text(label).font(.ui(10)).foregroundStyle(.white.opacity(0.4))
+            Text(label).font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.4))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -118,6 +120,7 @@ struct QuotaAlertDetailView: View {
 struct QuotaAlertInlineView: View {
     let alert: QuotaAlert
     let onOpen: () -> Void
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         let copy = QuotaAlertCopy(alert: alert)
@@ -125,11 +128,11 @@ struct QuotaAlertInlineView: View {
             HStack(spacing: 10) {
                 QuotaEventSymbol(alert: alert, size: 13)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(copy.title).font(.ui(12, .medium)).foregroundStyle(.white.opacity(0.95))
-                    Text(alert.agent.displayName).font(.ui(10)).foregroundStyle(.white.opacity(0.45))
+                    Text(copy.title).font(.ui(12, .medium)).foregroundStyle(theme.alertText.opacity(0.95))
+                    Text(alert.agent.displayName).font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.45))
                 }
                 Spacer(minLength: 8)
-                Image(systemName: "arrow.up.right").font(.ui(10)).foregroundStyle(.white.opacity(0.4))
+                Image(systemName: "arrow.up.right").font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.4))
             }
             .padding(.vertical, 8).contentShape(Rectangle())
         }

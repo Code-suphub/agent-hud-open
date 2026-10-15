@@ -13,10 +13,10 @@ struct ModelUsageRow: View {
     var tokensPerHour: Double?
     var forecastHint: String?
     var cost: QuotaListCost?
-    var theme: Theme = .island
     var isLoading = false
     @State private var isHovered = false
     @Environment(\.panelSpacing) private var spacing
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         if let displayedForecastHint {

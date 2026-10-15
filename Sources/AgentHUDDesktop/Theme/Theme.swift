@@ -39,7 +39,8 @@ extension Font {
     }
 }
 
-/// Design tokens for the dark and light window chrome. The island/glow always use `.island` (dark).
+/// Design tokens for the dark and light window chrome, and for the HUD drawn in either. The HUD reads the theme of its
+/// screen's look (`HUDLook.theme`) from the environment (`hudTheme`); `.island`, the dark one, is the standard look's.
 struct Theme {
     /// Chooses the status palette variant.
     private let isLight: Bool
@@ -61,6 +62,27 @@ struct Theme {
     let segmentSelected: Color
     let sidebarText: Color
     let dotEnded: Color
+
+    // The HUD's own tokens, which the window chrome has no use for.
+
+    /// The HUD's surface: the island's silhouette, a detached card, the Simple panel and the panel's picture.
+    let islandFill: Color
+    /// How opaque `islandFill` is on the Simple panel at rest and on the line that grows out of it.
+    let restingFillOpacity: Double
+    /// The hairline round a surface that floats free of the screen's edge: the Simple panel and a detached card.
+    let islandOutline: Color
+    /// The hairline round the island while the desktop behind it is light, so the two do not run together.
+    let desktopOutline: Color
+    /// The unfilled part of a ring on the Simple panel.
+    let meterTrack: Color
+    /// The alerts' ink at full strength. Their reminders and cards grade it with opacities of their own.
+    let alertText: Color
+    /// Ink on a fill of `text`, such as the draft bar's Save button.
+    let inverseText: Color
+    /// Ink on a bright accent fill, such as Approve, Submit or Return to session, whose fill stays bright either way.
+    let onAccent: Color
+    /// A box raised off the HUD's surface, such as a hover popover's body.
+    let raisedSurface: Color
 
     func status(_ level: StatusLevel) -> Color {
         Color(StatusPalette.color(for: level, light: isLight))
@@ -100,7 +122,16 @@ struct Theme {
         segmentBackground: Color.white.opacity(0.08),
         segmentSelected: Color(hex: 0x5a5a5e),
         sidebarText: Color(hex: 0xd0d0d5),
-        dotEnded: Color(hex: 0x6e6e73)
+        dotEnded: Color(hex: 0x6e6e73),
+        islandFill: Color.black,
+        restingFillOpacity: 0.82,
+        islandOutline: Color.white.opacity(0.14),
+        desktopOutline: Color.white.opacity(0.18),
+        meterTrack: Color.white.opacity(0.14),
+        alertText: Color.white,
+        inverseText: Color.black,
+        onAccent: Color.black,
+        raisedSurface: Color(hex: 0x282828)
     )
 
     static let light = Theme(
@@ -122,10 +153,19 @@ struct Theme {
         segmentBackground: Color.black.opacity(0.08),
         segmentSelected: Color.white,
         sidebarText: Color(hex: 0x1d1d1f),
-        dotEnded: Color(hex: 0xaeaeb2)
+        dotEnded: Color(hex: 0xaeaeb2),
+        islandFill: Color(hex: 0xf5f5f7),
+        restingFillOpacity: 0.9,
+        islandOutline: Color.black.opacity(0.08),
+        desktopOutline: Color.black.opacity(0.10),
+        meterTrack: Color.black.opacity(0.10),
+        alertText: Color.black,
+        inverseText: Color.white,
+        onAccent: Color.black,
+        raisedSurface: Color.white
     )
 
-    /// The island panel is always black with dark-mode tokens.
+    /// The HUD's dark tokens, which the standard look draws with: light ink on the black island.
     static let island = Theme.dark
 
     static func forScheme(_ scheme: ColorScheme) -> Theme {

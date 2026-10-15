@@ -27,7 +27,7 @@ final class HUDPictureRendererTests: XCTestCase {
     private let notch = ScreenMetrics(menuBar: 37, notch: CGSize(width: 185, height: 32))
 
     private func renderer(hasNotch: Bool = true) -> HUDPictureRenderer {
-        HUDPictureRenderer(store: store, screen: key, hasNotch: hasNotch, metrics: hasNotch ? notch : .fallback)
+        HUDPictureRenderer(store: store, screen: key, hasNotch: hasNotch, look: .standard, metrics: hasNotch ? notch : .fallback)
     }
 
     private func bitmap(_ picture: HUDPicture, file: StaticString = #filePath, line: UInt = #line) throws -> NSBitmapImageRep {
@@ -112,6 +112,34 @@ final class HUDPictureRendererTests: XCTestCase {
         let strip = SimpleMeterConfig(items: items, placement: top).stripSize
         XCTAssertEqual(picture.width, Double(strip.width + 2 * HUDPictureRenderer.margin), accuracy: 1, "laid along a top edge")
         XCTAssertEqual(picture.height, Double(strip.height + 2 * HUDPictureRenderer.margin), accuracy: 1)
+    }
+
+    /// The picture is drawn in the screen's look: over the same backdrop, a Simple panel's own fill is black in the
+    /// standard look and the light surface in the light one, and the panel is the same size in both.
+    func testASimplePanelIsDrawnInTheScreensLook() throws {
+        layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
+        let items = ScreenAgents(store: store, listed: [], mode: .simple).meterItems
+        var top = renderer().placement
+        top.edge = .top
+        let strip = SimpleMeterConfig(items: items, placement: top).stripSize
+        // The picture, and the brightness most of the strip has: its fill, which the rings and figures leave showing.
+        func drawn(in look: HUDLook) throws -> (picture: HUDPicture, fill: CGFloat) {
+            let picture = try XCTUnwrap(HUDPictureRenderer(store: store, screen: key, hasNotch: true, look: look, metrics: notch).picture())
+            let rep = try bitmap(picture)
+            let margin = Int(HUDPictureRenderer.margin * 2), cap = Int(strip.height)
+            var levels: [CGFloat] = []
+            for y in stride(from: margin + 8, to: margin + Int(strip.height * 2) - 8, by: 2) {
+                for x in stride(from: margin + cap, to: margin + Int(strip.width * 2) - cap, by: 2) {
+                    levels.append(rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)?.brightnessComponent ?? 0)
+                }
+            }
+            return (picture, levels.sorted()[levels.count / 2])
+        }
+        let standard = try drawn(in: .standard), light = try drawn(in: HUDLook(appearance: .light))
+        XCTAssertLessThan(standard.fill, 0.1, "black as ever")
+        XCTAssertGreaterThan(light.fill, 0.8, "the light surface")
+        XCTAssertEqual(light.picture.width, standard.picture.width)
+        XCTAssertEqual(light.picture.height, standard.picture.height)
     }
 
     // MARK: To the tools

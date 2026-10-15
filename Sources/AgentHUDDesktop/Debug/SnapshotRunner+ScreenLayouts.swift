@@ -20,6 +20,8 @@ extension SnapshotRunner {
         let store = demoStore(settings)
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: DemoClock.now))
         let layout = settings.panelLayout
+        // The HUD's pieces drawn apart from the island are in the standard look, as the island's are.
+        let look = HUDLook.standard
         func keep(_ own: PanelLayout, for screen: String) {
             layout.propose(.own(own), for: screen)
             layout.save(.screen(screen))
@@ -38,6 +40,7 @@ extension SnapshotRunner {
         save("panel-layout-hud-simple",
              SimpleMeterView(config: meter)
                 .frame(width: meter.stripSize.width, height: meter.stripSize.height)
+                .hudLook(look)
                 .frame(width: 420, height: 90)
                 .background(Color(white: 0.10)),
              folder: folder, scheme: .dark)
@@ -60,7 +63,8 @@ extension SnapshotRunner {
         save("panel-layout-screen-draft-agent",
              agentPanel.frame(width: CGFloat(layout.effective(for: "snapshot-notch").style.agentPanelWidth), alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
-                .background(Color.black, in: RoundedRectangle(cornerRadius: IslandController.expandedRadius))
+                .background(look.theme.islandFill, in: RoundedRectangle(cornerRadius: IslandController.expandedRadius))
+                .hudLook(look)
                 .padding(20).background(Color(white: 0.10)),
              folder: folder, scheme: .dark)
         layout.discard(.screen("snapshot-notch"))

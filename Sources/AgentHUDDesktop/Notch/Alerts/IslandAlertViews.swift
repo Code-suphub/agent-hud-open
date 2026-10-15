@@ -9,6 +9,7 @@ struct IslandAlertCompactView: View {
     var waitingRequests: [PermissionRequest] = []
     @Environment(\.stripScale) private var scale
     @Environment(\.compactWings) private var wings
+    @Environment(\.hudTheme) private var theme
 
     /// What a finished turn's reminder says beside its agent.
     static var replyStatus: String { L10n.text("有新回复", "New reply") }
@@ -39,7 +40,7 @@ struct IslandAlertCompactView: View {
                             .font(.ui(s(12), .medium)).foregroundStyle(Color(alert.accent))
                     }.frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(theme.alertText)
                 .padding(.horizontal, wings?.padding ?? s(IslandController.alertSidePadding)).frame(height: height)
                 .contentShape(Rectangle())
             }
@@ -61,6 +62,8 @@ struct IslandAlertDetailView: View {
     var sessionNavigationFailed = false
     var waitingRequests: [PermissionRequest] = []
     var onSelectRequest: (String) -> Void = { _ in }
+    @Environment(\.hudTheme) private var theme
+
     var body: some View {
         switch alert {
         case .permission(let request):
@@ -74,7 +77,7 @@ struct IslandAlertDetailView: View {
                     BotMark(vendor: event.agentVendor, size: 24, phase: .done)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(event.agentVendor).font(.ui(13, .semibold))
-                        Text(event.model).font(.ui(11)).foregroundStyle(.white.opacity(0.45))
+                        Text(event.model).font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.45))
                     }
                     Spacer()
                     TurnEndedSymbol()
@@ -83,7 +86,7 @@ struct IslandAlertDetailView: View {
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.65))
+                            .foregroundStyle(theme.alertText.opacity(0.65))
                             .frame(width: 24, height: 24)
                             .contentShape(Rectangle())
                     }
@@ -96,7 +99,7 @@ struct IslandAlertDetailView: View {
                     Text(event.task).font(.ui(15, .medium)).lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                     if let message = event.message {
-                        Text(message).font(.ui(12)).foregroundStyle(.white.opacity(0.68)).lineLimit(4)
+                        Text(message).font(.ui(12)).foregroundStyle(theme.alertText.opacity(0.68)).lineLimit(4)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -106,11 +109,11 @@ struct IslandAlertDetailView: View {
                     if let start = event.startedAt {
                         Text(Countdown.compact(max(0, event.completedAt.timeIntervalSince(start))))
                     }
-                }.font(.tabular(11)).foregroundStyle(.white.opacity(0.5))
+                }.font(.tabular(11)).foregroundStyle(theme.alertText.opacity(0.5))
                 CompletionAlertActions(hasSession: event.navigationTarget != nil,
                                        navigationFailed: sessionNavigationFailed,
                                        onOpenSession: onOpenSession, onOpenUsage: onOpenUsage)
-            }.foregroundStyle(.white)
+            }.foregroundStyle(theme.alertText)
         }
     }
 }
@@ -127,6 +130,8 @@ struct IslandEventPanelView: View {
     var events: [IslandAlert] = []
     var waitingRequests: [PermissionRequest] = []
     var onSelectRequest: (String) -> Void = { _ in }
+    @Environment(\.hudTheme) private var theme
+    @Environment(\.permissionColor) private var color
 
     private var requests: [PermissionRequest] {
         if !waitingRequests.isEmpty { return waitingRequests }
@@ -161,12 +166,12 @@ struct IslandEventPanelView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
                         Text(L10n.text("待审批", "Waiting"))
-                            .font(.ui(11, .semibold)).foregroundStyle(PermissionColor.secondary)
+                            .font(.ui(11, .semibold)).foregroundStyle(color.secondary)
                         Spacer()
                         Text("\(requests.count)")
-                            .font(.tabular(10, .semibold)).foregroundStyle(PermissionColor.signal)
+                            .font(.tabular(10, .semibold)).foregroundStyle(color.signal)
                             .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(PermissionColor.signal.opacity(0.16), in: Capsule())
+                            .background(color.signal.opacity(0.16), in: Capsule())
                     }.padding(.horizontal, 4).padding(.bottom, 8)
                     VStack(spacing: 2) {
                         ForEach(requests) { request in
@@ -186,7 +191,7 @@ struct IslandEventPanelView: View {
                 }
             }
         }
-        .foregroundStyle(Theme.island.text)
+        .foregroundStyle(theme.text)
         .accessibilityIdentifier("island-event-panel")
     }
 }
@@ -195,6 +200,7 @@ private struct CompletionClosedRow: View {
     let event: SessionCompletion
     let onSelect: () -> Void
     @State private var hovering = false
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         Button(action: onSelect) {
@@ -209,14 +215,14 @@ private struct CompletionClosedRow: View {
                 .padding(.horizontal, 4).padding(.vertical, 1)
                 .background(Color(IslandAlert.turnAccent).opacity(0.14), in: RoundedRectangle(cornerRadius: 3))
                 .fixedSize()
-                Text(event.task).font(.ui(11)).foregroundStyle(Theme.island.secondary).lineLimit(1)
+                Text(event.task).font(.ui(11)).foregroundStyle(theme.secondary).lineLimit(1)
                 Spacer(minLength: 6)
                 Text(event.completedAt.formatted(date: .omitted, time: .shortened))
-                    .font(.tabular(11)).foregroundStyle(Theme.island.tertiary)
+                    .font(.tabular(11)).foregroundStyle(theme.tertiary)
             }
             .padding(.horizontal, 10).padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(hovering ? Theme.island.segmentBackground : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(hovering ? theme.segmentBackground : .clear, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -236,6 +242,8 @@ struct IslandAlertInlineView: View {
     var onOpenUsage: () -> Void = {}
     var sessionNavigationFailed = false
     var waitingRequests: [PermissionRequest] = []
+    @Environment(\.hudTheme) private var theme
+
     var body: some View {
         switch alert {
         case .permission(let request): PermissionAlertInlineView(request: request, onDecide: onDecide,
@@ -249,9 +257,9 @@ struct IslandAlertInlineView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L10n.text("\(event.agentVendor) · 有新回复", "\(event.agentVendor) · New reply"))
                             .font(.ui(12, .medium)).foregroundStyle(Color(alert.accent))
-                        Text(event.task).font(.ui(11)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                        Text(event.task).font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.7)).lineLimit(1)
                         if let message = event.message {
-                            Text(message).font(.ui(11)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
+                            Text(message).font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.45)).lineLimit(1)
                         }
                     }
                     Spacer()
@@ -259,7 +267,7 @@ struct IslandAlertInlineView: View {
                 CompletionAlertActions(hasSession: event.navigationTarget != nil,
                                        navigationFailed: sessionNavigationFailed,
                                        onOpenSession: onOpenSession, onOpenUsage: onOpenUsage)
-            }.foregroundStyle(.white).padding(.vertical, 8)
+            }.foregroundStyle(theme.alertText).padding(.vertical, 8)
         }
     }
 }
@@ -270,28 +278,29 @@ private struct CompletionAlertActions: View {
     let navigationFailed: Bool
     let onOpenSession: () -> Void
     let onOpenUsage: () -> Void
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if navigationFailed && hasSession {
                 Text(L10n.text("无法回到会话，请重试或查看 Token 用量", "Couldn't return to session. Retry or view token usage."))
-                    .font(.ui(11)).foregroundStyle(.white.opacity(0.65))
+                    .font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.65))
                     .fixedSize(horizontal: false, vertical: true)
             } else if !hasSession {
                 Text(L10n.text("暂时无法回到原会话", "Session return unavailable"))
-                    .font(.ui(11)).foregroundStyle(.white.opacity(0.5))
+                    .font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.5))
             }
             HStack(spacing: 6) {
                 Button(action: onOpenUsage) {
                     HStack(spacing: 4) {
                         Image(systemName: "chart.bar.xaxis").font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Theme.island.secondary)
+                            .foregroundStyle(theme.secondary)
                         Text(L10n.text("查看 Token 用量", "View token usage"))
                             .font(.ui(11, .medium)).lineLimit(1)
                     }
-                    .foregroundStyle(Theme.island.secondary)
+                    .foregroundStyle(theme.secondary)
                     .padding(.horizontal, 9).frame(height: 22)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.island.cardBorder, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(theme.cardBorder, lineWidth: 1))
                     .contentShape(Rectangle())
                 }
                 .accessibilityIdentifier("island-alert-openTokenUsage")
@@ -305,7 +314,7 @@ private struct CompletionAlertActions: View {
                                  : L10n.text("回到会话", "Return to session"))
                                 .font(.ui(11, .medium)).lineLimit(1)
                         }
-                        .foregroundStyle(.black)
+                        .foregroundStyle(theme.onAccent)
                         .padding(.horizontal, 9).frame(height: 22)
                         .background(Color(IslandAlert.turnAccent), in: RoundedRectangle(cornerRadius: 6))
                         .contentShape(Rectangle())

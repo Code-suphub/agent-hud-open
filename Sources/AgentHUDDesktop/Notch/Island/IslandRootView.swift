@@ -71,6 +71,11 @@ struct IslandRootView: View {
     let collapsedSize: CGSize
     let collapsedTopRadius: CGFloat
     let collapsedBottomRadius: CGFloat
+    /// What this screen's HUD looks like. Everything on the island takes its colours from it: the silhouette and what
+    /// the card holds.
+    let look: HUDLook
+    /// The desktop behind the island is light, which a hairline round the silhouette keeps it apart from. It follows the
+    /// Mac's appearance, not the look.
     let lightBorder: Bool
     let onOpenStats: () -> Void
     var onOpenSettings: () -> Void = {}
@@ -115,7 +120,7 @@ struct IslandRootView: View {
     var botLogos = true
     /// Set on a screen whose HUD is a logo queue. Collapsed, such a HUD has no silhouette: it is the marks
     /// over whatever is behind them. Kept apart from `logoQueue`, which only says whether marks are drawn —
-    /// hiding them leaves the backdrop alone and must not bring the black shape back.
+    /// hiding them leaves the backdrop alone and must not bring the silhouette back.
     var hidesSilhouette = false
     /// Set on a dock that separates its agents. The marks then stay where they are whatever the card does:
     /// the Simple panel draws its own capsule instead of lending it to the card, and nothing replaces them.
@@ -139,6 +144,10 @@ struct IslandRootView: View {
 
     private var detached: Bool { focusVendor != nil }
 
+    /// The tokens the silhouette and the detached card are filled and outlined with: the look's. Taken from the look
+    /// itself, because the environment this view sets reaches what it holds and not the view.
+    private var theme: Theme { look.theme }
+
     /// A card comes out of the dock and goes back into it: scaled from the side that faces the dock. The Simple
     /// line on a side edge only lengthens, as the panel growing an arm would.
     private func cardTransition(_ frame: CGRect, in bounds: CGSize, line: Bool) -> AnyTransition {
@@ -160,7 +169,9 @@ struct IslandRootView: View {
     private struct CardPlacement: ViewModifier, @preconcurrency Animatable {
         var frame: CGRect
         var radius: CGFloat
+        /// How much of `hairline` is drawn round the card: all of it, or none round the Simple line.
         var outline: Double
+        let hairline: Color
 
         var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>,
                                            AnimatablePair<CGFloat, Double>> {
@@ -178,7 +189,7 @@ struct IslandRootView: View {
             content
                 .frame(width: max(0, frame.width), height: max(0, frame.height))
                 .clipShape(card)
-                .overlay { card.strokeBorder(.white.opacity(outline), lineWidth: 1) }
+                .overlay { card.strokeBorder(hairline.opacity(outline), lineWidth: 1) }
                 .position(x: frame.midX, y: frame.midY)
         }
     }
@@ -257,11 +268,14 @@ struct IslandRootView: View {
     static var placeholder: IslandRootView {
         IslandRootView(store: nil, isOpen: false, collapsedSize: CGSize(width: 216, height: 32),
                        collapsedTopRadius: NotchGeometry.collapsedTopRadius, collapsedBottomRadius: 12,
-                       lightBorder: false, onOpenStats: {})
+                       look: .standard, lightBorder: false, onOpenStats: {})
     }
 
+    /// The island sets its look's colours and not the colour scheme that goes with them: what SwiftUI and AppKit choose
+    /// themselves on it, such as a mark's artwork, the scroller and a text field's caret, follows the app's appearance,
+    /// as it always has.
     var body: some View {
-        surfaces.environment(\.botLogos, botLogos)
+        surfaces.environment(\.botLogos, botLogos).environment(\.hudLook, look)
     }
 
     private var surfaces: some View {
@@ -288,10 +302,10 @@ struct IslandRootView: View {
             let bare = hidesSilhouette && !visible && (!floats || separatesAgents)
             let surface = ZStack(alignment: surfaceAlignment) {
                 // Keep one shape alive through collapse so it can shrink before becoming transparent.
-                shape.fill(.black.opacity(floats && !visible ? 0.82 : 1))
+                shape.fill(theme.islandFill.opacity(floats && !visible ? theme.restingFillOpacity : 1))
                     .overlay {
-                        if floats { shape.stroke(.white.opacity(0.14), lineWidth: 1) }
-                        else if lightBorder && alert == nil { shape.stroke(.white.opacity(0.18), lineWidth: 1) }
+                        if floats { shape.stroke(theme.islandOutline, lineWidth: 1) }
+                        else if lightBorder && alert == nil { shape.stroke(theme.desktopOutline, lineWidth: 1) }
                     }
                     .frame(width: size.width, height: size.height)
                     .opacity(bare ? 0 : 1)
@@ -312,12 +326,12 @@ struct IslandRootView: View {
                         let grows = growsFromPanel
                         let motion: Animation? = reduceMotion ? nil : IslandAnimation.curve
                         ZStack {
-                            Color.black.opacity(grows ? SimpleMeterView.fillOpacity : 1)
+                            theme.islandFill.opacity(grows ? theme.restingFillOpacity : 1)
                             content.environment(\.islandTyping, onTyping)
                         }
                         .modifier(CardPlacement(frame: presentationFrame,
                                                 radius: detachedRadius(height: presentationFrame.height),
-                                                outline: grows ? 0 : 0.14))
+                                                outline: grows ? 0 : 1, hairline: theme.islandOutline))
                         // Keyed to the card's place on screen. Its place in the window also changes whenever the
                         // window around it is resized, and that must never move the card.
                         .animation(motion, value: cardScreenFrame)
@@ -388,8 +402,14 @@ struct IslandRootView: View {
         .id(store?.settings.settings.language ?? .system)
     }
 
-    @ViewBuilder
+    /// What the island holds, drawn with this screen's look. The island is also measured from this alone, in a hosting
+    /// view of its own (`IslandWindowController.contentHeight(for:)`), so the look is set here and not only round `body`.
     var content: some View {
+        cardContent.environment(\.hudLook, look)
+    }
+
+    @ViewBuilder
+    private var cardContent: some View {
         if isOpen, showsAlertDetails, let alert {
             Group {
                 if alert.isSessionEvent {

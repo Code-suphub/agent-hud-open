@@ -15,6 +15,9 @@ struct GlowPane: View {
     /// The selected screen's glow as its HUD draws it now, an agent's unsaved style included.
     private var glow: GlowSettings { settings.effectiveGlow(on: screen) }
 
+    /// The look of the selected screen's HUD, which the preview's island is drawn in.
+    private var look: HUDLook { settings.effectiveLook(on: screen) }
+
     /// What the screen's resting HUD shows of the agents under its layout, which the preview's colours follow.
     private var agents: ScreenAgents {
         ScreenAgents(store: store, listed: settings.panelLayout.effective(for: screen).hud.agents, mode: placement.mode)
@@ -56,11 +59,11 @@ struct GlowPane: View {
                     .overlay(alignment: .top) {
                         if placement.mode == .logos {
                             LogoQueuePreview(settings: settings, store: store, placement: placement,
-                                             metrics: metrics, screen: screen)
+                                             metrics: metrics, screen: screen, look: look)
                         } else {
                             GlowPreview(
                                 appearance: agents.glowAppearance(light: false, on: screen), settings: current,
-                                islandSize: metrics.islandSize, islandRadius: metrics.islandRadius,
+                                islandSize: metrics.islandSize, islandRadius: metrics.islandRadius, look: look,
                                 previewsMotion: true
                             )
                         }
@@ -198,6 +201,8 @@ struct LogoQueuePreview: View {
     let placement: ScreenPlacement
     let metrics: ScreenMetrics
     var screen: String = ""
+    /// The look of that screen's HUD, which the backdrop's island edge is filled with.
+    let look: HUDLook
     /// Overrides what the queue shows. Only the snapshot runner uses it, to lay out every bundled mark.
     var marks: [LogoQueueItem]?
 
@@ -232,7 +237,8 @@ struct LogoQueuePreview: View {
                 GlowPreview(
                     appearance: agents.glowAppearance(light: false, on: screen),
                     settings: glow,
-                    islandSize: CGSize(width: width + overhang * 2, height: 2), islandRadius: 0, previewsMotion: true
+                    islandSize: CGSize(width: width + overhang * 2, height: 2), islandRadius: 0, look: look,
+                    previewsMotion: true
                 )
                 .frame(width: width, alignment: .center)
                 .clipped()

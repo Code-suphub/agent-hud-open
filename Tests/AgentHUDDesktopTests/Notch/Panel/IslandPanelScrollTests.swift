@@ -192,7 +192,7 @@ private final class IslandPanelScrollFixture {
             model: "Model 0", startedAt: now.addingTimeInterval(-180), completedAt: now)
         var root = IslandRootView(store: store, isOpen: true,
             collapsedSize: edge == nil ? CGSize(width: 216, height: 32) : strip.size,
-            collapsedTopRadius: 8, collapsedBottomRadius: 12, lightBorder: false, onOpenStats: {},
+            collapsedTopRadius: 8, collapsedBottomRadius: 12, look: .standard, lightBorder: false, onOpenStats: {},
             additionalHUDControls: { AnyView(IslandPanelFooterProbe().frame(width: 16, height: 28)) },
             alert: .completion(completion))
         root.presentationSize = canvas

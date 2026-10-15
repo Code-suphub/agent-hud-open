@@ -22,6 +22,8 @@ struct GlowPreview: View {
     let settings: GlowSettings
     let islandSize: CGSize
     let islandRadius: CGFloat
+    /// The look of the HUD whose island is drawn, which fills it and outlines it.
+    let look: HUDLook
     /// Scale applied to range/blur so small previews keep the proportions of the real notch.
     var scale: CGFloat = 1
     var lightBorder = false
@@ -75,10 +77,10 @@ struct GlowPreview: View {
             }
             if drawsIsland {
                 BottomRoundedRectangle(radius: islandRadius)
-                    .fill(Color.black)
+                    .fill(look.theme.islandFill)
                     .overlay {
                         if lightBorder {
-                            BottomRoundedRectangle(radius: islandRadius).stroke(Color.white.opacity(0.18), lineWidth: 1)
+                            BottomRoundedRectangle(radius: islandRadius).stroke(look.theme.desktopOutline, lineWidth: 1)
                         }
                     }
                     .frame(width: islandSize.width, height: islandSize.height)

@@ -41,5 +41,6 @@ struct SimpleMeterSheetScene: View {
             showsRings: variant.rings, showsNumbers: variant.numbers))
         return SimpleMeterView(config: config)
             .frame(width: config.stripSize.width, height: config.stripSize.height)
+            .hudLook(.standard)
     }
 }

@@ -79,7 +79,9 @@ struct HoverPanelView: View {
         let tokens: PanelTokenFilter
     }
 
-    let theme = Theme.island
+    /// The tokens of the HUD the panel is drawn in. The charts and cards it shares with the statistics window are
+    /// handed them.
+    @Environment(\.hudTheme) var theme
     /// Above the draft bar and the footer, which keep their room whatever the layout's spacing.
     private let footerSpacing: CGFloat = 10
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

@@ -77,7 +77,7 @@ final class LogoEdgeDistanceTests: XCTestCase {
             let expanded = geometry.expandedFrame(size: CGSize(width: 540, height: 300))
             var root = IslandRootView(store: nil, isOpen: false, collapsedSize: strip.size,
                                       collapsedTopRadius: 8, collapsedBottomRadius: 10,
-                                      lightBorder: false, onOpenStats: {})
+                                      look: .standard, lightBorder: false, onOpenStats: {})
             root.hidesSilhouette = true
             root.edge = edge
             root.logoQueue = config
@@ -95,7 +95,8 @@ final class LogoEdgeDistanceTests: XCTestCase {
                                              collapsedSize: rebased.collapsedSize,
                                              collapsedTopRadius: rebased.collapsedTopRadius,
                                              collapsedBottomRadius: rebased.collapsedBottomRadius,
-                                             lightBorder: rebased.lightBorder, onOpenStats: rebased.onOpenStats)
+                                             look: rebased.look, lightBorder: rebased.lightBorder,
+                                             onOpenStats: rebased.onOpenStats)
                 current.hidesSilhouette = rebased.hidesSilhouette
                 current.edge = rebased.edge
                 current.logoQueue = rebased.logoQueue

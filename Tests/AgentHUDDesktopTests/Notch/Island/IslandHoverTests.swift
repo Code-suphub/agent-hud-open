@@ -38,7 +38,7 @@ final class IslandHoverTests: XCTestCase {
 
         func root(open: Bool) -> IslandRootView {
             IslandRootView(store: store, isOpen: open, collapsedSize: CGSize(width: 216, height: 32), collapsedTopRadius: 16,
-                           collapsedBottomRadius: 12, lightBorder: false, onOpenStats: {})
+                           collapsedBottomRadius: 12, look: .standard, lightBorder: false, onOpenStats: {})
         }
         let measured = NSHostingView(rootView: HoverPanelView(store: store, onOpenStats: {})
             .frame(width: IslandController.expandedWidth).fixedSize(horizontal: false, vertical: true))
@@ -58,8 +58,10 @@ final class IslandHoverTests: XCTestCase {
         XCTAssertEqual(anchors.count, agents.count, "Every timed model row needs an island hover anchor")
         for (agent, anchor) in zip(agents, anchors) {
             let popup = try await enter(anchor, in: window)
-            let details = try XCTUnwrap(popup.contentView as? NSHostingView<QuotaForecastDetails>)
-            XCTAssertEqual(details.rootView.agent.id, agent.id, "The hovered row must use its own forecast")
+            let details = try XCTUnwrap(popup.contentView as? NSHostingView<ModifiedContent<QuotaForecastDetails, HUDLookEnvironment>>)
+            XCTAssertEqual(details.rootView.content.agent.id, agent.id, "The hovered row must use its own forecast")
+            XCTAssertEqual(details.rootView.modifier.look, .standard, "The popup draws in the look of the island it opens from")
+            XCTAssertEqual(popup.appearance?.name, HUDLook.standard.appearanceName)
             checkFollowsPointer(anchor, popup: popup, in: window)
             await leave(anchor, popup: popup, in: window)
         }

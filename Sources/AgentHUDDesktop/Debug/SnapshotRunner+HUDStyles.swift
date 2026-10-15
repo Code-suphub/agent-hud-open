@@ -22,7 +22,8 @@ extension SnapshotRunner {
         let layout = settings.panelLayout
         let notch = ScreenMetrics(menuBar: 37, notch: CGSize(width: 185, height: 32))
         func hud(_ name: String, _ screen: String, hasNotch: Bool) {
-            let renderer = HUDPictureRenderer(store: store, screen: screen, hasNotch: hasNotch, metrics: hasNotch ? notch : .fallback)
+            let renderer = HUDPictureRenderer(store: store, screen: screen, hasNotch: hasNotch, look: .standard,
+                                              metrics: hasNotch ? notch : .fallback)
             save("panel-layout-\(name)", renderer.view(), folder: folder, scheme: .dark)
         }
 
@@ -63,7 +64,7 @@ extension SnapshotRunner {
                                                                  simpleSize: ScreenPlacement.simpleSizeRange.upperBound))
         let side = PanelPictureRenderer(store: store, display: .init(
             insets: IslandRootView.dockInsets(edge: .left, collapsedSize: CGSize(width: strip.stripSize.width, height: 200)),
-            maximumHeight: 2_000))
+            maximumHeight: 2_000, look: .standard))
         save("panel-layout-width-\(PanelStyle.widthRange.lowerBound)-side-dock",
              side.card(masked: false, height: CGFloat(side.fit().height)).frame(width: side.width)
                 .padding(20).background(Color(white: 0.10)),

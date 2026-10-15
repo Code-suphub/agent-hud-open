@@ -76,7 +76,8 @@ final class DockLayoutTests: XCTestCase {
                               height: core.height + (edge.isHorizontal ? 0 : 32))
             var root = IslandRootView(store: nil, isOpen: false, collapsedSize: strip,
                                       collapsedTopRadius: IslandRootView.expandedTopRadius,
-                                      collapsedBottomRadius: 10, lightBorder: false, onOpenStats: {}, alert: alert)
+                                      collapsedBottomRadius: 10, look: .standard, lightBorder: false, onOpenStats: {},
+                                      alert: alert)
             root.hidesSilhouette = true
             root.edge = edge
             root.presentationFrame = CGRect(origin: .zero, size: size)
@@ -162,7 +163,7 @@ final class DockLayoutTests: XCTestCase {
         for edge in [HUDEdge.left, .right] {
             var root = IslandRootView(store: store, isOpen: true, collapsedSize: CGSize(width: 32, height: 80),
                                       collapsedTopRadius: 8, collapsedBottomRadius: 10,
-                                      lightBorder: false, onOpenStats: {})
+                                      look: .standard, lightBorder: false, onOpenStats: {})
             root.hidesSilhouette = true
             root.edge = edge
             let controller = IslandWindowController(
@@ -170,7 +171,7 @@ final class DockLayoutTests: XCTestCase {
             let shortHeight = controller.contentHeight(for: root)
             root = IslandRootView(store: store, isOpen: true, collapsedSize: CGSize(width: 32, height: 400),
                                   collapsedTopRadius: 8, collapsedBottomRadius: 10,
-                                  lightBorder: false, onOpenStats: {})
+                                  look: .standard, lightBorder: false, onOpenStats: {})
             root.hidesSilhouette = true
             root.edge = edge
             XCTAssertEqual(controller.contentHeight(for: root), shortHeight, accuracy: 1,
@@ -193,7 +194,7 @@ final class DockLayoutTests: XCTestCase {
             let placement = ScreenPlacement(mode: .logos, edge: edge)
             var root = IslandRootView(store: nil, isOpen: true, collapsedSize: rect.size,
                                       collapsedTopRadius: 8, collapsedBottomRadius: 10,
-                                      lightBorder: false, onOpenStats: {})
+                                      look: .standard, lightBorder: false, onOpenStats: {})
             root.hidesSilhouette = true
             root.edge = edge
             root.logoQueue = LogoQueueConfig(items: [LogoQueueItem(vendor: "Claude", isWorking: false)],
@@ -240,7 +241,7 @@ final class DockLayoutTests: XCTestCase {
         let strip = CGRect(x: 508, y: 0, width: 32, height: 400)
         var root = IslandRootView(store: store, isOpen: true, collapsedSize: strip.size,
                                   collapsedTopRadius: 8, collapsedBottomRadius: 10,
-                                  lightBorder: false, onOpenStats: {},
+                                  look: .standard, lightBorder: false, onOpenStats: {},
                                   additionalHUDControls: { AnyView(DockFooterMarker().frame(width: 16, height: 28)) })
         root.hidesSilhouette = true
         root.edge = .right

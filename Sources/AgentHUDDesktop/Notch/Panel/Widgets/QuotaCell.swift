@@ -134,7 +134,7 @@ struct QuotaCell: View {
     var forecastHint: String?
     var isLoading = false
     var ringSize = PanelRingSize.medium
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         Group {

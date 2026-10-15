@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The black island itself. Collapsed, the panel is exactly the notch. Opening sets the panel to the expanded content size
+/// The island itself. Collapsed, the panel is exactly the notch. Opening sets the panel to the expanded content size
 /// immediately and lets SwiftUI grow the shape out of the notch; closing shrinks the shape first, then the panel.
 @MainActor
 final class IslandWindowController {

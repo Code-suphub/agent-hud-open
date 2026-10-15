@@ -212,14 +212,14 @@ public enum SnapshotRunner {
         save("settings-display-small-bottom-dark", SettingsView(settings: settings, store: store, initialTab: .display).frame(width: SettingsWindowLayout.minimum.width, height: SettingsWindowLayout.minimum.height), folder: folder, scheme: .dark, scrollToBottom: true)
         let sampleWidth = SettingsWindowLayout.size.width - SettingsWindowLayout.sidebarWidth - 1
         let smallSampleWidth = SettingsWindowLayout.minimum.width - SettingsWindowLayout.sidebarWidth - 1
-        save("settings-panel-samples-dark", IslandPane(settings: settings, theme: .dark).padding(20).frame(width: sampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
-        save("settings-panel-samples-small-dark", IslandPane(settings: settings, theme: .dark).padding(20).frame(width: smallSampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
-        save("settings-panel-samples-light", IslandPane(settings: settings, theme: .light).padding(20).frame(width: sampleWidth).background(Theme.light.windowBackground), folder: folder, scheme: .light)
+        save("settings-panel-samples-dark", IslandPane(settings: settings, theme: .dark, look: .standard).padding(20).frame(width: sampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
+        save("settings-panel-samples-small-dark", IslandPane(settings: settings, theme: .dark, look: .standard).padding(20).frame(width: smallSampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
+        save("settings-panel-samples-light", IslandPane(settings: settings, theme: .light, look: .standard).padding(20).frame(width: sampleWidth).background(Theme.light.windowBackground), folder: folder, scheme: .light)
         settings.update {
             $0.showIslandQuota = false; $0.showIslandTokens = false; $0.showIslandSessions = false
             $0.showResetCountdown = false
         }
-        save("settings-panel-samples-off-dark", IslandPane(settings: settings, theme: .dark).padding(20).frame(width: sampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
+        save("settings-panel-samples-off-dark", IslandPane(settings: settings, theme: .dark, look: .standard).padding(20).frame(width: sampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
         settings.update {
             $0.showIslandQuota = true; $0.showIslandTokens = true; $0.showIslandSessions = true
             $0.showResetCountdown = true
@@ -390,7 +390,10 @@ public enum SnapshotRunner {
                                              codexResetCredits: balance))
             save("island-reset-\(name)-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
             if let balance, balance.availableCount > 0 {
-                save("island-reset-hover-\(name)-dark", ResetCreditsDetails(resets: balance).padding(8).background(Color.black),
+                // The details a hovered row opens, on the island's card in the standard look.
+                let look = HUDLook.standard
+                save("island-reset-hover-\(name)-dark",
+                     ResetCreditsDetails(resets: balance).padding(8).background(look.theme.islandFill).hudLook(look),
                      folder: folder, scheme: .dark)
             }
             if name == "available" {
@@ -560,8 +563,9 @@ public enum SnapshotRunner {
         save("stats-token-models-filtered-hover-dark",
              TokenConsumptionChart(store: store, theme: .dark, context: .stats, modelFilter: picked, inspectedColumnID: hover)
                 .padding(16).frame(width: 760).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
-        save("island-token-models-top10-dark", TokenConsumptionChart(store: store, theme: .island, context: .island)
-            .padding(18).frame(width: 480).background(Color.black), folder: folder, scheme: .dark)
+        let look = HUDLook.standard
+        save("island-token-models-top10-dark", TokenConsumptionChart(store: store, theme: look.theme, context: .island)
+            .padding(18).frame(width: 480).background(look.theme.islandFill).hudLook(look), folder: folder, scheme: .dark)
         store.setStatsRange(.days7)
         store.tokenBucketSize = .day1
         save("stats-token-dates-daily-dark", TokenConsumptionChart(store: store, theme: .dark, context: .stats)
@@ -845,6 +849,8 @@ struct IslandScene: View {
     var glowTime: Double? = nil
     /// The key of the screen whose layout the panel and the glow follow; nil follows the shared layout and every agent.
     var screen: String? = nil
+    /// What the HUD in the scene looks like. `light` is the desktop around it, which the look leaves alone.
+    var look = HUDLook.standard
 
     /// The glow beside the notch: every agent's, or the agents the screen's layout lists.
     private var glowAppearance: GlowAppearance {
@@ -867,12 +873,12 @@ struct IslandScene: View {
                             .padding(alert.detailInsets.map {
                     EdgeInsets(top: max($0.top, 38), leading: $0.leading, bottom: $0.bottom, trailing: $0.trailing)
                 } ?? EdgeInsets(top: 38 + alert.detailTopInset, leading: 24, bottom: 22, trailing: 24))
-                .frame(width: alert.detailWidth).fixedSize(horizontal: false, vertical: true))
+                .frame(width: alert.detailWidth).fixedSize(horizontal: false, vertical: true).hudLook(look))
             return hosting.fittingSize.height
         }
         let hosting = NSHostingView(rootView: HoverPanelView(store: store, onOpenStats: {}, alert: alert,
                                                             failedListedSessionID: failedListedSessionID, screen: screen)
-            .frame(width: panelWidth).fixedSize(horizontal: false, vertical: true))
+            .frame(width: panelWidth).fixedSize(horizontal: false, vertical: true).hudLook(look))
         return max(80, min(hosting.fittingSize.height, maximumPanelHeight))
     }
 
@@ -919,7 +925,8 @@ struct IslandScene: View {
                 appearance: glowAppearance,
                 settings: settings.effectiveGlow(on: screen),
                 islandSize: islandSize,
-                islandRadius: radius
+                islandRadius: radius,
+                look: look
             )
             .environment(\.glowFrozenTime, glowTime ?? 0.9)
             .frame(width: max(720, islandSize.width + 2 * flare + 40), alignment: .top)
@@ -936,7 +943,7 @@ struct IslandScene: View {
             store: store, isOpen: open,
             collapsedSize: CGSize(width: cameraWidth + NotchGeometry.collapsedTopRadius * 2, height: closedHeight),
             collapsedTopRadius: NotchGeometry.collapsedTopRadius, collapsedBottomRadius: 14,
-            lightBorder: light, onOpenStats: {}, alert: alert, failedListedSessionID: failedListedSessionID,
+            look: look, lightBorder: light, onOpenStats: {}, alert: alert, failedListedSessionID: failedListedSessionID,
             waitingRequests: waitingRequests, sessionEvents: sessionEvents,
             showsAlertDetails: showsAlertDetails, presentationSize: size
         )
@@ -1001,7 +1008,8 @@ struct LogoQueueScene: View {
 
     var body: some View {
         LogoQueuePreview(settings: settings, store: store, placement: placement,
-                         metrics: ScreenMetrics(menuBar: menuBar, notch: nil), screen: screen, marks: marks)
+                         metrics: ScreenMetrics(menuBar: menuBar, notch: nil), screen: screen, look: .standard,
+                         marks: marks)
             // The preview measures itself against the space it is given; a snapshot has to name one.
             .frame(width: width, height: 132)
             .padding(24)

@@ -28,7 +28,8 @@ struct DisplayPane: View {
                 GlowPane(settings: settings, store: store, theme: theme, placement: placement,
                          metrics: ScreenMetrics(screen: selection), screen: screen)
             }
-            IslandPane(settings: settings, theme: theme)
+            // The samples show the panel in the selected screen's look.
+            IslandPane(settings: settings, theme: theme, look: settings.effectiveLook(on: screen))
             SettingsSection(title: L10n.text("菜单栏", "Menu bar"), theme: theme) {
                 SettingsToggleRow(
                     label: L10n.text("显示菜单栏图标", "Show menu bar icon"),

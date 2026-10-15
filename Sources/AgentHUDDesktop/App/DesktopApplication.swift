@@ -163,6 +163,7 @@ public final class DesktopApplication {
                 guard let self else { return nil }
                 let display = NSScreen.screens.first { ScreenIdentity.key(for: $0) == key }
                 return HUDPictureRenderer(store: self.store, screen: key, hasNotch: display.map(ScreenIdentity.hasNotch) ?? false,
+                                          look: self.store.settings.effectiveLook(on: key),
                                           metrics: ScreenMetrics(screen: display)).picture()
             }
             let tools = PanelTools(store: store, screens: { [weak self] in self?.notch?.panelScreens ?? [] },

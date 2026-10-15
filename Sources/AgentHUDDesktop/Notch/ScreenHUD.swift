@@ -219,6 +219,8 @@ final class ScreenHUD {
         let requests: [PermissionRequest]
         let geometry: NotchGeometry
         let light: Bool
+        /// The look the island draws with: a change of it makes the panel and its images again.
+        let look: HUDLook
         let appearance: GlowAppearance
         let alertID: String?
         let focus: AgentMark?
@@ -256,7 +258,7 @@ final class ScreenHUD {
                       hookTurns: store.hookTurns, now: store.now, dataDate: store.dataDate,
                       error: store.lastError, loading: store.isLoading, range: store.statsRange,
                       bucketSize: store.tokenBucketSize, dimensions: store.tokenDimensions,
-                      requests: PermissionRequests.shared.pending, geometry: geometry, light: systemIsLight,
+                      requests: PermissionRequests.shared.pending, geometry: geometry, light: systemIsLight, look: look,
                       appearance: agents.glowAppearance(light: systemIsLight, on: key),
                       alertID: activeAlert?.id, focus: focus, pinned: pinned, alertDetails: alerts.current?.inUsagePanel == false,
                       pendingIDs: alerts.pendingIDs,
@@ -698,10 +700,12 @@ final class ScreenHUD {
     }
 
     /// How this display draws the whole panel, for a picture or a measurement made off screen: the insets its notch or
-    /// its dock gives the content, as `IslandRootView` sets them, and the tallest the panel opens here. It is worked out
-    /// from the placement in effect now, a style draft just proposed included, before the HUD has re-applied it.
+    /// its dock gives the content, as `IslandRootView` sets them, the tallest the panel opens here, and the HUD's look.
+    /// It is worked out from the placement in effect now, a style draft just proposed included, before the HUD has
+    /// re-applied it.
     var panelDisplay: PanelPictureRenderer.Display {
-        PanelPictureRenderer.Display(insets: Self.panelInsets(on: resolveGeometry()), maximumHeight: maximumContentHeight)
+        PanelPictureRenderer.Display(insets: Self.panelInsets(on: resolveGeometry()), maximumHeight: maximumContentHeight,
+                                     look: look)
     }
 
     /// The room the open panel's content keeps from the card's edges on `geometry`, as `IslandRootView` sets it: the
@@ -755,6 +759,10 @@ final class ScreenHUD {
         previewPlacement ?? screen.map { ScreenIdentity.placement(for: $0, in: settings) }
             ?? settings.effectivePlacement(on: key, hasNotch: false)
     }
+
+    /// What this HUD looks like, which its island, its panel, the cards on it and the pictures made of them draw with:
+    /// the look its screen's settings give it, as Settings previews it.
+    var look: HUDLook { settings.effectiveLook(on: key) }
 
     /// The panel's style in this screen's layout, whose width the open panel takes: the whole panel's, or on a dock
     /// that separates its agents one agent's own, 100 points narrower.
@@ -923,6 +931,7 @@ final class ScreenHUD {
             collapsedSize: geometry.mode.isDocked ? geometry.rect.size : geometry.islandFrame.size,
             collapsedTopRadius: geometry.mode.isDocked ? NotchGeometry.expandedTopRadius : NotchGeometry.collapsedTopRadius,
             collapsedBottomRadius: geometry.cornerRadius,
+            look: look,
             lightBorder: systemIsLight,
             onOpenStats: { [weak self] in self?.handOff { self?.onOpenStats?() } },
             onOpenSettings: { [weak self] in self?.handOff { self?.onOpenSettings?() } },

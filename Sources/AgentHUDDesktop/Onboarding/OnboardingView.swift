@@ -27,6 +27,7 @@ struct OnboardingView: View {
                     settings: settings.settings.glow,
                     islandSize: CGSize(width: 190, height: 26),
                     islandRadius: 13,
+                    look: .standard,
                     scale: 0.9
                 )
             }

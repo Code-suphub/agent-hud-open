@@ -42,7 +42,8 @@ extension PanelMeasure {
 struct IslandQuotaMetricPicker: View {
     @Binding var selection: PanelMeasure
     var measures = PanelBlockKind.quota.measures(under: .bar)
-    var theme: Theme = .island
+    /// The tokens of what it heads: its block's in the panel, or the sample's in Settings.
+    let theme: Theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -87,7 +88,7 @@ struct ProviderQuotaBlock: View {
     @State private var metric: PanelMeasure
     @Environment(\.panelSpacing) private var spacing
     @Environment(\.panelHalf) private var half
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
 
     init(store: UsageStore, rows: [AgentRow], plan: PanelBlockPlan, onOpenAgent: (() -> Void)? = nil) {
         self.store = store
@@ -260,7 +261,7 @@ struct AccountSectionHeader: View {
     let label: String
     var notice: String?
     var warning: String?
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
     @Environment(\.masksIdentity) private var masksIdentity
     @Environment(\.panelHalf) private var half
 
@@ -336,7 +337,7 @@ struct AccountSectionHeader: View {
 struct CodexResetCreditsView: View {
     let resets: CodexResetCredits
     let showExpiry: Bool
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
     @State private var isHovered = false
     @Environment(\.panelHalf) private var half
 

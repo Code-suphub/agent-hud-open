@@ -31,6 +31,9 @@ struct ScreensPane: View {
         return settings.effectivePlacement(on: current.key, hasNotch: current.hasNotch)
     }
 
+    /// The look of the selected screen's HUD, which its Simple preview is drawn in.
+    private var look: HUDLook { settings.effectiveLook(on: current?.key ?? selected) }
+
     /// A person's edit of the selected screen's placement: an agent's unsaved style for the screen is dropped first,
     /// so the change is made to the placement the screen has saved, and only the fields it changes differ.
     private func edit(_ change: (inout ScreenPlacement, Screen) -> Void) {
@@ -155,6 +158,7 @@ struct ScreensPane: View {
                         .overlay {
                             SimpleMeterView(config: preview)
                                 .frame(width: preview.stripSize.width, height: preview.stripSize.height)
+                                .hudLook(look)
                         }
                 }
                 SliderRow(label: L10n.text("大小", "Size"), value: binding(\.simpleSize),

@@ -2,18 +2,21 @@ import AppKit
 import SwiftUI
 
 /// Island details must track the mouse even while another app has keyboard focus.
+///
+/// The details are a window of their own, which the HUD's environment does not reach: they are drawn with the look of
+/// the HUD the row is in, which the popover reads where it is placed and hands on.
 struct IslandHoverPopover<Content: View>: NSViewRepresentable {
     let content: Content
     var enabled = true
     @Binding var isHovered: Bool
 
     func makeNSView(context: Context) -> IslandHoverAnchorView<Content> {
-        IslandHoverAnchorView(content: content)
+        IslandHoverAnchorView(content: content, look: context.environment.hudLook)
     }
 
     func updateNSView(_ view: IslandHoverAnchorView<Content>, context: Context) {
         view.onHover = { isHovered = $0 }
-        view.update(content: content, enabled: enabled, isHovered: isHovered)
+        view.update(content: content, look: context.environment.hudLook, enabled: enabled, isHovered: isHovered)
     }
 
     static func dismantleNSView(_ view: IslandHoverAnchorView<Content>, coordinator: ()) {
@@ -26,11 +29,15 @@ final class IslandHoverAnchorView<Content: View>: NSView {
     private var hoverArea: NSTrackingArea?
     private var pointerLocation: CGPoint?
     private var content: Content
+    private var look: HUDLook
+    /// The details as the popup hosts them: drawn with the look.
+    private typealias Details = NSHostingView<ModifiedContent<Content, HUDLookEnvironment>>
     /// Most rows are never hovered, so the panel and its hosting view wait for the first show.
-    private var popup: (panel: OverlayPanel, details: NSHostingView<Content>)?
+    private var popup: (panel: OverlayPanel, details: Details)?
 
-    init(content: Content) {
+    init(content: Content, look: HUDLook) {
         self.content = content
+        self.look = look
         super.init(frame: .zero)
     }
 
@@ -68,9 +75,15 @@ final class IslandHoverAnchorView<Content: View>: NSView {
         super.viewWillMove(toWindow: newWindow)
     }
 
-    func update(content: Content, enabled: Bool, isHovered: Bool) {
+    func update(content: Content, look: HUDLook, enabled: Bool, isHovered: Bool) {
         self.content = content
-        popup?.details.rootView = content
+        self.look = look
+        if let popup {
+            popup.details.rootView = content.hudLook(look)
+            if popup.panel.appearance?.name != look.appearanceName {
+                popup.panel.appearance = NSAppearance(named: look.appearanceName)
+            }
+        }
         guard isHovered, enabled, let window, let pointerLocation else {
             dismiss()
             return
@@ -81,12 +94,12 @@ final class IslandHoverAnchorView<Content: View>: NSView {
         popup.panel.orderFrontRegardless()
     }
 
-    private func makePopup() -> (panel: OverlayPanel, details: NSHostingView<Content>) {
-        let details = NSHostingView(rootView: content)
+    private func makePopup() -> (panel: OverlayPanel, details: Details) {
+        let details = Details(rootView: content.hudLook(look))
         let panel = OverlayPanel(frame: .zero, level: .popUpMenu, acceptsMouse: false)
         panel.title = "Island hover details"
         panel.hasShadow = true
-        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.appearance = NSAppearance(named: look.appearanceName)
         panel.contentView = details
         popup = (panel, details)
         return (panel, details)
