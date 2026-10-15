@@ -182,8 +182,10 @@ actor OpenAgentUsageProvider: UsageProvider, LedgerRecording {
                     billingPool: event.attribution?.pool)
             }
         }
-        let live = local.sessions.compactMap { item -> LiveSession? in
-            guard let start = item.start, let end = item.end, end >= since else { return nil }
+        // Tokens and models come from every session of `historyHours`; sessions only from those active in the session window.
+        let listed = local.sessions.filter { $0.end.map { $0 >= SessionWindow.start(at: now) } == true }
+        let live = listed.compactMap { item -> LiveSession? in
+            guard let start = item.start, let end = item.end else { return nil }
             let last = item.events.max(by: { $0.timestamp < $1.timestamp })
             let agentID = item.currentModel?.id ?? last?.agentId ?? "\(item.client.rawValue)-model:Unknown"
             if consumers[agentID] == nil {
@@ -255,13 +257,13 @@ actor OpenAgentUsageProvider: UsageProvider, LedgerRecording {
             indexing: local.indexing, insightsByAgent: insights, subscriptions: plans, sourceNotices: notices,
             // Every reading belongs to one pool, whose account carries its notice: none is the whole vendor's.
             quotaNotices: [:], readingIssues: [:], consumerIdsByQuota: links,
-            completions: local.sessions.flatMap { item in
+            completions: listed.flatMap { item in
                 item.completions.map { event in
                     var current = event
                     current.navigationTarget = item.navigation?.target
                     return current
                 }
-            }, turns: local.sessions.flatMap(\.turns), services: services,
+            }, turns: listed.flatMap(\.turns), services: services,
             activeQuotaPoolIDs: cached == nil ? nil : activePools, accounts: cached == nil ? nil : accounts)
     }
 }
