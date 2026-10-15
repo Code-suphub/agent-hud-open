@@ -13,7 +13,7 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | `AgentHUDDesktop` | Menu bar item, notch glow and panel, island alerts, onboarding, settings and statistics windows; its resource bundle holds every logo and notice | Core |
 | `AgentHUDOpenApp` (product `AgentHUDOpen`) | Launch options, live or sample data, adapter setup, process lifetime | Desktop, Core |
 
-`CombinedUsageProvider` reads one provider per client, one after another, and merges their reports; `UsageLedger` is the local SQLite store where providers keep parse positions, token events and quota readings, and from which the 15-minute usage and cost totals are read; `RetainedUsageProvider` restores the saved report at start and fills readings a partial refresh could not supply; `UsageCollector` runs the collection pipeline: it waits for sources to signal new data, reads the signalled sources and runs account steps one at a time, and hands each report to `UsageStore`, which publishes the report the desktop observes and tells subscribers what changed. A report carries quota windows, sessions with their token breakdown, turns, completions, 15-minute usage buckets, services, billing and the account inventory (`ProviderAccount`, `AccountObservation`); every quota row belongs to one account.
+`CombinedUsageProvider` reads one provider per client, one after another, and merges their reports; `UsageLedger` is the local SQLite store where providers keep parse positions, token events and quota readings, and from which the 15-minute usage and cost totals are read; `RetainedUsageProvider` restores the saved report at start and fills readings a partial refresh could not supply; `UsageCollector` runs the collection pipeline: it waits for sources to signal new data, reads the signalled sources and runs account steps one at a time, and hands each report to `UsageStore`, which publishes the report the desktop observes. A report carries quota windows, sessions with their token breakdown, turns, completions, 15-minute usage buckets, services, billing and the account inventory (`ProviderAccount`, `AccountObservation`); every quota row belongs to one account.
 
 ## Rules
 
@@ -32,7 +32,7 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 - `DesktopApplication` decides and presents island alerts itself: one `IslandEventTracker` checks every change of the report, the agent list or the Live status preference while the store is neither paused nor failing, and the island shows the new quota events, added usage resets and completed turns. Every host, the standalone application included, gets the same alerts without extra wiring.
 - A host that relays alerts elsewhere passes `onIslandEvents`. It receives every check after the island has presented it, including checks that found nothing, with the report and time the check used; the host maps that update and never runs a second tracker or presents again.
 - Completions in an update already honor `Settings.liveStatusEnabled(for:)`; hosts apply the same preference in any other relay or synchronization service they add ([session lifecycle](session-lifecycle.md)).
-- A host that receives its clients' prompt and Stop hooks hands the turns they saw to `UsageStore.hookTurns`, by session id, with `isReportedTurn` saying whether a hook turn is the one the report carries for its session; the store's view shows the hook turn's phase wherever the hooks saw more than the logs ([hook turns](session-lifecycle.md#hook-turns)). The standalone application hands in none.
+- A client's prompt and Stop hooks give no turn of their own: a session's phase comes from its log, which a host that receives those hooks has read at once ([hooks remind](session-lifecycle.md#hooks-remind)).
 
 ### Collection signals
 
@@ -43,15 +43,12 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 - A source's account steps run when its own work, or one of its windows resetting, makes a new reading worth taking; opening the panel, the menu or the statistics window reads every account, and no source repeats a request within `UsageRefresh.accountRequestSpacing`.
 - A settings change that needs a read wakes the collector at once, through `SettingsStore.onChange`, which a running `UsageStore` sets: a changed agent list reads every source, and GitHub Copilot quota reading switched on or off reads Copilot's quota at once, within the request spacing too, and every other account the spacing allows. The pass it wakes is serial like any other. `CombinedUsageProvider.standard(settings:ledger:persistent:)` takes the same `SettingsStore`, and the Copilot provider asks it for the consent whenever a reading is due.
 - Every source is read again every `UsageRefresh.accountInterval`, which catches a file event the watch missed, and a refresh reads every source once.
-- `UsageStore.observeChanges(_:)` calls a handler with `UsageChanges` for every newly displayed report: usage totals, readings, the ids of changed sessions, turns, new completions and the inventory. Publishers subscribe instead of comparing reports.
 
 ### Collection hooks
 
 - A host passes `UsageCollectionHooks` to `UsageStore`; every hook is optional, and without them the store displays the provider's report and loads `UsageStore.historyHours` hours, the seven-day range plus the partial hour.
 - `historyHours` is asked before every local poll and account step, so a host can widen the window providers read tokens for. It does not widen the sessions: a provider builds sessions only for those active within `SessionWindow.recency`, seven days, each with its whole sub-agent tree, and reports the turns and completions of those sessions and trees.
-- `publish` receives each report the provider returned and `merge` turns it into the displayed report, for example to add other data. Both are awaited inside the pass, after the provider fetch and before the report is displayed; no provider reads and nothing writes the ledger meanwhile, so a hook that reads the ledger stays serial with collection.
-- The merged report keeps the provider's discovered agents, accounts, active quota pools, completions and turns: the agent list and island events read them from `UsageStore.report`.
-- `UsageStore.remerge()` runs only `merge` again on the provider's last report, for data the host merges that changed since the pass. It never overlaps a local poll: a poll in progress merges for it, or merges again when its own merge had already started. A report installed with `replace(report:)` is not merged over.
+- `publish` receives each report the provider returned. It is awaited inside the pass, after the provider fetch and before the report is displayed; no provider reads and nothing writes the ledger meanwhile, so a hook that reads the ledger stays serial with collection.
 
 ### Session observers and hooks
 
@@ -111,10 +108,8 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | Item | Source | Meaning |
 | --- | --- | --- |
 | `UsageStore(provider:settings:accessAllowed:hooks:)` | AgentHUDCore | Any `UsageProvider`, the settings store, an access closure (false pauses collection) and `UsageCollectionHooks` |
-| `UsageCollectionHooks(historyHours:publish:merge:)` | AgentHUDCore | `@MainActor () -> Int`; `@MainActor (UsageReport) async -> Void`; `@MainActor (UsageReport) async -> UsageReport` |
-| `start()`, `stop()`, `refresh()`, `remerge()`, `replace(report:)`, `pause(for:)`, `resume()` | `UsageStore` | Collection lifecycle; `refresh` reads every source now unless a pass is running; `replace` installs a report without the provider |
-| `hookTurns` | `UsageStore` | `[String: SessionPhase.HookTurn]` by session id: the turns a host's prompt and Stop hooks saw |
-| `observeChanges(_:)` → `UsageChangeObservation` | `UsageStore` | `@MainActor (UsageChanges) -> Void` for each newly displayed report that changed something; releasing or cancelling the observation ends it |
+| `UsageCollectionHooks(historyHours:publish:)` | AgentHUDCore | `@MainActor () -> Int`; `@MainActor (UsageReport) async -> Void` |
+| `start()`, `stop()`, `refresh()`, `replace(report:)`, `pause(for:)`, `resume()` | `UsageStore` | Collection lifecycle; `refresh` reads every source now unless a pass is running; `replace` installs a report without the provider |
 | `UsageSource(name:directories:accountSteps:)` | AgentHUDCore | A provider's independently read part and its signals; nil `directories` is read every `UsageRefresh.pollInterval` |
 | `DesktopApplication(options:settings:store:additionalSettingsPages:experimentalSettings:onIslandEvents:)` | AgentHUDDesktop | Parsed `DesktopLaunchOptions`, the two stores, `[DesktopSettingsPage]`, `[DesktopSettingsSection]` for the Experimental page and an optional `(IslandEventTracker.Update, UsageReport, Date) -> Void` relay hook |
 | `start()`, `stop()`, `showSettings(pageID:)`, `showStats()`, `showOnboarding()`, `toggleGlow()` | `DesktopApplication` | Host entry points. `showSettings` selects a page by id (built-in `general`, `sources`, `display`, `experimental`; an unknown id keeps the current page) |
@@ -156,7 +151,7 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | Models: usage, sessions, accounts, agents, catalog, settings; calculations: quota, alerts, what the Mac shows | `Sources/AgentHUDCore/Models/<Area>/`; `Sources/AgentHUDCore/Logic/`, `Logic/Quota/`, `Logic/Alerts/` |
 | Durations, token counts, money, dates and languages as written | `Sources/AgentHUDCore/Formatting/` |
 | Vendor names, client and window names, app bundle IDs | `Sources/AgentHUDCore/Models/Catalog/VendorCatalog.swift`, `Formatting/WindowNames.swift` |
-| Collection pipeline, signals and hooks; change sets | `Sources/AgentHUDCore/Store/UsageCollector.swift`, `System/FileChangeMonitor.swift`, `Models/Usage/UsageChanges.swift` |
+| Collection pipeline, signals and hooks | `Sources/AgentHUDCore/Store/UsageCollector.swift`, `System/FileChangeMonitor.swift` |
 | Stores and data directory; the statistics window's selections and what they chart | `Sources/AgentHUDCore/Store/UsageStore.swift`, `SettingsStore.swift`, `UsageStore+Stats.swift`, `Ledger/QuotaHistoryStore.swift`, `System/AppSupport.swift`; the usage ledger in `Sources/AgentHUDCore/Ledger/` |
 | Application object, launch options, host pages | `Sources/AgentHUDDesktop/App/DesktopApplication.swift`, `LaunchOptions.swift`, `Settings/DesktopSettingsPage.swift` |
 | One copy at a time | `Sources/AgentHUDCore/System/InstanceLock.swift`, `Sources/AgentHUDDesktop/App/SingleInstance.swift` |

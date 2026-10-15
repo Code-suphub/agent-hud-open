@@ -45,12 +45,10 @@ Which clients expose running and terminal turns, which of them say they are wait
 - The island announces each completed turn once, for clients whose Live status is on (`IslandEventTracker`). Completions that happened before the application started are history, not events, and turns that finished while Live status was off are not replayed when it is turned back on.
 - Hosts that relay completions use the island's update rather than deciding again, and apply the same preference in any other relay or synchronization service.
 
-### Hook turns
+### Hooks remind
 
-- A host that receives its clients' prompt and Stop hooks hands the turns they saw to the store (`UsageStore.hookTurns`), by session id, saying whether each is the turn the session's log reports. A hook turn takes the place of what the log says wherever the hooks saw more (`SessionPhase.hookPrevails`), so the panel changes at the Stop hook rather than at the next read of the log.
-- The log keeps its word where it saw more than the hooks: work in flight after the Stop hook, such as sub-agents left running; while the hook turn is open, a wait for approval of the same turn, or that turn's end dated after the prompt; another turn, or one without an id, dated after the prompt.
-- An open hook turn runs for 30 minutes from its prompt (`SessionPhase.Limits.vouched`), as a reading is vouched for, and is out of date after that, when it no longer takes the place of a log that still has the session in flight; a stopped one is finished since its Stop hook, which is then the session's last event, and what the agent said at the Stop hook, where the hook carries it, is then the session's message. With Live status off, hook turns change nothing.
-- Agent HUD Open receives no prompt hooks and hands in no hook turns: the Stop hooks it installs complete their clients' turns through the providers (`SessionPhase.stopped`), which read a record as soon as a hook writes it ([Completion hooks](#completion-hooks)).
+- A client's prompt and Stop hooks carry no turn: nothing they report is kept, and a session's phase, last event and message come from its log alone. Sub-agents left running after a Stop hook therefore keep their session running, and a turn the log has not ended yet stays running until it does. A hook can only make the log be read sooner.
+- Agent HUD Open receives no prompt hooks: the Stop hooks it installs complete their clients' turns through the providers (`SessionPhase.stopped`), which read a record as soon as a hook writes it ([Completion hooks](#completion-hooks)).
 
 ### Sub-agents
 
@@ -117,8 +115,8 @@ Antigravity, Cursor, GitHub Copilot CLI, CodeBuddy and Qwen Code do not record f
 | --- | --- |
 | Turn, completion and session models | `Sources/AgentHUDCore/Models/Sessions/SessionTurn.swift`, `SessionCompletion.swift`, `LiveSession.swift` |
 | Live status preference | `Sources/AgentHUDCore/Models/Settings/Settings.swift` |
-| Whether a client's records have a session in flight when its provider reads it, and the turn it reports; a session's phase at a given time, a hook turn's phase and when it takes a reading's place; the session limits | `Sources/AgentHUDCore/Logic/SessionPhase.swift` |
-| A report's rows, balances, levels and sessions as the Mac shows them: each session's source, newest turn, last event, message and phase, the sessions waiting on a permission request, the hook turns in the log's place, their order, and the live sessions, working vendors, logo queue and the Sessions page's list; the store's view of its report, the requests waiting and the hook turns a host hands in | `Sources/AgentHUDCore/Logic/ReportView.swift`, `Sources/AgentHUDCore/Store/UsageStore.swift`, `Sources/AgentHUDCore/Hooks/Permission/PermissionRequests.swift` |
+| Whether a client's records have a session in flight when its provider reads it, and the turn it reports; a session's phase at a given time; the session limits | `Sources/AgentHUDCore/Logic/SessionPhase.swift` |
+| A report's rows, balances, levels and sessions as the Mac shows them: each session's source, newest turn, last event, message and phase, the sessions waiting on a permission request, their order, and the live sessions, working vendors, logo queue and the Sessions page's list; the store's view of its report and the requests waiting | `Sources/AgentHUDCore/Logic/ReportView.swift`, `Sources/AgentHUDCore/Store/UsageStore.swift`, `Sources/AgentHUDCore/Hooks/Permission/PermissionRequests.swift` |
 | What a session's card, page and island row say: its dot, state, elapsed time and label | `Sources/AgentHUDCore/Formatting/Countdown.swift`, `Sources/AgentHUDDesktop/Stats/Sessions/SessionList.swift`, `Stats/Sessions/SessionDetailView.swift`, `Notch/Panel/HoverPanelView+Sessions.swift` |
 | Completion reminders | `Sources/AgentHUDCore/Logic/Alerts/IslandEvents.swift`, `Sources/AgentHUDDesktop/App/DesktopApplication.swift` |
 | Adapter setup, a hook's installation, the handler command and the settings writer | `Sources/AgentHUDCore/Hooks/SessionObservers.swift`, `HookInstaller.swift`, `HookCommand.swift`, `HookSettings.swift` |

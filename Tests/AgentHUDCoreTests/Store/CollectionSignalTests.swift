@@ -228,50 +228,6 @@ final class CollectionSignalTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(reread, 2, "a result read for other hours is not reused")
     }
 
-    func testChangesNameWhatANewReportChanged() {
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let session = LiveSession(id: "s", agentId: "claude-model:opus", task: "Task", terminal: nil, startedAt: now, pctOfWindow: nil,
-                                  tokensIn: 1, tokensOut: 1, observedAt: now)
-        let base = UsageReport(generatedAt: now, snapshots: [UsageSnapshot(agentId: "claude", remainingPct: 80, updatedAt: now)],
-                               sessions: [session], usage: [UsageBucket(start: now, agentId: "claude-model:opus", tokensIn: 1, tokensOut: 0)])
-        XCTAssertFalse(UsageChanges(from: nil, to: base).isEmpty)
-        XCTAssertTrue(UsageChanges(from: base, to: base).isEmpty)
-        let checkedAgain = LiveSession(id: "s", agentId: "claude-model:opus", task: "Task", terminal: nil, startedAt: now, pctOfWindow: nil,
-                                       tokensIn: 1, tokensOut: 1, observedAt: now.addingTimeInterval(5))
-        let rechecked = UsageReport(generatedAt: now.addingTimeInterval(5), snapshots: base.snapshots, sessions: [checkedAgain], usage: base.usage)
-        XCTAssertTrue(UsageChanges(from: base, to: rechecked).sessions.isEmpty, "checking a session again is not a change")
-        let grown = LiveSession(id: "s", agentId: "claude-model:opus", task: "Task", terminal: nil, startedAt: now, pctOfWindow: nil,
-                                tokensIn: 5, tokensOut: 1, observedAt: now)
-        let later = UsageReport(generatedAt: now.addingTimeInterval(5), snapshots: base.snapshots, sessions: [grown],
-                                usage: [UsageBucket(start: now, agentId: "claude-model:opus", tokensIn: 5, tokensOut: 0)])
-        let changes = UsageChanges(from: base, to: later)
-        XCTAssertTrue(changes.usage)
-        XCTAssertFalse(changes.readings, "the same quota reading is not a change")
-        XCTAssertEqual(changes.sessions, ["s"])
-        let emptied = UsageReport(generatedAt: now, snapshots: [UsageSnapshot(agentId: "claude", remainingPct: 70, updatedAt: now)], sessions: [])
-        let dropped = UsageChanges(from: later, to: emptied)
-        XCTAssertTrue(dropped.readings)
-        XCTAssertEqual(dropped.sessions, ["s"], "a removed session is a change")
-    }
-
-    @MainActor
-    func testObserversReceiveChangesUntilCancelled() {
-        let suite = "CollectionSignalTests.\(UUID())", defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let store = UsageStore(provider: Source(directory: nil), settings: SettingsStore(defaults: defaults))
-        var received: [UsageChanges] = []
-        let observation = store.observeChanges { received.append($0) }
-        let now = Date()
-        let report = UsageReport(generatedAt: now, snapshots: [UsageSnapshot(agentId: "claude", remainingPct: 80, updatedAt: now)], sessions: [])
-        store.replace(report: report)
-        store.replace(report: report)
-        XCTAssertEqual(received.count, 1, "an identical report changes nothing")
-        XCTAssertTrue(received.first?.readings == true)
-        observation.cancel()
-        store.replace(report: UsageReport(generatedAt: now, snapshots: [], sessions: []))
-        XCTAssertEqual(received.count, 1)
-    }
-
     /// A client that keeps its log open reaches the file watch late, so recent logs are compared with their last look.
     @MainActor
     func testARecentLogThatGrewIsReportedOnceAndAFirstLookOnlyNotesIt() throws {

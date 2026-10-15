@@ -1,14 +1,6 @@
 import Foundation
 import Observation
 
-/// Keeps a change handler registered with `UsageStore.observeChanges(_:)`; releasing it unregisters the handler.
-public final class UsageChangeObservation {
-    private var cancellation: (() -> Void)?
-    init(_ cancellation: @escaping () -> Void) { self.cancellation = cancellation }
-    public func cancel() { cancellation?(); cancellation = nil }
-    deinit { cancellation?() }
-}
-
 /// Observable app state: the collected report, derived rows, glow appearance and stats selections.
 @MainActor
 @Observable
@@ -49,23 +41,17 @@ public final class UsageStore {
     public internal(set) var now: Date
     /// The time the store runs on: the wall clock, or the demo's own (`DemoClock`).
     @ObservationIgnored public let clock: @Sendable () -> Date
-    /// The turns clients' prompt and Stop hooks saw, by session id, which a host that receives those hooks hands in. A hook
-    /// turn takes the place of what a session's log says wherever the hooks saw more
-    /// (`SessionPhase.hookPrevails(_:over:lastEventAt:)`), so the panel follows a Stop hook at once.
-    public var hookTurns: [String: SessionPhase.HookTurn] = [:]
 
     public let settings: SettingsStore
     private let accessAllowed: () -> Bool
     private let collector: UsageCollector
     /// A later poll that found nothing changed extends the report's coverage.
     var checkedAt: Date?
-    @ObservationIgnored private var changeObservers: [UUID: @MainActor (UsageChanges) -> Void] = [:]
     /// Counts the reports shown, so that a new one is told from the last without comparing them.
     @ObservationIgnored private var reportGeneration = 0
     /// The last view built, and what it was built from.
     @ObservationIgnored private var built: (generation: Int, agents: [AgentDescriptor], settings: Settings, approvals: [String],
-                                            waiting: [String: Date], hookTurns: [String: SessionPhase.HookTurn], failure: String?,
-                                            view: ReportView)?
+                                            waiting: [String: Date], failure: String?, view: ReportView)?
     /// The HUD's token columns built from the current report up to one end, by period and models
     /// (`hudTokenColumns(consumerIDs:period:)`).
     @ObservationIgnored private var hudColumns: (generation: Int, end: Date, columns: [HUDColumnsKey: [TokenColumn]])?
@@ -76,7 +62,7 @@ public final class UsageStore {
         let consumerIDs: Set<String>?
     }
 
-    /// `hooks` let a host choose the history window, publish each provider report and merge it into the displayed report.
+    /// `hooks` let a host choose the history window, receive each provider report and follow what each pass read.
     public init(provider: any UsageProvider, settings: SettingsStore, accessAllowed: @escaping () -> Bool = { true },
                 hooks: UsageCollectionHooks = UsageCollectionHooks(), clock: @escaping @Sendable () -> Date = { Date() }) {
         self.settings = settings
@@ -110,52 +96,20 @@ public final class UsageStore {
         await collector.refreshAccounts()
     }
 
-    /// Runs only the merge hook again on the provider's last report, for data the merge adds that changed since the pass.
-    /// Never overlaps a local poll: one in progress merges for it.
-    public func remerge() async {
-        await collector.remerge()
-    }
-
     /// Installs a report directly (snapshots, tests) without going through the provider.
     public func replace(report: UsageReport) {
-        show(report)
+        self.report = report
         collector.forgetLocalReport()
         checkedAt = nil
         lastError = nil
         now = clock()
     }
 
-    /// Calls `handler` with what each newly displayed report changed, until the returned observation is released or cancelled.
-    public func observeChanges(_ handler: @escaping @MainActor (UsageChanges) -> Void) -> UsageChangeObservation {
-        let id = UUID()
-        changeObservers[id] = handler
-        return UsageChangeObservation { [weak self] in
-            // An observation can be released off the main thread; the handler is then removed on it.
-            guard Thread.isMainThread else {
-                Task { @MainActor [weak self] in _ = self?.changeObservers.removeValue(forKey: id) }
-                return
-            }
-            MainActor.assumeIsolated { _ = self?.changeObservers.removeValue(forKey: id) }
-        }
-    }
-
-    /// A pass's merged report replaces the displayed one.
+    /// A pass's report replaces the displayed one.
     func collected(_ report: UsageReport) {
-        show(report)
+        self.report = report
         checkedAt = nil
         lastError = nil
-    }
-
-    /// A merge run again on the provider's last report.
-    func merged(_ report: UsageReport) {
-        show(report)
-    }
-
-    private func show(_ report: UsageReport) {
-        let changes = UsageChanges(from: self.report, to: report)
-        self.report = report
-        guard !changes.isEmpty else { return }
-        for handler in changeObservers.values { handler(changes) }
     }
 
     public func pause(for interval: TimeInterval) {
@@ -175,22 +129,21 @@ public final class UsageStore {
     // MARK: Derived
 
     /// What the Mac shows of the report now: its rows, balances, levels and sessions, with the sessions whose clients wait
-    /// for an answer to a permission request or say they wait on the user (`PermissionRequests.shared`) waiting for approval and the hooks' turns in
-    /// their place, and every reading failed while the last pass failed to read any source. It is built again only when
-    /// the report, the agent list, the settings, the waiting requests, the hooks' turns, a failed pass or the time changed,
-    /// and reading it tracks all seven.
+    /// for an answer to a permission request or say they wait on the user (`PermissionRequests.shared`) waiting for
+    /// approval, and every reading failed while the last pass failed to read any source. It is built again only when the
+    /// report, the agent list, the settings, the waiting requests, a failed pass or the time changed, and reading it tracks
+    /// all six.
     public var view: ReportView {
         let report = self.report, agents = settings.agents, preferences = settings.settings, now = self.now, failure = lastError
-        let approvals = PermissionRequests.shared.pending, requests = approvals.map(\.id), hookTurns = self.hookTurns
+        let approvals = PermissionRequests.shared.pending, requests = approvals.map(\.id)
         let waiting = PermissionRequests.shared.waitingSessions
         if let built, built.generation == reportGeneration, built.view.now == now, built.agents == agents,
-           built.settings == preferences, built.approvals == requests, built.waiting == waiting, built.hookTurns == hookTurns,
-           built.failure == failure {
+           built.settings == preferences, built.approvals == requests, built.waiting == waiting, built.failure == failure {
             return built.view
         }
         let view = ReportView(report: report, agents: agents, settings: preferences, approvals: approvals, waiting: waiting,
-                              hookTurns: hookTurns, now: now, failure: failure)
-        built = (reportGeneration, agents, preferences, requests, waiting, hookTurns, failure, view)
+                              now: now, failure: failure)
+        built = (reportGeneration, agents, preferences, requests, waiting, failure, view)
         return view
     }
 

@@ -2,6 +2,10 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
+## Unreleased
+
+- Host API: a client's prompt and Stop hooks give no turn of their own any more, and a session's phase, last event and message come from its log alone. `UsageStore.hookTurns`, `SessionPhase.HookTurn` with `init(hook:now:)`, `init(hook:)` and `hookPrevails(_:over:lastEventAt:)`, and the `hookTurns` argument of `ReportView.init` are gone. So are `UsageStore.observeChanges(_:)`, `UsageChangeObservation` and `UsageChanges`, which every pass worked out over the whole report for no reader, and `UsageCollectionHooks.merge` with `UsageStore.remerge()`, which no host set.
+
 ## 0.5.4 — 2026-10-15
 
 - Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.

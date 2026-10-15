@@ -5,7 +5,8 @@ import Foundation
 /// a reading too old for the Mac to vouch for. A provider decides when it reads a session whether its source has it in
 /// flight (`LiveSession.endedAt`), by the rule its client's records support (`read(_:rule:at:)`); the phase adds, at the
 /// time it is shown, how long the Mac vouches for that reading, what the newest turn says and whether live status is on.
-/// A client's prompt and Stop hooks give a phase of their own, which takes the reading's place where the hooks saw more.
+/// A client's prompt and Stop hooks give no phase of their own: a hook makes the session's log be read at once
+/// (`UsageStore.remind(paths:)`), and the log decides.
 public struct SessionPhase: Hashable, Sendable {
     public enum State: String, Hashable, Sendable {
         /// A turn is in flight.
@@ -21,8 +22,8 @@ public struct SessionPhase: Hashable, Sendable {
     public let state: State
     /// In flight: when the turn in flight started, else when the session did. Otherwise: the session's last event.
     public let since: Date
-    /// In flight: when the Mac stops vouching for the state without a newer reading or hook. Nil otherwise, and for a
-    /// client waiting for an answer to a permission request, which lasts as long as it waits.
+    /// In flight: when the Mac stops vouching for the state without newer evidence. Nil otherwise, and for a client
+    /// waiting for an answer to a permission request, which lasts as long as it waits.
     public let validUntil: Date?
 
     public init(state: State, since: Date, validUntil: Date?) {
@@ -224,65 +225,6 @@ public struct SessionPhase: Hashable, Sendable {
     /// started.
     func awaitingApproval(_ session: LiveSession, turn: SessionTurn?) -> SessionPhase {
         SessionPhase(state: .waitingForApproval, since: isInFlight ? since : Self.inFlightSince(session, turn: turn), validUntil: nil)
-    }
-
-    // MARK: Hooks
-
-    /// A turn a client's hooks saw: it starts when the prompt is submitted and ends at the Stop hook.
-    public struct HookTurn: Hashable, Sendable {
-        public var startedAt: Date
-        public var endedAt: Date?
-        /// Whether it is the turn the reading reports; the caller matches the ids.
-        public var isReportedTurn: Bool
-        /// What the agent said at the Stop hook, where the hook carries it.
-        public var message: String?
-
-        public init(startedAt: Date, endedAt: Date?, isReportedTurn: Bool, message: String? = nil) {
-            self.startedAt = startedAt
-            self.endedAt = endedAt
-            self.isReportedTurn = isReportedTurn
-            self.message = message
-        }
-    }
-
-    /// The phase a hook turn gives at `now`: running since its start while it is open, for `Limits.vouched` after the start
-    /// as a reading is vouched for, and out of date after that; idle since its end.
-    public init(hook: HookTurn, now: Date) {
-        if let end = hook.endedAt {
-            self.init(state: .idle, since: end, validUntil: nil)
-        } else if now.timeIntervalSince(hook.startedAt) < Limits.vouched {
-            self.init(state: .running, since: hook.startedAt, validUntil: hook.startedAt.addingTimeInterval(Limits.vouched))
-        } else {
-            self.init(state: .unverified, since: hook.startedAt, validUntil: nil)
-        }
-    }
-
-    /// The phase a hook turn gives without a time: running since its start while it is open, however long ago that was,
-    /// and idle since its end. `init(hook:now:)` bounds an open turn as a reading is bounded.
-    public init(hook: HookTurn) {
-        self.init(state: hook.endedAt == nil ? .running : .idle, since: hook.endedAt ?? hook.startedAt, validUntil: nil)
-    }
-
-    /// Whether a hook turn takes the place of a reading's phase. The reading keeps it where it saw more than the hooks:
-    /// work in flight after the hook's end; while the hook is open, a wait for approval of the same turn, or that turn's
-    /// end dated after the hook's start; another turn, or one without an id, dated after the hook's start. Every
-    /// comparison of times is strict.
-    public static func hookPrevails(_ hook: HookTurn, over reading: SessionPhase, lastEventAt: Date) -> Bool {
-        // Work the reading saw after the hook saw the agent stop, such as sub-agents left running, outlasts that stop.
-        if reading.isInFlight, let end = hook.endedAt, lastEventAt > end { return false }
-        guard hook.isReportedTurn else { return reading.since <= hook.startedAt }
-        // The reading can see a wait for approval, or the turn's end, before the hooks do.
-        return !(hook.endedAt == nil
-            && (reading.state == .waitingForApproval || (!reading.isInFlight && reading.since > hook.startedAt)))
-    }
-
-    /// The phase a hook turn gives at `now` in place of a reading's, or nil where the reading keeps its own: where
-    /// `hookPrevails(_:over:lastEventAt:)` says the reading saw more, and where the hook turn is out of date while the
-    /// reading is in flight, since a hook turn past its half hour vouches for nothing.
-    static func hooked(_ hook: HookTurn, over reading: SessionPhase, lastEventAt: Date, now: Date) -> SessionPhase? {
-        guard hookPrevails(hook, over: reading, lastEventAt: lastEventAt) else { return nil }
-        let phase = SessionPhase(hook: hook, now: now)
-        return phase.state == .unverified && reading.isInFlight ? nil : phase
     }
 }
 

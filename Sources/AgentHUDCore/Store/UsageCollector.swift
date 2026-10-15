@@ -8,17 +8,11 @@ public struct UsageCollectionHooks {
     public var historyHours: @MainActor () -> Int
     /// Receives each report the provider returned, before it is displayed. The pass, and so the next pass, waits for it.
     public var publish: (@MainActor (UsageReport) async -> Void)?
-    /// Turns the provider's report into the displayed report, for example to add other data. The result must keep the
-    /// provider's discovered agents, accounts, active quota pools, completions and turns, which drive the agent list and
-    /// the island.
-    public var merge: (@MainActor (UsageReport) async -> UsageReport)?
 
     public init(historyHours: @escaping @MainActor () -> Int = { UsageStore.historyHours },
-                publish: (@MainActor (UsageReport) async -> Void)? = nil,
-                merge: (@MainActor (UsageReport) async -> UsageReport)? = nil) {
+                publish: (@MainActor (UsageReport) async -> Void)? = nil) {
         self.historyHours = historyHours
         self.publish = publish
-        self.merge = merge
     }
 }
 
@@ -70,11 +64,8 @@ final class UsageCollector {
     /// How recently a session must have been active for its log to be looked at, and how many logs are.
     static let logCheckRecency: TimeInterval = 24 * 3600
     static let logCheckLimit = 64
-    /// The provider's last report before the merge hook, numbered so a slower merge never replaces a newer one.
-    private var local: (report: UsageReport, generation: Int)?
-    private var generation = 0
-    private var isMerging = false
-    private var mergeRequested = false
+    /// The provider's last report: the logs looked at on a schedule and a single source's checks come from it.
+    private var local: UsageReport?
 
     init(provider: any UsageProvider, settings: SettingsStore, hooks: UsageCollectionHooks) {
         self.provider = provider
@@ -140,7 +131,8 @@ final class UsageCollector {
         await refresh()
     }
 
-    /// A report installed directly is not the provider's; merging must not replace it.
+    /// A report installed directly is not the provider's: the logs and checks the collector follows wait for the
+    /// provider's next report.
     func forgetLocalReport() {
         local = nil
     }
@@ -160,22 +152,6 @@ final class UsageCollector {
         guard let store, !isCollecting, !needsFetch, signalled.isEmpty, retryAt == nil, changes?.isWatching != false,
               sources.allSatisfy({ $0.directories != nil }), date.timeIntervalSince(store.dataDate) >= 60 else { return }
         store.checkedAt = date
-    }
-
-    /// Merges the last provider report again without collecting. A local read in progress merges for it, or merges again
-    /// once it returns when its own merge had already started.
-    func remerge() async {
-        guard hooks.merge != nil else { return }
-        mergeRequested = true
-        guard let store, !isMerging, !store.isRefreshing else { return }
-        isMerging = true
-        defer { isMerging = false }
-        while mergeRequested, !store.isRefreshing, let merge = hooks.merge, let local {
-            mergeRequested = false
-            let merged = await merge(local.report)
-            guard local.generation == self.local?.generation, store.isAccessAllowed else { continue }
-            store.merged(merged)
-        }
     }
 
     /// One pass: collects the signals, reads the signalled sources, then runs account steps within their budget.
@@ -217,7 +193,6 @@ final class UsageCollector {
             if spacing <= 0 {
                 let names: Set<String>? = needsFetch || signalled.contains("") ? nil : signalled
                 await fetch(at: started, sources: names, into: store)
-                if mergeRequested { await remerge() }
             }
         } else if started.timeIntervalSince(store.dataDate) >= 60, changes?.isWatching != false {
             store.checkedAt = started
@@ -273,7 +248,7 @@ final class UsageCollector {
     /// The logs of the sessions most recently active, newest first: where a new turn is most likely to be written.
     private func recentLogs(at date: Date) -> [String] {
         let cutoff = date.addingTimeInterval(-Self.logCheckRecency)
-        let recent = (local?.report.sessions ?? []).compactMap { session -> (path: String, at: Date)? in
+        let recent = (local?.sessions ?? []).compactMap { session -> (path: String, at: Date)? in
             guard let path = session.transcriptPath else { return nil }
             let at = session.lastActivityAt ?? session.endedAt ?? session.startedAt
             return at >= cutoff ? (path, at) : nil
@@ -339,7 +314,7 @@ final class UsageCollector {
     /// Each source's check times; a provider that does not split itself is checked from the report it returned.
     private func checks() async -> [String: [Date]] {
         let checks = await provider.sourceChecks()
-        guard checks.isEmpty, sources.count == 1, let report = local?.report else { return checks }
+        guard checks.isEmpty, sources.count == 1, let report = local else { return checks }
         return [sources[0].name: report.activityChecks]
     }
 
@@ -362,27 +337,24 @@ final class UsageCollector {
         return max(0, next.timeIntervalSince(now))
     }
 
-    /// The publish and merge hooks run here, before the pass can end.
+    /// The publish hook runs here, before the pass can end.
     private func fetch(at date: Date, sources names: Set<String>?, into store: UsageStore) async {
         needsFetch = false
         store.isRefreshing = true
         defer { store.isRefreshing = false }
         do {
             let agents = settings.agents
-            let fetched = try await provider.fetchUsage(agents: agents, historyHours: hooks.historyHours(), sources: names)
+            let report = try await provider.fetchUsage(agents: agents, historyHours: hooks.historyHours(), sources: names)
             let read = names ?? Set(sources.map(\.name))
             signalled.subtract(read)
             for name in read { readAt[name] = date }
-            await hooks.publish?(fetched)
-            mergeRequested = false
-            let report = await hooks.merge?(fetched) ?? fetched
+            await hooks.publish?(report)
             guard store.isAccessAllowed, !Task.isCancelled else { needsFetch = true; return }
             let agentsUnchanged = settings.agents == agents
             settings.mergeDiscovered(from: report)
             // This pass consumed its captured input and its own discoveries, but not an edit made while it awaited.
             fetchedAgents = agentsUnchanged ? settings.agents : agents
-            generation += 1
-            local = (fetched, generation)
+            local = report
             store.collected(report)
             fetchedAt = date
         } catch {
