@@ -73,6 +73,16 @@ final class DeepSeekDesktopTests: XCTestCase {
         }
     }
 
+    /// The desktop app's Host holds `profiles/desktop/cordis.yml` while it runs, as a command-line Harness's Node does, and
+    /// is the app's own executable in Node mode; its helpers never hold the profile.
+    func testTheDesktopHostIsAHarnessProcess() {
+        XCTAssertTrue(DeepSeekRuntime.isHarness(executable: "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness"))
+        XCTAssertTrue(DeepSeekRuntime.isHarness(executable: "/opt/homebrew/Cellar/node@24/24.19.0/bin/node"))
+        XCTAssertFalse(DeepSeekRuntime.isHarness(executable: "/Applications/DeepSeek Harness.app/Contents/Frameworks/"
+            + "DeepSeek Harness Helper.app/Contents/MacOS/DeepSeek Harness Helper"))
+        XCTAssertFalse(DeepSeekRuntime.isHarness(executable: "/usr/bin/vim"))
+    }
+
     func testNoRuntimeAtAllNamesBothWaysToGetOne() async {
         do {
             _ = try await DeepSeekNode.run(script: "", arguments: [], runtime: nil)
