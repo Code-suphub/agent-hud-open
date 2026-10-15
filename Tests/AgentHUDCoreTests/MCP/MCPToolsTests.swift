@@ -138,11 +138,19 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(hud["type"], .string("object"))
         XCTAssertEqual(hud["additionalProperties"], .bool(false))
         XCTAssertEqual(hud["properties"].objectValue?.keys.sorted(),
-                       ["agents", "bots", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "mode", "position", "reset",
-                        "ringWidth", "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize"])
+                       ["agents", "appearance", "bots", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "material", "mode",
+                        "position", "reset", "ringWidth", "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize"])
         XCTAssertEqual(hud["properties"]["reset"]["type"], .string("boolean"))
         XCTAssertEqual(hud["properties"]["reset"]["description"].stringValue,
-                       "True proposes the screen's default style, the placement its hardware is given and the default glow, with no other style field.")
+                       "True proposes the screen's default style, the placement its hardware is given, dark and solid, and the default glow, with no other style field.")
+        XCTAssertEqual(hud["description"].stringValue,
+                       "The resting HUD: the marks of a Dynamic dock, the items of a Simple panel, the glow, its colours and its material; a style field left out stays as saved.")
+        XCTAssertEqual(choices(hud["properties"]["appearance"]), ["dark", "light", "system"])
+        XCTAssertEqual(choices(hud["properties"]["material"]), ["solid", "glass"])
+        XCTAssertEqual(hud["properties"]["appearance"]["description"].stringValue,
+                       "Its colours, its panel's and its cards' too: dark, light, or system to follow macOS's light or dark setting. A notch HUD on a screen with a notch stays black.")
+        XCTAssertEqual(hud["properties"]["material"]["description"].stringValue,
+                       "Solid, or glass that shows the desktop through it blurred, in the appearance's colours; solid while Reduce Transparency is on. A notch HUD on a screen with a notch stays black.")
         XCTAssertEqual(schema["properties"]["from"]["description"].stringValue,
                        "Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of the one described here. Only 'previous' brings a screen's HUD style with it.")
         XCTAssertEqual(hud["properties"]["agents"]["type"], .string("array"))
@@ -186,6 +194,8 @@ final class MCPToolsTests: XCTestCase {
         let hud = schema["properties"]["hud"]["properties"]
         XCTAssertEqual(choices(hud["mode"]), HUDMode.allCases.map(\.agentName))
         XCTAssertEqual(choices(hud["edge"]), HUDEdge.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(hud["appearance"]), HUDAppearance.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(hud["material"]), HUDMaterial.allCases.map(\.rawValue))
         XCTAssertEqual(choices(hud["glow"]["properties"]["style"]), GlowStyle.allCases.map(\.rawValue))
         XCTAssertEqual(choices(hud["glow"]["properties"]["effect"]), GlowEffect.allCases.map(\.rawValue))
         XCTAssertEqual(Set(hud.objectValue?.keys.map { $0 } ?? []), Set(["agents"] + HUDStyle.names + [HUDStyle.resetName]),
@@ -195,12 +205,12 @@ final class MCPToolsTests: XCTestCase {
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {
         let tools = Dictionary(uniqueKeysWithValues: MCPTools.definitions.map { ($0["name"].stringValue ?? "", $0) })
         XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
-                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists and its token chart's period and total; and the attached screens, each with its resting HUD's style and the agents it can show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
+                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists and its token chart's period and total; and the attached screens, each with its resting HUD's style, the look it draws now and the agents it can show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
         XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
-                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with account names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now. Use it to check how a change looks; get_panel reads the same as data.")
+                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, with account names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now; glass is a stand-in. Use it to check how a change looks; get_panel reads the same as data.")
         XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
         XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
-                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style.")
+                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, appearance, material and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style.")
         XCTAssertEqual(tools["discard_panel_draft"]?["description"].stringValue,
                        "Drop the unsaved draft so the Agent HUD panel returns to the saved layout and, for a screen, its resting HUD to its saved style.")
 

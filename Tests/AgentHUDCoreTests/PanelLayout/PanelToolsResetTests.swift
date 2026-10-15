@@ -9,10 +9,12 @@ import XCTest
 final class PanelToolsResetTests: PanelToolsCase {
     private let builtIn = PanelScreen(key: "BUILT-IN-UUID", name: "Built-in display", mode: .notch, edge: .top, hasNotch: true,
                                       agents: ["Claude", "Codex", "DeepSeek"],
-                                      otherModes: [.logos: ["Claude", "Codex", "Cursor"], .simple: ["Claude", "Codex", "Kimi"]])
+                                      otherModes: [.logos: ["Claude", "Codex", "Cursor"], .simple: ["Claude", "Codex", "Kimi"]],
+                                      systemIsLight: false, reducesTransparency: false)
     private let second = PanelScreen(key: "SECOND-UUID", name: "Display 2", mode: .simple, edge: .left, hasNotch: false,
                                      agents: ["Claude", "Codex", "Kimi"],
-                                     otherModes: [.logos: ["Claude", "Codex", "Cursor"]])
+                                     otherModes: [.logos: ["Claude", "Codex", "Cursor"]],
+                                     systemIsLight: false, reducesTransparency: false)
 
     private lazy var screenTools = PanelTools(store: store, launch: 0, screens: { [unowned self] in [builtIn, second] })
 

@@ -72,6 +72,10 @@ extension PanelLayout {
                     found.append("style.width is a whole number from \(PanelStyle.widthRange.lowerBound) to "
                                  + "\(PanelStyle.widthRange.upperBound).")
                 }
+            case "appearance", "material":
+                // The panel's style is no place for the HUD's look, which is one screen's, beside its other style fields.
+                found.append("style has no property \"\(property)\"; the style takes spacing, separators and width. "
+                             + "The HUD's \(property) is hud.\(property), for one screen.")
             default:
                 found.append("style has no property \"\(property)\"; the style takes spacing, separators and width.")
             }

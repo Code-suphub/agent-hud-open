@@ -115,8 +115,8 @@ struct TokenConsumptionChart: View {
                 }
             }
             TokenBarsChart(columns: columns, interval: interval,
-                           colors: consumers.map { AgentPalette.swiftUIColor(index: store.consumerPaletteIndex($0.id)) },
-                           consumers: consumers, theme: theme, isLoading: store.report == nil,
+                           colors: consumers.map { color(of: $0) },
+                           consumers: consumers, theme: theme, context: context, isLoading: store.report == nil,
                            noModelsSelected: context == .stats && modelFilter.consumerIDs?.isEmpty == true,
                            inspectedColumnID: inspectedColumnID, compact: compact)
                 .id(context == .stats ? [store.statsRange.hours, store.tokenBucketSize.rawValue, store.tokenDimensions.rawValue]
@@ -223,9 +223,15 @@ struct TokenConsumptionChart: View {
             + unpriced.map(store.consumerName).joined(separator: L10n.text("、", ", "))
     }
 
+    /// A model's colour: the HUD's on the island, deeper on a light HUD; the palette's own on the statistics window.
+    private func color(of consumer: AgentDescriptor) -> Color {
+        let index = store.consumerPaletteIndex(consumer.id)
+        return context == .island ? theme.agent(index) : AgentPalette.swiftUIColor(index: index)
+    }
+
     private func legendLabel(_ consumer: AgentDescriptor, tokens: Int) -> some View {
         HStack(spacing: 5) {
-            Circle().fill(AgentPalette.swiftUIColor(index: store.consumerPaletteIndex(consumer.id))).frame(width: 7, height: 7)
+            Circle().fill(color(of: consumer)).frame(width: 7, height: 7)
             AgentLogo(vendor: consumer.vendor, size: 12)
             Text(consumer.name)
                 .lineLimit(1)

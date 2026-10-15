@@ -12,6 +12,8 @@ struct SimpleMeterView: View {
     var onIsland = false
     /// The look of the HUD the panel belongs to: the island's round it, the standard one in a preview with none.
     @Environment(\.hudLook) private var look
+    /// Glass drawn as its stand-in, in a preview or a picture of the panel.
+    @Environment(\.drawsGlassStandIn) private var glassStandIn
 
     private var theme: Theme { look.theme }
 
@@ -28,9 +30,10 @@ struct SimpleMeterView: View {
         .padding(EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right))
         .frame(width: panel.width, height: panel.height, alignment: .leading)
         .background {
-            shape.fill(theme.islandFill.opacity(theme.restingFillOpacity))
-                .overlay { shape.strokeBorder(theme.islandOutline, lineWidth: 1) }
-                .opacity(onIsland ? 0 : 1)
+            if !onIsland {
+                HUDSurface(shape, look: look, fill: theme.islandFill.opacity(theme.restingFillOpacity), contact: nil)
+                    .overlay { shape.strokeBorder(look.outline(theme.islandOutline, standIn: glassStandIn), lineWidth: 1) }
+            }
         }
         .padding(margin, SimpleMeterConfig.edgeMargin)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
@@ -39,8 +42,10 @@ struct SimpleMeterView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// The ring takes the level's colour and the number, which is text, the level's text colour.
     private func cell(_ item: SimpleMeterItem) -> some View {
-        let tint = item.level.map { theme.status($0) } ?? Color(StatusPalette.idle)
+        let tint = item.level.map { theme.status($0) } ?? theme.idle
+        let ink = item.level.map { theme.statusText($0) } ?? theme.idleText
         return HStack(spacing: config.labelSpacing) {
             ZStack {
                 if config.showsRings {
@@ -62,7 +67,7 @@ struct SimpleMeterView: View {
             if config.showsNumbers {
                 Text(item.label)
                     .font(.tabular(config.fontSize, .regular))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(ink)
                     .lineLimit(1)
                     .fixedSize()
                     .frame(width: config.edge.isHorizontal ? config.labelWidth(item) : config.labelColumn, alignment: .trailing)

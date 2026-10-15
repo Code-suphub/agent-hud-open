@@ -41,55 +41,116 @@ extension Font {
 
 /// Design tokens for the dark and light window chrome, and for the HUD drawn in either. The HUD reads the theme of its
 /// screen's look (`HUDLook.theme`) from the environment (`hudTheme`); `.island`, the dark one, is the standard look's.
+/// A light HUD draws with `.lightIsland`, modelled on macOS's light popovers and HUDs: dark ink on a near-white surface,
+/// the light window's own background, so the window tokens the panel shares with the statistics window sit on the
+/// ground they were made for. Light glass draws with `.lightGlass`.
+///
+/// The tokens are set here and nowhere else. A light HUD's theme is the light window's with the few tokens changed that
+/// its surface asks for, which is why they can be changed in this file.
 struct Theme {
-    /// Chooses the status palette variant.
-    private let isLight: Bool
-    let windowBackground: Color
-    let sidebarBackground: Color
-    let sidebarBorder: Color
-    let inputBackground: Color
-    let text: Color
-    let secondary: Color
-    let tertiary: Color
-    let card: Color
-    let cardBorder: Color
-    let divider: Color
-    let track: Color
-    let rowBackground: Color
-    let rowBorder: Color
-    let sessionRowBackground: Color
-    let segmentBackground: Color
-    let segmentSelected: Color
-    let sidebarText: Color
-    let dotEnded: Color
+    /// The palettes' variants.
+    private enum Shades {
+        /// The dark chrome's, and the dark HUD's.
+        case dark
+        /// The light window's.
+        case light
+        /// A light HUD's, which draws levels in shades of its own (`StatusPalette.lightHUDColor(for:)`): its surface has
+        /// no window chrome round it to set the system tints off.
+        case lightHUD
+    }
+
+    /// Chooses the palettes' variant.
+    private var shades: Shades
+    private(set) var windowBackground: Color
+    private(set) var sidebarBackground: Color
+    private(set) var sidebarBorder: Color
+    private(set) var inputBackground: Color
+    private(set) var text: Color
+    private(set) var secondary: Color
+    private(set) var tertiary: Color
+    private(set) var card: Color
+    private(set) var cardBorder: Color
+    private(set) var divider: Color
+    private(set) var track: Color
+    private(set) var rowBackground: Color
+    private(set) var rowBorder: Color
+    private(set) var sessionRowBackground: Color
+    private(set) var segmentBackground: Color
+    private(set) var segmentSelected: Color
+    private(set) var sidebarText: Color
+    private(set) var dotEnded: Color
 
     // The HUD's own tokens, which the window chrome has no use for.
 
     /// The HUD's surface: the island's silhouette, a detached card, the Simple panel and the panel's picture.
-    let islandFill: Color
+    private(set) var islandFill: Color
     /// How opaque `islandFill` is on the Simple panel at rest and on the line that grows out of it.
-    let restingFillOpacity: Double
+    private(set) var restingFillOpacity: Double
     /// The hairline round a surface that floats free of the screen's edge: the Simple panel and a detached card.
-    let islandOutline: Color
+    private(set) var islandOutline: Color
     /// The hairline round the island while the desktop behind it is light, so the two do not run together.
-    let desktopOutline: Color
+    private(set) var desktopOutline: Color
     /// The unfilled part of a ring on the Simple panel.
-    let meterTrack: Color
-    /// The alerts' ink at full strength. Their reminders and cards grade it with opacities of their own.
-    let alertText: Color
+    private(set) var meterTrack: Color
+    /// The alerts' ink at full strength. Their reminders and cards grade it with opacities of their own (`alertInk(_:)`).
+    private(set) var alertText: Color
     /// Ink on a fill of `text`, such as the draft bar's Save button.
-    let inverseText: Color
-    /// Ink on a bright accent fill, such as Approve, Submit or Return to session, whose fill stays bright either way.
-    let onAccent: Color
+    private(set) var inverseText: Color
+    /// Ink on a bright fill that stays bright either way, such as Approve or Submit.
+    private(set) var onAccent: Color
     /// A box raised off the HUD's surface, such as a hover popover's body.
-    let raisedSurface: Color
+    private(set) var raisedSurface: Color
+    /// A box set into a card, such as a request's command inside the request's own card.
+    private(set) var insetSurface: Color
+    /// What glass is tinted with under the HUD's ink (`HUDSurface`): `islandFill` thinned, which darkens dark glass and
+    /// lightens light glass enough for the HUD's fixed text and status colours to keep their contrast over any desktop.
+    /// Where nothing is behind to blur, it is glass's stand-in on its own.
+    private(set) var glassTint: Color
+    /// The alerts' accents (`IslandAlert.accent`) as text and thin glyphs: a finished turn's blue, calm news's green and
+    /// a warning's warm. On the dark HUD they are the accents themselves; on a light one, darker versions that stay
+    /// legible there. The accents stay the glow's tint.
+    private(set) var alertTurnText: Color
+    private(set) var alertCalmText: Color
+    private(set) var alertWarningText: Color
 
+    private var isLight: Bool { shades != .dark }
+
+    /// A level as a fill: a ring, a bar, a dot.
     func status(_ level: StatusLevel) -> Color {
-        Color(StatusPalette.color(for: level, light: isLight))
+        Color(shades == .lightHUD ? StatusPalette.lightHUDColor(for: level)
+                                  : StatusPalette.color(for: level, light: isLight))
     }
 
+    /// A level as text or a thin glyph, which on a light theme has to be darker than the fill to be read.
     func statusText(_ level: StatusLevel) -> Color {
-        Color(StatusPalette.textColor(for: level, light: isLight))
+        Color(shades == .lightHUD ? StatusPalette.lightHUDTextColor(for: level)
+                                  : StatusPalette.textColor(for: level, light: isLight))
+    }
+
+    /// The alerts' accents as fills: their main buttons, such as Return to session or View usage statistics, and their
+    /// dots and bars, under ink of `onAlertFill`. They are the text shades: on the dark HUD the bright accents
+    /// themselves, and on a light one the deep shades, where a pastel on near-white reads as a button switched off.
+    var alertTurnFill: Color { alertTurnText }
+    var alertCalmFill: Color { alertCalmText }
+    var alertWarningFill: Color { alertWarningText }
+    /// Ink on those fills: black on the dark HUD's bright accents, white on a light HUD's deep shades.
+    var onAlertFill: Color { isLight ? .white : .black }
+
+    /// The alerts' ink graded to `opacity`, for their captions, account lines and times. Near-black ink thinned on a
+    /// near-white surface fades much faster than white ink thinned on black, so a light theme lifts the grade by a fifth
+    /// to keep a caption about as legible as on the dark HUD, where the grade is the one asked for.
+    func alertInk(_ opacity: Double) -> Color {
+        alertText.opacity(isLight ? min(1, opacity + 0.2) : opacity)
+    }
+
+    /// The grey of an agent with no level to show, as a fill, and as text.
+    var idle: Color { Color(StatusPalette.idle) }
+    var idleText: Color { Color(StatusPalette.idleTextColor(light: isLight)) }
+
+    /// One agent's colour in the HUD, by its palette index (`UsageStore.consumerPaletteIndex(_:)`): the statistics
+    /// window's palette on a dark HUD, its deeper shades on a light one.
+    func agent(_ index: Int) -> Color {
+        Color(AgentPalette.color(index: index, light: isLight))
     }
 
     /// One hue per token kind, lighter on the dark chrome.
@@ -104,7 +165,7 @@ struct Theme {
     }
 
     static let dark = Theme(
-        isLight: false,
+        shades: .dark,
         windowBackground: Color(hex: 0x282828),
         sidebarBackground: Color(hex: 0x1f1f1f),
         sidebarBorder: Color.white.opacity(0.08),
@@ -131,11 +192,16 @@ struct Theme {
         alertText: Color.white,
         inverseText: Color.black,
         onAccent: Color.black,
-        raisedSurface: Color(hex: 0x282828)
+        raisedSurface: Color(hex: 0x282828),
+        insetSurface: Color.white.opacity(0.05),
+        glassTint: Color.black.opacity(0.75),
+        alertTurnText: Color(IslandAlert.turnAccent),
+        alertCalmText: Color(IslandAlert.calmAccent),
+        alertWarningText: Color(IslandAlert.warningAccent)
     )
 
     static let light = Theme(
-        isLight: true,
+        shades: .light,
         windowBackground: Color(hex: 0xf5f5f7),
         sidebarBackground: Color(hex: 0xe8e8ea),
         sidebarBorder: Color.black.opacity(0.08),
@@ -154,19 +220,47 @@ struct Theme {
         segmentSelected: Color.white,
         sidebarText: Color(hex: 0x1d1d1f),
         dotEnded: Color(hex: 0xaeaeb2),
+        // The light HUD: the window's near-white with its ink, hairlines of black at 8 to 10 %, an edge round a shell
+        // that stands on a light desktop, and boxes raised in white or set in a shade of black.
         islandFill: Color(hex: 0xf5f5f7),
         restingFillOpacity: 0.9,
-        islandOutline: Color.black.opacity(0.08),
+        islandOutline: Color.black.opacity(0.10),
         desktopOutline: Color.black.opacity(0.10),
         meterTrack: Color.black.opacity(0.10),
-        alertText: Color.black,
+        alertText: Color(hex: 0x1d1d1f),
         inverseText: Color.white,
         onAccent: Color.black,
-        raisedSurface: Color.white
+        raisedSurface: Color.white,
+        insetSurface: Color.black.opacity(0.04),
+        glassTint: Color(hex: 0xf5f5f7).opacity(0.7),
+        alertTurnText: Color(hex: 0x2f62d0),
+        alertCalmText: Color(hex: 0x0f7b57),
+        alertWarningText: Color(hex: 0xa8521c)
     )
 
     /// The HUD's dark tokens, which the standard look draws with: light ink on the black island.
     static let island = Theme.dark
+
+    /// The HUD's light tokens, which a light look draws with: the light window's, with the levels in the HUD's own
+    /// shades, and a button's outline as firm as on the dark HUD, where the window's hairline would all but vanish on a
+    /// white card.
+    static let lightIsland: Theme = {
+        var theme = Theme.light
+        theme.shades = .lightHUD
+        theme.cardBorder = Color.black.opacity(0.12)
+        return theme
+    }()
+
+    /// Light glass's tokens: the light HUD's, with its secondary and tertiary ink a grade darker, since glass over a dark
+    /// desktop is a greyer ground than the solid surface and the window's own greys fall to 2:1 there, and a request's
+    /// card a thinned white that lets the glass show through it, as white at 5 % does on dark glass.
+    static let lightGlass: Theme = {
+        var theme = Theme.lightIsland
+        theme.secondary = Color(hex: 0x55555a)
+        theme.tertiary = Color(hex: 0x737378)
+        theme.card = Color.white.opacity(0.55)
+        return theme
+    }()
 
     static func forScheme(_ scheme: ColorScheme) -> Theme {
         scheme == .light ? .light : .dark

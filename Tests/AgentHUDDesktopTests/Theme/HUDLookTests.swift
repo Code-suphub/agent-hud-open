@@ -5,7 +5,8 @@ import XCTest
 @testable import AgentHUDDesktop
 
 /// What a screen's HUD looks like, and how a look reaches what the HUD draws: its tokens everywhere, and SwiftUI's colour
-/// scheme and AppKit's appearance in what is drawn apart from the island, whatever the app is set to.
+/// scheme and AppKit's appearance in what is drawn apart from the island, whatever the app is set to, and on the island
+/// under every look but the standard one.
 @MainActor
 final class HUDLookTests: XCTestCase {
     /// The standard look is the HUD as it has always been drawn: the island's dark tokens, dark controls and artwork.
@@ -24,7 +25,21 @@ final class HUDLookTests: XCTestCase {
         XCTAssertEqual(light.theme.islandFill, Theme.light.islandFill)
     }
 
-    /// Every screen's settings give its HUD the standard look: none of them chooses another yet.
+    /// A light HUD draws with the HUD's own light tokens, and light glass with its darker ink; dark glass keeps the dark
+    /// island's.
+    func testEachLookDrawsWithItsOwnTokens() {
+        XCTAssertEqual(HUDLook(appearance: .light).theme.cardBorder, Theme.lightIsland.cardBorder)
+        XCTAssertEqual(HUDLook(appearance: .light).theme.secondary, Theme.light.secondary)
+        let lightGlass = HUDLook(appearance: .light, material: .glass).theme
+        XCTAssertEqual(lightGlass.secondary, Theme.lightGlass.secondary)
+        XCTAssertEqual(lightGlass.tertiary, Theme.lightGlass.tertiary)
+        XCTAssertNotEqual(lightGlass.secondary, Theme.light.secondary)
+        let darkGlass = HUDLook(appearance: .dark, material: .glass).theme
+        XCTAssertEqual(darkGlass.secondary, Theme.island.secondary)
+        XCTAssertEqual(darkGlass.card, Theme.island.card)
+    }
+
+    /// A screen whose settings choose no look gives its HUD the standard one (`HUDLookResolutionTests`).
     func testEveryScreenHasTheStandardLook() {
         let suite = "app.agenthud.tests.hud-look.\(UUID().uuidString)"
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
@@ -94,15 +109,52 @@ final class HUDLookTests: XCTestCase {
         XCTAssertEqual(seen.text, Theme.island.text)
     }
 
-    /// The island takes only its look's colours. Its window, and with it what AppKit and SwiftUI choose themselves on it,
-    /// such as a mark's artwork, the scroller and a text field's caret, keep the app's appearance, as they always have.
-    func testTheIslandKeepsTheAppsAppearance() throws {
+    /// What AppKit chooses itself on the island, such as the scroller, a text field's caret and a template image, follows
+    /// the island's hosting view, which takes a light or glass look's appearance whatever the app is set to, and again
+    /// when the look changes. Under the standard look it takes none, and leaves them to the app as it always has. The
+    /// window itself keeps none of its own.
+    func testTheIslandTakesItsLooksAppearance() throws {
         _ = NSApplication.shared
         let controller = IslandWindowController(frame: CGRect(x: 0, y: 0, width: 216, height: 32), rootView: .placeholder)
-        controller.setRootView(.placeholder)
         let hosting = try XCTUnwrap(controller.panel.contentView)
         XCTAssertNil(hosting.appearance)
         XCTAssertNil(controller.panel.appearance)
+
+        func island(_ look: HUDLook) -> IslandRootView {
+            IslandRootView(store: nil, isOpen: false, collapsedSize: CGSize(width: 216, height: 32),
+                           collapsedTopRadius: NotchGeometry.collapsedTopRadius, collapsedBottomRadius: 12,
+                           look: look, lightBorder: false, onOpenStats: {})
+        }
+        controller.setRootView(island(HUDLook(appearance: .light)))
+        XCTAssertEqual(hosting.appearance?.name, .aqua)
+        controller.setRootView(island(HUDLook(appearance: .dark, material: .glass)))
+        XCTAssertEqual(hosting.appearance?.name, .darkAqua)
+        controller.setRootView(.placeholder)
+        XCTAssertNil(hosting.appearance)
+    }
+
+    /// The island under the standard look sets its colours and leaves its colour scheme to the app, as it always has, so
+    /// a mark's artwork is the one it always drew. Every other look draws in its own scheme, whatever the app is set to.
+    func testTheStandardIslandLeavesItsSchemeToTheApp() {
+        let seen = Seen()
+        for (appearance, scheme) in [(NSAppearance.Name.aqua, ColorScheme.light), (.darkAqua, .dark)] {
+            let standard = NSHostingView(rootView: Probe(seen: seen).islandLook(.standard))
+            standard.appearance = NSAppearance(named: appearance)
+            _ = standard.fittingSize
+            XCTAssertEqual(seen.scheme, scheme, "\(appearance)")
+            XCTAssertEqual(seen.look, .standard)
+            XCTAssertEqual(seen.text, Theme.island.text)
+        }
+
+        let darkGlass = NSHostingView(rootView: Probe(seen: seen).islandLook(HUDLook(appearance: .dark, material: .glass)))
+        darkGlass.appearance = NSAppearance(named: .aqua)
+        _ = darkGlass.fittingSize
+        XCTAssertEqual(seen.scheme, .dark)
+        let light = NSHostingView(rootView: Probe(seen: seen).islandLook(HUDLook(appearance: .light)))
+        light.appearance = NSAppearance(named: .darkAqua)
+        _ = light.fittingSize
+        XCTAssertEqual(seen.scheme, .light)
+        XCTAssertEqual(seen.text, Theme.light.text)
     }
 
     /// A text field on a card is AppKit's, which the look's colour scheme does not reach: it inks its text and its

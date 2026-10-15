@@ -8,6 +8,17 @@ enum IslandAnimation {
     static let curve = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: duration)
     static var mediaCurve: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1) }
 
+    /// Cross-fades what `layer` draws now into what it is given next, on the island's curve: a change of look in layers
+    /// that are drawn for one ground and do not fade with a colour, such as a blur, a dock's marks or a reminder's bot.
+    static func fadeLook(of layer: CALayer) {
+        let fade = CATransition()
+        fade.type = .fade
+        fade.duration = duration
+        fade.timingFunction = mediaCurve
+        // A layer keeps one transition, under this key whatever key it is added with.
+        layer.add(fade, forKey: kCATransition)
+    }
+
     static func attachmentAlignment(for edge: HUDEdge) -> Alignment {
         switch edge {
         case .top: return .top

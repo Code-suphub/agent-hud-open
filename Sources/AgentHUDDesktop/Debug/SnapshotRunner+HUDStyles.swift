@@ -31,7 +31,7 @@ extension SnapshotRunner {
         layout.proposeStyle(HUDStyle(mode: .simple, position: 0, simpleSize: 28), for: "snapshot-notch", hasNotch: true)
         hud("style-simple", "snapshot-notch", hasNotch: true)
         // Its panel says the style waits, and that it is this display's.
-        save("panel-layout-style-bar", IslandScene(store: store, settings: settings, open: true, light: false,
+        save("panel-layout-style-bar", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard,
                                                    screen: "snapshot-notch"),
              folder: folder, scheme: .dark)
         layout.discard(.screen("snapshot-notch"))
@@ -52,7 +52,7 @@ extension SnapshotRunner {
         for width in [PanelStyle.widthRange.lowerBound, PanelStyle.widthRange.upperBound] {
             layout.propose(PanelLayout(style: PanelStyle(width: width)))
             layout.save()
-            save("panel-layout-width-\(width)", IslandScene(store: store, settings: settings, open: true, light: false),
+            save("panel-layout-width-\(width)", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard),
                  folder: folder, scheme: .dark)
         }
         // The narrowest layout beside the widest Simple panel on a left edge, whose strip the panel keeps clear: the panel

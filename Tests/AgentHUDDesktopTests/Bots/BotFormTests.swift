@@ -6,19 +6,20 @@ import XCTest
 final class BotFormTests: XCTestCase {
     func testEveryBundledMarkHasABot() {
         for vendor in AgentArtwork.allVendors {
-            XCTAssertNotNil(BotForm.form(for: vendor), "\(vendor) has artwork and no bot")
+            XCTAssertNotNil(BotForm.form(for: vendor, ground: .dark), "\(vendor) has artwork and no bot")
         }
     }
 
     func testClientsThatShareAMarkShareItsBot() throws {
-        let codex = try XCTUnwrap(BotForm.form(for: "Codex")), chatGPT = try XCTUnwrap(BotForm.form(for: "ChatGPT"))
+        let codex = try XCTUnwrap(BotForm.form(for: "Codex", ground: .dark))
+        let chatGPT = try XCTUnwrap(BotForm.form(for: "ChatGPT", ground: .dark))
         XCTAssertTrue(codex === chatGPT)
-        XCTAssertNil(BotForm.form(for: "An agent nobody has drawn"))
+        XCTAssertNil(BotForm.form(for: "An agent nobody has drawn", ground: .dark))
     }
 
     func testOutlinesAreOneReachPerDegreeAndStayInsideTheFrame() throws {
         for vendor in AgentArtwork.allVendors {
-            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
             XCTAssertEqual(form.logoReach.count, BotForm.samples)
             XCTAssertEqual(form.bodyReach.count, BotForm.samples)
             guard form.spec.ownEyes == nil else { continue }
@@ -30,7 +31,7 @@ final class BotFormTests: XCTestCase {
     }
 
     func testClaudeHasTwelveEvenHeads() throws {
-        let reach = try XCTUnwrap(BotForm.form(for: "Claude")).bodyReach
+        let reach = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark)).bodyReach
         let mean = reach.reduce(0, +) / CGFloat(reach.count)
         var peaks = 0
         for index in reach.indices {
@@ -44,7 +45,7 @@ final class BotFormTests: XCTestCase {
 
     func testEveryBotDrawsAtQueueSizeInEveryPhase() throws {
         for vendor in AgentArtwork.allVendors {
-            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
             for phase in [BotPhase.working, .asking, .done] {
                 var motion = BotMotion(seed: 3)
                 motion.spin = form.spec.spin
@@ -59,7 +60,7 @@ final class BotFormTests: XCTestCase {
     }
 
     func testAnOutlinedFrameGrowsByTheHairlineOnEveryEdge() throws {
-        let form = try XCTUnwrap(BotForm.form(for: "Claude"))
+        let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))
         var motion = BotMotion(seed: 3)
         motion.set(.working, at: 0)
         motion.step(to: 0); motion.step(to: 1)
@@ -71,7 +72,7 @@ final class BotFormTests: XCTestCase {
     }
 
     func testCopilotRestoresItsOriginalEyesWhileShowingTheLogo() throws {
-        let form = try XCTUnwrap(BotForm.form(for: "GitHub Copilot"))
+        let form = try XCTUnwrap(BotForm.form(for: "GitHub Copilot", ground: .dark))
         let original = try XCTUnwrap(BotRenderer.image(form, motion: BotMotion(seed: 3), side: 60))
         var motion = BotMotion(seed: 3)
         motion.set(.working, at: 0)
@@ -89,7 +90,7 @@ final class BotFormTests: XCTestCase {
     }
 
     func testCopilotEyeTransitionKeepsItsBodyOpaque() throws {
-        let form = try XCTUnwrap(BotForm.form(for: "GitHub Copilot"))
+        let form = try XCTUnwrap(BotForm.form(for: "GitHub Copilot", ground: .dark))
         let original = try XCTUnwrap(BotRenderer.image(form, motion: BotMotion(seed: 3), side: 60))
         var motion = BotMotion(seed: 3)
         motion.set(.working, at: 0)

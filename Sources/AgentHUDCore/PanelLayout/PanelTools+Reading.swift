@@ -78,8 +78,9 @@ extension PanelTools {
     }
 
     /// One attached screen as an agent reads it: its key and role, how it presents the HUD, which layout its panel
-    /// draws, the panel's width there and whether the panel shows a draft, its resting HUD's style in effect and
-    /// whether a style draft waits, the agents its resting HUD can show now, and those it shows under its layout.
+    /// draws, the panel's width there and whether the panel shows a draft, its resting HUD's style in effect, the look it
+    /// draws now and whether a style draft waits, the agents its resting HUD can show now, and those it shows under its
+    /// layout.
     private func listing(_ screen: PanelScreen) -> JSONValue {
         let drawn = layout.effective(for: screen.key)
         let order = HUDAgentOrder(listed: drawn.hud.agents, available: screen.agents)
@@ -90,6 +91,7 @@ extension PanelTools {
             "width": .integer(Int64(drawn.style.panelWidth)),
             "unsaved": .bool(layout.hasDraft(on: screen.key)),
             "hud": styleInEffect(of: screen),
+            "look": lookInEffect(of: screen),
             "styleUnsaved": .bool(layout.hasStyleDraft(screen.key)),
             "agents": .array(screen.agents.map(JSONValue.string)),
             "shows": .array(order.arrange(screen.agents) { $0 }.map(JSONValue.string)),

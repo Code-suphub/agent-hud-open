@@ -103,8 +103,67 @@ struct BotSpec: Sendable {
     var settle: CGFloat = 0
 
     /// A mark with no entry stays a logo: it moves as a whole and has no face.
-    static func spec(for vendor: String) -> BotSpec? {
-        table[AgentArtwork.markKey(vendor).replacingOccurrences(of: "-dark", with: "")]
+    ///
+    /// The table draws every bot for a dark ground, the island's black or a wallpaper, in light ink. On a light ground,
+    /// a light HUD's surface, a bot in light ink would vanish, so it wears dark ink there instead (`lightGroundInk`), and
+    /// a body that is now dark has its eyes cut in the ground's own colour (`lightCut`): a single-colour mark's, whose
+    /// body is its own stencil, and every bot whose paint turned dark.
+    static func spec(for vendor: String, ground: HUDLook.Appearance) -> BotSpec? {
+        let key = AgentArtwork.markKey(vendor).replacingOccurrences(of: "-dark", with: "")
+        guard let spec = table[key] else { return nil }
+        guard ground == .light else { return spec }
+        let swaps = lightGroundInk[key] ?? []
+        var light = swaps.reduce(spec) { $0.repainted($1.dark, $1.light) }
+        if light.eyeColor == nil, AgentArtwork.isTemplate(vendor) || !swaps.isEmpty { light.eyeColor = lightCut }
+        return light
+    }
+
+    /// The light ground's own colour, the light HUD's surface: eyes drawn in it read as cut out of a dark body.
+    static let lightCut = RGBA(hex: 0xf5f5f7)
+
+    /// The light ink each bot in it is painted with, and the dark ink it wears on a light ground instead: as its mark's
+    /// own artwork for a light background draws it where there is one, the light HUD's ink where there is none.
+    private static let lightGroundInk: [String: [(dark: RGBA, light: RGBA)]] = [
+        // Black with white eyes, as its wordmark is on a light ground.
+        "Grok Bot": [(RGBA(hex: 0xffffff), RGBA(hex: 0x000000))],
+        "Pi": [(RGBA(hex: 0xffffff), ink)],
+        "Hermes": [(RGBA(hex: 0xf8f8f9), ink)],
+        // The light variant's dark frame, with its cap and moustache in the variant's pale grey.
+        "OpenCode": [(RGBA(hex: 0xf1ecec), RGBA(hex: 0x211e1e)), (grey, RGBA(hex: 0xcfcecd))],
+        // A black ball, its own artwork's for a light background, in the same green neck warmer.
+        "Qoder": [(RGBA(hex: 0xf8f8f8), RGBA(hex: 0x161616))],
+        "CodeBuddy": [(RGBA(hex: 0xffffff), ink)],
+        "WorkBuddy": [(RGBA(hex: 0xeafaf6), RGBA(hex: 0x1b2622))],
+    ]
+
+    /// The light HUD's ink.
+    private static let ink = RGBA(hex: 0x1d1d1f)
+
+    /// The same bot with every paint and piece in `old` painted `new` instead. Its eyes keep their colour.
+    private func repainted(_ old: RGBA, _ new: RGBA) -> BotSpec {
+        func swap(_ value: RGBA) -> RGBA { value == old ? new : value }
+        func swap(_ paint: Paint) -> Paint {
+            switch paint {
+            case .artwork: .artwork
+            case .solid(let value): .solid(swap(value))
+            case .linear(let from, let to, let stops): .linear(from: from, to: to, stops: stops.map(swap))
+            case .radial(let center, let inner, let outer, let stops):
+                .radial(center: center, inner: inner, outer: outer, stops: stops.map(swap))
+            }
+        }
+        var spec = self
+        spec.paint = swap(paint)
+        spec.patch = patch.map { Patch(box: $0.box, round: $0.round, paint: swap($0.paint)) }
+        spec.stroke = stroke.map(swap)
+        spec.decor = decor.map { item in
+            switch item {
+            case .soft(let rects, let value, let round): .soft(rects, swap(value), round: round)
+            case .feelers(let lines, let value, let width): .feelers(lines, swap(value), width: width)
+            case .blocks(let rects, let value, let follows): .blocks(rects, swap(value), followsFace: follows)
+            case .cut, .notch, .line: item
+            }
+        }
+        return spec
     }
 
     private static let grey = RGBA(hex: 0x4b4646)

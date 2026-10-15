@@ -115,7 +115,7 @@ struct PermissionQuestionCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
                 if questions.count > 1 {
                     Text("\(page + 1)/\(questions.count)")
-                        .font(.tabular(10, .semibold)).foregroundStyle(color.signal)
+                        .font(.tabular(10, .semibold)).foregroundStyle(color.signalText)
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(color.signal.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
                 }

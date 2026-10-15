@@ -26,14 +26,14 @@ public enum SnapshotRunner {
         let alertAgent = AgentDescriptor(id: "claude-session", vendor: "Claude", model: L10n.windowSession, source: "", enabled: true)
         for kind in QuotaAlert.Kind.allCases {
             let alert = IslandAlert.quota(QuotaAlert.preview(kind, agent: alertAgent))
-            save("alert-\(kind.rawValue)-compact", IslandScene(store: store, settings: settings, open: false, light: false, alert: alert), folder: folder, scheme: .dark)
-            save("alert-\(kind.rawValue)-detail", IslandScene(store: store, settings: settings, open: true, light: false, alert: alert, showsAlertDetails: true), folder: folder, scheme: .dark)
-            save("alert-\(kind.rawValue)-inline", IslandScene(store: store, settings: settings, open: true, light: false, alert: alert), folder: folder, scheme: .dark)
+            save("alert-\(kind.rawValue)-compact", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, alert: alert), folder: folder, scheme: .dark)
+            save("alert-\(kind.rawValue)-detail", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, alert: alert, showsAlertDetails: true), folder: folder, scheme: .dark)
+            save("alert-\(kind.rawValue)-inline", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, alert: alert), folder: folder, scheme: .dark)
         }
         let grant = IslandAlert.resetCredits(.preview())
-        save("alert-resetCredits-compact", IslandScene(store: store, settings: settings, open: false, light: false, alert: grant), folder: folder, scheme: .dark)
-        save("alert-resetCredits-detail", IslandScene(store: store, settings: settings, open: true, light: false, alert: grant, showsAlertDetails: true), folder: folder, scheme: .dark)
-        save("alert-resetCredits-inline", IslandScene(store: store, settings: settings, open: true, light: false, alert: grant), folder: folder, scheme: .dark)
+        save("alert-resetCredits-compact", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, alert: grant), folder: folder, scheme: .dark)
+        save("alert-resetCredits-detail", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, alert: grant, showsAlertDetails: true), folder: folder, scheme: .dark)
+        save("alert-resetCredits-inline", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, alert: grant), folder: folder, scheme: .dark)
 
         for vendor in ["Claude", "Codex", "DeepSeek"] {
             let now = DemoClock.now
@@ -44,8 +44,8 @@ public enum SnapshotRunner {
                 navigationTarget: vendor == "Claude" ? .iTermSession(id: "snapshot-terminal")
                     : vendor == "Codex" ? .codexThread(id: "00000000-0000-0000-0000-000000000001") : nil)
             let alert = IslandAlert.completion(completion)
-            save("alert-completion-\(vendor)-compact", IslandScene(store: store, settings: settings, open: false, light: false, alert: alert), folder: folder, scheme: .dark)
-            save("alert-completion-\(vendor)-detail", IslandScene(store: store, settings: settings, open: true, light: false, alert: alert, showsAlertDetails: true), folder: folder, scheme: .dark)
+            save("alert-completion-\(vendor)-compact", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, alert: alert), folder: folder, scheme: .dark)
+            save("alert-completion-\(vendor)-detail", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, alert: alert, showsAlertDetails: true), folder: folder, scheme: .dark)
         }
 
         // A tool call waiting for its user: the reminder that holds, and what hovering turns it into.
@@ -71,13 +71,13 @@ public enum SnapshotRunner {
                                        cwd: "/Users/me/Projects/acme-api", at: Date())),
         ] {
             let alert = IslandAlert.permission(request)
-            save("alert-permission-\(name)-compact", IslandScene(store: store, settings: settings, open: false, light: false, alert: alert), folder: folder, scheme: .dark)
-            save("alert-permission-\(name)-detail", IslandScene(store: store, settings: settings, open: true, light: false, alert: alert, showsAlertDetails: true), folder: folder, scheme: .dark)
+            save("alert-permission-\(name)-compact", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, alert: alert), folder: folder, scheme: .dark)
+            save("alert-permission-\(name)-detail", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, alert: alert, showsAlertDetails: true), folder: folder, scheme: .dark)
             guard name == "bash" else { continue }
             let queue = DemoData.permissionRequests()
             let queued = IslandAlert.permission(queue[0])
-            save("alert-permission-queued-compact", IslandScene(store: store, settings: settings, open: false, light: false, alert: queued, waitingRequests: queue), folder: folder, scheme: .dark)
-            save("alert-permission-queued-detail", IslandScene(store: store, settings: settings, open: true, light: false, alert: queued, showsAlertDetails: true, waitingRequests: queue), folder: folder, scheme: .dark)
+            save("alert-permission-queued-compact", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, alert: queued, waitingRequests: queue), folder: folder, scheme: .dark)
+            save("alert-permission-queued-detail", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, alert: queued, showsAlertDetails: true, waitingRequests: queue), folder: folder, scheme: .dark)
         }
 
         let waiting = DemoData.permissionRequests()
@@ -88,33 +88,33 @@ public enum SnapshotRunner {
             message: L10n.text("标题返回 agent，token 数字打开会话用量。", "Titles return to the agent; token counts open session usage."),
             navigationTarget: .codexThread(id: "00000000-0000-0000-0000-000000000001")))
         let sessionEvents: [IslandAlert] = [.permission(waiting[0]), reply]
-        save("alert-events-permission-selected", IslandScene(store: store, settings: settings, open: true, light: false,
+        save("alert-events-permission-selected", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard,
                                                             alert: sessionEvents[0], showsAlertDetails: true,
                                                             waitingRequests: waiting, sessionEvents: sessionEvents),
              folder: folder, scheme: .dark)
-        save("alert-events-reply-selected", IslandScene(store: store, settings: settings, open: true, light: false,
+        save("alert-events-reply-selected", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard,
                                                        alert: reply, showsAlertDetails: true,
                                                        waitingRequests: waiting, sessionEvents: sessionEvents),
              folder: folder, scheme: .dark)
 
-        save("island-collapsed", IslandScene(store: store, settings: settings, open: false, light: false), folder: folder, scheme: .dark)
+        save("island-collapsed", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard), folder: folder, scheme: .dark)
         for style in GlowStyle.allCases where style != .blur {
             settings.update { $0.glowStyle = style; $0.glowEffect = .breathe }
-            save("island-collapsed-\(style.rawValue)", IslandScene(store: store, settings: settings, open: false, light: false, glowTime: 0), folder: folder, scheme: .dark)
-            save("island-expanded-\(style.rawValue)", IslandScene(store: store, settings: settings, open: true, light: false, glowTime: 0), folder: folder, scheme: .dark)
+            save("island-collapsed-\(style.rawValue)", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, glowTime: 0), folder: folder, scheme: .dark)
+            save("island-expanded-\(style.rawValue)", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, glowTime: 0), folder: folder, scheme: .dark)
             // One representative moment of every effect.
             for (effect, time) in [(GlowEffect.breathe, 1.5), (.flow, 2.0), (.scan, 1.1), (.ripple, 0.9), (.shimmer, 0.3), (.boot, 1.2)] {
                 settings.update { $0.glowEffect = effect }
-                save("island-collapsed-\(style.rawValue)-\(effect.rawValue)", IslandScene(store: store, settings: settings, open: false, light: false, glowTime: time), folder: folder, scheme: .dark)
+                save("island-collapsed-\(style.rawValue)-\(effect.rawValue)", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, glowTime: time), folder: folder, scheme: .dark)
             }
         }
         for (effect, time) in [(GlowEffect.breathe, 1.5), (.flow, 2.0), (.scan, 1.1), (.ripple, 0.9), (.shimmer, 0.3), (.boot, 1.2)] {
             settings.update { $0.glowStyle = .blur; $0.glowEffect = effect }
-            save("island-collapsed-blur-\(effect.rawValue)", IslandScene(store: store, settings: settings, open: false, light: false, glowTime: time), folder: folder, scheme: .dark)
+            save("island-collapsed-blur-\(effect.rawValue)", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, glowTime: time), folder: folder, scheme: .dark)
         }
         for style in GlowStyle.allCases where style != .blur {
             settings.update { $0.glowStyle = style; $0.glowEffect = .breathe; $0.glowGridDensity = 2 }
-            save("island-collapsed-\(style.rawValue)-dense", IslandScene(store: store, settings: settings, open: false, light: false, glowTime: 0), folder: folder, scheme: .dark)
+            save("island-collapsed-\(style.rawValue)-dense", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard, glowTime: 0), folder: folder, scheme: .dark)
         }
         settings.update { $0.glowGridDensity = 1 }
         // Logo mode: the agents' own marks over the glow backdrop, one shot per style.
@@ -167,9 +167,10 @@ public enum SnapshotRunner {
         settings.update { $0.glowStyle = .dots; $0.glowEffect = .ripple }
         save("settings-display-dots-dark", SettingsView(settings: settings, store: store, initialTab: .display).frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
         settings.update { $0.glowStyle = .blur; $0.glowEffect = .breathe }
-        save("island-expanded-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
-        save("island-expanded-light", IslandScene(store: store, settings: settings, open: true, light: true), folder: folder, scheme: .light)
+        save("island-expanded-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
+        save("island-expanded-light", IslandScene(store: store, settings: settings, open: true, light: true, look: .standard), folder: folder, scheme: .light)
         saveLayouts(preferences: settings.settings, folder: folder)
+        saveHUDLooks(preferences: settings.settings, folder: folder)
         // Session titles and token counts remain separate controls, including unavailable and failed returns.
         if let codex = settings.agents.first(where: { $0.vendor == "Codex" }) {
             let saved = settings.settings
@@ -187,14 +188,14 @@ public enum SnapshotRunner {
                             startedAt: now.addingTimeInterval(-120), pctOfWindow: nil,
                             tokensIn: 1_600_000, tokensOut: 100_000, observedAt: now)
             ]))
-            save("island-session-actions", IslandScene(store: sessions, settings: settings, open: true, light: false),
+            save("island-session-actions", IslandScene(store: sessions, settings: settings, open: true, light: false, look: .standard),
                  folder: folder, scheme: .dark)
-            save("island-session-actions-failed", IslandScene(store: sessions, settings: settings, open: true, light: false,
+            save("island-session-actions-failed", IslandScene(store: sessions, settings: settings, open: true, light: false, look: .standard,
                                                             failedListedSessionID: "snapshot-native"),
                  folder: folder, scheme: .dark)
             settings.update { $0 = saved }
         }
-        let scrollScene = IslandScene(store: store, settings: settings, open: true, light: false, maximumPanelHeight: 420)
+        let scrollScene = IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, maximumPanelHeight: 420)
         save("island-scroll-top", scrollScene, folder: folder, scheme: .dark)
         save("island-scroll-bottom", scrollScene, folder: folder, scheme: .dark, scrollToBottom: true)
         save("menubar-dark", MenuBarStrip(store: store, light: false), folder: folder, scheme: .dark)
@@ -305,14 +306,14 @@ public enum SnapshotRunner {
             $0.showIslandTokens = false
         }
         settings.updateAgents { $0.map { $0.with(enabled: $0.id == "claude-opus") } }
-        save("island-custom-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-custom-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.update { $0.showIslandQuota = false; $0.showIslandSessions = false; $0.showIslandTokens = true }
-        save("island-tokens-only-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-tokens-only-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.update { $0.showIslandTokens = false }
-        save("island-minimal-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-minimal-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.update { $0.showIslandQuota = true; $0.showIslandTokens = true; $0.showIslandSessions = true }
         settings.updateAgents { $0.map { $0.with(enabled: false) } }
-        save("island-no-models-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-no-models-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
 
         settings.updateAgents { _ in DemoData.agents + [
             AgentDescriptor(id: "codex-spark-preview", vendor: "Codex", model: "GPT-5.3-Codex-Spark · Weekly limit", shortModel: "Spark 7d",
@@ -341,14 +342,14 @@ public enum SnapshotRunner {
         }
         let resetNow = DemoClock.now
         let loadingStore = demoStore(settings)
-        save("island-loading-quota", IslandScene(store: loadingStore, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-loading-quota", IslandScene(store: loadingStore, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.update { $0.showResetCountdown = false }
-        save("island-loading-no-reset", IslandScene(store: loadingStore, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-loading-no-reset", IslandScene(store: loadingStore, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.update { $0.showResetCountdown = true; $0.showIslandTokens = true }
-        save("island-loading-tokens", IslandScene(store: loadingStore, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-loading-tokens", IslandScene(store: loadingStore, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         loadingStore.replace(report: UsageReport(generatedAt: resetNow, snapshots: [], sessions: [],
                                                 indexing: IndexProgress(done: 12, total: 80)))
-        save("island-loading-indexing", IslandScene(store: loadingStore, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-loading-indexing", IslandScene(store: loadingStore, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.update { $0.showIslandTokens = false }
         let quotaSnapshots = quotaAgents.enumerated().map { index, agent in
             UsageSnapshot(agentId: agent.id, remainingPct: [88, 21, 40, 74][index],
@@ -357,7 +358,7 @@ public enum SnapshotRunner {
                           updatedAt: resetNow)
         }
         store.replace(report: UsageReport(generatedAt: resetNow, snapshots: quotaSnapshots, sessions: []))
-        save("island-weekly-resets-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-weekly-resets-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         // Full names too long for a row give way to their short names: Claude's weekly window in English, a Codex bucket's
         // and a pool's with its plan.
         let pool = BillingPool(provider: "Kimi", realm: "CN", product: .plan, scope: "snapshot", evidence: .account, entitlement: "kimi-code")
@@ -373,7 +374,7 @@ public enum SnapshotRunner {
         store.replace(report: UsageReport(generatedAt: resetNow, snapshots: longNames.map {
             UsageSnapshot(agentId: $0.id, remainingPct: 64, resetAt: resetNow.addingTimeInterval(86400), windowDuration: 7 * 86400, updatedAt: resetNow)
         }, sessions: []))
-        save("island-long-names-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-long-names-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.updateAgents { _ in quotaAgents }
         let resetBalances: [(String, CodexResetCredits?)] = [
             ("available", DemoData.codexResetCredits(now: resetNow)),
@@ -388,7 +389,7 @@ public enum SnapshotRunner {
         for (name, balance) in resetBalances {
             store.replace(report: UsageReport(generatedAt: resetNow, snapshots: quotaSnapshots, sessions: [],
                                              codexResetCredits: balance))
-            save("island-reset-\(name)-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+            save("island-reset-\(name)-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
             if let balance, balance.availableCount > 0 {
                 // The details a hovered row opens, on the island's card in the standard look.
                 let look = HUDLook.standard
@@ -397,19 +398,19 @@ public enum SnapshotRunner {
                      folder: folder, scheme: .dark)
             }
             if name == "available" {
-                save("island-reset-available-light", IslandScene(store: store, settings: settings, open: true, light: true), folder: folder, scheme: .light)
+                save("island-reset-available-light", IslandScene(store: store, settings: settings, open: true, light: true, look: .standard), folder: folder, scheme: .light)
                 settings.update { $0.showResetCountdown = false }
-                save("island-reset-dates-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+                save("island-reset-dates-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
                 settings.update { $0.showResetCountdown = true; $0.showIslandQuota = false }
-                save("island-reset-quota-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+                save("island-reset-quota-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
                 settings.update { $0.showIslandQuota = true }
                 settings.setAgent(id: "codex", enabled: false)
-                save("island-reset-codex-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+                save("island-reset-codex-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
                 settings.setAgent(id: "codex", enabled: true)
             }
         }
         settings.update { $0.showResetCountdown = false }
-        save("island-no-reset-column-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-no-reset-column-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
 
         // An API-billed agent has one account card, controlled by its agent switch.
         let deepseek = AgentDescriptor(id: "deepseek", vendor: "DeepSeek", model: "Harness", source: L10n.sourceDeepSeekSessions, enabled: true)
@@ -418,16 +419,16 @@ public enum SnapshotRunner {
         store.replace(report: UsageReport(generatedAt: resetNow, snapshots: quotaSnapshots, sessions: [],
                                          billing: [DemoData.deepSeekBilling(now: resetNow)],
                                          codexResetCredits: DemoData.codexResetCredits(now: resetNow)))
-        save("island-layout-all-agents", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-layout-all-agents", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.updateAgents { _ in [quotaAgents[0], deepseek] }
         settings.update { $0.showResetCountdown = true }
         store.replace(report: UsageReport(generatedAt: resetNow, snapshots: [quotaSnapshots[0]], sessions: [],
                                          billing: [DemoData.deepSeekBilling(now: resetNow)]))
-        save("island-deepseek-enabled-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-deepseek-enabled-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.setAgent(id: "deepseek", enabled: false)
-        save("island-deepseek-disabled-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-deepseek-disabled-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.updateAgents { _ in [deepseek] }
-        save("island-deepseek-only-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-deepseek-only-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
 
         // Native and Pi accounts can both be current; an older sign-in remains a historical reading.
         let currentAccount = ProviderAccount.identified(provider: "Codex", user: "work@example.com", workspace: "team")!
@@ -458,7 +459,7 @@ public enum SnapshotRunner {
                                    resetCredits: .init(availableCount: 0, credits: nil)),
                 AccountObservation(account: previousAccount, label: "me@example.com", plan: "prolite", observedAt: resetNow.addingTimeInterval(-3 * 3600), isCurrent: false),
             ]]))
-        save("island-provider-accounts-dark", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("island-provider-accounts-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         save("settings-agents-provider-accounts-dark", SettingsView(settings: settings, store: store, initialTab: .sources,
             sourceStatuses: [.init(id: "codex-cli", name: "Codex", detail: "", state: .ready(plan: "pro"))], initialProviderID: "Codex")
             .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
@@ -491,7 +492,7 @@ public enum SnapshotRunner {
                 .init(account: account, client: "Grok CLI", label: "me@example.com", plan: "SuperGrok", observedAt: now,
                     wallets: [.init(kind: .prepaid, balance: 0, observedAt: now), .init(kind: .onDemand, used: 0, limit: 0, observedAt: now)]),
             ]]))
-        save("quota-grok-unknown-zero-wallets", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("quota-grok-unknown-zero-wallets", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.updateAgents { _ in [weekly, extra] }
         store.replace(report: UsageReport(generatedAt: now, snapshots: [
             .init(agentId: weekly.id, remainingPct: 99.329611, resetAt: reset, windowDuration: TimeInterval(7 * 86400), updatedAt: nativeAt),
@@ -502,11 +503,11 @@ public enum SnapshotRunner {
                           .init(kind: .onDemand, used: Decimal(string: "2.50"), limit: 10, observedAt: walletAt)],
                 sourceInfo: L10n.text("额度来自 Grok Bot 缓存；在 Bot 中刷新可更新读数", "Quota from Grok Bot cache; refresh in Bot to update")),
         ]]))
-        save("quota-grok-native-wallets", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("quota-grok-native-wallets", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
     }
 
     /// A question half answered: the first of two, one option picked, so the card shows what choosing looks like.
-    private static func snapshotQuestion() -> PermissionRequest {
+    static func snapshotQuestion() -> PermissionRequest {
         let questions = [
             PermissionQuestion(question: L10n.text("这 40 个提交现在推上去吗？推了之后 PR 的标题和正文也要改。",
                                                    "Push the 40 commits now? The PR title and body need updating after."),
@@ -741,8 +742,10 @@ public enum SnapshotRunner {
         // Limit visual rechecks to the changed surface, e.g. AGENTHUD_SNAPSHOT_PREFIX=settings-.
         if let prefix = ProcessInfo.processInfo.environment["AGENTHUD_SNAPSHOT_PREFIX"], !name.hasPrefix(prefix) { return }
         // Default sizing options so the hosting view reports SwiftUI's ideal size; then freeze it.
-        // Animated glow previews draw from layers that bitmap caching cannot see; snapshots use a still frame.
-        let hosting = NSHostingView(rootView: view.environment(\.glowFrozenTime, 0.9).ignoresSafeArea())
+        // Animated glow previews draw from layers that bitmap caching cannot see; snapshots use a still frame. Glass and
+        // blur are not drawn by bitmap caching either; glass is drawn as its stand-in.
+        let hosting = NSHostingView(rootView: view.environment(\.glowFrozenTime, 0.9).environment(\.drawsGlassStandIn, true)
+            .ignoresSafeArea())
         var size = hosting.fittingSize
         if size.width <= 0 || size.height <= 0 { size = hosting.intrinsicContentSize }
         guard size.width > 0, size.height > 0 else {
@@ -838,7 +841,10 @@ struct IslandScene: View {
     let store: UsageStore
     let settings: SettingsStore
     let open: Bool
+    /// The desktop around the HUD is light, which the look leaves alone.
     let light: Bool
+    /// What the HUD in the scene looks like.
+    let look: HUDLook
     var maximumPanelHeight: CGFloat = (NSScreen.main?.frame.height ?? 900) - 80
     var alert: IslandAlert? = nil
     var showsAlertDetails = false
@@ -849,8 +855,6 @@ struct IslandScene: View {
     var glowTime: Double? = nil
     /// The key of the screen whose layout the panel and the glow follow; nil follows the shared layout and every agent.
     var screen: String? = nil
-    /// What the HUD in the scene looks like. `light` is the desktop around it, which the look leaves alone.
-    var look = HUDLook.standard
 
     /// The glow beside the notch: every agent's, or the agents the screen's layout lists.
     private var glowAppearance: GlowAppearance {

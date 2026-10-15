@@ -15,9 +15,11 @@ enum LogoImages {
         var side: Int
         /// Outline thickness in device pixels. A hairline: one pixel reads as an edge, more as a border.
         var outline: Int
-        /// Which artwork variant to bake, for the vendors that ship one per background. It does not choose
-        /// the ink: a single-colour mark is always drawn light, because what sits behind the queue is the
-        /// wallpaper, not an app surface, and the system's appearance says nothing about the contrast there.
+        /// Whether the mark is drawn for a light ground, the surface of a light HUD it stands on: the artwork
+        /// variant made for a light background, for the vendors that ship one per background, and a single-colour
+        /// mark in dark ink with a light outline. Otherwise a single-colour mark is drawn light with a dark outline,
+        /// which reads on the island's black and on any wallpaper; the system's appearance says nothing about the
+        /// contrast there, so only the HUD's own look, and whether a surface is behind the mark, choose this.
         var light: Bool
     }
 
@@ -63,7 +65,7 @@ enum LogoImages {
         // The ring is built opaque in its own bitmap and composited once. Drawing the eight offsets straight
         // into this context would let them accumulate where they overlap, which is most of the ring, and the
         // outline would come out near black however low each pass was set.
-        if outline > 0, let ring = ring(mark: mark, rect: rect, thickness: outline, canvas: canvas) {
+        if outline > 0, let ring = ring(mark: mark, rect: rect, thickness: outline, canvas: canvas, light: key.light) {
             context.saveGState()
             context.setAlpha(Self.outlineOpacity)
             context.draw(ring, in: CGRect(x: 0, y: 0, width: CGFloat(canvas), height: CGFloat(canvas)))
@@ -71,11 +73,11 @@ enum LogoImages {
         }
 
         if AgentArtwork.isTemplate(key.vendor) {
-            // A single-colour mark carries no colour of its own; it is drawn as a white stencil, with the
-            // outline above doing the work on a pale wallpaper.
+            // A single-colour mark carries no colour of its own; it is drawn as a stencil in the ground's ink, white
+            // or dark, with the outline above doing the work on a wallpaper of the same lightness.
             context.saveGState()
             context.clip(to: rect, mask: mark)
-            context.setFillColor(NSColor.white.cgColor)
+            context.setFillColor(key.light ? BotForm.ink(on: .light) : NSColor.white.cgColor)
             context.fill(rect)
             context.restoreGState()
         } else {
@@ -104,8 +106,8 @@ enum LogoImages {
                       height: CGFloat(maxY - minY + 1) / CGFloat(height))
     }
 
-    /// How dark the finished outline is. Enough to separate a white mark from a pale wallpaper, not enough
-    /// to read as a border drawn around it.
+    /// How strong the finished outline is. Enough to separate a white mark from a pale wallpaper, or a dark one
+    /// from a dark wallpaper, not enough to read as a border drawn around it.
     static let outlineOpacity: CGFloat = 0.5
     /// Passes over the ring. Smearing an anti-aliased silhouette leaves a soft edge however thin the offset
     /// is; drawing it again drives the half-covered pixels to opaque, which is what makes the line crisp
@@ -121,14 +123,15 @@ enum LogoImages {
 
     /// The mark's silhouette spread one pixel in every direction, with the mark itself knocked back out of
     /// it. Without that the ring survives under the mark's own half-transparent edge and shows through it,
-    /// which reads as a thick muddy border rather than an edge.
-    private static func ring(mark: CGImage, rect: CGRect, thickness: CGFloat, canvas: Int) -> CGImage? {
+    /// which reads as a thick muddy border rather than an edge. It is black round a mark for a dark ground and
+    /// white round one for a light ground.
+    private static func ring(mark: CGImage, rect: CGRect, thickness: CGFloat, canvas: Int, light: Bool) -> CGImage? {
         guard let context = CGContext(
             data: nil, width: canvas, height: canvas, bitsPerComponent: 8, bytesPerRow: canvas * 4,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
         context.interpolationQuality = .none
-        context.setFillColor(NSColor.black.cgColor)
+        context.setFillColor(light ? NSColor.white.cgColor : NSColor.black.cgColor)
         for _ in 0..<outlinePasses {
             for offset in neighbours {
                 let shifted = rect.offsetBy(dx: offset.x * thickness, dy: offset.y * thickness)

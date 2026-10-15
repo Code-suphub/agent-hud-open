@@ -23,7 +23,7 @@ extension SnapshotRunner {
         func shoot(_ name: String, _ proposal: PanelLayout) {
             settings.panelLayout.propose(proposal)
             settings.panelLayout.save()
-            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false),
+            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard),
                  folder: folder, scheme: .dark)
         }
         shoot("sessions-3", PanelLayout(sessions: PanelLayout.Sessions(limit: 3)))

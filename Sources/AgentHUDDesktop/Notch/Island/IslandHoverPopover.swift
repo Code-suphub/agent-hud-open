@@ -4,7 +4,8 @@ import SwiftUI
 /// Island details must track the mouse even while another app has keyboard focus.
 ///
 /// The details are a window of their own, which the HUD's environment does not reach: they are drawn with the look of
-/// the HUD the row is in, which the popover reads where it is placed and hands on.
+/// the HUD the row is in, which the popover reads where it is placed and hands on. They stand on a surface of that look
+/// (`HUDSurface`), whose glass shows what is behind their window, the panel under them included.
 struct IslandHoverPopover<Content: View>: NSViewRepresentable {
     let content: Content
     var enabled = true

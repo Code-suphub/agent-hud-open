@@ -69,8 +69,8 @@ struct ScreenLayoutRow: View {
 }
 
 /// One screen's HUD style, in that screen's part of Settings → Display: Reset to Default gives it the default placement
-/// and glow at once, the HUD's mode, place and sizes and the glow together, and leaves its panel layout. It is a version
-/// of the screen, so the Panel layout row's Revert to Previous undoes it.
+/// and glow at once, the HUD's mode, place and sizes, its appearance and material, Dark and Solid, and the glow together,
+/// and leaves its panel layout. It is a version of the screen, so the Panel layout row's Revert to Previous undoes it.
 struct ScreenStyleRow: View {
     let settings: SettingsStore
     let screen: String
@@ -84,8 +84,8 @@ struct ScreenStyleRow: View {
 
     var body: some View {
         SettingRow(label: L10n.text("HUD 样式", "HUD style"),
-                   subtitle: L10n.text("形态、位置、大小和光晕一起回到默认；「恢复上一版」可以撤销。",
-                                       "Mode, position, sizes and glow go back to their defaults; Revert to Previous undoes it.")) {
+                   subtitle: L10n.text("形态、位置、大小、外观和光晕一起回到默认；「恢复上一版」可以撤销。",
+                                       "Mode, position, sizes, appearance and glow go back to their defaults; Revert to Previous undoes it.")) {
             Button(L10n.text("恢复默认", "Reset to Default"), action: reset)
                 .controlSize(.small)
                 .disabled(!canReset)

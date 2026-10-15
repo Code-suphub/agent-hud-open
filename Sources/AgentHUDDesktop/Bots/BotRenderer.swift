@@ -29,6 +29,15 @@ enum BotRenderer {
 
     /// The island's own dark: eyes drawn in it read as cut out of any body, on the island or over a wallpaper.
     private static let ink = CGColor(srgbRed: 0.05, green: 0.05, blue: 0.06, alpha: 1)
+
+    /// What reads as cut out of a body drawn in `form`'s ink: the island's dark out of a light body, the light ground's
+    /// own colour out of a dark one.
+    private static func cut(_ form: BotForm) -> CGColor {
+        switch form.ground {
+        case .dark: ink
+        case .light: color(BotSpec.lightCut)
+        }
+    }
     private static let box = CGRect(x: 0, y: 0, width: 1, height: 1)
 
     /// A frame's bitmap, in the byte order and the colours of the display it is for. A layer given any other
@@ -45,8 +54,8 @@ enum BotRenderer {
 
     /// One frame, `side` pixels to the mark's side, with `margin` of room on every edge.
     ///
-    /// - outline: pixels of dark hairline round the bot, for a bot that sits on a wallpaper beside the logo
-    ///   queue's outlined marks. The picture grows by that much on every edge.
+    /// - outline: pixels of hairline round the bot, for a bot that sits on a wallpaper beside the logo queue's outlined
+    ///   marks: dark round a bot in light ink, light round one in dark ink. The picture grows by that much on every edge.
     /// - space: the colours of the display the frame is shown on; sRGB when it is not known.
     static func image(_ form: BotForm, motion: BotMotion, side: CGFloat, outline: Int = 0, space: CGColorSpace? = nil) -> CGImage? {
         let inner = Int((side * (1 + 2 * margin)).rounded(.up)), extent = inner + outline * 2
@@ -68,23 +77,24 @@ enum BotRenderer {
                 context.setBlendMode(.plusLighter)
                 context.beginTransparencyLayer(auxiliaryInfo: nil)
                 draw(form.stripped ?? form.artwork, in: box, on: context)
-                ownEyes(eyes, face: motion.face, on: context)
+                ownEyes(eyes, face: motion.face, ink: form.ink, on: context)
                 context.endTransparencyLayer()
             }
         } else {
             body(form, motion: motion, on: context)
         }
         context.restoreGState()
-        if outline > 0 { hairline(on: context, extent: extent, reach: outline) }
+        if outline > 0 { hairline(on: context, extent: extent, reach: outline, ground: form.ground) }
         return context.makeImage()
     }
 
     /// Darkens the pixels just outside the bot, the way the queue's marks are outlined: the silhouette spread
-    /// by `reach`, hardened so a soft edge still gives a crisp line, and drawn behind the bot at half strength.
+    /// by `reach`, hardened so a soft edge still gives a crisp line, and drawn behind the bot at half strength. Round a
+    /// bot in dark ink, drawn for a light ground, the line is white instead.
     ///
     /// The marks build theirs once, from masks. A bot is drawn again whenever it blinks, so its hairline comes
     /// from the picture's own alpha instead, spread by Accelerate, which costs a fraction of drawing the bot.
-    private static func hairline(on context: CGContext, extent: Int, reach: Int) {
+    private static func hairline(on context: CGContext, extent: Int, reach: Int, ground: HUDLook.Appearance) {
         guard let data = context.data else { return }
         let count = extent * extent, size = vImagePixelCount(extent), none = vImage_Flags(kvImageNoFlags)
         let alpha = UnsafeMutablePointer<UInt8>.allocate(capacity: count), spread = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
@@ -109,7 +119,7 @@ enum BotRenderer {
         context.setBlendMode(.destinationOver)
         context.setAlpha(LogoImages.outlineOpacity)
         context.clip(to: whole, mask: mask)
-        context.setFillColor(.black)
+        context.setFillColor(ground == .light ? .white : .black)
         context.fill(whole)
         context.restoreGState()
     }
@@ -134,7 +144,7 @@ enum BotRenderer {
         let ringShare = spec.ring == nil ? 0 : max(0, min(1, (share - 0.5) / 0.5))
         if let ring = spec.ring, ringShare > 0 {
             context.setAlpha(ringShare)
-            context.setStrokeColor(.white)
+            context.setStrokeColor(form.ink)
             context.setLineWidth(ring.width * radius)
             context.setLineCap(.round)
             context.addPath(ringPath(ring, spec: spec, grown: ringShare, nearSideOnly: false))
@@ -197,7 +207,7 @@ enum BotRenderer {
             context.addPath(outline)
             context.clip()
             context.setAlpha(ringShare)
-            context.setStrokeColor(ink)
+            context.setStrokeColor(cut(form))
             context.setLineWidth(ring.width * radius)
             context.setLineCap(.butt)
             context.addPath(ringPath(ring, spec: spec, grown: ringShare, nearSideOnly: true))
@@ -322,7 +332,7 @@ enum BotRenderer {
             if let field = form.field {
                 draw(field, in: CGRect(x: origin.x - 0.25, y: origin.y - 0.25, width: 1.5, height: 1.5), on: context)
             } else {
-                context.setFillColor(.white)
+                context.setFillColor(form.ink)
                 context.fill(everything)
             }
         case .solid(let value):
@@ -380,8 +390,8 @@ enum BotRenderer {
         }
     }
 
-    /// Eyes that belong to the artwork: drawn where the mark draws them, in the mark's own light ink.
-    private static func ownEyes(_ eyes: [CGRect], face: BotFace, on context: CGContext) {
+    /// Eyes that belong to the artwork: drawn where the mark draws them, in the mark's own `ink`.
+    private static func ownEyes(_ eyes: [CGRect], face: BotFace, ink: CGColor, on context: CGContext) {
         guard let first = eyes.first, let last = eyes.last else { return }
         let middle = (first.midX + last.midX) / 2, apart = abs(last.midX - first.midX)
         for eye in eyes {
@@ -393,13 +403,13 @@ enum BotRenderer {
                                 y: eye.midY + min(0.03, eye.height * 0.14) * face.lookY)
             if face.happy < 0.98 {
                 context.setAlpha(1 - face.happy)
-                context.setFillColor(.white)
+                context.setFillColor(ink)
                 context.addPath(pill(width, max(height, width * 0.16), round: 1))
                 context.fillPath()
             }
             if face.happy > 0.02 {
                 smile(half: min(eye.width * 0.95, apart * 0.3), stroke: min(eye.width * 0.6, apart * 0.2),
-                      paint: .white, strength: face.happy, on: context)
+                      paint: ink, strength: face.happy, on: context)
             }
             context.restoreGState()
         }

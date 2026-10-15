@@ -2,8 +2,9 @@ import AppKit
 import AgentHUDCore
 import CoreGraphics
 
-/// Everything a bot needs from its mark's artwork, read once: the artwork in light ink, how far it reaches
-/// from the body's centre in every direction, the body's own reach, and the mark's colours as a soft field.
+/// Everything a bot needs from its mark's artwork, read once for the ground it stands on: the artwork in the
+/// ground's ink, how far it reaches from the body's centre in every direction, the body's own reach, and the
+/// mark's colours as a soft field.
 ///
 /// The morph is the first outline relaxing into the second while the artwork fades into the field, which is
 /// why both outlines are taken as reach per degree from one centre: any two can be blended angle by angle.
@@ -15,6 +16,9 @@ final class BotForm {
     private static let grain = 256
 
     let vendor: String
+    /// The ground the bot is drawn for: a dark one, the island's black or a wallpaper, takes light ink, and a light
+    /// one, a light HUD's surface, dark ink.
+    let ground: HUDLook.Appearance
     let spec: BotSpec
     let artwork: CGImage
     /// The artwork with its own eyes taken out, for a mark that keeps its artwork and animates them.
@@ -23,24 +27,31 @@ final class BotForm {
     let bodyReach: [CGFloat]
     let field: CGImage?
 
-    private static var cache: [String: BotForm?] = [:]
+    /// One form per mark and ground.
+    private struct Key: Hashable {
+        let mark: String
+        let light: Bool
+    }
 
-    static func form(for vendor: String) -> BotForm? {
-        let key = AgentArtwork.markKey(vendor)
+    private static var cache: [Key: BotForm?] = [:]
+
+    static func form(for vendor: String, ground: HUDLook.Appearance) -> BotForm? {
+        let key = Key(mark: AgentArtwork.markKey(vendor), light: ground == .light)
         if let hit = cache[key] { return hit }
-        let form = read(vendor)
+        let form = read(vendor, ground: ground)
         cache[key] = form
         return form
     }
 
     /// Reads a mark afresh, without the cache.
-    static func read(_ vendor: String) -> BotForm? {
-        BotSpec.spec(for: vendor).flatMap { BotForm(vendor: vendor, spec: $0) }
+    static func read(_ vendor: String, ground: HUDLook.Appearance) -> BotForm? {
+        BotSpec.spec(for: vendor, ground: ground).flatMap { BotForm(vendor: vendor, ground: ground, spec: $0) }
     }
 
-    private init?(vendor: String, spec: BotSpec) {
-        guard let artwork = Self.lightArtwork(for: vendor), let pixels = Self.pixels(of: artwork) else { return nil }
+    private init?(vendor: String, ground: HUDLook.Appearance, spec: BotSpec) {
+        guard let artwork = Self.artwork(for: vendor, ground: ground), let pixels = Self.pixels(of: artwork) else { return nil }
         self.vendor = vendor
+        self.ground = ground
         self.spec = spec
         self.artwork = artwork
         logoReach = Self.reach(alphaOf: pixels, from: spec.center)
@@ -51,10 +62,21 @@ final class BotForm {
 
     // MARK: Artwork
 
-    /// The dark-surface artwork at a fixed size. A single-colour mark carries no colour of its own and is
-    /// drawn as a white stencil, the way the logo queue draws it.
-    private static func lightArtwork(for vendor: String) -> CGImage? {
-        guard let image = AgentArtwork.original(for: vendor, light: false) else { return nil }
+    /// The ink a single-colour mark is drawn in on `ground`: white on a dark one, the light HUD's ink on a light one.
+    static func ink(on ground: HUDLook.Appearance) -> CGColor {
+        switch ground {
+        case .dark: .white
+        case .light: CGColor(srgbRed: 0x1d / 255, green: 0x1d / 255, blue: 0x1f / 255, alpha: 1)
+        }
+    }
+
+    /// This form's ink (`ink(on:)`).
+    var ink: CGColor { Self.ink(on: ground) }
+
+    /// The artwork made for `ground` at a fixed size. A single-colour mark carries no colour of its own and is drawn
+    /// as a stencil in the ground's ink, the way the logo queue draws it.
+    private static func artwork(for vendor: String, ground: HUDLook.Appearance) -> CGImage? {
+        guard let image = AgentArtwork.original(for: vendor, light: ground == .light) else { return nil }
         var rect = CGRect(origin: .zero, size: image.size)
         guard let mark = image.cgImage(forProposedRect: &rect, context: nil, hints: nil),
               let context = bitmap(grain) else { return nil }
@@ -62,7 +84,7 @@ final class BotForm {
         context.interpolationQuality = .high
         if AgentArtwork.isTemplate(vendor) {
             context.clip(to: box, mask: mark)
-            context.setFillColor(.white)
+            context.setFillColor(ink(on: ground))
             context.fill(box)
         } else {
             context.draw(mark, in: box)

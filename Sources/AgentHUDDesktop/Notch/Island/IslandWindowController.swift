@@ -7,6 +7,8 @@ import SwiftUI
 final class IslandWindowController {
     let panel: OverlayPanel
     private let hosting: TrackingHostingView
+    /// Whether the island has been given its screen's view yet, and with it the look a later change fades from.
+    private var hasShownLook = false
 
     var rootView: IslandRootView { hosting.rootView }
 
@@ -18,6 +20,7 @@ final class IslandWindowController {
         panel = OverlayPanel(frame: frame, level: NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1), acceptsMouse: true)
         panel.title = "Agent HUD Island"
         hosting = TrackingHostingView(rootView: rootView)
+        hosting.appearance = rootView.look.islandAppearanceName.flatMap(NSAppearance.init(named:))
         hosting.sizingOptions = []
         hosting.frame = CGRect(origin: .zero, size: frame.size)
         hosting.autoresizingMask = [.width, .height]
@@ -25,6 +28,17 @@ final class IslandWindowController {
     }
 
     func setRootView(_ view: IslandRootView) {
+        // What AppKit draws on the island, such as the scroller, a text field's caret and a template image, follows the
+        // hosting view's appearance: the look's, set again when the look changes, or the app's under the standard look.
+        if hosting.appearance?.name != view.look.islandAppearanceName {
+            hosting.appearance = view.look.islandAppearanceName.flatMap(NSAppearance.init(named:))
+        }
+        var view = view
+        // The first view replaces the placeholder, whose standard look is no look the screen chose to fade from.
+        if !hasShownLook {
+            view.animatesLook = false
+            hasShownLook = true
+        }
         hosting.rootView = view
         // Commit SwiftUI's layout in the same run-loop turn as the glow layers.
         hosting.layoutSubtreeIfNeeded()

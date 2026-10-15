@@ -17,6 +17,7 @@ struct ModelUsageRow: View {
     @State private var isHovered = false
     @Environment(\.panelSpacing) private var spacing
     @Environment(\.hudTheme) private var theme
+    @Environment(\.hudLook) private var look
 
     var body: some View {
         if let displayedForecastHint {
@@ -35,18 +36,21 @@ struct ModelUsageRow: View {
         let level = row.level ?? .ok
         let color = theme.status(level)
         let value = metricValue
-        let metricColor = switch metric {
-        case .quota: color
-        case .burnRate: runsOut ? theme.status(.warning) : theme.status(.ok)
-        case .tokens, .cost: theme.status(.ok)
+        let metricLevel: StatusLevel = switch metric {
+        case .quota: level
+        case .burnRate: runsOut ? .warning : .ok
+        case .tokens, .cost: .ok
         }
-        let valueColor = row.level == nil ? theme.secondary : metricColor
-        let markerColor = row.level == nil || value == nil ? theme.tertiary : metricColor
+        // The marker is filled with the level's colour; the value is text, in the level's text colour.
+        let valueColor = row.level == nil ? theme.secondary : theme.statusText(metricLevel)
+        let markerColor = row.level == nil || value == nil ? theme.tertiary : theme.status(metricLevel)
         return HStack(spacing: IslandRowLayout.spacing) {
             Circle()
                 .fill(markerColor)
                 .frame(width: IslandRowLayout.markerWidth, height: IslandRowLayout.markerWidth)
-                .shadow(color: row.level == nil || value == nil ? .clear : markerColor, radius: 4)
+                // A lit LED on a dark HUD. On a light one a glow would only blur the dot's edge.
+                .shadow(color: row.level == nil || value == nil || look.appearance == .light ? .clear : markerColor,
+                        radius: 4)
             // A name is never cut: one too long for the column gives way to the window's short name.
             ViewThatFits(in: .horizontal) {
                 nameText(row.agent.name)
@@ -73,7 +77,7 @@ struct ModelUsageRow: View {
             if showsDetail {
                 Text(metricDetail)
                     .font(.tabular(12))
-                    .foregroundStyle(metric == .burnRate && runsOut ? theme.status(.warning) : theme.secondary)
+                    .foregroundStyle(metric == .burnRate && runsOut ? theme.statusText(.warning) : theme.secondary)
                     .lineLimit(1)
                     .frame(width: 96, alignment: .trailing)
                     .contentTransition(.numericText())

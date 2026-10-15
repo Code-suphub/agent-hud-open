@@ -37,7 +37,7 @@ struct IslandAlertCompactView: View {
                     HStack(spacing: s(7)) {
                         TurnEndedSymbol(size: s(16))
                         Text(Self.replyStatus)
-                            .font(.ui(s(12), .medium)).foregroundStyle(Color(alert.accent))
+                            .font(.ui(s(12), .medium)).foregroundStyle(alert.accentText(theme))
                     }.frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
                 }
                 .foregroundStyle(theme.alertText)
@@ -77,16 +77,16 @@ struct IslandAlertDetailView: View {
                     BotMark(vendor: event.agentVendor, size: 24, phase: .done)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(event.agentVendor).font(.ui(13, .semibold))
-                        Text(event.model).font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.45))
+                        Text(event.model).font(.ui(11)).foregroundStyle(theme.alertInk(0.45))
                     }
                     Spacer()
                     TurnEndedSymbol()
                     Text(L10n.text("有新回复", "New reply"))
-                        .font(.ui(12, .medium)).foregroundStyle(Color(alert.accent))
+                        .font(.ui(12, .medium)).foregroundStyle(alert.accentText(theme))
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(theme.alertText.opacity(0.65))
+                            .foregroundStyle(theme.alertInk(0.65))
                             .frame(width: 24, height: 24)
                             .contentShape(Rectangle())
                     }
@@ -99,7 +99,7 @@ struct IslandAlertDetailView: View {
                     Text(event.task).font(.ui(15, .medium)).lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                     if let message = event.message {
-                        Text(message).font(.ui(12)).foregroundStyle(theme.alertText.opacity(0.68)).lineLimit(4)
+                        Text(message).font(.ui(12)).foregroundStyle(theme.alertInk(0.68)).lineLimit(4)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -109,7 +109,7 @@ struct IslandAlertDetailView: View {
                     if let start = event.startedAt {
                         Text(Countdown.compact(max(0, event.completedAt.timeIntervalSince(start))))
                     }
-                }.font(.tabular(11)).foregroundStyle(theme.alertText.opacity(0.5))
+                }.font(.tabular(11)).foregroundStyle(theme.alertInk(0.5))
                 CompletionAlertActions(hasSession: event.navigationTarget != nil,
                                        navigationFailed: sessionNavigationFailed,
                                        onOpenSession: onOpenSession, onOpenUsage: onOpenUsage)
@@ -169,7 +169,7 @@ struct IslandEventPanelView: View {
                             .font(.ui(11, .semibold)).foregroundStyle(color.secondary)
                         Spacer()
                         Text("\(requests.count)")
-                            .font(.tabular(10, .semibold)).foregroundStyle(color.signal)
+                            .font(.tabular(10, .semibold)).foregroundStyle(color.signalText)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(color.signal.opacity(0.16), in: Capsule())
                     }.padding(.horizontal, 4).padding(.bottom, 8)
@@ -211,7 +211,7 @@ private struct CompletionClosedRow: View {
                     Image(systemName: "text.bubble").font(.system(size: 8, weight: .bold))
                     Text(L10n.text("有新回复", "New reply")).font(.ui(10, .bold))
                 }
-                .foregroundStyle(Color(IslandAlert.turnAccent))
+                .foregroundStyle(theme.alertTurnText)
                 .padding(.horizontal, 4).padding(.vertical, 1)
                 .background(Color(IslandAlert.turnAccent).opacity(0.14), in: RoundedRectangle(cornerRadius: 3))
                 .fixedSize()
@@ -256,10 +256,10 @@ struct IslandAlertInlineView: View {
                     TurnEndedSymbol()
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L10n.text("\(event.agentVendor) · 有新回复", "\(event.agentVendor) · New reply"))
-                            .font(.ui(12, .medium)).foregroundStyle(Color(alert.accent))
-                        Text(event.task).font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.7)).lineLimit(1)
+                            .font(.ui(12, .medium)).foregroundStyle(alert.accentText(theme))
+                        Text(event.task).font(.ui(11)).foregroundStyle(theme.alertInk(0.7)).lineLimit(1)
                         if let message = event.message {
-                            Text(message).font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.45)).lineLimit(1)
+                            Text(message).font(.ui(11)).foregroundStyle(theme.alertInk(0.45)).lineLimit(1)
                         }
                     }
                     Spacer()
@@ -284,11 +284,11 @@ private struct CompletionAlertActions: View {
         VStack(alignment: .leading, spacing: 8) {
             if navigationFailed && hasSession {
                 Text(L10n.text("无法回到会话，请重试或查看 Token 用量", "Couldn't return to session. Retry or view token usage."))
-                    .font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.65))
+                    .font(.ui(11)).foregroundStyle(theme.alertInk(0.65))
                     .fixedSize(horizontal: false, vertical: true)
             } else if !hasSession {
                 Text(L10n.text("暂时无法回到原会话", "Session return unavailable"))
-                    .font(.ui(11)).foregroundStyle(theme.alertText.opacity(0.5))
+                    .font(.ui(11)).foregroundStyle(theme.alertInk(0.5))
             }
             HStack(spacing: 6) {
                 Button(action: onOpenUsage) {
@@ -314,9 +314,9 @@ private struct CompletionAlertActions: View {
                                  : L10n.text("回到会话", "Return to session"))
                                 .font(.ui(11, .medium)).lineLimit(1)
                         }
-                        .foregroundStyle(theme.onAccent)
+                        .foregroundStyle(theme.onAlertFill)
                         .padding(.horizontal, 9).frame(height: 22)
-                        .background(Color(IslandAlert.turnAccent), in: RoundedRectangle(cornerRadius: 6))
+                        .background(theme.alertTurnFill, in: RoundedRectangle(cornerRadius: 6))
                         .contentShape(Rectangle())
                     }
                     .accessibilityIdentifier("island-alert-openSession")
@@ -328,10 +328,11 @@ private struct CompletionAlertActions: View {
 
 private struct TurnEndedSymbol: View {
     var size: CGFloat = 16
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         Image(systemName: "text.bubble")
             .symbolRenderingMode(.palette)
-            .font(.system(size: size, weight: .semibold)).foregroundStyle(Color(IslandAlert.turnAccent))
+            .font(.system(size: size, weight: .semibold)).foregroundStyle(theme.alertTurnText)
     }
 }

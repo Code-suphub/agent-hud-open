@@ -7,9 +7,11 @@ import XCTest
 /// beside its notch, and a second one with a Dynamic dock.
 final class PanelToolsScreensTests: PanelToolsCase {
     private let builtIn = PanelScreen(key: "BUILT-IN-UUID", name: "Built-in display", mode: .notch, edge: .top, hasNotch: true,
-                                      agents: ["Claude", "Codex", "DeepSeek"])
+                                      agents: ["Claude", "Codex", "DeepSeek"],
+                                      systemIsLight: false, reducesTransparency: false)
     private let second = PanelScreen(key: "SECOND-UUID", name: "Display 2", mode: .logos, edge: .right, hasNotch: false,
-                                     agents: ["Claude", "Codex", "Cursor"])
+                                     agents: ["Claude", "Codex", "Cursor"],
+                                     systemIsLight: false, reducesTransparency: false)
     /// The scopes the renderer was asked to draw or measure, in order.
     private var asked: [PanelLayoutScope] = []
 
@@ -273,8 +275,8 @@ final class PanelToolsScreensTests: PanelToolsCase {
     func testWhatIsReadOfTheScreensNamesNoOneAndNoAccount() throws {
         let text = String(decoding: try RecordCoding.encoder().encode(JSONValue.object(try call(MCPTools.getPanel))), as: UTF8.self)
         for listed in screens(try call(MCPTools.getPanel)) {
-            XCTAssertEqual(listed.keys.sorted(), ["agents", "edge", "hasNotch", "hud", "key", "layout", "mode", "name", "shows",
-                                                  "styleUnsaved", "unsaved", "width"])
+            XCTAssertEqual(listed.keys.sorted(), ["agents", "edge", "hasNotch", "hud", "key", "layout", "look", "mode", "name",
+                                                  "shows", "styleUnsaved", "unsaved", "width"])
         }
         let labels = (store.report?.accounts ?? [:]).values.flatMap { $0 }.flatMap { [$0.displayName, $0.account.id] }
         for label in labels { XCTAssertFalse(text.contains(label), label) }

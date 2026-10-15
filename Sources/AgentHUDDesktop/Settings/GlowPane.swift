@@ -11,12 +11,11 @@ struct GlowPane: View {
     var metrics: ScreenMetrics = .fallback
     /// The display being edited. Every control here writes that screen's own glow.
     var screen: String = ""
+    /// The look of that screen's HUD, which the preview's island is drawn in.
+    let look: HUDLook
 
     /// The selected screen's glow as its HUD draws it now, an agent's unsaved style included.
     private var glow: GlowSettings { settings.effectiveGlow(on: screen) }
-
-    /// The look of the selected screen's HUD, which the preview's island is drawn in.
-    private var look: HUDLook { settings.effectiveLook(on: screen) }
 
     /// What the screen's resting HUD shows of the agents under its layout, which the preview's colours follow.
     private var agents: ScreenAgents {

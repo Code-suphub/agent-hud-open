@@ -211,6 +211,8 @@ public final class DesktopApplication {
             recorder.onFinish = { NSApp.terminate(nil) }
             try recorder.start()
             self.recorder = recorder
+            // The movie is drawn from the windows' layers, which hold no glass or blur it could show.
+            notch?.drawsGlassStandIn = true
         } catch {
             NSLog("[AgentHUD] Recording to %@ could not start: %@", path, String(describing: error))
         }

@@ -118,28 +118,45 @@ final class HUDPictureRendererTests: XCTestCase {
     /// standard look and the light surface in the light one, and the panel is the same size in both.
     func testASimplePanelIsDrawnInTheScreensLook() throws {
         layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
-        let items = ScreenAgents(store: store, listed: [], mode: .simple).meterItems
-        var top = renderer().placement
-        top.edge = .top
-        let strip = SimpleMeterConfig(items: items, placement: top).stripSize
-        // The picture, and the brightness most of the strip has: its fill, which the rings and figures leave showing.
-        func drawn(in look: HUDLook) throws -> (picture: HUDPicture, fill: CGFloat) {
-            let picture = try XCTUnwrap(HUDPictureRenderer(store: store, screen: key, hasNotch: true, look: look, metrics: notch).picture())
-            let rep = try bitmap(picture)
-            let margin = Int(HUDPictureRenderer.margin * 2), cap = Int(strip.height)
-            var levels: [CGFloat] = []
-            for y in stride(from: margin + 8, to: margin + Int(strip.height * 2) - 8, by: 2) {
-                for x in stride(from: margin + cap, to: margin + Int(strip.width * 2) - cap, by: 2) {
-                    levels.append(rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)?.brightnessComponent ?? 0)
-                }
-            }
-            return (picture, levels.sorted()[levels.count / 2])
-        }
-        let standard = try drawn(in: .standard), light = try drawn(in: HUDLook(appearance: .light))
+        let standard = try simplePanel(in: .standard), light = try simplePanel(in: HUDLook(appearance: .light))
         XCTAssertLessThan(standard.fill, 0.1, "black as ever")
         XCTAssertGreaterThan(light.fill, 0.8, "the light surface")
         XCTAssertEqual(light.picture.width, standard.picture.width)
         XCTAssertEqual(light.picture.height, standard.picture.height)
+    }
+
+    /// Nothing is behind a picture to show through glass: a panel of glass is drawn as its stand-in, its look's tint
+    /// over the backdrop, darker than the backdrop for dark glass and lighter for light glass, short of the solid fill.
+    func testAGlassPanelIsDrawnAsItsStandIn() throws {
+        layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
+        let dark = try simplePanel(in: HUDLook(appearance: .dark, material: .glass))
+        let light = try simplePanel(in: HUDLook(appearance: .light, material: .glass))
+        let solid = try simplePanel(in: HUDLook(appearance: .light))
+        XCTAssertGreaterThan(dark.fill, 0.04, "the backdrop shows through dark glass")
+        XCTAssertLessThan(dark.fill, 0.2, "darker than the backdrop")
+        XCTAssertGreaterThan(light.fill, 0.5, "lighter than the backdrop")
+        XCTAssertLessThan(light.fill, solid.fill - 0.1, "short of the light surface itself")
+        XCTAssertEqual(light.picture.width, solid.picture.width)
+        XCTAssertEqual(light.picture.height, solid.picture.height)
+    }
+
+    /// The Simple panel's picture in `look`, and the brightness most of its strip has: its fill, which the rings and
+    /// figures leave showing.
+    private func simplePanel(in look: HUDLook) throws -> (picture: HUDPicture, fill: CGFloat) {
+        let items = ScreenAgents(store: store, listed: [], mode: .simple).meterItems
+        var top = renderer().placement
+        top.edge = .top
+        let strip = SimpleMeterConfig(items: items, placement: top).stripSize
+        let picture = try XCTUnwrap(HUDPictureRenderer(store: store, screen: key, hasNotch: true, look: look, metrics: notch).picture())
+        let rep = try bitmap(picture)
+        let margin = Int(HUDPictureRenderer.margin * 2), cap = Int(strip.height)
+        var levels: [CGFloat] = []
+        for y in stride(from: margin + 8, to: margin + Int(strip.height * 2) - 8, by: 2) {
+            for x in stride(from: margin + cap, to: margin + Int(strip.width * 2) - cap, by: 2) {
+                levels.append(rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)?.brightnessComponent ?? 0)
+            }
+        }
+        return (picture, levels.sorted()[levels.count / 2])
     }
 
     // MARK: To the tools
@@ -147,7 +164,8 @@ final class HUDPictureRendererTests: XCTestCase {
     /// The tools hand the picture over with what it shows, for an attached screen only.
     func testTheToolsReturnTheRestingHUD() throws {
         let screen = PanelScreen(key: key, name: "Built-in display", mode: .notch, edge: .top, hasNotch: true,
-                                 agents: ScreenAgents.available(store: store, mode: .notch))
+                                 agents: ScreenAgents.available(store: store, mode: .notch),
+                                 systemIsLight: false, reducesTransparency: false)
         let renderer = renderer()
         let tools = PanelTools(store: store, screens: { [screen] }, hud: { _ in renderer.picture() })
         layout.proposeStyle(HUDStyle(glow: HUDStyle.Glow(effect: .ripple)), for: key, hasNotch: true)

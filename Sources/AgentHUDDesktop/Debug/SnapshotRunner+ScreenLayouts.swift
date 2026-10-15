@@ -47,13 +47,13 @@ extension SnapshotRunner {
 
         // Beside the notch: a warning and a critical agent's colours alone, where every agent's would be many.
         keep(PanelLayout(hud: PanelLayout.HUD(agents: ["OpenClaw", "GitHub Copilot", "Claude"])), for: "snapshot-notch")
-        save("panel-layout-hud-notch-glow", IslandScene(store: store, settings: settings, open: false, light: false,
+        save("panel-layout-hud-notch-glow", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard,
                                                         screen: "snapshot-notch"),
              folder: folder, scheme: .dark)
         // That screen's panel with a draft of its own, whose bar says it is this display's alone.
         layout.propose(.own(PanelLayout(hiddenSections: [.blocks], hud: PanelLayout.HUD(agents: ["OpenClaw", "Claude"]))),
                        for: "snapshot-notch")
-        save("panel-layout-screen-draft", IslandScene(store: store, settings: settings, open: true, light: false,
+        save("panel-layout-screen-draft", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard,
                                                       screen: "snapshot-notch"),
              folder: folder, scheme: .dark)
         // The same draft in Claude's own panel on a dock that separates its agents, whose narrower bar keeps one line.

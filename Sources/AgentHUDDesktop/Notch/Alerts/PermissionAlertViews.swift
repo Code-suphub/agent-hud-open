@@ -20,13 +20,18 @@ struct PermissionColor {
     var deny: Color { Color(StatusPalette.critical) }
     /// Ink on a fill of `allow`, which stays bright whatever the theme.
     var onAllow: Color { theme.onAccent }
+    /// The three as text and thin glyphs: themselves on a dark HUD, darker on a light one, where the bright fills would
+    /// not be read.
+    var signalText: Color { theme.alertWarningText }
+    var allowText: Color { theme.statusText(.ok) }
+    var denyText: Color { theme.statusText(.critical) }
 
     var text: Color { theme.text }
     var secondary: Color { theme.secondary }
     var tertiary: Color { theme.tertiary }
     /// The card being decided, and the boxes inside it.
     var surface: Color { theme.card }
-    var inset: Color { theme.rowBackground }
+    var inset: Color { theme.insetSurface }
     var border: Color { theme.cardBorder }
     /// A row the pointer is over.
     var highlight: Color { theme.segmentBackground }
@@ -116,7 +121,7 @@ struct PermissionAlertDetailView: View {
             Text(L10n.text("待审批", "Waiting")).font(.ui(11, .semibold)).foregroundStyle(color.secondary)
             Spacer()
             Text("\(queue.count)")
-                .font(.tabular(10, .semibold)).foregroundStyle(color.signal)
+                .font(.tabular(10, .semibold)).foregroundStyle(color.signalText)
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(color.signal.opacity(0.16), in: Capsule())
         }.padding(.horizontal, 4).padding(.bottom, 8)
@@ -196,7 +201,7 @@ private struct PermissionRowHead: View {
                 Image(systemName: request.symbol).font(.system(size: 8, weight: .bold))
                 Text(request.badge).font(.tabular(10, .bold))
             }
-                .foregroundStyle(color.signal)
+                .foregroundStyle(color.signalText)
                 .padding(.horizontal, 4).padding(.vertical, 1)
                 .background(color.signal.opacity(0.14), in: RoundedRectangle(cornerRadius: 3))
             // An open question shows itself in full below, one question at a time, and so does a command that came
@@ -247,7 +252,7 @@ private struct PermissionRuleNote: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: "checkmark.seal").font(.system(size: 9, weight: .bold))
-                .foregroundStyle(color.allow.opacity(0.8))
+                .foregroundStyle(color.allowText.opacity(0.8))
             Text(L10n.text("总是允许会添加", "Always allow adds")).font(.ui(11)).foregroundStyle(color.secondary)
                 .fixedSize()
             Text(rule).font(.tabular(11)).foregroundStyle(color.text.opacity(0.85))
@@ -265,8 +270,8 @@ private struct PermissionDiff: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            side(removed, sign: "−", tint: color.deny)
-            side(added, sign: "+", tint: color.allow)
+            side(removed, sign: "−", tint: color.denyText)
+            side(added, sign: "+", tint: color.allowText)
         }
         .padding(9).frame(maxWidth: .infinity, alignment: .leading)
         .background(color.inset, in: RoundedRectangle(cornerRadius: 7))
@@ -401,14 +406,14 @@ private struct PermissionButtons: View {
         HStack(spacing: 6) {
             button(L10n.text("拒绝", "Deny"), symbol: "xmark", identifier: "island-permission-deny",
                    fill: color.deny.opacity(0.14), stroke: color.deny.opacity(0.3),
-                   foreground: color.deny) { onDecide(.deny) }
+                   foreground: color.denyText) { onDecide(.deny) }
             Spacer(minLength: 8)
             if let always = request.alwaysAllow {
                 // A seal, not a tick: this answer outlives the call it was given for.
                 button(L10n.text("总是允许", "Always allow"), symbol: "checkmark.seal",
                        identifier: "island-permission-always",
                        fill: .clear, stroke: color.allow.opacity(0.4),
-                       foreground: color.allow) { onDecide(.allowAlways(always)) }
+                       foreground: color.allowText) { onDecide(.allowAlways(always)) }
             }
             button(request.allowLabel, symbol: "checkmark", identifier: "island-permission-approve",
                    fill: color.allow, stroke: .clear, foreground: color.onAllow) { onDecide(.allow) }
@@ -443,7 +448,7 @@ private struct PermissionSymbol: View {
 
     var body: some View {
         Image(systemName: "hand.raised.fill")
-            .font(.system(size: size, weight: .semibold)).foregroundStyle(color.signal)
+            .font(.system(size: size, weight: .semibold)).foregroundStyle(color.signalText)
             .symbolEffect(.pulse, options: .repeating, value: requestID)
             .symbolEffectsRemoved(reduceMotion)
     }

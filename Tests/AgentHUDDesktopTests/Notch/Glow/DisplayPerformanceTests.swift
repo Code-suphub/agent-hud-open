@@ -10,7 +10,7 @@ final class DisplayPerformanceTests: XCTestCase {
         func render() throws -> GlowImage {
             let glow = settings.glow.geometry(islandWidth: 240, islandHeight: 30, islandRadius: 13)
             return try XCTUnwrap(cache.render(glow: glow, islandSize: CGSize(width: 240, height: 30),
-                islandRadius: 13, outwardOnly: settings.glowOutwardOnly, stops: GlowGradient.idleStops, scale: 2,
+                islandRadius: 13, outwardOnly: settings.glowOutwardOnly, cutout: nil, stops: GlowGradient.idleStops, scale: 2,
                 pattern: settings.glow.pattern()))
         }
         let initial = try render()
@@ -76,7 +76,8 @@ final class DisplayPerformanceTests: XCTestCase {
         let glow = settings.glow.geometry(islandWidth: 240, islandHeight: 30, islandRadius: 13)
         return GlowFrameRenderer(.init(glow: glow, islandRadius: 13, stops: GlowGradient.stops(levels: levels),
                                        scale: 2, pattern: settings.glow.pattern(),
-                                       islandSize: CGSize(width: 240, height: 30), outwardOnly: settings.glowOutwardOnly))
+                                       islandSize: CGSize(width: 240, height: 30), outwardOnly: settings.glowOutwardOnly,
+                                       cutout: nil))
     }
 
     @MainActor
@@ -87,7 +88,7 @@ final class DisplayPerformanceTests: XCTestCase {
             let glow = settings.glow.geometry(islandWidth: island.width, islandHeight: island.height, islandRadius: 13)
             let rendered = try XCTUnwrap(GlowFrameRenderer.resting(.init(glow: glow, islandRadius: 13,
                                                                          stops: GlowGradient.stops(levels: [.ok, .critical]), scale: 2,
-                                                                         pattern: settings.glow.pattern())))
+                                                                         pattern: settings.glow.pattern(), cutout: nil)))
             XCTAssertEqual(rendered.size, CGSize(width: glow.width, height: glow.height))
             let centerX = Int(glow.width), centerY = Int(island.height)
             XCTAssertEqual(try alpha(in: rendered.image, x: centerX, y: centerY), 0, "\(style): nothing is drawn over the island")
@@ -132,7 +133,8 @@ final class DisplayPerformanceTests: XCTestCase {
         let island = CGSize(width: 240, height: 30)
         let glow = settings.glow.geometry(islandWidth: island.width, islandHeight: island.height, islandRadius: 13)
         let stops = GlowGradient.stops(levels: [.ok, .critical])
-        let still = try XCTUnwrap(GlowRenderer.render(glow: glow, islandSize: island, islandRadius: 13, outwardOnly: true, stops: stops, scale: 2))
+        let still = try XCTUnwrap(GlowRenderer.render(glow: glow, islandSize: island, islandRadius: 13, outwardOnly: true,
+                                                      cutout: nil, stops: stops, scale: 2))
         for effect in GlowEffect.allCases {
             let renderer = gridRenderer(style: .blur, effect: effect)
             let resting = try XCTUnwrap(renderer.render(time: 1.3, blend: 0, breathSeconds: 3, breathAmplitude: 0.6))

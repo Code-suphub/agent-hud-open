@@ -192,8 +192,9 @@ struct ProviderQuotaBlock: View {
             }
             if plan.widget == .chart {
                 TokenBarsChart(columns: chartColumns, interval: store.hudTokenInterval,
-                               colors: chartConsumers.map { AgentPalette.swiftUIColor(index: store.consumerPaletteIndex($0.id)) },
-                               consumers: chartConsumers, theme: theme, isLoading: store.report == nil, compact: true)
+                               colors: chartConsumers.map { theme.agent(store.consumerPaletteIndex($0.id)) },
+                               consumers: chartConsumers, theme: theme, context: .island, isLoading: store.report == nil,
+                               compact: true)
                     .frame(height: 40)
                     .padding(.horizontal, IslandRowLayout.inset)
                     .padding(.top, spacing.chartTop)
@@ -352,7 +353,7 @@ struct CodexResetCreditsView: View {
                 .layoutPriority(half ? 1 : 0)
             Text(availabilityLabel)
                 .font(.tabular(12, .semibold))
-                .foregroundStyle(resets.availableCount > 0 ? theme.status(.ok) : theme.secondary)
+                .foregroundStyle(resets.availableCount > 0 ? theme.statusText(.ok) : theme.secondary)
                 .fixedSize()
             Spacer(minLength: 8)
             if resets.availableCount > 0 {

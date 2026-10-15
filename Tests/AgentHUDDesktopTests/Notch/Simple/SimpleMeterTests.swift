@@ -233,7 +233,7 @@ final class SimpleMeterTests: XCTestCase {
 
     @MainActor
     func testAMarkWithNothingUnderItDrawsItsOwnLogoWhileItRests() throws {
-        let form = try XCTUnwrap(BotForm.form(for: "Claude"))
+        let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))
         let queued = BotActor(form: form, staysBot: false, period: 3)
         let alone = BotActor(form: form, staysBot: false, period: 3)
         alone.restsHidden = false

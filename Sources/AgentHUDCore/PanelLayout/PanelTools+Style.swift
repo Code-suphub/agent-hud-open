@@ -116,4 +116,23 @@ extension PanelTools {
                              glow: settings.effectiveGlow(on: screen.key))
         return .object(style.json)
     }
+
+    /// The look one attached screen's resting HUD draws now, its panel and its cards with it, its style draft included:
+    /// its `appearance`, `dark` or `light`, `system` drawn as macOS is set, and its `material`, `solid` or `glass`, with
+    /// a `note` where it draws other than its style asks: a notch HUD on a screen with a notch stays black, dark and
+    /// solid, and Reduce Transparency draws glass solid.
+    func lookInEffect(of screen: PanelScreen) -> JSONValue {
+        let placement = store.settings.effectivePlacement(on: screen.key, hasNotch: screen.hasNotch)
+        var look: [String: JSONValue] = [
+            "appearance": .string(screen.drawsLight(placement) ? HUDAppearance.light.rawValue : HUDAppearance.dark.rawValue),
+            "material": .string(screen.drawsGlass(placement) ? HUDMaterial.glass.rawValue : HUDMaterial.solid.rawValue),
+        ]
+        if !placement.drawsLook(hasNotch: screen.hasNotch) {
+            look["note"] = .string("A notch HUD on a screen with a notch stays black, dark and solid, whatever its "
+                                   + "appearance and material; they show in \"dynamic\" or \"simple\" mode.")
+        } else if placement.material == .glass, screen.reducesTransparency {
+            look["note"] = .string("This Mac has Reduce Transparency on, so its glass is drawn solid.")
+        }
+        return .object(look)
+    }
 }

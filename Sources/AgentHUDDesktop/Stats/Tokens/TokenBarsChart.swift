@@ -8,19 +8,25 @@ struct TokenBarsChart: View {
     let colors: [Color]
     let consumers: [AgentDescriptor]
     let theme: Theme
+    /// Where the chart is drawn, which decides the surface its column details are raised on: the HUD's own on the
+    /// island, the window's on the statistics window.
+    let context: TokenConsumptionChart.Context
     var isLoading = false
     var noModelsSelected = false
     let compact: Bool
     @State private var hoveredID: Date?
+    /// The look of the HUD the chart is drawn in, on the island, whose surface the column details are raised off.
+    @Environment(\.hudLook) private var look
 
     init(columns: [TokenColumn], interval: DateInterval, colors: [Color], consumers: [AgentDescriptor], theme: Theme,
-         isLoading: Bool = false, noModelsSelected: Bool = false, inspectedColumnID: Date? = nil,
-         compact: Bool = false) {
+         context: TokenConsumptionChart.Context, isLoading: Bool = false, noModelsSelected: Bool = false,
+         inspectedColumnID: Date? = nil, compact: Bool = false) {
         self.columns = columns
         self.interval = interval
         self.colors = colors
         self.consumers = consumers
         self.theme = theme
+        self.context = context
         self.isLoading = isLoading
         self.noModelsSelected = noModelsSelected
         self.compact = compact
@@ -157,7 +163,16 @@ struct TokenBarsChart: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .foregroundStyle(theme.text)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.windowBackground))
+        .background {
+            // Over glass the details are its tint once more, which sets them off the panel they stand on: glass shows
+            // nothing through glass.
+            if context == .island {
+                HUDSurface(RoundedRectangle(cornerRadius: 8), look: look, fill: theme.raisedSurface, contact: nil)
+                    .environment(\.drawsGlassStandIn, true)
+            } else {
+                RoundedRectangle(cornerRadius: 8).fill(theme.windowBackground)
+            }
+        }
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.cardBorder))
         .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
     }

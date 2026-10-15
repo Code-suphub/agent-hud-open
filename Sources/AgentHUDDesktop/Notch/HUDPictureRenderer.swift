@@ -9,8 +9,9 @@ import SwiftUI
 /// screen's own notch, or the bar that stands in for one.
 ///
 /// Like the panel's picture it is views in a hosting view that is never put in a window: nothing opens, nothing shows
-/// on screen and no read starts. The glow is drawn as a still frame, the one the snapshots draw, which every build
-/// draws the same way. It shows marks and figures, and no account or session.
+/// on screen and no read starts. Nothing is behind it to show through glass, which is drawn as its stand-in, the look's
+/// tint over the backdrop. The glow is drawn as a still frame, the one the snapshots draw, which every build draws the
+/// same way. It shows marks and figures, and no account or session.
 @MainActor
 struct HUDPictureRenderer {
     let store: UsageStore
@@ -25,7 +26,8 @@ struct HUDPictureRenderer {
 
     /// Room around the HUD on the backdrop, in points.
     static let margin: CGFloat = 16
-    /// The backdrop: dark enough for a glow to read, light enough for the black island to stand off it.
+    /// The backdrop: dark enough for a glow to read, light enough for the black island to stand off it. Glass's stand-in
+    /// is drawn over it, here and on the panel's picture (`PanelPictureRenderer.card(masked:height:)`).
     static let backdrop = Color(white: 0.2)
     /// The moment of a moving glow or bot the still is drawn at, the snapshots' own.
     static let frozenTime = 0.9
@@ -84,6 +86,7 @@ struct HUDPictureRenderer {
             .background(Self.backdrop)
             .environment(\.glowFrozenTime, Self.frozenTime)
             .environment(\.masksIdentity, true)
+            .environment(\.drawsGlassStandIn, true)
             .hudLook(look)
     }
 

@@ -31,7 +31,7 @@ struct ResetCreditAlertCompactView: View {
                 HStack(spacing: s(7)) {
                     ResetCreditSymbol(grant: grant, size: s(12))
                     Text(copy.compactTitle)
-                        .font(.tabular(s(12), .medium)).foregroundStyle(theme.alertText.opacity(0.92)).lineLimit(1)
+                        .font(.tabular(s(12), .medium)).foregroundStyle(theme.alertInk(0.92)).lineLimit(1)
                 }
                 .frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
             }
@@ -59,16 +59,16 @@ struct ResetCreditAlertDetailView: View {
                 AgentLogo(vendor: grant.account.account.provider, size: 22)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(grant.account.account.provider).font(.ui(13, .semibold)).foregroundStyle(theme.alertText)
-                    Text(grant.account.displayName).font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.42))
+                    Text(grant.account.displayName).font(.ui(10)).foregroundStyle(theme.alertInk(0.42))
                         .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 5) {
-                    Circle().fill(copy.accent).frame(width: 5, height: 5)
-                    Text(L10n.text("新增重置", "new reset")).font(.ui(10, .medium)).foregroundStyle(copy.accent)
+                    Circle().fill(copy.accentFill(theme)).frame(width: 5, height: 5)
+                    Text(L10n.text("新增重置", "new reset")).font(.ui(10, .medium)).foregroundStyle(copy.accentText(theme))
                 }
             }
-            Text(copy.title).font(.ui(12)).foregroundStyle(theme.alertText.opacity(0.58))
+            Text(copy.title).font(.ui(12)).foregroundStyle(theme.alertInk(0.58))
                 .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 metric("+\(grant.added)", label: L10n.text("新增", "added"))
@@ -80,9 +80,9 @@ struct ResetCreditAlertDetailView: View {
                     Text(L10n.text("查看用量统计", "View usage statistics"))
                     Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .semibold))
                 }
-                .font(.ui(12, .semibold)).foregroundStyle(theme.onAccent.opacity(0.9))
+                .font(.ui(12, .semibold)).foregroundStyle(theme.onAlertFill.opacity(0.9))
                 .frame(maxWidth: .infinity).frame(height: 30)
-                .background(copy.accent, in: RoundedRectangle(cornerRadius: 7))
+                .background(copy.accentFill(theme), in: RoundedRectangle(cornerRadius: 7))
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("island-alert-details-open")
@@ -95,7 +95,7 @@ struct ResetCreditAlertDetailView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value).font(.tabular(23, .medium)).foregroundStyle(theme.alertText)
                 .lineLimit(1).minimumScaleFactor(0.75)
-            Text(label).font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.4))
+            Text(label).font(.ui(10)).foregroundStyle(theme.alertInk(0.4))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -113,12 +113,12 @@ struct ResetCreditAlertInlineView: View {
             HStack(spacing: 10) {
                 ResetCreditSymbol(grant: grant, size: 13)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(copy.title).font(.ui(12, .medium)).foregroundStyle(theme.alertText.opacity(0.95))
+                    Text(copy.title).font(.ui(12, .medium)).foregroundStyle(theme.alertInk(0.95))
                     Text("\(grant.account.account.provider) · \(grant.account.displayName)")
-                        .font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.45)).lineLimit(1).truncationMode(.middle)
+                        .font(.ui(10)).foregroundStyle(theme.alertInk(0.45)).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
-                Image(systemName: "arrow.up.right").font(.ui(10)).foregroundStyle(theme.alertText.opacity(0.4))
+                Image(systemName: "arrow.up.right").font(.ui(10)).foregroundStyle(theme.alertInk(0.4))
             }
             .padding(.vertical, 8).contentShape(Rectangle())
         }
@@ -133,12 +133,13 @@ private struct ResetCreditSymbol: View {
     let grant: ResetCreditGrant
     let size: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hudTheme) private var theme
     @State private var animate = false
 
     var body: some View {
         Image(systemName: "arrow.counterclockwise")
             .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(Color(IslandAlert.calmAccent))
+            .foregroundStyle(theme.alertCalmText)
             .rotationEffect(.degrees(animate ? -360 : 0))
             .frame(width: size + 2, height: size + 2)
             .task(id: grant.id) {
@@ -152,7 +153,9 @@ private struct ResetCreditSymbol: View {
 
 private struct ResetCreditAlertCopy {
     let grant: ResetCreditGrant
-    var accent: Color { Color(IslandAlert.calmAccent) }
+    /// The accent as a fill, and as text and thin glyphs, on a HUD drawn with `theme`.
+    func accentFill(_ theme: Theme) -> Color { theme.alertCalmFill }
+    func accentText(_ theme: Theme) -> Color { theme.alertCalmText }
     var compactTitle: String {
         L10n.text("+\(grant.added) 次重置", grant.added == 1 ? "+1 reset" : "+\(grant.added) resets")
     }

@@ -34,7 +34,7 @@ struct BotSheetScene: View {
 
     @ViewBuilder
     private func frame(_ vendor: String, side: CGFloat, outline: Int = 0) -> some View {
-        if let form = BotForm.form(for: vendor), let image = picture(form, side: side, outline: outline) {
+        if let form = BotForm.form(for: vendor, ground: .dark), let image = picture(form, side: side, outline: outline) {
             Image(decorative: image, scale: 2)
         } else {
             AgentLogo(vendor: vendor, size: side)

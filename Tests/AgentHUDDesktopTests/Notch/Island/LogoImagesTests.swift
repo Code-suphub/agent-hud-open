@@ -74,7 +74,7 @@ final class LogoImagesTests: XCTestCase {
         let side: CGFloat = 36, scale: CGFloat = 2
         let screen = CGRect(x: 0, y: 0, width: 1200, height: 900)
         for vendor in AgentArtwork.allVendors {
-            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
             var placements: [(view: LogoQueueLayerView, canvas: CGRect, edge: HUDEdge)] = []
             for edge in HUDEdge.allCases {
                 let placement = ScreenPlacement(edge: edge, logoSize: Double(side), logoEdgeDistance: 0)

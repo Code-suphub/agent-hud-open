@@ -86,7 +86,7 @@ final class PreviewLifecycleTests: XCTestCase {
         let island = CGSize(width: 240, height: 30)
         return .init(glow: settings.geometry(islandWidth: island.width, islandHeight: island.height, islandRadius: 13),
                      islandRadius: 13, stops: GlowGradient.stops(levels: [.ok]), scale: 2,
-                     pattern: GlowPattern(style: style), islandSize: island, outwardOnly: true)
+                     pattern: GlowPattern(style: style), islandSize: island, outwardOnly: true, cutout: nil)
     }
 }
 

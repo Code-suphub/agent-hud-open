@@ -23,7 +23,7 @@ struct PanelDraftBar: View {
         HStack(spacing: 6) {
             Image(systemName: "square.dashed")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(theme.status(.warning))
+                .foregroundStyle(theme.statusText(.warning))
             Text(title)
                 .font(.ui(12, .medium))
                 .foregroundStyle(theme.text)

@@ -98,7 +98,7 @@ struct AgentPeekView: View {
     }
 
     private func tint(_ line: AgentPeek.Line) -> Color {
-        line.level.map { theme.status($0) } ?? theme.secondary
+        line.level.map { theme.statusText($0) } ?? theme.secondary
     }
 
     private var bubble: some View {

@@ -76,6 +76,20 @@ enum IslandAlert: Identifiable {
     static let turnAccent = RGBA(hex: 0x82aaff)
     static let calmAccent = RGBA(hex: 0x6cd8ac)
     static let warningAccent = RGBA(hex: 0xe9a16d)
+
+    /// `accent` as text or a thin glyph on a HUD drawn with `theme`: the accent itself on a dark HUD, a darker one that
+    /// stays legible on a light HUD. `accent` itself stays the glow's tint.
+    func accentText(_ theme: Theme) -> Color {
+        if case .completion = self { return theme.alertTurnText }
+        return isWarning ? theme.alertWarningText : theme.alertCalmText
+    }
+
+    /// `accent` as a fill on a HUD drawn with `theme`, a button, a dot or a bar, under ink of `Theme.onAlertFill`: the
+    /// accent itself on a dark HUD, a darker one on a light HUD.
+    func accentFill(_ theme: Theme) -> Color {
+        if case .completion = self { return theme.alertTurnFill }
+        return isWarning ? theme.alertWarningFill : theme.alertCalmFill
+    }
 }
 
 /// Keeps one alert on the island at a time; later alerts wait in arrival order. An alert expires `visibleDuration`

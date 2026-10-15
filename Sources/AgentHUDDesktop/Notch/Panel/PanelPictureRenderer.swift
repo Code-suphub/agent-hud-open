@@ -110,11 +110,18 @@ struct PanelPictureRenderer {
             .hudLook(display.look)
     }
 
-    /// The panel on the island's card: the look's fill, rounded on every corner as the open island is at its foot.
+    /// The panel on the island's card: the look's surface, rounded on every corner as the open island is at its foot.
+    /// Nothing is behind a picture to show through glass, so glass is drawn as its stand-in, the look's tint, over the
+    /// backdrop the HUD's own pictures have (`HUDPictureRenderer.backdrop`).
     func card(masked: Bool, height: CGFloat) -> some View {
-        panel(masked: masked)
+        let shape = RoundedRectangle(cornerRadius: IslandController.expandedRadius, style: .continuous)
+        let look = display.look
+        return panel(masked: masked)
             .frame(height: height, alignment: .top)
-            .background(display.look.theme.islandFill,
-                        in: RoundedRectangle(cornerRadius: IslandController.expandedRadius, style: .continuous))
+            .background {
+                HUDSurface(shape, look: look, fill: look.theme.islandFill, contact: nil)
+                    .background { if look.material == .glass { shape.fill(HUDPictureRenderer.backdrop) } }
+                    .environment(\.drawsGlassStandIn, true)
+            }
     }
 }

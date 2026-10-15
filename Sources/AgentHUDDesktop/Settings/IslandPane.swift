@@ -100,7 +100,7 @@ struct IslandPane: View {
             }
             TokenBarsChart(columns: IslandSampleData.columns, interval: IslandSampleData.interval,
                            colors: IslandSampleData.colors, consumers: IslandSampleData.consumers, theme: island,
-                           compact: true)
+                           context: .island, compact: true)
                 .frame(height: 42)
         }
         .font(.ui(11))
@@ -138,8 +138,9 @@ struct IslandPane: View {
 }
 
 /// A fixed-size sample stays in place when its corresponding panel content is switched off. It is drawn on the island's
-/// card, in the look of the HUD it stands for, which sets its colours as it does the island's and leaves its colour
-/// scheme to the window.
+/// card, in the look of the HUD it stands for, which it takes as the island does (`islandLook(_:)`): the standard look
+/// leaves its colour scheme to the window, as the island leaves it to the app. A card of glass is its stand-in, its tint
+/// over the pane: the window has no desktop of the HUD's to show through it.
 private struct IslandPartSample<Content: View>: View {
     let height: CGFloat
     let look: HUDLook
@@ -153,8 +154,9 @@ private struct IslandPartSample<Content: View>: View {
             .frame(height: height)
             .padding(.horizontal, 14)
             .opacity(enabled ? 1 : 0.25)
-            .background(look.theme.islandFill, in: RoundedRectangle(cornerRadius: 9))
-            .environment(\.hudLook, look)
+            .background(HUDSurface(RoundedRectangle(cornerRadius: 9), look: look, fill: look.theme.islandFill, contact: nil))
+            .islandLook(look)
+            .environment(\.drawsGlassStandIn, true)
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
             .allowsHitTesting(false)

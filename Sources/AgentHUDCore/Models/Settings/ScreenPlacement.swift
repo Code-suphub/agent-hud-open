@@ -31,6 +31,24 @@ public enum HUDEdge: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// The colours one screen's HUD is drawn in: light ink on a dark surface, the HUD as it has always been, dark ink on a
+/// light one, or whichever of the two macOS is set to. It is the HUD's own, apart from the Appearance the app's windows
+/// take (`Settings.appearance`).
+public enum HUDAppearance: String, Codable, Sendable, CaseIterable {
+    case dark
+    case light
+    /// Light or dark as macOS is set, whatever the app's own Appearance.
+    case system
+}
+
+/// What one screen's HUD surface is made of: an opaque fill, or glass that lets the desktop behind it show through,
+/// blurred. Glass keeps the HUD's appearance, dark glass with light ink or light glass with dark ink, whatever is behind
+/// it.
+public enum HUDMaterial: String, Codable, Sendable, CaseIterable {
+    case solid
+    case glass
+}
+
 /// One screen's HUD. Everything here is per screen: two displays can run different modes, sit on
 /// different edges and size their logos differently. The glow is per screen too, kept beside this in
 /// `Settings.screenGlow` under the same display key, with `Settings.glow` for a display that has none.
@@ -68,6 +86,10 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// A docked HUD answers for one agent at a time: hovering a mark opens that agent's own panel from the
     /// mark, and a request or reminder grows from the mark of the agent that sent it while the others stay.
     public var separatesAgents: Bool
+    /// The colours of the HUD, its panel and its cards: dark, the HUD as it has always been, unless chosen otherwise.
+    public var appearance: HUDAppearance
+    /// The surface of the HUD, its panel and its cards: solid unless chosen otherwise.
+    public var material: HUDMaterial
 
     public init(
         mode: HUDMode = .logos,
@@ -82,7 +104,9 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         showsRings: Bool = true,
         showsNumbers: Bool = true,
         simpleBots: Bool = false,
-        separatesAgents: Bool = false
+        separatesAgents: Bool = false,
+        appearance: HUDAppearance = .dark,
+        material: HUDMaterial = .solid
     ) {
         self.mode = mode
         self.edge = edge
@@ -97,9 +121,11 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         self.showsNumbers = showsNumbers
         self.simpleBots = simpleBots
         self.separatesAgents = separatesAgents
+        self.appearance = appearance
+        self.material = material
     }
 
-    /// A display's starting point: a notched screen keeps its island, anything else shows the queue.
+    /// A display's starting point: a notched screen keeps its island, anything else shows the queue, both dark and solid.
     public static func `default`(hasNotch: Bool) -> ScreenPlacement {
         ScreenPlacement(mode: hasNotch ? .notch : .logos)
     }
@@ -111,6 +137,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case mode, edge, offset, logoSize, logoEdgeDistance, gapScale, showsLogos
         case simpleSize, ringWidth, showsRings, showsNumbers, simpleBots, separatesAgents
+        case appearance, material
     }
 
     public init(from decoder: Decoder) throws {
@@ -129,7 +156,39 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
             showsRings: try c.decodeIfPresent(Bool.self, forKey: .showsRings) ?? d.showsRings,
             showsNumbers: try c.decodeIfPresent(Bool.self, forKey: .showsNumbers) ?? d.showsNumbers,
             simpleBots: try c.decodeIfPresent(Bool.self, forKey: .simpleBots) ?? d.simpleBots,
-            separatesAgents: try c.decodeIfPresent(Bool.self, forKey: .separatesAgents) ?? d.separatesAgents
+            separatesAgents: try c.decodeIfPresent(Bool.self, forKey: .separatesAgents) ?? d.separatesAgents,
+            // A name saved by a newer build falls back to the default instead of failing the whole placement, and with
+            // it every screen's (`Settings.screens`).
+            appearance: (try? c.decodeIfPresent(HUDAppearance.self, forKey: .appearance)) ?? d.appearance,
+            material: (try? c.decodeIfPresent(HUDMaterial.self, forKey: .material)) ?? d.material
         )
+    }
+}
+
+// MARK: The look drawn
+
+extension ScreenPlacement {
+    /// Whether the HUD draws its appearance and material: everywhere but at a hardware notch, where the island in Notch
+    /// mode, the panel it opens into and the cards it grows stay black, dark and solid, one with the camera housing. A
+    /// bar that stands in for a notch on a screen without one draws them, as every dock does.
+    public func drawsLook(hasNotch: Bool) -> Bool {
+        mode != .notch || !hasNotch
+    }
+
+    /// Whether the HUD is drawn light: its appearance, `system` as macOS is set now (`systemIsLight`), and dark where it
+    /// does not draw its look (`drawsLook(hasNotch:)`).
+    public func drawsLight(hasNotch: Bool, systemIsLight: Bool) -> Bool {
+        guard drawsLook(hasNotch: hasNotch) else { return false }
+        switch appearance {
+        case .dark: return false
+        case .light: return true
+        case .system: return systemIsLight
+        }
+    }
+
+    /// Whether the HUD is drawn as glass: its material, solid while Reduce Transparency is on (`reducesTransparency`)
+    /// and where it does not draw its look (`drawsLook(hasNotch:)`).
+    public func drawsGlass(hasNotch: Bool, reducesTransparency: Bool) -> Bool {
+        drawsLook(hasNotch: hasNotch) && material == .glass && !reducesTransparency
     }
 }

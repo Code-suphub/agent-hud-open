@@ -31,6 +31,15 @@ final class IslandController {
 
     var onOpenStats: (() -> Void)? { didSet { huds.values.forEach { $0.onOpenStats = onOpenStats } } }
     var onOpenSettings: (() -> Void)? { didSet { huds.values.forEach { $0.onOpenSettings = onOpenSettings } } }
+    /// Set while the HUD is recorded (`--record`). A recording draws the HUD's windows in this process, where no glass
+    /// and no blur is drawn, so every HUD draws its glass as the stand-in a picture does, on screen as in the movie.
+    var drawsGlassStandIn = false {
+        didSet {
+            guard drawsGlassStandIn != oldValue else { return }
+            huds.values.forEach { $0.drawsGlassStandIn = drawsGlassStandIn }
+            apply(animated: false)
+        }
+    }
 
     init(store: UsageStore, settings: SettingsStore,
          additionalHUDControls: @escaping @MainActor (@escaping @MainActor () -> Void) -> AnyView = { _ in AnyView(EmptyView()) }) {
@@ -44,6 +53,8 @@ final class IslandController {
         ) { [weak self] _ in
             Task { @MainActor in self?.rebuild() }
         })
+        // A HUD that matches macOS turns light or dark with it, and every HUD's glow and outline follow the menu bar's;
+        // the change cross-fades like any change of the HUD, and Reduce Motion applies it at once (`ScreenHUD.apply`).
         observers.append(DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
         ) { [weak self] _ in
@@ -51,8 +62,14 @@ final class IslandController {
                 guard let self else { return }
                 self.systemIsLight = SystemAppearance.isLight
                 self.huds.values.forEach { $0.systemIsLight = self.systemIsLight }
-                self.apply(animated: false)
+                self.apply(animated: true)
             }
+        })
+        // Reduce Transparency draws a HUD of glass solid, and turning it off gives the glass back.
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.apply(animated: true) }
         })
         trackChanges({ [weak self] in self?.inputs }, onChange: { [weak self] in
             self?.apply(animated: true)
@@ -120,6 +137,7 @@ final class IslandController {
             let hud = ScreenHUD(key: key, screen: screens.indices.contains(index) ? screens[index] : nil,
                                 store: store, settings: settings, additionalHUDControls: additionalHUDControls)
             hud.systemIsLight = systemIsLight
+            hud.drawsGlassStandIn = drawsGlassStandIn
             hud.onOpenStats = { [weak self] in self?.onOpenStats?() }
             hud.onOpenSettings = { [weak self] in self?.onOpenSettings?() }
             hud.onClaimRequest = { [weak self, weak hud] id in
@@ -153,9 +171,12 @@ final class IslandController {
     }
 
     /// The attached displays as the MCP tools tell an agent of them, in the system's order: by role, with how each
-    /// presents the HUD now, a style draft included, and the agents its resting HUD would show now in each mode.
+    /// presents the HUD now, a style draft included, the agents its resting HUD would show now in each mode, and how the
+    /// Mac is set for the look each draws (`SettingsStore.effectiveLook(on:)`).
     var panelScreens: [PanelScreen] {
-        NSScreen.screens.enumerated().map { index, screen in
+        let systemIsLight = SystemAppearance.isLight
+        let reducesTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        return NSScreen.screens.enumerated().map { index, screen in
             let placement = ScreenIdentity.placement(for: screen, in: settings)
             var others: [HUDMode: [String]] = [:]
             for mode in HUDMode.allCases where mode != placement.mode {
@@ -164,7 +185,8 @@ final class IslandController {
             return PanelScreen(key: ScreenIdentity.key(for: screen), name: ScreenIdentity.role(of: screen, at: index),
                                mode: placement.mode, edge: placement.mode.isDocked ? placement.edge : .top,
                                hasNotch: ScreenIdentity.hasNotch(screen),
-                               agents: ScreenAgents.available(store: store, mode: placement.mode), otherModes: others)
+                               agents: ScreenAgents.available(store: store, mode: placement.mode), otherModes: others,
+                               systemIsLight: systemIsLight, reducesTransparency: reducesTransparency)
         }
     }
 

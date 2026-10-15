@@ -4,8 +4,13 @@ import AgentHUDCore
 struct QuotaForecastDetails: View {
     let agent: AgentDescriptor
     let hint: String
-    /// The tokens of the HUD the row is in, which the popover hands on to its own window (`IslandHoverPopover`).
-    @Environment(\.hudTheme) private var theme
+    /// The look of the HUD the row is in, which the popover hands on to its own window (`IslandHoverPopover`). The
+    /// details stand on a surface of that look in their window, glass included, with its hairline, which Liquid Glass
+    /// leaves out for the rim it lights of its own (`HUDLook.outline(_:standIn:)`).
+    @Environment(\.hudLook) private var look
+    @Environment(\.drawsGlassStandIn) private var glassStandIn
+
+    private var theme: Theme { look.theme }
 
     var body: some View {
         Text(hint)
@@ -15,8 +20,8 @@ struct QuotaForecastDetails: View {
             .lineLimit(1)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(theme.raisedSurface))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.cardBorder))
+            .background(HUDSurface(RoundedRectangle(cornerRadius: 8), look: look, fill: theme.raisedSurface, contact: nil))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(look.outline(theme.cardBorder, standIn: glassStandIn)))
             .fixedSize()
             .accessibilityLabel("\(agent.displayName), \(hint)")
     }
