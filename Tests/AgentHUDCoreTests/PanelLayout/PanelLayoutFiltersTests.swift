@@ -108,7 +108,7 @@ final class PanelLayoutFiltersTests: XCTestCase {
 
     func testThePeriodsAreTheStatisticsRangesInTheirOwnColumns() {
         XCTAssertEqual(PanelTokenPeriod.allCases.map(\.label), ["24h", "7d", "30d"])
-        XCTAssertEqual(PanelTokenPeriod.allCases.map(\.duration), [86400, 7 * 86400, 30 * 86400])
+        XCTAssertEqual(PanelTokenPeriod.allCases.map(\.duration), [86400, 7 * 86400, 30 * 86400] as [TimeInterval])
         XCTAssertEqual(PanelTokenPeriod.allCases.map(\.bucketSize), [.minutes15, .day1, .day1])
         XCTAssertEqual(PanelTokenPeriod.allCases.map(\.range), [.hours24, .days7, .days30])
     }
