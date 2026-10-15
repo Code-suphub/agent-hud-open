@@ -36,19 +36,21 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 
 ### Collection signals
 
-- A source is read only when it signals new data: a file change under its directories, its account step finishing, one of its checks falling due, or, for a source without directories, its poll interval. Whatever a source does inside, whether it watches files, receives hook callbacks or polls a service, the collector sees only these signals.
-- Reads stay serial: signals only mark sources as due, and the collector reads the due sources in one pass; signals that arrive during a pass are read by the next one, and passes start at most every `UsageRefresh.readSpacing`.
+- A source is read only when it signals new data: a file change under its directories, a log under them a host reminded the collector of, its account step finishing, one of its checks falling due, or, for a source without directories, its poll interval. Whatever a source does inside, whether it watches files, receives hook callbacks or polls a service, the collector sees only these signals.
+- Reads stay serial: signals only mark sources as due, and the collector reads the due sources in one pass; signals that arrive during a pass are read by the next one, and passes start at most every `UsageRefresh.readSpacing`, except one that reads a log a host reminded the collector of.
 - Time-based changes of activity are checks, not polls: a session whose source never said what its turn is doing is read again when it reaches `SessionPhase.Limits.quiet` without an observation, and a running turn when it stops counting as current work and again at `SessionPhase.Limits.abandoned`, where silence means its client is gone.
 - File events name real paths; the collector compares them with each directory as given and as `realpath` resolves it.
 - A source's account steps run when its own work, or one of its windows resetting, makes a new reading worth taking; opening the panel, the menu or the statistics window reads every account, and no source repeats a request within `UsageRefresh.accountRequestSpacing`.
 - A settings change that needs a read wakes the collector at once, through `SettingsStore.onChange`, which a running `UsageStore` sets: a changed agent list reads every source, and GitHub Copilot quota reading switched on or off reads Copilot's quota at once, within the request spacing too, and every other account the spacing allows. The pass it wakes is serial like any other. `CombinedUsageProvider.standard(settings:ledger:persistent:)` takes the same `SettingsStore`, and the Copilot provider asks it for the consent whenever a reading is due.
 - Every source is read again every `UsageRefresh.accountInterval`, which catches a file event the watch missed, and a refresh reads every source once.
+- A host whose clients' hooks say something happened in a session's log, such as a prompt submitted or a turn stopped, reminds the collector of it (`UsageStore.remind(paths:)`). The reminder is read by the next pass, as a file event would be, without waiting for the read spacing or for the event itself, which a log written through an open handle may never give; a pass under way leaves it to the next one. The log is then looked at three more times, half a second apart, and read again whenever it changed, for what its client writes right after the hook (`LogReminders`). A reminder carries nothing the store keeps.
 
 ### Collection hooks
 
 - A host passes `UsageCollectionHooks` to `UsageStore`; every hook is optional, and without them the store displays the provider's report and loads `UsageStore.historyHours` hours, the seven-day range plus the partial hour.
 - `historyHours` is asked before every local poll and account step, so a host can widen the window providers read tokens for. It does not widen the sessions: a provider builds sessions only for those active within `SessionWindow.recency`, seven days, each with its whole sub-agent tree, and reports the turns and completions of those sessions and trees.
 - `publish` receives each report the provider returned. It is awaited inside the pass, after the provider fetch and before the report is displayed; no provider reads and nothing writes the ledger meanwhile, so a hook that reads the ledger stays serial with collection.
+- `afterPass` runs after each read, once the store shows its report, with the paths under the sources' directories that changed since the read before: those the file watch reported, the recent logs found grown and the reminded logs. They are nil when the collector cannot name them: at the first read, after events the watch dropped, while nothing can be watched, at the fallback read of every source and after the agent list changed. The pass, and so the next one, waits for it, so what a host reads there, such as the transcripts of the sessions that changed, stays serial with collection.
 
 ### Session observers and hooks
 
@@ -108,8 +110,9 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | Item | Source | Meaning |
 | --- | --- | --- |
 | `UsageStore(provider:settings:accessAllowed:hooks:)` | AgentHUDCore | Any `UsageProvider`, the settings store, an access closure (false pauses collection) and `UsageCollectionHooks` |
-| `UsageCollectionHooks(historyHours:publish:)` | AgentHUDCore | `@MainActor () -> Int`; `@MainActor (UsageReport) async -> Void` |
+| `UsageCollectionHooks(historyHours:publish:afterPass:)` | AgentHUDCore | `@MainActor () -> Int`; `@MainActor (UsageReport) async -> Void`; `@MainActor (Set<String>?) async -> Void` |
 | `start()`, `stop()`, `refresh()`, `replace(report:)`, `pause(for:)`, `resume()` | `UsageStore` | Collection lifecycle; `refresh` reads every source now unless a pass is running; `replace` installs a report without the provider |
+| `remind(paths:)` | `UsageStore` | Reads these logs at the next pass, without waiting for the read spacing or a file event, for a host whose clients' hooks reported in them |
 | `UsageSource(name:directories:accountSteps:)` | AgentHUDCore | A provider's independently read part and its signals; nil `directories` is read every `UsageRefresh.pollInterval` |
 | `DesktopApplication(options:settings:store:additionalSettingsPages:experimentalSettings:onIslandEvents:)` | AgentHUDDesktop | Parsed `DesktopLaunchOptions`, the two stores, `[DesktopSettingsPage]`, `[DesktopSettingsSection]` for the Experimental page and an optional `(IslandEventTracker.Update, UsageReport, Date) -> Void` relay hook |
 | `start()`, `stop()`, `showSettings(pageID:)`, `showStats()`, `showOnboarding()`, `toggleGlow()` | `DesktopApplication` | Host entry points. `showSettings` selects a page by id (built-in `general`, `sources`, `display`, `experimental`; an unknown id keeps the current page) |
@@ -151,7 +154,7 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 | Models: usage, sessions, accounts, agents, catalog, settings; calculations: quota, alerts, what the Mac shows | `Sources/AgentHUDCore/Models/<Area>/`; `Sources/AgentHUDCore/Logic/`, `Logic/Quota/`, `Logic/Alerts/` |
 | Durations, token counts, money, dates and languages as written | `Sources/AgentHUDCore/Formatting/` |
 | Vendor names, client and window names, app bundle IDs | `Sources/AgentHUDCore/Models/Catalog/VendorCatalog.swift`, `Formatting/WindowNames.swift` |
-| Collection pipeline, signals and hooks | `Sources/AgentHUDCore/Store/UsageCollector.swift`, `System/FileChangeMonitor.swift` |
+| Collection pipeline, signals and hooks; reminders and the paths a pass saw change | `Sources/AgentHUDCore/Store/UsageCollector.swift`, `LogReminders.swift`, `ChangedPaths.swift`, `LogSignature.swift`, `System/FileChangeMonitor.swift` |
 | Stores and data directory; the statistics window's selections and what they chart | `Sources/AgentHUDCore/Store/UsageStore.swift`, `SettingsStore.swift`, `UsageStore+Stats.swift`, `Ledger/QuotaHistoryStore.swift`, `System/AppSupport.swift`; the usage ledger in `Sources/AgentHUDCore/Ledger/` |
 | Application object, launch options, host pages | `Sources/AgentHUDDesktop/App/DesktopApplication.swift`, `LaunchOptions.swift`, `Settings/DesktopSettingsPage.swift` |
 | One copy at a time | `Sources/AgentHUDCore/System/InstanceLock.swift`, `Sources/AgentHUDDesktop/App/SingleInstance.swift` |

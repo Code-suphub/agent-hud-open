@@ -47,7 +47,8 @@ Which clients expose running and terminal turns, which of them say they are wait
 
 ### Hooks remind
 
-- A client's prompt and Stop hooks carry no turn: nothing they report is kept, and a session's phase, last event and message come from its log alone. Sub-agents left running after a Stop hook therefore keep their session running, and a turn the log has not ended yet stays running until it does. A hook can only make the log be read sooner.
+- A client's prompt and Stop hooks carry no turn: nothing they report is kept, and a session's phase, last event and message come from its log alone. Sub-agents left running after a Stop hook therefore keep their session running, and a turn the log has not ended yet stays running until it does.
+- A host that receives those hooks reminds the store of the session's log (`UsageStore.remind(paths:)`), and the next pass reads it at once, without waiting for a file event or the read spacing: the panel follows a Stop hook within one read of the log, which Claude Code writes the turn's end to before it runs its Stop hooks. A client can still be writing when its hook runs, so the log is looked at three more times, half a second apart, and read again whenever it changed; after that the file watch and the look at recent logs follow it as they follow every log.
 - Agent HUD Open receives no prompt hooks: the Stop hooks it installs complete their clients' turns through the providers (`SessionPhase.stopped`), which read a record as soon as a hook writes it ([Completion hooks](#completion-hooks)).
 
 ### Sub-agents

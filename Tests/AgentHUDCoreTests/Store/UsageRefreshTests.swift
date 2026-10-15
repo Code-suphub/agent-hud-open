@@ -46,6 +46,24 @@ final class UsageRefreshTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(publishes.count, 2)
     }
 
+    /// The after-pass hook runs last in a pass, once the store shows the report the publish hook received; a refresh with
+    /// no file watch cannot name what changed.
+    @MainActor
+    func testTheAfterPassHookRunsOnceTheReportIsShown() async throws {
+        var order: [String] = [], handed: [Set<String>?] = []
+        weak var shown: UsageStore?
+        let provider = CountingProvider()
+        let store = store(provider, hooks: UsageCollectionHooks(publish: { _ in order.append("publish") }, afterPass: { changed in
+            order.append(shown?.report == nil ? "after, before it is shown" : "after")
+            handed.append(changed)
+        }))
+        shown = store
+        await store.refresh()
+        await store.refresh()
+        XCTAssertEqual(order, ["publish", "after", "publish", "after"])
+        XCTAssertEqual(handed, [nil, nil])
+    }
+
     @MainActor
     func testHostChoosesTheHistoryWindow() async throws {
         var hours = 24

@@ -44,7 +44,7 @@ public final class UsageStore {
 
     public let settings: SettingsStore
     private let accessAllowed: () -> Bool
-    private let collector: UsageCollector
+    let collector: UsageCollector
     /// A later poll that found nothing changed extends the report's coverage.
     var checkedAt: Date?
     /// Counts the reports shown, so that a new one is told from the last without comparing them.
@@ -94,6 +94,15 @@ public final class UsageStore {
     /// for work to move them. Every provider's own request spacing still holds, so looking twice in a minute reads once.
     public func refreshAccounts() async {
         await collector.refreshAccounts()
+    }
+
+    /// Reads these logs now, for a host whose clients' hooks say something happened in them, such as a prompt submitted
+    /// or a turn stopped. A hook is only a reminder: the store keeps nothing it says, and the log, read at once, says what
+    /// happened. The next pass reads the sources that own them without waiting for a file event or the read spacing, and
+    /// looks at them again for a moment after, while their clients may still be writing (`LogReminders`). The read is a
+    /// pass like any other, serial with collection and as incremental; a pass under way leaves them to the next.
+    public func remind(paths: Set<String>) {
+        collector.remind(paths: paths)
     }
 
     /// Installs a report directly (snapshots, tests) without going through the provider.
