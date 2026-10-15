@@ -1100,4 +1100,28 @@ final class AccumulatorCompactionTests: XCTestCase {
         counted += old.ingest(ClaudeTranscriptParser.parse(line)).count
         XCTAssertEqual(counted, 2, "after compaction the keys are gone; finished files never get appended anyway, and the ledger keeps one row per key")
     }
+
+    func testAnIdleLogReadOverTwoPollsCountsAResponseSplitBetweenThemOnce() async throws {
+        // Claude Code writes a line per content block of a response, each with its usage. A day-old log read from its start
+        // stops at 4 MiB on no time budget (`TailLogStore.chunkSize`), here between the two blocks of one response.
+        let projects = FileManager.default.temporaryDirectory.appendingPathComponent("agenthud-split-\(UUID().uuidString)/projects", isDirectory: true)
+        try FileManager.default.createDirectory(at: projects.appendingPathComponent("-p"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: projects.deletingLastPathComponent()) }
+        let stamp = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-2 * 86400))
+        func block(_ type: String, output: Int) -> String {
+            #"{"parentUuid":"r","isSidechain":false,"message":{"model":"claude-opus-5-5","id":"msg_split","type":"message","role":"assistant","content":[{"type":"\#(type)","\#(type)":"…"}],"stop_reason":null,"usage":{"input_tokens":3,"output_tokens":\#(output)}},"requestId":"req_split","type":"assistant","uuid":"a-\#(type)","timestamp":"\#(stamp)","sessionId":"s-split"}"#
+        }
+        let first = block("thinking", output: 16), second = block("text", output: 231)
+        let output = String(repeating: "x", count: (4 << 20) - first.utf8.count - 300)
+        let result = #"{"parentUuid":"p","isSidechain":false,"type":"user","message":{"role":"user","content":[{"tool_use_id":"t","type":"tool_result","content":"\#(output)"}]},"uuid":"r","timestamp":"\#(stamp)","sessionId":"s-split"}"#
+        try ([result, first, second].joined(separator: "\n") + "\n").write(to: projects.appendingPathComponent("-p/s-split.jsonl"), atomically: true, encoding: .utf8)
+        let store = ClaudeTranscriptStore(roots: [projects], ledger: UsageLedger.inMemory())
+        var pass = await store.index(modifiedSince: .distantPast, timeBudget: 0)
+        XCTAssertEqual(pass.pending, 1, "the read stopped after the first block")
+        pass = await store.index(modifiedSince: .distantPast, timeBudget: 0)
+        XCTAssertEqual(pass.pending, 0)
+        XCTAssertEqual(pass.sessions.first?.tokensOut, 16, "the response counts once, from its first line, as in a read in one go")
+        let usage = await store.usage(since: .distantPast)
+        XCTAssertEqual(usage.reduce(0) { $0 + $1.tokensOut }, 16)
+    }
 }
