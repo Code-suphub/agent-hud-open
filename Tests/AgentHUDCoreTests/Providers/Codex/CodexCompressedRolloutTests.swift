@@ -241,6 +241,27 @@ final class CodexCompressedRolloutTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(counted, [compressed.path: rollout.counted])
     }
 
+    /// A compressed rollout is older than the cutoff, so nothing but the stopped read itself brings the store back to it.
+    func testAReadStoppedShortGoesOnAfterARestartWhenTheRolloutIsOlderThanTheCutoff() async throws {
+        var rollout = Rollout(start: started)
+        for number in 1...6 { rollout.turn(number, at: number * 100, input: 1_000 * number, cached: 0, output: number, toolOutput: 1 << 20) }
+        try compress(try write(rollout))
+        let ledger = UsageLedger.inMemory()
+        var pass = await makeStore(ledger).index(since: .distantPast, timeBudget: 0)
+        XCTAssertGreaterThan(pass.pending, 0)
+        var counted = try await tokensByKey(ledger).values.reduce(0, +)
+        XCTAssertLessThan(counted, rollout.counted, "the budget stopped the first read")
+
+        let restarted = makeStore(ledger)
+        var passes = 0
+        repeat {
+            pass = await restarted.index(since: Date(), timeBudget: 0)
+            passes += 1
+        } while pass.pending > 0 && passes < 10
+        counted = try await tokensByKey(ledger).values.reduce(0, +)
+        XCTAssertEqual(counted, rollout.counted)
+    }
+
     /// The app read the newest turn, then quit before the history; Codex compressed the rollout a week later.
     func testHistoryLeftUnreadWhenTheRolloutWasCompressedIsReadFromItsStart() async throws {
         var rollout = Rollout(start: started)

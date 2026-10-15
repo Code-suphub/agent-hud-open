@@ -133,6 +133,9 @@ final class TailLogStore<Log: TailLog> {
     private var stored: [String: UsageLedger.FileState] = [:]
     /// Logs whose stored state has another version or cannot be decoded, to read again from the start.
     private var outdated: Set<String> = []
+    /// Logs whose stored state says their last read stopped before their end, as a time budget or a quit can leave it;
+    /// until read on, which an older log is only from here.
+    private var unfinished: Set<String> = []
     /// Sessions and modification times of grouped logs, for choosing the copy that counts.
     private var groups: [String: String] = [:]
     private var modified: [String: Date] = [:]
@@ -172,10 +175,11 @@ final class TailLogStore<Log: TailLog> {
         if loadedGeneration != generation {
             stored = (try? await ledger.fileStates(source: Log.source)) ?? [:]
             entries = [:]
-            // Only the version is decoded, and only of logs recent enough to matter.
-            outdated = Set(stored.filter {
-                (LedgerCopies.signature($0.value.signature)?.modified ?? .distantPast) >= retained && !Self.isCurrent($0.value)
-            }.keys)
+            // Only the version and position are decoded, and only of logs recent enough to matter.
+            let progress = stored.filter { (LedgerCopies.signature($0.value.signature)?.modified ?? .distantPast) >= retained }
+                .mapValues(Self.progress)
+            outdated = Set(progress.filter { $0.value?.version != Log.version }.keys)
+            unfinished = Set(progress.filter { $0.value.map { $0.version == Log.version && $0.offset < $0.committed } == true }.keys)
             groups = stored.compactMapValues(\.group)
             modified = stored.compactMapValues { $0.group == nil ? nil : LedgerCopies.signature($0.signature)?.modified }
             loadedGeneration = generation
@@ -190,8 +194,9 @@ final class TailLogStore<Log: TailLog> {
             if let entry = entry(path), entry.size == file.size, LedgerCopies.same(entry.modified, file.modified), entry.offset >= entry.committed { continue }
             changing.append((path, file))
         }
-        // An older log whose state another version wrote may hold usage that version counted differently.
-        for path in outdated {
+        // An older log whose state another version wrote may hold usage that version counted differently, and one whose
+        // last read stopped short has lines waiting: both are read on over as many polls as that takes.
+        for path in outdated.union(unfinished).union(entries.filter { $0.value.offset < $0.value.committed }.keys) {
             if let file = listing[path], file.modified < cutoff, file.modified >= retained { changing.append((path, file)) }
         }
 
@@ -279,6 +284,7 @@ final class TailLogStore<Log: TailLog> {
             for (path, update) in updates { entries[path] = update.entry }
             for path in removed { entries[path] = nil; stored[path] = nil }
             outdated.subtract(written.union(removed))
+            unfinished.subtract(written.union(removed))
             groups = nextGroups
             modified = nextModified
             pass.changed = Array(Set(updates.keys).union(handovers.map(\.to)))
@@ -301,6 +307,7 @@ final class TailLogStore<Log: TailLog> {
             entries[to] = entries.removeValue(forKey: from)
             stored[to] = stored.removeValue(forKey: from)
             if outdated.remove(from) != nil { outdated.insert(to) }
+            if unfinished.remove(from) != nil { unfinished.insert(to) }
             groups[to] = groups.removeValue(forKey: from)
             modified[to] = modified.removeValue(forKey: from)
         }
@@ -464,8 +471,11 @@ final class TailLogStore<Log: TailLog> {
         return result
     }
 
-    private static func isCurrent(_ file: UsageLedger.FileState) -> Bool {
-        file.state.flatMap { try? JSONDecoder().decode(StoredVersion.self, from: $0) }?.version == Log.version
+    /// A stored state's version, and where its last read stopped against the end of the complete lines it saw; nil for a
+    /// state that cannot be decoded.
+    private static func progress(_ file: UsageLedger.FileState) -> (version: Int, offset: Int, committed: Int)? {
+        guard let stored = file.state.flatMap({ try? JSONDecoder().decode(StoredProgress.self, from: $0) }) else { return nil }
+        return (stored.version, stored.offset ?? 0, stored.committedSize ?? LedgerCopies.signature(file.signature)?.size ?? 0)
     }
 
     private static func state(_ entry: Entry) -> UsageLedger.FileState {
@@ -528,7 +538,9 @@ final class TailLogStore<Log: TailLog> {
     }
 }
 
-/// The version of a stored state, read without its summary.
-private struct StoredVersion: Decodable {
+/// The version of a stored state and its position, read without its summary.
+private struct StoredProgress: Decodable {
     let version: Int
+    let offset: Int?
+    let committedSize: Int?
 }
