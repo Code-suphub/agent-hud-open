@@ -2,8 +2,9 @@
 
 Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` on `main`; `CFBundleShortVersionString` in `scripts/build-app.sh` carries the three-part numeric version `X.Y.Z`. Each entry lists what changed for people using the application and, under **Host API**, what changed for applications that embed `AgentHUDCore` and `AgentHUDDesktop`. Dates are tag dates.
 
-## Unreleased
+## 0.5.4 — 2026-10-15
 
+- Requires Agent HUD for iPhone 1.5 or later for iPhone and Apple Watch viewing, as 0.5.0 does.
 - Sessions, their turns and their completions cover the last seven days of activity however far back a host reads tokens. A host that read a month of logs for its day totals, as the private app does while its local network is on, built every session of that month on each pass, about 1,270 Claude logs where 520 were active that week; the session list and the agent cards listed them too. Each listed session keeps its whole sub-agent tree, and a listed Grok Bot all its billed runs, however old. Day totals, statistics, models and usage records still cover every log read. On this Mac, reading 32 days of Claude Code and Codex, a pass builds 323 sessions and sub-agents where it built 976, in 109 ms where it took 125, and the first pass after launch takes 3 s where it took 5 to 6.
 - An agent card picks its sessions from those seven days for every range, 30 days included, while its tokens, price and cache rewrites cover the whole range. What calls sent again after the cache lapsed now comes from the usage ledger, every session's calls whether or not it is listed, so a 30-day card's cache rewrites cover the month without building a month of sessions; before, they covered only the sessions the report listed, a week on a host that reads one.
 - A failed Claude Code engine read keeps the local data of a month with no session in its last week, with a notice, where it failed the whole read.
