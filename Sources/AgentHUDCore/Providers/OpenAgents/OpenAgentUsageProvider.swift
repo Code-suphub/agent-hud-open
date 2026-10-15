@@ -193,12 +193,14 @@ actor OpenAgentUsageProvider: UsageProvider, LedgerRecording {
                     source: L10n.text("本地会话", "Local session"), enabled: true)
             }
             // The newest turn is the last one listed.
-            let running = SessionPhase.read(.init(turn: item.turns.last), rule: .turns, at: now).inFlight
+            let evidence = SessionPhase.SourceEvidence(turn: item.turns.last)
+            let running = SessionPhase.read(evidence, rule: .turns, at: now).inFlight
             let unique = UsageAggregation.usageUnion([item.events])
             return LiveSession(id: item.id, agentId: agentID, task: item.title,
                 terminal: item.workspace.map { URL(fileURLWithPath: $0).lastPathComponent }, startedAt: start, endedAt: running ? nil : end,
                 pctOfWindow: nil, tokensIn: unique.reduce(0) { $0 + $1.tokensIn }, tokensOut: unique.reduce(0) { $0 + $1.tokensOut },
-                client: item.client.name, transcriptPath: item.path.isEmpty ? nil : item.path, cacheReadTokens: unique.reduce(0) { $0 + $1.cacheReadTokens }, observedAt: now,
+                client: item.client.name, transcriptPath: item.path.isEmpty ? nil : item.path, cacheReadTokens: unique.reduce(0) { $0 + $1.cacheReadTokens },
+                observedAt: evidence.newest,
                 workingDirectory: item.workspace, lastActivityAt: end, navigationTarget: item.navigation?.target)
         }
         var snapshots: [UsageSnapshot] = [], descriptors: [AgentDescriptor] = []
