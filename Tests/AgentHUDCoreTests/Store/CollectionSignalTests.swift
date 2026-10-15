@@ -104,6 +104,19 @@ final class CollectionSignalTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor
+    func testLookingAtTheAccountsWithAWorkingWatchListsNoFileAgain() async throws {
+        let a = Source(directory: try directory())
+        let store = try await start(CombinedUsageProvider([.init("A", a)]))
+        let initial = try await wait { await a.fetches == 1 }
+        XCTAssertTrue(initial)
+        let before = await a.changedPaths.count
+        await store.refreshAccounts()
+        let fetches = await a.fetches, after = await a.changedPaths.dropFirst(before)
+        XCTAssertEqual(fetches, 2, "opening the panel still reads")
+        XCTAssertFalse(after.contains { $0 == nil }, "a nil would make every listing list all its roots: \(after)")
+    }
+
+    @MainActor
     func testQuietSourcesAreNotReadAgain() async throws {
         let a = Source(directory: try directory())
         _ = try await start(CombinedUsageProvider([.init("A", a)]))

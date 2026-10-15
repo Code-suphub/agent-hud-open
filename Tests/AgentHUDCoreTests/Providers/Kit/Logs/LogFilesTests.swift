@@ -138,4 +138,69 @@ final class LogFilesTests: XCTestCase {
         XCTAssertTrue(files.refresh(now: Date()).truncated, "files the full listing did not reach are still missing")
         XCTAssertTrue(names(files).contains("4.jsonl"))
     }
+
+    func testASymlinkedRootListsTheSameFilesHoweverItIsReached() throws {
+        let base = try directory(), visits = Visits()
+        let target = base.appendingPathComponent("real"), link = base.appendingPathComponent("link")
+        try write(target.appendingPathComponent("p/1.jsonl"))
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let files = listing([link], visits: visits)
+        files.refresh(now: Date())
+        let full = Set(files.files.keys)
+        XCTAssertEqual(full, [real(target).appendingPathComponent("p/1.jsonl").path])
+
+        files.noteChanges([real(target).appendingPathComponent("p").path])
+        files.refresh(now: Date())
+        XCTAssertEqual(Set(files.files.keys), full, "a subfolder event")
+        files.noteChanges([link.path])
+        files.refresh(now: Date())
+        XCTAssertEqual(Set(files.files.keys), full, "a root event")
+        files.noteChanges([real(target).path])
+        files.refresh(now: Date())
+        XCTAssertEqual(Set(files.files.keys), full, "a root event by the real path")
+    }
+
+    func testARootCreatedAfterTheFirstListingTakesEventsByItsRealPath() throws {
+        let base = try directory(), visits = Visits()
+        let root = base.appendingPathComponent("home/projects")
+        let files = listing([root], visits: visits)
+        files.refresh(now: Date())
+        XCTAssertTrue(files.files.isEmpty)
+
+        let log = root.appendingPathComponent("p/a.jsonl")
+        try write(log)
+        let named = real(root)
+        XCTAssertNotEqual(named.path, root.path, "the fixture sits behind a symlink")
+        files.noteChanges([named.path, named.appendingPathComponent("p").path])
+        files.refresh(now: Date())
+        XCTAssertEqual(Set(files.files.keys), [named.appendingPathComponent("p/a.jsonl").path])
+    }
+
+    func testAFileEventInASkippedOrHiddenFolderAddsNothing() throws {
+        let root = try directory(), visits = Visits()
+        try write(root.appendingPathComponent("s/1.jsonl"))
+        let files = listing([root], visits: visits)
+        files.refresh(now: Date())
+
+        let skipped = root.appendingPathComponent("s/tool-results/2.jsonl"), hidden = root.appendingPathComponent("s/.hidden/3.jsonl")
+        let hiddenFile = root.appendingPathComponent("s/.4.jsonl")
+        for url in [skipped, hidden, hiddenFile] { try write(url) }
+        files.noteChanges(Set([skipped, hidden, hiddenFile].map { real($0).path }))
+        files.refresh(now: Date())
+        XCTAssertEqual(names(files), ["1.jsonl"])
+    }
+
+    func testAGoneFileThatWasNeverListedWalksNothing() throws {
+        let root = try directory(), visits = Visits()
+        try write(root.appendingPathComponent("s/1.jsonl"))
+        let files = listing([root], visits: visits)
+        files.refresh(now: Date())
+
+        // An atomic write reports its temporary file, gone by the time the poll looks.
+        visits.paths = []
+        files.noteChanges([real(root).appendingPathComponent("s/1.meta.json.sb-1234").path])
+        files.refresh(now: Date())
+        XCTAssertEqual(names(files), ["1.jsonl"])
+        XCTAssertEqual(visits.paths, [real(root).appendingPathComponent("s/1.meta.json.sb-1234").path], "asked about once, as a file")
+    }
 }
