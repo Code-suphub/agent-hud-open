@@ -109,7 +109,7 @@ final class AgentSeparationTests: XCTestCase {
     }
 
     @MainActor
-    func testTheHoveredMarkIsGlancedAtThenOpenedAndLeftAloneAfterwards() throws {
+    func testTheHoveredMarkWakesFromThePeekOnAndIsLeftAloneAfterwards() throws {
         _ = NSApplication.shared
         let screen = try XCTUnwrap(NSScreen.main)
         let key = ScreenIdentity.key(for: screen)
@@ -136,11 +136,11 @@ final class AgentSeparationTests: XCTestCase {
             pointer = CGPoint(x: strip.midX, y: strip.maxY - 6)
             hud.samplePointer()
             hud.forceOpen()
-            XCTAssertEqual(attention().first, .glanced, "\(mode): the hovered mark is its logo for the glance")
+            XCTAssertEqual(attention().first, .opened, "\(mode): the hovered mark is its bot from the peek on")
             XCTAssertTrue(attention().dropFirst().allSatisfy { $0 == .none }, "\(mode): the others follow their agents")
 
             hud.pinAgent()
-            XCTAssertEqual(attention().first, .opened, "\(mode): a click wakes it for a moment")
+            XCTAssertEqual(attention().first, .opened, "\(mode): and stays it through the click")
 
             hud.forceCollapse()
             XCTAssertTrue(attention().allSatisfy { $0 == .none }, "\(mode): closing gives every mark back to its agent")

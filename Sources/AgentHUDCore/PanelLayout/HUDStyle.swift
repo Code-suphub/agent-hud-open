@@ -9,8 +9,8 @@ import Foundation
 /// It is written in an agent's words, as `set_panel_layout`'s `hud` takes it beside `agents`: `mode` is `notch`,
 /// `dynamic` or `simple`; `position` is the placement's `offset`, `logoGap` its `gapScale`, `edgeDistance` its
 /// `logoEdgeDistance`, `showLogos`, `showRings` and `showNumbers` its `showsLogos`, `showsRings` and `showsNumbers`,
-/// `bots` its `simpleBots` and `separateAgents` its `separatesAgents`; under `glow`, `speed` is the glow's working
-/// period, `breathSeconds`, and `amplitude` its `breathAmplitude`.
+/// and `separateAgents` its `separatesAgents`; under `glow`, `speed` is the glow's working period, `breathSeconds`, and
+/// `amplitude` its `breathAmplitude`.
 public struct HUDStyle: Hashable, Sendable {
     public var mode: HUDMode?
     public var edge: HUDEdge?
@@ -26,8 +26,6 @@ public struct HUDStyle: Hashable, Sendable {
     public var ringWidth: Double?
     public var showRings: Bool?
     public var showNumbers: Bool?
-    /// Whether the Simple panel's marks turn into bots.
-    public var bots: Bool?
     /// Whether a dock answers for one agent at a time.
     public var separateAgents: Bool?
     public var glow: Glow
@@ -60,8 +58,8 @@ public struct HUDStyle: Hashable, Sendable {
 
     public init(mode: HUDMode? = nil, edge: HUDEdge? = nil, position: Double? = nil, logoSize: Double? = nil,
                 logoGap: Double? = nil, edgeDistance: Double? = nil, showLogos: Bool? = nil, simpleSize: Double? = nil,
-                ringWidth: Double? = nil, showRings: Bool? = nil, showNumbers: Bool? = nil, bots: Bool? = nil,
-                separateAgents: Bool? = nil, glow: Glow = Glow()) {
+                ringWidth: Double? = nil, showRings: Bool? = nil, showNumbers: Bool? = nil, separateAgents: Bool? = nil,
+                glow: Glow = Glow()) {
         self.mode = mode
         self.edge = edge
         self.position = position
@@ -73,7 +71,6 @@ public struct HUDStyle: Hashable, Sendable {
         self.ringWidth = ringWidth
         self.showRings = showRings
         self.showNumbers = showNumbers
-        self.bots = bots
         self.separateAgents = separateAgents
         self.glow = glow
     }
@@ -95,7 +92,6 @@ public struct HUDStyle: Hashable, Sendable {
         if let ringWidth { next.ringWidth = ringWidth }
         if let showRings { next.showsRings = showRings }
         if let showNumbers { next.showsNumbers = showNumbers }
-        if let bots { next.simpleBots = bots }
         if let separateAgents { next.separatesAgents = separateAgents }
         return next
     }
@@ -119,7 +115,7 @@ public struct HUDStyle: Hashable, Sendable {
         self.init(mode: placement.mode, edge: placement.edge, position: placement.offset, logoSize: placement.logoSize,
                   logoGap: placement.gapScale, edgeDistance: placement.logoEdgeDistance, showLogos: placement.showsLogos,
                   simpleSize: placement.simpleSize, ringWidth: placement.ringWidth, showRings: placement.showsRings,
-                  showNumbers: placement.showsNumbers, bots: placement.simpleBots, separateAgents: placement.separatesAgents,
+                  showNumbers: placement.showsNumbers, separateAgents: placement.separatesAgents,
                   glow: Glow(style: glow.style, effect: glow.effect, brightness: glow.brightness, range: glow.range,
                              blur: glow.blur, speed: glow.breathSeconds, amplitude: glow.breathAmplitude,
                              outwardOnly: glow.outwardOnly))
@@ -193,7 +189,7 @@ extension HUDStyle {
     /// A field of a screen's placement an agent can set, by the name it uses for it.
     enum Field: String, CaseIterable, Sendable {
         case mode, edge, position, logoSize, logoGap, edgeDistance, showLogos, simpleSize, ringWidth, showRings,
-             showNumbers, bots, separateAgents
+             showNumbers, separateAgents
 
         /// The range a number keeps within, Settings' own; nil for a field that is no number.
         var range: ClosedRange<Double>? {
@@ -204,7 +200,7 @@ extension HUDStyle {
             case .edgeDistance: ScreenPlacement.logoEdgeDistanceRange
             case .simpleSize: ScreenPlacement.simpleSizeRange
             case .ringWidth: ScreenPlacement.ringWidthRange
-            case .mode, .edge, .showLogos, .showRings, .showNumbers, .bots, .separateAgents: nil
+            case .mode, .edge, .showLogos, .showRings, .showNumbers, .separateAgents: nil
             }
         }
 
@@ -214,7 +210,7 @@ extension HUDStyle {
             case .mode: HUDMode.allCases
             case .edge, .position, .separateAgents: [.logos, .simple]
             case .logoSize, .logoGap, .edgeDistance, .showLogos: [.logos]
-            case .simpleSize, .ringWidth, .showRings, .showNumbers, .bots: [.simple]
+            case .simpleSize, .ringWidth, .showRings, .showNumbers: [.simple]
             }
         }
     }
@@ -249,7 +245,6 @@ extension HUDStyle {
         case .ringWidth: ringWidth.map(JSONValue.number)
         case .showRings: showRings.map(JSONValue.bool)
         case .showNumbers: showNumbers.map(JSONValue.bool)
-        case .bots: bots.map(JSONValue.bool)
         case .separateAgents: separateAgents.map(JSONValue.bool)
         }
     }
@@ -269,7 +264,6 @@ extension HUDStyle {
         case .ringWidth: ringWidth = number
         case .showRings: showRings = json.boolValue
         case .showNumbers: showNumbers = json.boolValue
-        case .bots: bots = json.boolValue
         case .separateAgents: separateAgents = json.boolValue
         }
     }

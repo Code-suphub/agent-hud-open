@@ -9,7 +9,7 @@ final class HUDStyleTests: XCTestCase {
     private let every: [String: JSONValue] = [
         "mode": .string("dynamic"), "edge": .string("left"), "position": .number(0.25), "logoSize": .integer(30),
         "logoGap": .number(0.5), "edgeDistance": .integer(6), "showLogos": .bool(false), "simpleSize": .integer(32),
-        "ringWidth": .number(2.5), "showRings": .bool(false), "showNumbers": .bool(false), "bots": .bool(true),
+        "ringWidth": .number(2.5), "showRings": .bool(false), "showNumbers": .bool(false),
         "separateAgents": .bool(true),
         "glow": .object(["style": .string("dots"), "effect": .string("ripple"), "brightness": .number(0.5),
                          "range": .integer(20), "blur": .integer(4), "speed": .integer(6), "amplitude": .number(0.3),
@@ -24,7 +24,7 @@ final class HUDStyleTests: XCTestCase {
         let placement = style.applied(to: .default(hasNotch: true))
         XCTAssertEqual(placement, ScreenPlacement(mode: .logos, edge: .left, offset: 0.25, logoSize: 30, logoEdgeDistance: 6,
                                                   gapScale: 0.5, showsLogos: false, simpleSize: 32, ringWidth: 2.5,
-                                                  showsRings: false, showsNumbers: false, simpleBots: true, separatesAgents: true))
+                                                  showsRings: false, showsNumbers: false, separatesAgents: true))
         var glow = GlowSettings()
         glow.style = .dots
         glow.effect = .ripple
@@ -56,7 +56,7 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertEqual(HUDMode(agentName: "dynamic"), .logos)
         XCTAssertNil(HUDMode(agentName: "logos"), "the settings' own name is not an agent's")
         XCTAssertEqual(HUDStyle.names, ["mode", "edge", "position", "logoSize", "logoGap", "edgeDistance", "showLogos", "simpleSize",
-                                        "ringWidth", "showRings", "showNumbers", "bots", "separateAgents", "glow"])
+                                        "ringWidth", "showRings", "showNumbers", "separateAgents", "glow"])
     }
 
     /// Reduced against what a screen has saved, a style keeps only what it changes: the style a screen has in effect,
@@ -127,7 +127,7 @@ final class HUDStyleTests: XCTestCase {
                        ["hud.mode is one of \"notch\", \"dynamic\", \"simple\"."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "edge", .string("centre")),
                        ["hud.edge is one of \"top\", \"right\", \"bottom\", \"left\"."])
-        for name in ["showLogos", "showRings", "showNumbers", "bots", "separateAgents"] {
+        for name in ["showLogos", "showRings", "showNumbers", "separateAgents"] {
             XCTAssertEqual(HUDStyle.misreadings(ofField: name, .string("yes")), ["hud.\(name) is true or false."])
             XCTAssertEqual(HUDStyle.misreadings(ofField: name, .bool(true)), [])
         }
@@ -144,8 +144,8 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertNil(HUDStyle.misreadings(ofField: "background", .string("blue")), "a key that names no field is the caller's")
         XCTAssertEqual(PanelLayout.misreadings(of: .object(["hud": .object(["background": .string("blue")])])),
                        ["hud has no property \"background\"; the hud takes agents, mode, edge, position, logoSize, logoGap, "
-                        + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, bots, separateAgents, glow "
-                        + "and reset."])
+                        + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, separateAgents, glow and "
+                        + "reset."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .string("yes")), ["hud.reset is true or false."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .bool(false)), [])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .null), [])

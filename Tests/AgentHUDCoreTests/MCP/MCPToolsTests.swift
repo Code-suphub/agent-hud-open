@@ -138,7 +138,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(hud["type"], .string("object"))
         XCTAssertEqual(hud["additionalProperties"], .bool(false))
         XCTAssertEqual(hud["properties"].objectValue?.keys.sorted(),
-                       ["agents", "bots", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "mode", "position", "reset",
+                       ["agents", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "mode", "position", "reset",
                         "ringWidth", "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize"])
         XCTAssertEqual(hud["properties"]["reset"]["type"], .string("boolean"))
         XCTAssertEqual(hud["properties"]["reset"]["description"].stringValue,
@@ -152,7 +152,7 @@ final class MCPToolsTests: XCTestCase {
         for name in ["position", "logoSize", "logoGap", "edgeDistance", "simpleSize", "ringWidth"] {
             XCTAssertEqual(hud["properties"][name]["type"], .string("number"), name)
         }
-        for name in ["showLogos", "showRings", "showNumbers", "bots", "separateAgents"] {
+        for name in ["showLogos", "showRings", "showNumbers", "separateAgents"] {
             XCTAssertEqual(hud["properties"][name]["type"], .string("boolean"), name)
         }
         XCTAssertEqual(hud["properties"]["logoSize"]["description"].stringValue, "Dynamic: logo size in points, 12 to 36.")

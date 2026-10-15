@@ -11,13 +11,12 @@ enum BotPhase: Sendable, Equatable {
     case asking
     /// A turn just ended: the bot smiles.
     case done
-    /// The agent's card is being glanced at: the mark holds still as its logo, whatever its agent is doing.
-    case glanced
-    /// The agent's whole panel is open: the bot is up and watches the pointer for as long as it stays open.
+    /// The agent's own card is open, from a hover or a click: the bot is up and watches the pointer for as long as
+    /// the card stays open.
     case opened
 
     /// The mark stays where its logo is, with no hop and nothing raised.
-    var staysInPlace: Bool { self == .working || self == .idle || self == .glanced || self == .opened }
+    var staysInPlace: Bool { self == .working || self == .idle || self == .opened }
 }
 
 /// The bot's eyes. `look` and `lookY` are shares of a full turn of the head, right and down positive.
@@ -122,7 +121,6 @@ struct BotMotion: Sendable {
         switch phase {
         case .idle: return botInterval == nil && pose == BotPose()
         case .done: return (last ?? 0) - since > Self.doneSeconds
-        case .glanced: return pose == BotPose()
         case .working, .asking, .opened: return false
         }
     }
@@ -224,7 +222,7 @@ struct BotMotion: Sendable {
             return age < 1.2 || knock < 0.55 ? BotPace.lively : BotPace.following
         case .done:
             if age < 1.5 { return BotPace.lively }
-        case .working, .idle, .glanced, .opened:
+        case .working, .idle, .opened:
             break
         }
         return following ? BotPace.following : BotPace.calm
@@ -252,7 +250,7 @@ struct BotMotion: Sendable {
         var pose = BotPose()
         let t = CGFloat(age)
         switch phase {
-        case .working, .idle, .glanced, .opened:
+        case .working, .idle, .opened:
             // Breathing changes the body's shape around its fixed centre.
             let breath = 2 * CGFloat.pi * CGFloat(age / period)
             pose.scaleX = 1 + 0.03 * sin(2 * breath)
@@ -300,7 +298,7 @@ struct BotMotion: Sendable {
         var target = BotFace()
         var every: ClosedRange<TimeInterval>? = 3.2...6.5
         switch phase {
-        case .working, .idle, .glanced, .opened:
+        case .working, .idle, .opened:
             target.look = aim.x
             target.lookY = aim.y
             every = 2.2...4.5
@@ -369,7 +367,7 @@ struct BotMotion: Sendable {
         }
         var lift: CGFloat = 0, scale: CGFloat = 1
         switch phase {
-        case .working, .idle, .glanced, .opened:
+        case .working, .idle, .opened:
             break
         case .asking:
             lift = 0.03
