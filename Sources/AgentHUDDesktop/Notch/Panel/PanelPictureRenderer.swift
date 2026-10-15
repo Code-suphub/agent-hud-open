@@ -60,10 +60,12 @@ struct PanelPictureRenderer {
         HoverPanelView.width(CGFloat(store.settings.panelLayout.effective(for: screen).style.panelWidth), insets: display.insets)
     }
 
-    /// The panel's height as the island opens it, at least 80 points, and the tallest the display lets it open.
+    /// The panel's height as the island opens it, at least 80 points, the tallest the display lets it open, and the
+    /// width its content is laid out in there.
     func fit() -> PanelFit {
         let natural = IslandWindowController.naturalHeight(of: panel(masked: false))
-        return PanelFit(height: Double(max(80, natural.rounded())), maximumHeight: Double(display.maximumHeight))
+        return PanelFit(height: Double(max(80, natural.rounded())), maximumHeight: Double(display.maximumHeight),
+                        contentWidth: Double(width - display.insets.leading - display.insets.trailing))
     }
 
     /// The whole panel as a PNG, at `PanelPicture.pointScale` pixels a point or at the scale that keeps it within

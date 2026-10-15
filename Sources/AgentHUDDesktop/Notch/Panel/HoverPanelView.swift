@@ -62,8 +62,8 @@ struct HoverPanelView: View {
         return vendor.map { AgentArtwork.markKey($0) == AgentArtwork.markKey(focusVendor) } ?? false
     }
 
-    private var quotaGroups: [(vendor: String, rows: [AgentRow])] { store.rowGroups.filter { focused($0.vendor) } }
-    private var billing: [APIBilling] { store.enabledBilling.filter { focused($0.vendor) } }
+    var quotaGroups: [(vendor: String, rows: [AgentRow])] { store.rowGroups.filter { focused($0.vendor) } }
+    var billing: [APIBilling] { store.enabledBilling.filter { focused($0.vendor) } }
     private var consumers: [AgentDescriptor] { store.consumers.filter { focused($0.vendor) } }
 
     /// The models the token chart draws: those of the agents the layout names, and on an agent's own panel only that
@@ -88,36 +88,19 @@ struct HoverPanelView: View {
 
     private var layout: PanelLayoutStore { store.settings.panelLayout }
 
-    /// The panel under its screen's layout in effect, a draft included. The Settings switches decide what exists; the
-    /// layout hides, orders and draws what they leave.
-    private var plan: PanelLayoutPlan { PanelLayoutPlan(layout: layout.effective(for: screen), blocks: store.view.panelBlocks) }
-
-    /// One block of the panel with what it draws: a vendor's quota rows, or the API accounts under one key.
-    private enum Block: Identifiable {
-        case quota(PanelBlockPlan, rows: [AgentRow])
-        case billing(PanelBlockPlan, accounts: [APIBilling])
-
-        var plan: PanelBlockPlan {
-            switch self {
-            case .quota(let plan, _), .billing(let plan, _): plan
-            }
-        }
-
-        /// A block that asks for another widget, or other measures, is another view: its picker starts again.
-        var id: String { "\(plan.key)|\(plan.widget.rawValue)|" + plan.measures.map(\.rawValue).joined(separator: ",") }
-        var isQuota: Bool { plan.kind == .quota }
+    /// The panel under its screen's layout in effect, a draft included, its blocks in lines at the width the island
+    /// gives the content. The Settings switches decide what exists; the layout hides, orders and draws what they leave.
+    /// One agent's own panel sets every block across the whole line.
+    private var plan: PanelLayoutPlan {
+        let effective = layout.effective(for: screen)
+        return PanelLayoutPlan(layout: effective, blocks: store.view.panelBlocks, contentWidth: Double(contentWidth(effective.style)),
+                               pairs: focusVendor == nil)
     }
 
-    private func blocks(_ plan: PanelLayoutPlan) -> [Block] {
-        guard store.settings.settings.showIslandQuota else { return [] }
-        let groups = Dictionary(quotaGroups.map { ($0.vendor, $0.rows) }, uniquingKeysWith: { first, _ in first })
-        let accounts = Dictionary(grouping: billing, by: \.panelBlockKey)
-        return plan.blocks.compactMap { block in
-            switch block.kind {
-            case .quota: groups[block.key].map { .quota(block, rows: $0) }
-            case .billing: accounts[block.key].map { .billing(block, accounts: $0) }
-            }
-        }
+    /// The width the whole panel's content is laid out in under `style`: the width the island gives the panel
+    /// (`width(_:insets:)`) inside its insets.
+    func contentWidth(_ style: PanelStyle) -> CGFloat {
+        Self.width(CGFloat(style.panelWidth), insets: insets) - insets.leading - insets.trailing
     }
 
     /// The sections that have something to show, in the layout's order.
@@ -171,7 +154,8 @@ struct HoverPanelView: View {
 
     private var content: some View {
         let plan = plan
-        let blocks = blocks(plan)
+        let lines = blockLines(plan)
+        let blocks = lines.flatMap(\.blocks)
         let sections = sections(plan, blocks: blocks)
         let inlineAlert = alert.map { !$0.isSessionEvent } == true
         // A quota block names its agent; where none is drawn, the panel still has to say whose it is.
@@ -199,7 +183,7 @@ struct HoverPanelView: View {
             ForEach(Array(sections.enumerated()), id: \.element) { index, section in
                 switch section {
                 case .blocks:
-                    blockList(blocks, separated: index > 0, spacing: spacing, divider: divider)
+                    blockList(lines, separated: index > 0, spacing: spacing, divider: divider)
                 case .tokens:
                     TokenConsumptionChart(store: store, theme: theme, context: .island, modelFilter: tokenFilter(plan.tokens),
                                           period: plan.tokens.period, compact: true, onOpenStats: onOpenStats)
@@ -216,34 +200,6 @@ struct HoverPanelView: View {
         .environment(\.panelSpacing, spacing)
     }
 
-    /// The blocks in the layout's order. A quota block comes under a divider unless it is the first, which has one only
-    /// below another section. An API account's card is always under its own divider, the first one too, as it has been
-    /// since before there were layouts, so a panel of balances alone is the panel it was. Without separators each
-    /// divider's room stays and its line goes.
-    private func blockList(_ blocks: [Block], separated: Bool, spacing: PanelSpacingMetrics, divider: Color) -> some View {
-        VStack(alignment: .leading, spacing: spacing.blocks) {
-            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
-                Group {
-                    switch block {
-                    case .quota(let plan, let rows):
-                        let divided = index > 0 || separated
-                        ProviderQuotaBlock(store: store, rows: rows, plan: plan)
-                            .padding(.top, divided ? spacing.divided : 0)
-                            .topDivider(divided ? divider : .clear)
-                    case .billing(_, let accounts):
-                        VStack(alignment: .leading, spacing: spacing.blocks) {
-                            ForEach(accounts) { account in
-                                APIBillingCard(billing: account, store: store, theme: theme, compact: true)
-                                    .padding(.top, spacing.divided)
-                                    .topDivider(divider)
-                            }
-                        }
-                    }
-                }
-                .transition(.opacity)
-            }
-        }
-    }
 
     private var footer: some View {
         HStack {

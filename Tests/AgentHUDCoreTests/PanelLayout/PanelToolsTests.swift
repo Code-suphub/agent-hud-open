@@ -270,7 +270,7 @@ final class PanelToolsTests: PanelToolsCase {
         for part in ["blocks.Claude.widget is one of \"bar\", \"ring\", \"number\", \"chart\"",
                      "blocks.Claude.measures[0]: \"speed\" is not one of \"quota\", \"burn\", \"tokens\", \"cost\"",
                      "blocks.Claude.measures[1] is a string", "blocks.Claude has no property \"hide\"",
-                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, countdown, columns and ringSize.",
+                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, countdown, columns, ringSize and span.",
                      "blocks.Claude.hidden is true or false", "sections[0]: \"weather\" is not one of", "order is a list"] {
             XCTAssertTrue(names.contains(part), "\(part) — \(names)")
         }

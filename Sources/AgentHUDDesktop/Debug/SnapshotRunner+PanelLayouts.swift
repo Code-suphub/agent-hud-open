@@ -9,10 +9,10 @@ extension SnapshotRunner {
     /// mixes widgets, reorders the blocks and hides a section; each spacing, the panel without separators, a ring block
     /// at each size, a block of six windows in two and in six columns, blocks offering two measures and one, a block
     /// with its countdown hidden, the layouts kept per screen (`saveScreenLayouts`), an agent's style drafts and the
-    /// panel's widths (`saveHUDStyles`), and the session rows and the token chart under a layout's filters
-    /// (`saveFilters`). They are drawn from a settings store of their own, with the preferences the
-    /// other stills have at this point: a layout once saved leaves a previous one behind, which every Settings still
-    /// after these would show as something to revert to.
+    /// panel's widths (`saveHUDStyles`), the session rows and the token chart under a layout's filters (`saveFilters`),
+    /// and blocks that take half a line (`saveHalves`). They are drawn from a settings store of their own, with the
+    /// preferences the other stills have at this point: a layout once saved leaves a previous one behind, which every
+    /// Settings still after these would show as something to revert to.
     static func saveLayouts(preferences: AgentHUDCore.Settings, folder: URL) {
         if let prefix = ProcessInfo.processInfo.environment["AGENTHUD_SNAPSHOT_PREFIX"],
            !"panel-layout".hasPrefix(prefix) && !prefix.hasPrefix("panel-layout") { return }
@@ -62,6 +62,7 @@ extension SnapshotRunner {
         saveScreenLayouts(preferences: preferences, folder: folder)
         saveHUDStyles(preferences: preferences, folder: folder)
         saveFilters(preferences: preferences, folder: folder)
+        saveHalves(preferences: preferences, folder: folder)
 
         layout.reset()
         var blocks: [String: PanelLayout.Block] = [:]

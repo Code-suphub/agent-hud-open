@@ -6,10 +6,14 @@ enum IslandRowLayout {
     static let inset: CGFloat = 6
     static let markerWidth: CGFloat = 8
     static let spacing: CGFloat = 12
+    /// Between the parts of a row in half a line, whose name is as wide as it is.
+    static let halfSpacing: CGFloat = 8
     static let nameWidth: CGFloat = 152
     static let textInset = inset + markerWidth + spacing
     static let headingFont = Font.ui(13, .bold)
     static let headingVerticalPadding: CGFloat = 1
+    /// A block's heading with a picker, as tall as the picker's buttons; in half a line every heading is this tall.
+    static let headingHeight: CGFloat = 18
 }
 
 /// How a block's picker names and draws the measures it flips between. The Mac uses direct buttons where the phone
@@ -49,7 +53,7 @@ struct IslandQuotaMetricPicker: View {
                 } label: {
                     Image(systemName: metric.symbol)
                         .font(.ui(9, .semibold))
-                        .frame(width: 20, height: 18)
+                        .frame(width: 20, height: IslandRowLayout.headingHeight)
                         .foregroundStyle(selection == metric ? theme.text : theme.tertiary)
                         .background(
                             RoundedRectangle(cornerRadius: 5)
@@ -71,13 +75,16 @@ struct IslandQuotaMetricPicker: View {
 /// One independently switchable provider block, drawn by the widget its plan names, with a picker over the measures
 /// the plan offers where there is more than one. Refreshes keep its selected measure because the vendor is its
 /// identity; the panel gives it a new identity when its plan asks for another widget or other measures, and the picker
-/// starts from the first of them again.
+/// starts from the first of them again. In half a line the agent's name keeps one line and is given its room before
+/// anything else on it, the loading spinner and a chart's period giving way first, and the heading is as tall as one
+/// with a picker whatever it holds.
 struct ProviderQuotaBlock: View {
     let store: UsageStore
     let rows: [AgentRow]
     let plan: PanelBlockPlan
     @State private var metric: PanelMeasure
     @Environment(\.panelSpacing) private var spacing
+    @Environment(\.panelHalf) private var half
     private let theme = Theme.island
 
     init(store: UsageStore, rows: [AgentRow], plan: PanelBlockPlan) {
@@ -103,23 +110,42 @@ struct ProviderQuotaBlock: View {
             HStack(spacing: 6) {
                 AgentLogo(vendor: vendor, size: 14)
                     .frame(width: IslandRowLayout.inset * 2 + IslandRowLayout.markerWidth)
-                Text(VendorCatalog.name(vendor))
-                    .font(IslandRowLayout.headingFont)
-                    .foregroundStyle(theme.text)
-                if store.isLoading {
-                    LoadingSpinner(color: theme.secondary)
-                        .accessibilityLabel(L10n.text("正在读取额度", "Loading quota"))
+                if half {
+                    // The name is given its room first and keeps one line: the spinner gives way where both have no
+                    // room, and a name longer than any the app gives an agent (`PanelLines.widestHeading`) wraps.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) { name.lineLimit(1); spinner }
+                        name.lineLimit(1)
+                        name
+                    }
+                    .layoutPriority(1)
+                } else {
+                    name
+                    spinner
                 }
                 Spacer()
                 if plan.measures.count > 1 {
                     IslandQuotaMetricPicker(selection: $metric, measures: plan.measures, theme: theme)
                         .padding(.trailing, 2)
                 } else if plan.widget == .chart {
-                    Text(TokenConsumptionChart.total(store.report == nil ? nil : chartColumns))
-                        .font(.tabular(12))
-                        .padding(.trailing, IslandRowLayout.inset)
+                    let total = TokenConsumptionChart.total(store.report == nil ? nil : chartColumns)
+                    Group {
+                        if half {
+                            // The figure stays where the period has no room beside the name.
+                            ViewThatFits(in: .horizontal) {
+                                Text(total)
+                                Text(total.components(separatedBy: " · ").last ?? total).fixedSize()
+                            }
+                        } else {
+                            Text(total)
+                        }
+                    }
+                    .font(.tabular(12))
+                    .padding(.trailing, IslandRowLayout.inset)
                 }
             }
+            // In half a line every heading is as tall as one with a picker, so two halves' rows start level.
+            .frame(minHeight: half ? IslandRowLayout.headingHeight : nil)
             .font(.ui(11))
             .foregroundStyle(theme.secondary)
             .padding(.vertical, IslandRowLayout.headingVerticalPadding)
@@ -157,6 +183,18 @@ struct ProviderQuotaBlock: View {
                     .padding(.horizontal, IslandRowLayout.inset)
                     .padding(.top, spacing.chartTop)
             }
+        }
+    }
+
+    private var name: Text {
+        Text(VendorCatalog.name(vendor)).font(IslandRowLayout.headingFont).foregroundStyle(theme.text)
+    }
+
+    @ViewBuilder
+    private var spinner: some View {
+        if store.isLoading {
+            LoadingSpinner(color: theme.secondary)
+                .accessibilityLabel(L10n.text("正在读取额度", "Loading quota"))
         }
     }
 
@@ -200,7 +238,8 @@ struct ProviderQuotaBlock: View {
 /// Names the account above its windows once a client has more than one, or when it is no longer signed in. A client
 /// that said why it has no current reading says it here, where the stale rows are. On the panel's picture for an agent
 /// the name is masked, where the reading came from is not said, and the warning and the notice, which their provider
-/// or client wrote, are placeholder bars.
+/// or client wrote, are placeholder bars. In half a line, where the line is short, whether the account is current
+/// gives way first, and then the name shortens from the middle.
 struct AccountSectionHeader: View {
     let account: AccountObservation
     /// Whether the account is current or when it was last read.
@@ -209,29 +248,17 @@ struct AccountSectionHeader: View {
     var warning: String?
     private let theme = Theme.island
     @Environment(\.masksIdentity) private var masksIdentity
+    @Environment(\.panelHalf) private var half
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(masksIdentity ? IdentityMask.account(account.displayName) : account.displayName)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .foregroundStyle(theme.text.opacity(account.isCurrent ? 0.85 : 0.6))
-                if let plan = account.planLabel {
-                    Text(plan).foregroundStyle(theme.secondary)
+            if half {
+                ViewThatFits(in: .horizontal) {
+                    line(label: label)
+                    line(label: nil)
                 }
-                if let sourceDetails {
-                    let said = masksIdentity ? "" : sourceDetails
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(theme.tertiary)
-                        .help(said)
-                        .accessibilityLabel(L10n.text("读数来源", "Reading source"))
-                        .accessibilityHint(said)
-                }
-                Spacer(minLength: 8)
-                Text(label)
-                    .foregroundStyle(theme.tertiary)
-                    .lineLimit(1)
+            } else {
+                line(label: label)
             }
             if let warning {
                 Text(warning)
@@ -254,6 +281,34 @@ struct AccountSectionHeader: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// The account's name, its plan and where its reading came from, with `label` at the end of the line.
+    private func line(label: String?) -> some View {
+        HStack(spacing: 6) {
+            Text(masksIdentity ? IdentityMask.account(account.displayName) : account.displayName)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .foregroundStyle(theme.text.opacity(account.isCurrent ? 0.85 : 0.6))
+            if let plan = account.planLabel {
+                Text(plan).foregroundStyle(theme.secondary)
+                    .fixedSize(horizontal: half, vertical: false)
+            }
+            if let sourceDetails {
+                let said = masksIdentity ? "" : sourceDetails
+                Image(systemName: "info.circle")
+                    .foregroundStyle(theme.tertiary)
+                    .help(said)
+                    .accessibilityLabel(L10n.text("读数来源", "Reading source"))
+                    .accessibilityHint(said)
+            }
+            Spacer(minLength: 8)
+            if let label {
+                Text(label)
+                    .foregroundStyle(theme.tertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
     private var sourceDetails: String? {
         guard let info = account.sourceInfo else { return nil }
         let date = account.observedAt.formatted(Date.FormatStyle().month(.abbreviated).day()
@@ -262,21 +317,24 @@ struct AccountSectionHeader: View {
     }
 }
 
-/// Earned resets belong to the account, so they appear once beneath its quota windows.
+/// Earned resets belong to the account, so they appear once beneath its quota windows. In half a line, which has no bar
+/// rows to line up with, the name is as wide as it is and the parts stand closer.
 struct CodexResetCreditsView: View {
     let resets: CodexResetCredits
     let showExpiry: Bool
     private let theme = Theme.island
     @State private var isHovered = false
+    @Environment(\.panelHalf) private var half
 
     var body: some View {
-        HStack(spacing: IslandRowLayout.spacing) {
+        HStack(spacing: half ? IslandRowLayout.halfSpacing : IslandRowLayout.spacing) {
             Image(systemName: "arrow.counterclockwise")
                 .font(.ui(12, .medium))
                 .frame(width: IslandRowLayout.markerWidth)
             Text(L10n.text("额度重置", "Usage resets"))
                 .font(.ui(12, .medium))
-                .frame(width: IslandRowLayout.nameWidth, alignment: .leading)
+                .frame(width: half ? nil : IslandRowLayout.nameWidth, alignment: .leading)
+                .layoutPriority(half ? 1 : 0)
             Text(availabilityLabel)
                 .font(.tabular(12, .semibold))
                 .foregroundStyle(resets.availableCount > 0 ? theme.status(.ok) : theme.secondary)

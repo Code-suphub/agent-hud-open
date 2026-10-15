@@ -7,10 +7,14 @@ public struct PanelFit: Equatable, Sendable {
     public let height: Double
     /// The tallest the panel opens on its display, in points.
     public let maximumHeight: Double
+    /// The width the panel lays its blocks out in there, inside the display's insets, which decides whether two half
+    /// blocks share a line (`PanelLayoutPlan`); nil where the measure does not say, which counts as beside the notch.
+    public let contentWidth: Double?
 
-    public init(height: Double, maximumHeight: Double) {
+    public init(height: Double, maximumHeight: Double, contentWidth: Double? = nil) {
         self.height = height
         self.maximumHeight = maximumHeight
+        self.contentWidth = contentWidth
     }
 
     /// Whether the panel is taller than its display lets it open, so a person scrolls to see the rest.

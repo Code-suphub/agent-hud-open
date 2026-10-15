@@ -60,6 +60,10 @@ extension PanelBlockKind {
 
     /// Whether the kind's blocks drawn with `widget` have rings a layout sizes: quota windows as rings.
     func takesRingSize(under widget: PanelWidget) -> Bool { self == .quota && widget == .ring }
+
+    /// Whether the kind's blocks drawn with `widget` can take half a line: cells, a chart and a balance's card can. Bar
+    /// rows cannot: their columns take about 366 pt, which half of the widest panel does not leave.
+    func takesHalf(under widget: PanelWidget) -> Bool { widget != .bar }
 }
 
 /// One block the hover panel has now. A list of them is in the panel's default order.
@@ -112,8 +116,8 @@ extension PanelLayout {
     /// Every issue of the layout against the blocks the panel has now, blocks by key and then `order` by position: a
     /// block key or an order entry that names no block, a widget its block's kind does not accept, a measure that is
     /// not offered under the widget the block is drawn with, a countdown hidden on a balance, columns or a ring size
-    /// where the block has no cells or no rings, and a hidden row its block does not have. A layout with issues still
-    /// resolves (`PanelLayoutPlan`): what cannot be done as asked falls back or waits.
+    /// where the block has no cells or no rings, half a line for bar rows, and a hidden row its block does not have. A
+    /// layout with issues still resolves (`PanelLayoutPlan`): what cannot be done as asked falls back or waits.
     ///
     /// What one of the `held` layouts already holds for a block or a row that is away is no issue when it comes back
     /// as it is held: the block's own entry unchanged, its key in `order`, the row among its block's hidden rows. A
@@ -181,6 +185,12 @@ extension PanelLayout {
                 : "\(drawn) draws no ring. ringSize applies to the \"ring\" widget."
             issues.append(PanelLayoutIssue(path: path + ".ringSize", message: message))
         }
+        if change.span == .half && !kind.takesHalf(under: widget) {
+            let message = "Bar rows need the full width of the panel, so the \"\(widget.rawValue)\" widget of \"\(block.key)\" "
+                + "cannot take half a line. span \"half\" applies to the \"ring\", \"number\" and \"chart\" widgets and to API "
+                + "balances."
+            issues.append(PanelLayoutIssue(path: path + ".span", message: message))
+        }
         let rows = block.rowKeys.isEmpty ? "It has no rows to hide." : "Its rows: \(quoted(block.rowKeys))."
         for (index, row) in change.hiddenRows.enumerated() where !block.rowKeys.contains(row) && !heldRows.contains(row) {
             issues.append(PanelLayoutIssue(path: path + ".hiddenRows[\(index)]",
@@ -211,8 +221,9 @@ extension PanelLayout {
     /// The layout reduced to what it changes about the blocks the panel has now, so that two layouts that draw those
     /// blocks alike are the same layout. For a block the panel has, its widget is left out where it is its kind's
     /// default; its measures are kept to those its widget offers and left out where that is none or every one in the
-    /// widget's own order; and a countdown, columns or a ring size is left out where the block has none to set, and
-    /// columns or a ring size where it is the default. A block's key is left out at the end of `order` where the block
+    /// widget's own order; a countdown, columns or a ring size is left out where the block has none to set, and
+    /// columns or a ring size where it is the default; and a span is left out where it is the whole line or the block
+    /// cannot take half of one. A block's key is left out at the end of `order` where the block
     /// would come there anyway. What it holds for a block that is away stays as written. A proposal that spells out
     /// the default view is then the default layout, and one that spells out the saved layout is the saved one.
     func reduced(against existing: [PanelBlockInfo]) -> PanelLayout {
@@ -230,6 +241,7 @@ extension PanelLayout {
             if !kind.takesCountdown { change.countdown = true }
             if !kind.takesColumns(under: widget) || change.columns == Block.defaultColumns { change.columns = nil }
             if !kind.takesRingSize(under: widget) || change.ringSize == .medium { change.ringSize = nil }
+            if change.span == .full || !kind.takesHalf(under: widget) { change.span = nil }
             layout.blocks[key] = change
         }
         let inDefaultOrder = existing.map(\.key)

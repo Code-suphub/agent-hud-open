@@ -20,6 +20,10 @@ public enum PanelMeasure: String, Codable, CaseIterable, Sendable, Identifiable 
 /// How large the ring widget draws its rings; `medium` is the ring's default size.
 public enum PanelRingSize: String, Codable, CaseIterable, Sendable { case small, medium, large }
 
+/// How much of a line of the hover panel a block takes: the whole line, as by default, or half of it, beside the block
+/// next to it in the panel's order where that one takes half too (`PanelLayoutPlan`).
+public enum PanelSpan: String, Codable, CaseIterable, Sendable { case full, half }
+
 /// How far apart the hover panel sets its sections, blocks, rows and cells; `regular` is the default view's spacing.
 public enum PanelSpacing: String, Codable, CaseIterable, Sendable { case compact, regular, roomy }
 
@@ -101,8 +105,8 @@ public struct PanelStyle: Hashable, Codable, Sendable {
 /// a block is a quota window, under its `AgentDescriptor.windowKey`. A key that names nothing the panel has now stays
 /// in the document and applies again when its block or row returns.
 ///
-/// The JSON is also what an agent sends, so reading forgives field by field: a widget, ring size or spacing name this
-/// build does not know leaves that field unset, a measure or section it does not know is left out of its list,
+/// The JSON is also what an agent sends, so reading forgives field by field: a widget, ring size, span or spacing name
+/// this build does not know leaves that field unset, a measure or section it does not know is left out of its list,
 /// columns outside 2 to 6, a width outside 480 to 720 and a session limit outside 1 to 10 count as not given, a block,
 /// a style, the sessions, the tokens or a hud that is not an object is left out, a value of the wrong type counts as not
 /// given, and keys it does not know are ignored, the style
@@ -128,6 +132,8 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         public var columns: Int?
         /// The size of a ring widget's rings; nil for medium.
         public var ringSize: PanelRingSize?
+        /// How much of its line the block takes; nil for the whole line.
+        public var span: PanelSpan?
 
         /// The columns a layout can give a block of cells.
         static let columnRange = 2...6
@@ -135,7 +141,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         static let defaultColumns = 4
 
         public init(widget: PanelWidget? = nil, measures: [PanelMeasure] = [], hidden: Bool = false, hiddenRows: [String] = [],
-                    countdown: Bool = true, columns: Int? = nil, ringSize: PanelRingSize? = nil) {
+                    countdown: Bool = true, columns: Int? = nil, ringSize: PanelRingSize? = nil, span: PanelSpan? = nil) {
             self.widget = widget
             self.measures = measures
             self.hidden = hidden
@@ -143,11 +149,13 @@ public struct PanelLayout: Hashable, Codable, Sendable {
             self.countdown = countdown
             self.columns = columns
             self.ringSize = ringSize
+            self.span = span
         }
 
         /// Whether the block changes nothing: every field unset, empty or as the default view has it.
         var isEmpty: Bool {
             widget == nil && measures.isEmpty && !hidden && hiddenRows.isEmpty && countdown && columns == nil && ringSize == nil
+                && span == nil
         }
 
         /// The block with each measure named once, in the order first named; each hidden row named once, in key order,
@@ -156,10 +164,10 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         func normalized() -> Block {
             Block(widget: widget, measures: measures.withoutRepeats, hidden: hidden,
                   hiddenRows: hiddenRows.filter { !$0.isEmpty }.withoutRepeats.sorted(), countdown: countdown,
-                  columns: columns.flatMap { Self.columnRange.contains($0) ? $0 : nil }, ringSize: ringSize)
+                  columns: columns.flatMap { Self.columnRange.contains($0) ? $0 : nil }, ringSize: ringSize, span: span)
         }
 
-        private enum CodingKeys: String, CodingKey { case widget, measures, hidden, hiddenRows, countdown, columns, ringSize }
+        private enum CodingKeys: String, CodingKey { case widget, measures, hidden, hiddenRows, countdown, columns, ringSize, span }
 
         /// Nil when the value is not an object.
         init?(json: JSONValue) {
@@ -170,7 +178,8 @@ public struct PanelLayout: Hashable, Codable, Sendable {
                       hiddenRows: PanelLayout.strings(fields["hiddenRows"]),
                       countdown: fields["countdown"]?.boolValue ?? true,
                       columns: fields["columns"]?.countValue.flatMap { Self.columnRange.contains($0) ? $0 : nil },
-                      ringSize: fields["ringSize"]?.stringValue.flatMap(PanelRingSize.init(rawValue:)))
+                      ringSize: fields["ringSize"]?.stringValue.flatMap(PanelRingSize.init(rawValue:)),
+                      span: fields["span"]?.stringValue.flatMap(PanelSpan.init(rawValue:)))
         }
 
         public init(from decoder: Decoder) throws {
@@ -190,6 +199,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
             if !countdown { try c.encode(false, forKey: .countdown) }
             try c.encodeIfPresent(columns, forKey: .columns)
             try c.encodeIfPresent(ringSize, forKey: .ringSize)
+            try c.encodeIfPresent(span, forKey: .span)
         }
     }
 

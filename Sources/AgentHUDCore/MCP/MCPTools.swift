@@ -81,6 +81,8 @@ public enum MCPTools {
             "countdown": described("boolean", "False hides a quota block's reset times."),
             "columns": described("integer", "Cells on a line for the ring and number widgets, 2 to 6; 4 if left out."),
             "ringSize": text("Ring size for the ring widget; medium if left out.", oneOf: ["small", "medium", "large"]),
+            "span": text("The whole line, the default, or half of it beside the next block if that is half too. Not for bar "
+                         + "rows.", oneOf: PanelSpan.allCases.map(\.rawValue)),
         ])
         let blocks: [String: JSONValue] = [
             "type": .string("object"),

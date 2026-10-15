@@ -20,11 +20,15 @@ extension PanelTools {
     /// The panel as an agent reads it: which screen, the layout in effect there, with a screen's style draft in its
     /// hud, and the style it sets, its width among it, the panel's height on that display and whether it scrolls there,
     /// whether Settings shows reset countdowns, every section and every block the panel has, shown or hidden, with the
-    /// readings of each block's rows, the session rows and the token chart as the layout filters them, and the attached
-    /// screens.
-    func panel(_ scope: PanelLayoutScope, among attached: [PanelScreen], note: String? = nil) -> [String: JSONValue] {
+    /// span each takes there and the readings of its rows, the session rows and the token chart as the layout filters
+    /// them, and the attached screens.
+    /// - proposed: whether the note answers a proposal, after which it says which blocks the layout gives half a line
+    ///   take the whole one there, and why.
+    func panel(_ scope: PanelLayoutScope, among attached: [PanelScreen], note: String? = nil,
+               proposed: Bool = false) -> [String: JSONValue] {
         let effective = effective(scope), existing = store.view.panelBlocks
-        let plan = PanelLayoutPlan(layout: effective, blocks: existing)
+        let measured = fit?(scope)
+        let plan = PanelLayoutPlan(layout: effective, blocks: existing, contentWidth: measured?.contentWidth)
         let settings = store.settings.settings
         let switches: [PanelSection: Bool] = [.blocks: settings.showIslandQuota, .tokens: settings.showIslandTokens,
                                               .sessions: settings.showIslandSessions]
@@ -52,12 +56,25 @@ extension PanelTools {
             "screens": .array(attached.map(listing)),
         ]
         if case .screen(let key) = scope { result["usesSharedLayout"] = .bool(layout.usesShared(key)) }
-        if let measured = fit?(scope) {
+        if let measured {
             result["height"] = .integer(Int64(measured.height.rounded()))
             result["scrolls"] = .bool(measured.scrolls)
         }
-        if let note { result["note"] = .string(note) }
+        if let note { result["note"] = .string(proposed ? note + Self.wholeLines(plan, asked: effective) : note) }
         return result
+    }
+
+    /// What says which blocks the layout gives half a line take the whole one, and why: a sentence after a note, or
+    /// nothing where every such block shares a line.
+    private static func wholeLines(_ plan: PanelLayoutPlan, asked layout: PanelLayout) -> String {
+        let whole = plan.blocks.filter { block in
+            layout.blocks[block.key]?.span == .half && block.kind.takesHalf(under: block.widget) && block.span == .full
+        }
+        guard !whole.isEmpty else { return "" }
+        let names = PanelLayout.quoted(whole.map(\.key))
+        let reason = plan.halvesFit ? "no half block is left next to \(whole.count == 1 ? "it" : "each") to share a line with"
+            : "the panel is too narrow here for two halves side by side"
+        return " \(names) \(whole.count == 1 ? "takes" : "take") the whole line: \(reason)."
     }
 
     /// One attached screen as an agent reads it: its key and role, how it presents the HUD, which layout its panel
@@ -80,7 +97,8 @@ extension PanelTools {
     }
 
     /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns
-    /// and the ring size are told only where the block has them to set.
+    /// and the ring size are told only where the block has them to set, and the columns and the span as the panel sets
+    /// the block in its line.
     private func block(of plan: PanelBlockPlan, shown: Bool) -> JSONValue {
         var block: [String: JSONValue] = [
             "key": .string(plan.key), "kind": .string(plan.kind.rawValue), "shown": .bool(shown),
@@ -94,6 +112,7 @@ extension PanelTools {
         }
         if plan.kind.takesColumns(under: plan.widget) { block["columns"] = .integer(Int64(plan.columns)) }
         if plan.kind.takesRingSize(under: plan.widget) { block["ringSize"] = .string(plan.ringSize.rawValue) }
+        block["span"] = .string(plan.span.rawValue)
         switch plan.kind {
         case .quota:
             block["name"] = .string(VendorCatalog.name(plan.key))

@@ -218,7 +218,7 @@ public struct PanelTools {
                 note += " The placement and glow of its resting HUD in that version are not part of the draft while the "
                     + "screen is not attached."
             }
-            return .result(panel(scope, among: attached, note: note))
+            return .result(panel(scope, among: attached, note: note, proposed: true))
         }
         let document = JSONValue.object(arguments.filter { Self.layoutKeys.contains($0.key) })
         let view = store.view, existing = view.panelBlocks
@@ -261,7 +261,7 @@ public struct PanelTools {
                 ?? " The shared layout is unchanged"
             note += ": a call with only hud style fields leaves the layout as it is."
         }
-        return .result(panel(scope, among: attached, note: note))
+        return .result(panel(scope, among: attached, note: note, proposed: true))
     }
 
     /// Whether a call gives a screen's style alone: beside `screen` and `revision` it names only a `hud`, every property

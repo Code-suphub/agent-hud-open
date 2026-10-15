@@ -89,7 +89,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(schema["properties"]["blocks"]["type"], .string("object"))
         XCTAssertEqual(block["additionalProperties"], .bool(false))
         XCTAssertEqual(block["properties"].objectValue?.keys.sorted(),
-                       ["columns", "countdown", "hidden", "hiddenRows", "measures", "ringSize", "widget"])
+                       ["columns", "countdown", "hidden", "hiddenRows", "measures", "ringSize", "span", "widget"])
         XCTAssertEqual(choices(block["properties"]["widget"]), ["bar", "ring", "number", "chart"])
         XCTAssertEqual(block["properties"]["measures"]["type"], .string("array"))
         XCTAssertEqual(choices(block["properties"]["measures"]["items"]), ["quota", "burn", "tokens", "cost"])
@@ -98,6 +98,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(block["properties"]["countdown"]["type"], .string("boolean"))
         XCTAssertEqual(block["properties"]["columns"]["type"], .string("integer"))
         XCTAssertEqual(choices(block["properties"]["ringSize"]), ["small", "medium", "large"])
+        XCTAssertEqual(choices(block["properties"]["span"]), ["full", "half"])
 
         let style = schema["properties"]["style"]
         XCTAssertEqual(style["type"], .string("object"))
@@ -176,6 +177,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(choices(block["widget"]), PanelWidget.allCases.map(\.rawValue))
         XCTAssertEqual(choices(block["measures"]["items"]), PanelMeasure.allCases.map(\.rawValue))
         XCTAssertEqual(choices(block["ringSize"]), PanelRingSize.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(block["span"]), PanelSpan.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["style"]["properties"]["spacing"]), PanelSpacing.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["sections"]["items"]), PanelSection.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["sessions"]["properties"]["states"]["items"]),
