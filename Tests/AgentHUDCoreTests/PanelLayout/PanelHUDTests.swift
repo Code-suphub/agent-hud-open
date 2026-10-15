@@ -46,7 +46,7 @@ final class PanelHUDTests: XCTestCase {
         XCTAssertTrue(found.contains("hud.agents[2] is an agent's name from get_panel's screens."), "\(found)")
         XCTAssertTrue(found.contains("hud has no property \"size\"; the hud takes agents, mode, edge, position, logoSize, logoGap, "
                                      + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, bots, "
-                                     + "separateAgents, appearance, material, glow and reset."), "\(found)")
+                                     + "separateAgents, appearance, material, transparency, glow and reset."), "\(found)")
         XCTAssertEqual(PanelLayout.misreadings(of: .object(["hud": .string("Claude")])), ["hud is an object."])
         XCTAssertEqual(PanelLayout.misreadings(of: .object(["hud": .object(["agents": .string("Claude")])])), ["hud.agents is a list."])
         XCTAssertEqual(PanelLayout.misreadings(of: .object(["hud": .null])), [])

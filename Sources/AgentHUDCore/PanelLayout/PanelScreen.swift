@@ -48,14 +48,14 @@ public struct PanelScreen: Equatable, Sendable {
         mode == self.mode ? agents : otherModes[mode] ?? agents
     }
 
-    /// Whether its resting HUD, drawing `placement`, is drawn light now (`ScreenPlacement.drawsLight(hasNotch:systemIsLight:)`).
+    /// Whether its resting HUD, drawing `placement`, is drawn light now (`ScreenPlacement.drawsLight(systemIsLight:)`).
     func drawsLight(_ placement: ScreenPlacement) -> Bool {
-        placement.drawsLight(hasNotch: hasNotch, systemIsLight: systemIsLight)
+        placement.drawsLight(systemIsLight: systemIsLight)
     }
 
     /// Whether its resting HUD, drawing `placement`, is drawn as glass now
-    /// (`ScreenPlacement.drawsGlass(hasNotch:reducesTransparency:)`).
+    /// (`ScreenPlacement.drawsGlass(reducesTransparency:)`).
     func drawsGlass(_ placement: ScreenPlacement) -> Bool {
-        placement.drawsGlass(hasNotch: hasNotch, reducesTransparency: reducesTransparency)
+        placement.drawsGlass(reducesTransparency: reducesTransparency)
     }
 }

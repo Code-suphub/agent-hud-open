@@ -706,8 +706,12 @@ final class ScreenHUD {
     /// It is worked out from the placement in effect now, a style draft just proposed included, before the HUD has
     /// re-applied it.
     var panelDisplay: PanelPictureRenderer.Display {
-        PanelPictureRenderer.Display(insets: Self.panelInsets(on: resolveGeometry()), maximumHeight: maximumContentHeight,
-                                     look: look)
+        let geometry = resolveGeometry(), look = look
+        var insets = Self.panelInsets(on: geometry)
+        if !geometry.mode.isDocked {
+            insets.top += IslandRootView.inkClearance(inksNotch: geometry.hasNotch, look: look)
+        }
+        return PanelPictureRenderer.Display(insets: insets, maximumHeight: maximumContentHeight, look: look)
     }
 
     /// The room the open panel's content keeps from the card's edges on `geometry`, as `IslandRootView` sets it: the
@@ -767,6 +771,17 @@ final class ScreenHUD {
     /// (`SettingsStore.effectiveLook(on:)`). It is read afresh on every apply, which `IslandController` asks for with the
     /// HUD's motion when the settings, a style draft, macOS's light or dark setting or Reduce Transparency change it.
     var look: HUDLook { settings.effectiveLook(on: key) }
+
+    /// The island in Notch mode at a hardware notch, whose row keeps the camera housing's dark.
+    private var atHardwareNotch: Bool { geometry.mode == .notch && geometry.hasNotch }
+
+    /// The look the island draws with: at a hardware notch the notch row's while it rests there or shows a reminder's
+    /// wings, dark in the look's material (`HUDLook.inNotchRow`), and the screen's look once it opens into the panel or
+    /// a card; everywhere else the screen's look. Opening and closing cross-fade between the two on the island's curve.
+    /// The glow keeps the screen's look, whose material, which alone decides what it cuts out, is the row's too.
+    private func islandLook(open: Bool) -> HUDLook {
+        atHardwareNotch && !open ? look.inNotchRow : look
+    }
 
     /// The panel's style in this screen's layout, whose width the open panel takes: the whole panel's, or on a dock
     /// that separates its agents one agent's own, 100 points narrower.
@@ -928,9 +943,10 @@ final class ScreenHUD {
             collapsedSize: geometry.mode.isDocked ? geometry.rect.size : geometry.islandFrame.size,
             collapsedTopRadius: geometry.mode.isDocked ? NotchGeometry.expandedTopRadius : NotchGeometry.collapsedTopRadius,
             collapsedBottomRadius: geometry.cornerRadius,
-            look: look,
+            look: islandLook(open: open),
             lightBorder: systemIsLight,
             drawsGlassStandIn: drawsGlassStandIn,
+            inksNotch: atHardwareNotch,
             onOpenStats: { [weak self] in self?.handOff { self?.onOpenStats?() } },
             onOpenSettings: { [weak self] in self?.handOff { self?.onOpenSettings?() } },
             additionalHUDControls: { [weak self] in
@@ -1256,8 +1272,8 @@ final class ScreenHUD {
     }
 
     /// What a light or glass look gives shadows on this screen, in the shapes `IslandRootView` fills: the island, or the
-    /// panel or reminder it has grown into, kept bare on a collapsed logo queue so the panel grows out of it with its
-    /// shadow; and on a dock that separates its agents the Simple panel, which stays put while a card comes and goes.
+    /// panel or reminder it has grown into, kept bare on a collapsed logo queue and at a hardware notch so the panel grows
+    /// out of it with its shadow; and on a dock that separates its agents the Simple panel, which stays put while a card comes and goes.
     private func shells(expanded: Bool, open: Bool, islandFrame: CGRect, radius: CGFloat, flare: CGFloat) -> HUDShells {
         let separates = placement.separatesAgents && geometry.mode.isDocked
         let panel = simpleMeter.map { meter in
@@ -1266,7 +1282,10 @@ final class ScreenHUD {
         }
         switch geometry.mode {
         case .notch:
-            return HUDShells(surface: HUDShell(frame: islandFrame, radius: radius, flare: flare, floats: false, bare: false),
+            // At a hardware notch the collapsed island is the camera housing, black in any look (`NotchInk`), and casts
+            // no shadow; it is kept bare so that the panel grows out of it with its shadow.
+            let bare = geometry.hasNotch && !expanded
+            return HUDShells(surface: HUDShell(frame: islandFrame, radius: radius, flare: flare, floats: false, bare: bare),
                              dock: nil)
         case .logos:
             let silhouette = HUDShell(frame: islandFrame, radius: radius, flare: flare, floats: false, bare: !expanded)

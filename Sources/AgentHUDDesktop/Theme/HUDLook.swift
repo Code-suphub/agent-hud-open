@@ -22,10 +22,22 @@ struct HUDLook: Equatable, Sendable {
 
     var appearance: Appearance
     var material: Material = .solid
+    /// How much of the desktop glass lets through, from 0, the look's own surface laid over the glass whole, to 1, the
+    /// glass bare: what the screen's Transparency chooses (`ScreenPlacement.glassTransparency`). A solid look keeps the
+    /// standard value, so that it compares equal whatever the screen once chose for glass.
+    var transparency: Double = ScreenPlacement.standardGlassTransparency
 
     /// The HUD as it has always been drawn: dark and solid. A screen has it until its settings choose another, and the
-    /// island in a hardware notch keeps it whatever they choose.
+    /// island at rest in a hardware notch looks it whatever they choose.
     static let standard = HUDLook(appearance: .dark)
+
+    /// The look of the island in the row of a hardware notch, at rest or showing a reminder's wings: dark whatever the
+    /// appearance, in the look's own material, so that the row stays one with the camera housing. At rest the island is
+    /// the housing's own shape, inked black (`NotchInk`); a reminder's wings are black, or black glass under Glass. What
+    /// opens out of the row, the panel and the cards, takes the look itself (`ScreenHUD`).
+    var inNotchRow: HUDLook {
+        HUDLook(appearance: .dark, material: material, transparency: transparency)
+    }
 
     /// The tokens the HUD draws with: the island's own for a dark HUD, solid or glass; the light window's, set for the
     /// HUD, for a light one; and for light glass, those with ink a grade darker.
@@ -44,6 +56,14 @@ struct HUDLook: Equatable, Sendable {
         case .dark: .dark
         case .light: .light
         }
+    }
+
+    /// What glass is covered with under the HUD's ink (`HUDSurface`): the theme's `glassTint`, the look's own surface,
+    /// at the opacity the transparency leaves it. It darkens dark glass and lightens light glass, and holds the glass to
+    /// the look's appearance over any desktop: Liquid Glass follows what is behind it, light over a light desktop, and
+    /// the HUD's text and status colours are fixed. Where nothing is behind to blur, it is glass's stand-in on its own.
+    var glassCover: Color {
+        theme.glassTint.opacity(1 - transparency)
     }
 
     /// The same for AppKit: the appearance of a hosting view or a window that draws the HUD, a hover popover's or a
@@ -65,14 +85,14 @@ struct HUDLook: Equatable, Sendable {
 // MARK: Resolution
 
 extension HUDLook {
-    /// The look of a HUD that draws `placement` on a screen with or without a hardware notch, with macOS set to light or
-    /// dark (`systemIsLight`) and Reduce Transparency on or off: the placement's appearance, `system` as macOS is set,
-    /// and its material, glass drawn solid under Reduce Transparency. The island in a hardware notch has the standard
-    /// look, whatever the placement chooses (`ScreenPlacement.drawsLook(hasNotch:)`).
-    init(drawing placement: ScreenPlacement, hasNotch: Bool, systemIsLight: Bool, reducesTransparency: Bool) {
-        self.init(appearance: placement.drawsLight(hasNotch: hasNotch, systemIsLight: systemIsLight) ? .light : .dark,
-                  material: placement.drawsGlass(hasNotch: hasNotch, reducesTransparency: reducesTransparency)
-                    ? .glass : .solid)
+    /// The look of a HUD that draws `placement`, with macOS set to light or dark (`systemIsLight`) and Reduce
+    /// Transparency on or off: the placement's appearance, `system` as macOS is set, and its material, glass drawn solid
+    /// under Reduce Transparency, at the placement's transparency.
+    init(drawing placement: ScreenPlacement, systemIsLight: Bool, reducesTransparency: Bool) {
+        let glass = placement.drawsGlass(reducesTransparency: reducesTransparency)
+        self.init(appearance: placement.drawsLight(systemIsLight: systemIsLight) ? .light : .dark,
+                  material: glass ? .glass : .solid,
+                  transparency: glass ? placement.glassTransparency : ScreenPlacement.standardGlassTransparency)
     }
 }
 
@@ -81,20 +101,33 @@ extension SettingsStore {
     /// with: the one place a screen's look comes from. It is resolved from the placement the screen draws now, its style
     /// draft included (`effectivePlacement(on:hasNotch:)`), on the display of that key, one that is not attached counting
     /// as a display without a notch, and from how the Mac is set now:
-    /// - Notch mode on a display with a hardware notch keeps the standard look, black, dark and solid, whatever the
-    ///   screen's appearance and material: the island there is one with the camera housing, and its panel and its cards
-    ///   grow out of it. A notch-style bar on a display without a notch takes the screen's look.
-    /// - Otherwise the screen's appearance, with `system` read from macOS's own light or dark setting
-    ///   (`SystemAppearance.isLight`), never from the app's Appearance, which only its windows take.
-    /// - And the screen's material, except that Reduce Transparency draws glass solid.
+    /// - The screen's appearance, with `system` read from macOS's own light or dark setting (`SystemAppearance.isLight`),
+    ///   never from the app's Appearance.
+    /// - And the screen's material, except that Reduce Transparency draws glass solid, at the screen's transparency.
+    ///
+    /// Notch mode at a hardware notch takes the look too, in part: the island stays dark in the notch's row, black or
+    /// black glass (`inNotchRow`), and the camera housing black in any look (`IslandRootView.inksNotch`), while the panel
+    /// and the cards that open out of the row take the look whole.
     ///
     /// A HUD being dragged keeps the look its screen has saved until it is dropped.
     func effectiveLook(on screen: String) -> HUDLook {
-        let display = NSScreen.screens.first { ScreenIdentity.key(for: $0) == screen }
-        let hasNotch = display.map(ScreenIdentity.hasNotch) ?? false
-        return HUDLook(drawing: effectivePlacement(on: screen, hasNotch: hasNotch), hasNotch: hasNotch,
-                       systemIsLight: SystemAppearance.isLight,
-                       reducesTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
+        HUDLook(drawing: effectivePlacement(on: screen, hasNotch: Self.hasNotch(screen)),
+                systemIsLight: SystemAppearance.isLight,
+                reducesTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
+    }
+
+    /// The look of the HUD on `screen` at rest, before it opens, which a picture or a preview of the resting HUD draws:
+    /// the screen's look, but in Notch mode at a hardware notch the standard one, black and solid, as the island at rest
+    /// there is drawn in any look (`NotchInk`).
+    func restingLook(on screen: String) -> HUDLook {
+        let hasNotch = Self.hasNotch(screen)
+        guard !(hasNotch && effectivePlacement(on: screen, hasNotch: hasNotch).mode == .notch) else { return .standard }
+        return effectiveLook(on: screen)
+    }
+
+    /// Whether the attached display of `screen` has a hardware notch; a display that is not attached has none.
+    private static func hasNotch(_ screen: String) -> Bool {
+        NSScreen.screens.first { ScreenIdentity.key(for: $0) == screen }.map(ScreenIdentity.hasNotch) ?? false
     }
 }
 

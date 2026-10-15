@@ -139,7 +139,8 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(hud["additionalProperties"], .bool(false))
         XCTAssertEqual(hud["properties"].objectValue?.keys.sorted(),
                        ["agents", "appearance", "bots", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "material", "mode",
-                        "position", "reset", "ringWidth", "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize"])
+                        "position", "reset", "ringWidth", "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize",
+                        "transparency"])
         XCTAssertEqual(hud["properties"]["reset"]["type"], .string("boolean"))
         XCTAssertEqual(hud["properties"]["reset"]["description"].stringValue,
                        "True proposes the screen's default style, the placement its hardware is given, dark and solid, and the default glow, with no other style field.")
@@ -148,16 +149,19 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(choices(hud["properties"]["appearance"]), ["dark", "light", "system"])
         XCTAssertEqual(choices(hud["properties"]["material"]), ["solid", "glass"])
         XCTAssertEqual(hud["properties"]["appearance"]["description"].stringValue,
-                       "Its colours, its panel's and its cards' too: dark, light, or system to follow macOS's light or dark setting. A notch HUD on a screen with a notch stays black.")
+                       "Its colours, its panel's and its cards' too: dark, light, or system to follow macOS's light or dark setting. At a hardware notch a notch HUD stays dark in the notch's row, black or black glass; the panel and the cards it opens into take the look.")
         XCTAssertEqual(hud["properties"]["material"]["description"].stringValue,
-                       "Solid, or glass that shows the desktop through it blurred, in the appearance's colours; solid while Reduce Transparency is on. A notch HUD on a screen with a notch stays black.")
+                       "Solid, or glass that shows the desktop through it blurred, in the appearance's colours; solid while Reduce Transparency is on. At a hardware notch a notch HUD stays dark in the notch's row, black or black glass; the panel and the cards it opens into take the look.")
+        XCTAssertEqual(hud["properties"]["transparency"]["type"], .string("number"))
+        XCTAssertEqual(hud["properties"]["transparency"]["description"].stringValue,
+                       "Glass: how much of the desktop shows through it, from the appearance's own surface laid over the glass whole to almost bare glass, 0 to 0.9.")
         XCTAssertEqual(schema["properties"]["from"]["description"].stringValue,
                        "Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of the one described here. Only 'previous' brings a screen's HUD style with it.")
         XCTAssertEqual(hud["properties"]["agents"]["type"], .string("array"))
         XCTAssertEqual(hud["properties"]["agents"]["items"], .object(["type": .string("string")]))
         XCTAssertEqual(choices(hud["properties"]["mode"]), ["notch", "dynamic", "simple"])
         XCTAssertEqual(choices(hud["properties"]["edge"]), ["top", "right", "bottom", "left"])
-        for name in ["position", "logoSize", "logoGap", "edgeDistance", "simpleSize", "ringWidth"] {
+        for name in ["position", "logoSize", "logoGap", "edgeDistance", "simpleSize", "ringWidth", "transparency"] {
             XCTAssertEqual(hud["properties"][name]["type"], .string("number"), name)
         }
         for name in ["showLogos", "showRings", "showNumbers", "bots", "separateAgents"] {

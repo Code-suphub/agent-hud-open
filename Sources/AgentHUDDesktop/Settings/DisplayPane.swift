@@ -39,8 +39,10 @@ struct DisplayPane: View {
             ScreensPane(settings: settings, store: store, theme: theme, look: look, selected: $screen)
             // Simple mode draws no glow, so its screen has no glow settings to show.
             if placement.mode != .simple {
+                // The glow's preview shows the HUD at rest, dark in the row of a hardware notch.
                 GlowPane(settings: settings, store: store, theme: theme, placement: placement,
-                         metrics: ScreenMetrics(screen: selection), screen: screen, look: look)
+                         metrics: ScreenMetrics(screen: selection), screen: screen,
+                         look: settings.restingLook(on: screen))
             }
             // The samples show the panel in the selected screen's look.
             IslandPane(settings: settings, theme: theme, look: look)
@@ -60,14 +62,17 @@ struct DisplayPane: View {
     }
 }
 
-/// Decorative wallpaper for the glow preview. A HUD of glass is previewed with its stand-in, its tint over the
-/// wallpaper: a blur in the Settings window would show the desktop behind the window, not the wallpaper painted in it.
+/// Decorative wallpaper for the glow preview. A HUD of glass is previewed in Liquid Glass, which takes in what is drawn
+/// behind it in its own window, the wallpaper painted here; the frosted blur takes in only the desktop behind the
+/// window, so where glass is frosted it is previewed with its stand-in, its cover over the wallpaper.
 struct SettingsPreview<Content: View>: View {
     @ViewBuilder let content: () -> Content
+    /// A snapshot draws every glass as its stand-in, and its preview with it.
+    @Environment(\.drawsGlassStandIn) private var drawsStandIn
 
     var body: some View {
         content()
-            .environment(\.drawsGlassStandIn, true)
+            .environment(\.drawsGlassStandIn, drawsStandIn || !HUDGlass.isLiquid)
             .frame(maxWidth: .infinity)
             .background {
                 GeometryReader { geometry in

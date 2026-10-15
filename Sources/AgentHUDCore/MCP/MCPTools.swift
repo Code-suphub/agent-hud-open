@@ -50,8 +50,9 @@ public enum MCPTools {
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
         + "layout and, for a screen, its resting HUD to its saved style."
 
-    /// What the look's fields leave as it is: the island in a hardware notch, which is one with the camera housing.
-    private static let notchStaysBlack = "A notch HUD on a screen with a notch stays black."
+    /// What the look's fields leave as it is: the row of a hardware notch, which the island is one with.
+    private static let housingStaysBlack = "At a hardware notch a notch HUD stays dark in the notch's row, black or black "
+        + "glass; the panel and the cards it opens into take the look."
 
     /// What every tool takes to name the layout it acts on.
     private static let screenDescription = "A screen key from get_panel for that screen's own layout; 'all', the default, "
@@ -132,10 +133,12 @@ public enum MCPTools {
             "bots": described("boolean", "Simple: marks turn into bots."),
             "separateAgents": described("boolean", "Dynamic or simple: hovering a mark opens that agent's own panel."),
             "appearance": text("Its colours, its panel's and its cards' too: dark, light, or system to follow macOS's light "
-                               + "or dark setting. \(notchStaysBlack)", oneOf: HUDAppearance.allCases.map(\.rawValue)),
+                               + "or dark setting. \(housingStaysBlack)", oneOf: HUDAppearance.allCases.map(\.rawValue)),
             "material": text("Solid, or glass that shows the desktop through it blurred, in the appearance's colours; "
-                             + "solid while Reduce Transparency is on. \(notchStaysBlack)",
+                             + "solid while Reduce Transparency is on. \(housingStaysBlack)",
                              oneOf: HUDMaterial.allCases.map(\.rawValue)),
+            "transparency": number("Glass: how much of the desktop shows through it, from the appearance's own surface "
+                                   + "laid over the glass whole to almost bare glass,", .transparency),
             "glow": object([
                 "style": text("Glow style.", oneOf: GlowStyle.allCases.map(\.rawValue)),
                 "effect": text("What it plays.", oneOf: GlowEffect.allCases.map(\.rawValue)),

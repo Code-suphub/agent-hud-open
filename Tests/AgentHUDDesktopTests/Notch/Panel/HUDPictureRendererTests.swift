@@ -125,8 +125,9 @@ final class HUDPictureRendererTests: XCTestCase {
         XCTAssertEqual(light.picture.height, standard.picture.height)
     }
 
-    /// Nothing is behind a picture to show through glass: a panel of glass is drawn as its stand-in, its look's tint
-    /// over the backdrop, darker than the backdrop for dark glass and lighter for light glass, short of the solid fill.
+    /// Nothing is behind a picture to show through glass: a panel of glass is drawn as its stand-in, its look's cover at
+    /// the standard transparency over the backdrop, darker than the backdrop for dark glass and lighter for light glass,
+    /// short of the solid fill.
     func testAGlassPanelIsDrawnAsItsStandIn() throws {
         layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
         let dark = try simplePanel(in: HUDLook(appearance: .dark, material: .glass))

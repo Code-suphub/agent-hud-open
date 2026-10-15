@@ -37,11 +37,11 @@ struct ScreensPane: View {
         return settings.effectivePlacement(on: current.key, hasNotch: current.hasNotch)
     }
 
-    /// Whether the selected screen's HUD stays black whatever its appearance and material: Notch mode on a display with a
-    /// notch, one with the camera housing (`ScreenPlacement.drawsLook(hasNotch:)`). Its look row is then off.
-    private var staysBlack: Bool {
+    /// Whether the selected screen's HUD is the island at a hardware notch, which stays dark in the notch's row while the
+    /// panel and the cards that open out of it take the look (`HUDLook.inNotchRow`).
+    private var atHardwareNotch: Bool {
         guard let current else { return false }
-        return !placement.drawsLook(hasNotch: current.hasNotch)
+        return placement.mode == .notch && current.hasNotch
     }
 
     /// A person's edit of the selected screen's placement: an agent's unsaved style for the screen is dropped first,
@@ -118,6 +118,12 @@ struct ScreensPane: View {
                 .padding(.horizontal, 16).padding(.bottom, 12)
             SettingsDivider(theme: theme)
             lookRow
+            if placement.material == .glass {
+                SettingsDivider(theme: theme)
+                SliderRow(label: L10n.text("透明度", "Transparency"), value: binding(\.glassTransparency),
+                          range: ScreenPlacement.glassTransparencyRange, step: 0.05,
+                          format: { "\(Int(($0 * 100).rounded()))%" }, theme: theme)
+            }
             SettingsDivider(theme: theme)
             SettingRow(label: L10n.text("位置", "Position"),
                        subtitle: L10n.text("回到这块屏幕的顶部安全位置。", "Return to a reachable position at the top of this display.")) {
@@ -226,9 +232,8 @@ struct ScreensPane: View {
     }
 
     /// The selected screen's look, in one row: its appearance, Dark, Light or Match system, and its material, Solid or
-    /// Glass, for the HUD, its panel and its cards. Both are off for Notch mode on a display with a notch, which stays
-    /// black, and the row says so; with Reduce Transparency on it says that glass shows solid. The HUD style's Reset to
-    /// Default gives Dark and Solid back (`ScreenStyleRow`).
+    /// Glass, for the HUD, its panel and its cards. At a hardware notch the row says that the notch's row stays dark;
+    /// with Reduce Transparency on it says that glass shows solid. Glass brings a Transparency slider below the row. The HUD style's Reset to Default gives Dark and Solid back (`ScreenStyleRow`).
     private var lookRow: some View {
         SettingRow(label: L10n.text("HUD 外观", "HUD appearance"), subtitle: lookNote) {
             HStack(spacing: 8) {
@@ -248,15 +253,19 @@ struct ScreensPane: View {
                 .accessibilityLabel(L10n.text("材质", "Material"))
                 .accessibilityIdentifier("settings-screen-material")
             }
-            .disabled(current == nil || staysBlack)
+            .disabled(current == nil)
         }
     }
 
-    /// The look row's one line, where it has one: why its choices are off, or what Reduce Transparency does to glass.
+    /// The look row's one line, where it has one: what Reduce Transparency does to glass, or what stays black at a notch.
     private var lookNote: String? {
-        if staysBlack { return L10n.text("刘海形态保持黑色。", "Notch mode stays black.") }
-        guard reducesTransparency else { return nil }
-        return L10n.text("「降低透明度」已打开，玻璃显示为实色。", "Reduce Transparency is on, so Glass shows as solid.")
+        if reducesTransparency, placement.material == .glass {
+            return L10n.text("「降低透明度」已打开，玻璃显示为实色。", "Reduce Transparency is on, so Glass shows as solid.")
+        }
+        guard atHardwareNotch else { return nil }
+        return L10n.text("刘海那一行始终是深色：收起时纯黑，提醒两翼在玻璃下是黑玻璃；展开的面板和卡片使用这里的外观。",
+                         "The notch's row stays dark: black at rest, and a reminder's wings black glass under Glass; the "
+                            + "panel and cards that open from it take this look.")
     }
 
     private func resetPosition() {

@@ -30,6 +30,9 @@ public final class DesktopApplication {
     private var toolChannel: AgentToolsChannel?
     private var notch: IslandController?
     private var statusItem: StatusItemController?
+    /// What the Mac tells the windows that follow their screen's look (`WindowLook`): a change of displays, of its light
+    /// or dark setting, or of Reduce Transparency, none of which the settings observe.
+    private var windowLookObservers: [NSObjectProtocol] = []
     private lazy var settingsWindow = SettingsWindowController(
         settings: settings, store: store, additionalPages: additionalSettingsPages, experimentalSections: experimentalSettings
     )
@@ -66,6 +69,7 @@ public final class DesktopApplication {
     public func start() {
         let sources = options.demo ? DemoData.sources : SourceDetector.resolve(SourceDetector.detect(), report: store.report)
         settings.update { $0.applyLiveStatusDefaults(sources: sources) }
+        WindowLook.source = { [weak self] screen in self?.settings.windowLook(on: screen) }
         applyAppearance()
         let notch = IslandController(store: store, settings: settings, additionalHUDControls: additionalHUDControls)
         notch.onOpenStats = { [weak self] in self?.showStats() }
@@ -85,6 +89,16 @@ public final class DesktopApplication {
         trackChanges({ [weak self] in
             self?.settings.settings.appearance
         }, onChange: { [weak self] in self?.applyAppearance() })
+        // Under Match screen a screen's new look, its style draft's included, reaches the windows on that screen. The
+        // settings and the style drafts (any one of them read reads them all) are read apart from the displays as well,
+        // so the watch is armed with no display attached too; a window whose look has not changed is left as it is.
+        trackChanges({ [weak self] in
+            guard let self else { return }
+            _ = self.settings.settings
+            _ = self.settings.panelLayout.styleDraft(of: "")
+            _ = NSScreen.screens.map { self.settings.windowLook(on: $0) }
+        }, onChange: { WindowLook.refreshAll() })
+        observeWindowLooks()
         trackChanges({ [weak self] in
             self?.settings.settings.language
         }, onChange: { [weak self] in
@@ -163,7 +177,7 @@ public final class DesktopApplication {
                 guard let self else { return nil }
                 let display = NSScreen.screens.first { ScreenIdentity.key(for: $0) == key }
                 return HUDPictureRenderer(store: self.store, screen: key, hasNotch: display.map(ScreenIdentity.hasNotch) ?? false,
-                                          look: self.store.settings.effectiveLook(on: key),
+                                          look: self.store.settings.restingLook(on: key),
                                           metrics: ScreenMetrics(screen: display)).picture()
             }
             let tools = PanelTools(store: store, screens: { [weak self] in self?.notch?.panelScreens ?? [] },
@@ -265,11 +279,30 @@ public final class DesktopApplication {
         onIslandEvents?(update, report, now)
     }
 
+    /// Has the windows take their screen's look again whenever the Mac changes what it depends on. Each waits a turn of
+    /// the run loop, so that the HUDs have taken a change of displays first and every screen is known by its key again.
+    private func observeWindowLooks() {
+        let refresh: @Sendable (Notification) -> Void = { _ in
+            Task { @MainActor in WindowLook.refreshAll() }
+        }
+        windowLookObservers = [
+            NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                                   object: nil, queue: .main, using: refresh),
+            DistributedNotificationCenter.default().addObserver(forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+                                                                object: nil, queue: .main, using: refresh),
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main,
+                using: refresh),
+        ]
+    }
+
     private func applyAppearance() {
         switch settings.settings.appearance {
-        case .system: NSApp.appearance = nil
+        // Under Match screen each window and the menu take their own (`WindowLook`); anything else follows macOS.
+        case .system, .screen: NSApp.appearance = nil
         case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
         case .light: NSApp.appearance = NSAppearance(named: .aqua)
         }
+        WindowLook.refreshAll()
     }
 }

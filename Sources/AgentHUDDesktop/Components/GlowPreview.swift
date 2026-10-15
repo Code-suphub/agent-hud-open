@@ -78,7 +78,7 @@ struct GlowPreview: View {
                     .offset(y: glow.topOffset)
             }
             if drawsIsland {
-                // A preview has no desktop behind its island, so glass is drawn as its stand-in, over the preview's own.
+                // Glass is drawn as its preview draws it (`SettingsPreview`), or as its stand-in in a snapshot.
                 HUDSurface(BottomRoundedRectangle(radius: islandRadius), look: look, fill: look.theme.islandFill,
                            contact: nil)
                     .overlay {
@@ -87,7 +87,6 @@ struct GlowPreview: View {
                         }
                     }
                     .frame(width: islandSize.width, height: islandSize.height)
-                    .environment(\.drawsGlassStandIn, true)
             }
         }
     }

@@ -64,6 +64,12 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     public static let simpleSizeRange: ClosedRange<Double> = 16...40
     /// Stroke of that ring, in points.
     public static let ringWidthRange: ClosedRange<Double> = 1...4
+    /// How much of the desktop glass lets through. At 0 the HUD's own surface covers the glass whole, which still lights
+    /// its rim; the top stops short of bare glass, whose colours follow the desktop behind it and leave the HUD's fixed
+    /// ink unread on a desktop of the other shade.
+    public static let glassTransparencyRange: ClosedRange<Double> = 0...0.9
+    /// Half and half: dark glass that is plainly not black, and light glass that is plainly not white.
+    public static let standardGlassTransparency = 0.5
     public var mode: HUDMode
     public var edge: HUDEdge
     /// The queue's centre along its edge, as a fraction of that edge's length, so it survives a
@@ -90,6 +96,9 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     public var appearance: HUDAppearance
     /// The surface of the HUD, its panel and its cards: solid unless chosen otherwise.
     public var material: HUDMaterial
+    /// How much of the desktop shows through glass, from 0 to 0.9 (`glassTransparencyRange`): the share of the glass
+    /// left uncovered by the HUD's own surface. Kept while the material is solid, for when glass is chosen again.
+    public var glassTransparency: Double
 
     public init(
         mode: HUDMode = .logos,
@@ -106,7 +115,8 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         simpleBots: Bool = false,
         separatesAgents: Bool = false,
         appearance: HUDAppearance = .dark,
-        material: HUDMaterial = .solid
+        material: HUDMaterial = .solid,
+        glassTransparency: Double = ScreenPlacement.standardGlassTransparency
     ) {
         self.mode = mode
         self.edge = edge
@@ -123,6 +133,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         self.separatesAgents = separatesAgents
         self.appearance = appearance
         self.material = material
+        self.glassTransparency = Self.clamp(glassTransparency, to: Self.glassTransparencyRange)
     }
 
     /// A display's starting point: a notched screen keeps its island, anything else shows the queue, both dark and solid.
@@ -137,7 +148,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case mode, edge, offset, logoSize, logoEdgeDistance, gapScale, showsLogos
         case simpleSize, ringWidth, showsRings, showsNumbers, simpleBots, separatesAgents
-        case appearance, material
+        case appearance, material, glassTransparency
     }
 
     public init(from decoder: Decoder) throws {
@@ -160,7 +171,8 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
             // A name saved by a newer build falls back to the default instead of failing the whole placement, and with
             // it every screen's (`Settings.screens`).
             appearance: (try? c.decodeIfPresent(HUDAppearance.self, forKey: .appearance)) ?? d.appearance,
-            material: (try? c.decodeIfPresent(HUDMaterial.self, forKey: .material)) ?? d.material
+            material: (try? c.decodeIfPresent(HUDMaterial.self, forKey: .material)) ?? d.material,
+            glassTransparency: try c.decodeIfPresent(Double.self, forKey: .glassTransparency) ?? d.glassTransparency
         )
     }
 }
@@ -168,17 +180,10 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
 // MARK: The look drawn
 
 extension ScreenPlacement {
-    /// Whether the HUD draws its appearance and material: everywhere but at a hardware notch, where the island in Notch
-    /// mode, the panel it opens into and the cards it grows stay black, dark and solid, one with the camera housing. A
-    /// bar that stands in for a notch on a screen without one draws them, as every dock does.
-    public func drawsLook(hasNotch: Bool) -> Bool {
-        mode != .notch || !hasNotch
-    }
-
-    /// Whether the HUD is drawn light: its appearance, `system` as macOS is set now (`systemIsLight`), and dark where it
-    /// does not draw its look (`drawsLook(hasNotch:)`).
-    public func drawsLight(hasNotch: Bool, systemIsLight: Bool) -> Bool {
-        guard drawsLook(hasNotch: hasNotch) else { return false }
+    /// Whether the HUD is drawn light: its appearance, `system` as macOS is set now (`systemIsLight`). Every mode draws
+    /// its look, Notch mode at a hardware notch too, where the camera housing itself stays black and the look grows
+    /// round it.
+    public func drawsLight(systemIsLight: Bool) -> Bool {
         switch appearance {
         case .dark: return false
         case .light: return true
@@ -186,9 +191,8 @@ extension ScreenPlacement {
         }
     }
 
-    /// Whether the HUD is drawn as glass: its material, solid while Reduce Transparency is on (`reducesTransparency`)
-    /// and where it does not draw its look (`drawsLook(hasNotch:)`).
-    public func drawsGlass(hasNotch: Bool, reducesTransparency: Bool) -> Bool {
-        drawsLook(hasNotch: hasNotch) && material == .glass && !reducesTransparency
+    /// Whether the HUD is drawn as glass: its material, solid while Reduce Transparency is on (`reducesTransparency`).
+    public func drawsGlass(reducesTransparency: Bool) -> Bool {
+        material == .glass && !reducesTransparency
     }
 }

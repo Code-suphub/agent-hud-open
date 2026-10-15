@@ -112,34 +112,68 @@ final class ScreenPlacementTests: XCTestCase {
         XCTAssertEqual(SettingsStore(defaults: defaults).settings.screens, placements)
     }
 
-    /// The look a HUD draws: its own, but for the notch's on a display that has one, which stays dark and solid; `system`
-    /// as macOS is set; and glass solid under Reduce Transparency.
-    func testTheLookDrawnFollowsTheNotchMacOSAndReduceTransparency() {
-        let chosen = ScreenPlacement(mode: .notch, appearance: .light, material: .glass)
-        XCTAssertFalse(chosen.drawsLook(hasNotch: true))
-        XCTAssertFalse(chosen.drawsLight(hasNotch: true, systemIsLight: true), "a notch HUD at a notch stays dark")
-        XCTAssertFalse(chosen.drawsGlass(hasNotch: true, reducesTransparency: false), "and solid")
-        XCTAssertTrue(chosen.drawsLook(hasNotch: false), "the bar that stands in for a notch draws the look")
-        XCTAssertTrue(chosen.drawsLight(hasNotch: false, systemIsLight: false))
-        XCTAssertTrue(chosen.drawsGlass(hasNotch: false, reducesTransparency: false))
-        for mode in [HUDMode.logos, .simple] {
-            var dock = chosen
-            dock.mode = mode
-            XCTAssertTrue(dock.drawsLook(hasNotch: true), "\(mode) on a display with a notch draws its look")
-            XCTAssertTrue(dock.drawsLight(hasNotch: true, systemIsLight: false))
-            XCTAssertTrue(dock.drawsGlass(hasNotch: true, reducesTransparency: false))
+    /// The look a HUD draws is its own in every mode, the notch's at a hardware notch too, which keeps only the notch's
+    /// row dark (`HUDLook.inNotchRow`, in the app): `system` as macOS is set, and glass solid under Reduce Transparency.
+    func testTheLookDrawnFollowsMacOSAndReduceTransparencyInEveryMode() {
+        for mode in HUDMode.allCases {
+            let chosen = ScreenPlacement(mode: mode, appearance: .light, material: .glass)
+            XCTAssertTrue(chosen.drawsLight(systemIsLight: false), "\(mode) draws its light look")
+            XCTAssertTrue(chosen.drawsGlass(reducesTransparency: false), "\(mode) draws its glass")
+            XCTAssertFalse(chosen.drawsGlass(reducesTransparency: true), "\(mode) under Reduce Transparency is solid")
         }
 
         let system = ScreenPlacement(appearance: .system)
-        XCTAssertTrue(system.drawsLight(hasNotch: false, systemIsLight: true))
-        XCTAssertFalse(system.drawsLight(hasNotch: false, systemIsLight: false))
-        XCTAssertFalse(ScreenPlacement(appearance: .dark).drawsLight(hasNotch: false, systemIsLight: true))
-        XCTAssertTrue(ScreenPlacement(appearance: .light).drawsLight(hasNotch: false, systemIsLight: false))
+        XCTAssertTrue(system.drawsLight(systemIsLight: true))
+        XCTAssertFalse(system.drawsLight(systemIsLight: false))
+        XCTAssertFalse(ScreenPlacement(appearance: .dark).drawsLight(systemIsLight: true))
+        XCTAssertTrue(ScreenPlacement(appearance: .light).drawsLight(systemIsLight: false))
 
         let glass = ScreenPlacement(material: .glass)
-        XCTAssertTrue(glass.drawsGlass(hasNotch: false, reducesTransparency: false))
-        XCTAssertFalse(glass.drawsGlass(hasNotch: false, reducesTransparency: true), "Reduce Transparency draws it solid")
-        XCTAssertFalse(ScreenPlacement().drawsGlass(hasNotch: false, reducesTransparency: false))
-        XCTAssertFalse(ScreenPlacement().drawsLight(hasNotch: false, systemIsLight: true), "dark unless chosen")
+        XCTAssertTrue(glass.drawsGlass(reducesTransparency: false))
+        XCTAssertFalse(glass.drawsGlass(reducesTransparency: true), "Reduce Transparency draws it solid")
+        XCTAssertFalse(ScreenPlacement().drawsGlass(reducesTransparency: false))
+        XCTAssertFalse(ScreenPlacement().drawsLight(systemIsLight: true), "dark unless chosen")
+    }
+
+    // MARK: The glass's transparency
+
+    /// Glass lets half the desktop through unless chosen otherwise, on every display's starting point too, and a
+    /// transparency is held to 0 through 0.9, the top short of bare glass, whether it is given or read back.
+    func testGlassTransparencyStartsAtHalfAndIsHeldToItsRange() throws {
+        XCTAssertEqual(ScreenPlacement.standardGlassTransparency, 0.5)
+        XCTAssertEqual(ScreenPlacement.glassTransparencyRange, 0...0.9)
+        XCTAssertEqual(ScreenPlacement().glassTransparency, ScreenPlacement.standardGlassTransparency)
+        for hasNotch in [true, false] {
+            XCTAssertEqual(ScreenPlacement.default(hasNotch: hasNotch).glassTransparency, 0.5)
+        }
+        for (given, kept) in [(0.0, 0.0), (0.3, 0.3), (0.9, 0.9), (1.0, 0.9), (-0.2, 0.0), (Double.nan, 0.0)] {
+            XCTAssertEqual(ScreenPlacement(material: .glass, glassTransparency: given).glassTransparency, kept, "\(given)")
+        }
+        for (saved, kept) in [(0.25, 0.25), (2, 0.9), (-1, 0)] {
+            let placement = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
+                #"{"material":"glass","glassTransparency":\#(saved)}"#.utf8))
+            XCTAssertEqual(placement.glassTransparency, kept, "\(saved)")
+            XCTAssertEqual(placement.material, .glass)
+        }
+    }
+
+    /// A placement saved before glass had a transparency reads as the standard one and costs no other field; a
+    /// transparency is written under its own key and read back as it was, kept while the material is solid.
+    func testGlassTransparencyDecodesFromOlderSettingsAndRoundTrips() throws {
+        let older = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
+            #"{"mode":"simple","appearance":"light","material":"glass"}"#.utf8))
+        XCTAssertEqual(older.glassTransparency, ScreenPlacement.standardGlassTransparency)
+        XCTAssertEqual(older, ScreenPlacement(mode: .simple, appearance: .light, material: .glass))
+
+        let chosen = ScreenPlacement(mode: .logos, material: .glass, glassTransparency: 0.2)
+        let written = try JSONEncoder().encode(chosen)
+        let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: written) as? [String: Any])
+        XCTAssertEqual(fields["glassTransparency"] as? Double, 0.2)
+        XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: written), chosen)
+
+        let solid = ScreenPlacement(material: .solid, glassTransparency: 0.7)
+        XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: JSONEncoder().encode(solid)).glassTransparency, 0.7,
+                       "kept for when glass is chosen again")
+        XCTAssertNotEqual(solid, ScreenPlacement(), "a placement is its fields, the transparency among them")
     }
 }

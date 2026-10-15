@@ -77,6 +77,60 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: data), original)
     }
 
+    // MARK: The app's appearance
+
+    /// Match screen is saved as System beside a key of its own, so that a build that has no Match screen reads System
+    /// rather than failing to read the settings, and reads back as Match screen; every other appearance is saved as
+    /// before, without that key.
+    func testMatchScreenIsSavedAsSystemThatFollowsTheScreen() throws {
+        let screen = Settings().with { $0.appearance = .screen }
+        let data = try JSONEncoder().encode(screen)
+        let stored = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(stored["appearance"] as? String, "system", "what an older build reads")
+        XCTAssertEqual(stored["appearanceFollowsScreen"] as? Bool, true)
+        XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: data), screen)
+        XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: data).appearance, .screen)
+
+        for mode in [AppearanceMode.system, .dark, .light] {
+            let other = Settings().with { $0.appearance = mode }
+            let written = try JSONEncoder().encode(other)
+            let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: written) as? [String: Any])
+            XCTAssertEqual(fields["appearance"] as? String, mode.rawValue)
+            XCTAssertNil(fields["appearanceFollowsScreen"], "\(mode) writes no new key")
+            XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: written).appearance, mode)
+        }
+    }
+
+    /// Settings saved before Match screen read as they were saved; the key alone makes an appearance Match screen,
+    /// whatever appearance is saved beside it, and a key set to false leaves the saved one.
+    func testSettingsWithoutMatchScreenReadAsSaved() throws {
+        func read(_ json: String) throws -> AppearanceMode {
+            try JSONDecoder().decode(Settings.self, from: Data(json.utf8)).appearance
+        }
+        XCTAssertEqual(try read(#"{"appearance":"dark"}"#), .dark)
+        XCTAssertEqual(try read(#"{"appearance":"light"}"#), .light)
+        XCTAssertEqual(try read(#"{"appearance":"system"}"#), .system)
+        XCTAssertEqual(try read(#"{}"#), .system)
+        XCTAssertEqual(try read(#"{"appearance":"system","appearanceFollowsScreen":true}"#), .screen)
+        XCTAssertEqual(try read(#"{"appearance":"dark","appearanceFollowsScreen":true}"#), .screen)
+        XCTAssertEqual(try read(#"{"appearance":"light","appearanceFollowsScreen":false}"#), .light)
+    }
+
+    /// An appearance this build does not know, saved by a newer one, or a value of the wrong type, reads as the default
+    /// and costs no other setting; so does a follow-screen key of the wrong type.
+    func testAnUnknownAppearanceCostsNoOtherSetting() throws {
+        let newer = try JSONDecoder().decode(Settings.self, from: Data(
+            #"{"appearance":"sepia","glowRange":20,"launchAtLogin":false}"#.utf8))
+        XCTAssertEqual(newer.appearance, .system)
+        XCTAssertEqual(newer.glowRange, 20)
+        XCTAssertFalse(newer.launchAtLogin)
+        XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: Data(#"{"appearance":7,"glowRange":20}"#.utf8)),
+                       Settings().with { $0.glowRange = 20 })
+        let mistyped = try JSONDecoder().decode(Settings.self, from: Data(
+            #"{"appearance":"light","appearanceFollowsScreen":"yes"}"#.utf8))
+        XCTAssertEqual(mistyped.appearance, .light)
+    }
+
     func testSettingsSavedBeforeBotLogosKeepThemOn() throws {
         let saved = try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))
         XCTAssertTrue(saved.botLogos)

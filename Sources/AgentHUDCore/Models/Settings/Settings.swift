@@ -1,9 +1,14 @@
 import Foundation
 
+/// The appearance of the app's own windows and of the menu-bar menu.
 public enum AppearanceMode: String, Codable, Sendable, CaseIterable {
         case system
         case dark
         case light
+        /// Each window, and the menu, as dark or light as the HUD of the screen it is on (`ScreenPlacement.appearance`).
+        /// It is saved as `system` beside `appearanceFollowsScreen`, so that a build without it reads System rather than
+        /// failing to read the settings.
+        case screen
 }
 
 /// How the notch glow is drawn.
@@ -135,7 +140,7 @@ public struct Settings: Hashable, Codable, Sendable {
         case requiresOptionToOpen, openImmediatelyAtTop, hoverDelayMs, collapseDelayMs, showResetCountdown
         case showIslandQuota, showIslandTokens, showIslandSessions, botLogos, hiddenAccountIDs
         case liveStatusPreferences, disabledLiveStatusSources, readCopilotQuota, clientHooks, agentTools, approvalWaitMinutes
-        case launchAtLogin, showMenuBarIcon, appearance, language, screens, screenGlow
+        case launchAtLogin, showMenuBarIcon, appearance, appearanceFollowsScreen, language, screens, screenGlow
     }
 
     public init(from decoder: Decoder) throws {
@@ -188,7 +193,10 @@ public struct Settings: Hashable, Codable, Sendable {
             .flatMap { Self.approvalWaitChoices.contains($0) ? $0 : nil } ?? d.approvalWaitMinutes
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? d.launchAtLogin
         showMenuBarIcon = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? d.showMenuBarIcon
-        appearance = try c.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? d.appearance
+        // An appearance saved by a newer build falls back to the default instead of failing the whole decode.
+        let appearance = (try? c.decodeIfPresent(AppearanceMode.self, forKey: .appearance)) ?? d.appearance
+        let followsScreen = (try? c.decodeIfPresent(Bool.self, forKey: .appearanceFollowsScreen)) ?? false
+        self.appearance = followsScreen ? .screen : appearance
         language = try c.decodeIfPresent(AppLanguage.self, forKey: .language) ?? d.language
         screens = (try? c.decodeIfPresent([String: ScreenPlacement].self, forKey: .screens)) ?? d.screens
         screenGlow = (try? c.decodeIfPresent([String: GlowSettings].self, forKey: .screenGlow)) ?? d.screenGlow
@@ -226,7 +234,8 @@ public struct Settings: Hashable, Codable, Sendable {
         try c.encode(approvalWaitMinutes, forKey: .approvalWaitMinutes)
         try c.encode(launchAtLogin, forKey: .launchAtLogin)
         try c.encode(showMenuBarIcon, forKey: .showMenuBarIcon)
-        try c.encode(appearance, forKey: .appearance)
+        try c.encode(appearance == .screen ? .system : appearance, forKey: .appearance)
+        if appearance == .screen { try c.encode(true, forKey: .appearanceFollowsScreen) }
         try c.encode(language, forKey: .language)
         try c.encode(screens, forKey: .screens)
         try c.encode(screenGlow, forKey: .screenGlow)

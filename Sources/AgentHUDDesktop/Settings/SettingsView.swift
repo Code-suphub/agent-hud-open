@@ -197,7 +197,7 @@ struct SettingsSidebar: View {
         .padding(.horizontal, 10)
         .padding(.bottom, 12)
         .frame(maxHeight: .infinity)
-        .background(theme.sidebarBackground)
+        .background(WindowGround(color: theme.sidebarBackground))
     }
 
     private func pageButton(id: String, title: String, symbol: String, color: Color) -> some View {

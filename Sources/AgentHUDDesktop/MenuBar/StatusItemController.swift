@@ -17,6 +17,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let settings: SettingsStore
     private let additionalMenuItems: () -> [NSMenuItem]
     var actions = MenuActions()
+    /// Whether the menu being built is drawn light, which its dots and critical figures are coloured for.
+    private var menuIsLight = SystemAppearance.isLight
+    /// Whether the agents' artwork in it is the dark version, or nil for the app's own appearance.
+    private var artworkIsDark: Bool?
 
     private static let menuWidth: CGFloat = 250
     private static let agentMenuFont = NSFontManager.shared.convert(.menuFont(ofSize: 13), toHaveTrait: .boldFontMask)
@@ -65,6 +69,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         Task { await store.refreshAccounts() }
         menu.removeAllItems()
+        // Under Appearance → Match screen the menu is as dark or light as the HUD of the screen its menu bar is on, and
+        // its dots, its critical figures and the agents' artwork are drawn for that; otherwise it follows macOS.
+        let look = WindowLook.look(on: item.button?.window?.screen)
+        menu.appearance = look.flatMap { NSAppearance(named: $0.appearanceName) }
+        menuIsLight = look.map { $0.appearance == .light } ?? SystemAppearance.isLight
+        artworkIsDark = look.map { $0.appearance == .dark }
         let groups = store.rowGroups
         for (index, group) in groups.enumerated() {
             if index > 0 { menu.addItem(.separator()) }
@@ -72,7 +82,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 let header = NSMenuItem(title: group.vendor, action: nil, keyEquivalent: "")
                 header.isEnabled = false
                 header.view = MenuRowView(
-                    title: header.title, image: AgentArtwork.image(for: group.vendor),
+                    title: header.title, image: AgentArtwork.image(for: group.vendor, dark: artworkIsDark),
                     font: Self.agentMenuFont, minimumWidth: Self.menuWidth
                 )
                 menu.addItem(header)
@@ -100,8 +110,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             let item = NSMenuItem(title: title, action: #selector(openStats), keyEquivalent: "")
             item.target = self
             item.view = MenuRowView(title: title, value: balance.isEmpty ? "—" : balance,
-                                         image: AgentArtwork.image(for: billing.vendor), font: Self.agentMenuFont,
-                                         valueColor: Self.valueColor(store.view.level(of: billing)), minimumWidth: Self.menuWidth)
+                                         image: AgentArtwork.image(for: billing.vendor, dark: artworkIsDark), font: Self.agentMenuFont,
+                                         valueColor: Self.valueColor(store.view.level(of: billing), light: menuIsLight),
+                                         minimumWidth: Self.menuWidth)
             let cost = billing.estimatedCost(currency: billing.currency, during: store.statsInterval)
                 .map { MoneyFormat.amount($0, currency: billing.currency, estimated: true) } ?? "—"
             // A balance whose read failed says why before its cost.
@@ -138,8 +149,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func rowItem(_ row: AgentRow, showVendor: Bool) -> NSMenuItem {
         let level = row.level ?? .ok
-        let light = SystemAppearance.isLight
-        let color = NSColor(StatusPalette.color(for: level, light: light))
+        let color = NSColor(StatusPalette.color(for: level, light: menuIsLight))
         let label = row.agent.name
         let name = showVendor ? row.agent.compactName : label
         let value: String
@@ -152,18 +162,21 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         item.target = self
         item.view = MenuRowView(
             title: name, value: value,
-            image: showVendor ? AgentArtwork.image(for: row.agent.vendor) : StatusIconRenderer.dot(color: row.level == nil ? .tertiaryLabelColor : color),
+            image: showVendor ? AgentArtwork.image(for: row.agent.vendor, dark: artworkIsDark)
+                : StatusIconRenderer.dot(color: row.level == nil ? .tertiaryLabelColor : color),
             font: showVendor ? Self.agentMenuFont : .menuFont(ofSize: 13),
-            titleColor: row.isCurrentAccount ? .labelColor : .secondaryLabelColor, valueColor: Self.valueColor(row.level), minimumWidth: Self.menuWidth
+            titleColor: row.isCurrentAccount ? .labelColor : .secondaryLabelColor,
+            valueColor: Self.valueColor(row.level, light: menuIsLight), minimumWidth: Self.menuWidth
         )
         item.toolTip = store.quotaForecastHint(for: row.id)
         item.view?.toolTip = item.toolTip
         return item
     }
 
-    /// The colour of a quota row's or a balance's figure: the critical text colour at a critical level, else secondary.
-    static func valueColor(_ level: StatusLevel?) -> NSColor {
-        level == .critical ? NSColor(StatusPalette.textColor(for: .critical, light: SystemAppearance.isLight)) : .secondaryLabelColor
+    /// The colour of a quota row's or a balance's figure: the critical text colour at a critical level, for a menu drawn
+    /// light or dark, else secondary.
+    static func valueColor(_ level: StatusLevel?, light: Bool = SystemAppearance.isLight) -> NSColor {
+        level == .critical ? NSColor(StatusPalette.textColor(for: .critical, light: light)) : .secondaryLabelColor
     }
 
     private func action(_ title: String, key: String, modifiers: NSEvent.ModifierFlags, selector: Selector) -> NSMenuItem {

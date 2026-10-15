@@ -39,16 +39,19 @@ extension HUDLook {
 ///
 /// - Solid is `fill` in the shape, as the HUD has always been filled.
 /// - Glass is Liquid Glass on macOS 26 in a build made with Xcode 26 or later, and a frosted blur of what is behind the
-///   window everywhere else (`FrostedGlass`). Either is held to the look's appearance, dark or light, whatever is behind
-///   it, and carries the theme's `glassTint` under the HUD's ink, which darkens dark glass and lightens light glass: the
-///   HUD's text and status colours are fixed, and keep their contrast over a bright desktop or a dark one only on a
-///   ground held close to the look's own. Liquid Glass is tinted with it, under the rim and the highlights it lights,
-///   which give the surface its edge; the blur is covered with it.
-/// - Where nothing is behind to blur (`drawsGlassStandIn`), glass is its tint alone.
+///   window everywhere else (`FrostedGlass`). Either is covered with the look's own surface at the opacity the screen's
+///   transparency leaves it (`HUDLook.glassCover`), under the HUD's ink. The cover is what holds the glass to the look:
+///   Liquid Glass turns light over a light desktop and dark over a dark one whatever it is tinted, and the HUD's text and
+///   status colours are fixed, so dark glass over a white window would otherwise carry white text on pale grey.
+/// - Where nothing is behind to blur (`drawsGlassStandIn`), glass is its cover alone.
+///
+/// The surface is drawn behind what the HUD holds, never round it: glass that holds the HUD's content would turn that
+/// content's colour scheme with the desktop behind it, and glass drawn in a `GlassEffectContainer` with the content
+/// beside it blurs the content as if it were the desktop. So no surface is ever put in such a container.
 ///
 /// A change of look cross-fades on the island's curve, and under Reduce Motion is made at once. A blur or glass does not
 /// fade with a colour, so each way of drawing is a layer of its own, and a change between them fades one layer out as
-/// the other fades in; a change of appearance moves the colours, and fades a blur into its new one.
+/// the other fades in; a change of appearance or of transparency moves the colours, and fades a blur into its new one.
 struct HUDSurface<S: Shape>: View {
     let shape: S
     let look: HUDLook
@@ -88,31 +91,31 @@ struct HUDSurface<S: Shape>: View {
                 shape.fill(fill)
                     .transition(.opacity)
             case .standIn:
-                shape.fill(look.theme.glassTint)
+                shape.fill(look.glassCover)
                     .transition(.opacity)
             case .frosted:
                 FrostedGlass(appearance: look.appearanceName)
                     .clipShape(shape)
-                    .overlay { shape.fill(look.theme.glassTint) }
+                    .overlay { shape.fill(look.glassCover) }
                     .transition(.opacity)
             case .liquid:
                 liquid
+                    .overlay { shape.fill(look.glassCover) }
                     .transition(.opacity)
             }
         }
         .animation(reduceMotion ? nil : IslandAnimation.curve, value: look)
     }
 
-    /// Liquid Glass in the shape, run past the screen edge the surface stands on, tinted, and in the look's colour
-    /// scheme, so it stays dark or light whatever is behind it.
+    /// Liquid Glass in the shape, run past the screen edge the surface stands on, in the look's colour scheme. Its
+    /// colours are the cover's (`HUDLook.glassCover`), drawn over it: a tint of its own is taken as a hint the glass
+    /// lets the desktop overrule.
     @ViewBuilder
     private var liquid: some View {
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
             Color.clear
-                .glassEffect(.regular.tint(look.theme.glassTint),
-                             in: ContactBleed(base: shape, edge: contact, depth: HUDGlass.bleed))
-                .glassEffectTransition(.materialize)
+                .glassEffect(.regular, in: ContactBleed(base: shape, edge: contact, depth: HUDGlass.bleed))
                 .environment(\.colorScheme, look.colorScheme)
         }
         #endif
@@ -141,29 +144,6 @@ struct ContactBleed<Base: Shape>: Shape {
         case .right: CGRect(x: rect.maxX, y: rect.minY, width: depth, height: rect.height)
         }
         return shape.union(Path(strip))
-    }
-}
-
-/// Where two of the HUD's glass surfaces meet, the Simple panel and the line that grows out of it: on Liquid Glass they
-/// are drawn as one glass, with no rim along the seam. Anywhere else, and where `joins` is off, it holds its content as
-/// it is. `joins` follows how the HUD is built, never its look, so a change of look keeps what it holds.
-struct HUDGlassContainer<Content: View>: View {
-    let joins: Bool
-    @ViewBuilder let content: Content
-
-    /// Glass this close joins: the line touches the panel, or tucks behind it, and a card stands 6 points off it.
-    static var spacing: CGFloat { 2 }
-
-    var body: some View {
-        #if compiler(>=6.2)
-        if #available(macOS 26, *), joins {
-            GlassEffectContainer(spacing: Self.spacing) { content }
-        } else {
-            content
-        }
-        #else
-        content
-        #endif
     }
 }
 

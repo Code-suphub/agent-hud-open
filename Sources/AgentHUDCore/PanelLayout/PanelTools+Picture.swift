@@ -94,8 +94,12 @@ extension PanelTools {
         }
         let placement = store.settings.effectivePlacement(on: key, hasNotch: screen.hasNotch)
         let draft = layout.hasStyleDraft(key)
-        let appearance: HUDAppearance = screen.drawsLight(placement) ? .light : .dark
-        let material: HUDMaterial = screen.drawsGlass(placement) ? .glass : .solid
+        // At a hardware notch the island at rest is black whatever the look; the look shows on what it opens into.
+        let atNotch = placement.mode == .notch && screen.hasNotch
+        let lookAppearance: HUDAppearance = screen.drawsLight(placement) ? .light : .dark
+        let lookMaterial: HUDMaterial = screen.drawsGlass(placement) ? .glass : .solid
+        let appearance: HUDAppearance = atNotch ? .dark : lookAppearance
+        let material: HUDMaterial = atNotch ? .solid : lookMaterial
         var note = "The resting HUD of \"\(screen.name)\" as it looks now, " + (draft ? "with its unsaved style draft" : "as saved")
         switch placement.mode {
         case .notch:
@@ -104,8 +108,12 @@ extension PanelTools {
             note += ": a \"\(placement.mode.agentName)\" HUD on its \(placement.edge.rawValue) edge"
             if placement.edge != .top { note += ", drawn here along a top edge as Settings previews it" }
         }
-        note += placement.drawsLook(hasNotch: screen.hasNotch)
-            ? ", \(appearance.rawValue) and \(material.rawValue)" : ", black, as an island at a notch always is"
+        if atNotch {
+            note += ", black at rest, as the notch is; a reminder's wings are dark and \(lookMaterial.rawValue), and the "
+                + "panel and the cards it opens into \(lookAppearance.rawValue) and \(lookMaterial.rawValue)"
+        } else {
+            note += ", \(appearance.rawValue) and \(material.rawValue)"
+        }
         note += ", on a dark backdrop, \(Self.points(drawn.width)) by \(Self.points(drawn.height)) points"
         if placement.mode == .simple {
             note += "; a simple HUD draws no glow."

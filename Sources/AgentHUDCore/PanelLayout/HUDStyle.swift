@@ -9,8 +9,8 @@ import Foundation
 /// It is written in an agent's words, as `set_panel_layout`'s `hud` takes it beside `agents`: `mode` is `notch`,
 /// `dynamic` or `simple`; `position` is the placement's `offset`, `logoGap` its `gapScale`, `edgeDistance` its
 /// `logoEdgeDistance`, `showLogos`, `showRings` and `showNumbers` its `showsLogos`, `showsRings` and `showsNumbers`,
-/// `bots` its `simpleBots` and `separateAgents` its `separatesAgents`, while `appearance` and `material` keep their
-/// names; under `glow`, `speed` is the glow's working period, `breathSeconds`, and `amplitude` its `breathAmplitude`.
+/// `bots` its `simpleBots`, `separateAgents` its `separatesAgents` and `transparency` its `glassTransparency`, while
+/// `appearance` and `material` keep their names; under `glow`, `speed` is the glow's working period, `breathSeconds`, and `amplitude` its `breathAmplitude`.
 public struct HUDStyle: Hashable, Sendable {
     public var mode: HUDMode?
     public var edge: HUDEdge?
@@ -34,6 +34,8 @@ public struct HUDStyle: Hashable, Sendable {
     public var appearance: HUDAppearance?
     /// Their surface, solid or glass.
     public var material: HUDMaterial?
+    /// How much of the desktop glass lets through, 0 to 0.9.
+    public var transparency: Double?
     public var glow: Glow
 
     /// The glow's part of a style.
@@ -66,7 +68,7 @@ public struct HUDStyle: Hashable, Sendable {
                 logoGap: Double? = nil, edgeDistance: Double? = nil, showLogos: Bool? = nil, simpleSize: Double? = nil,
                 ringWidth: Double? = nil, showRings: Bool? = nil, showNumbers: Bool? = nil, bots: Bool? = nil,
                 separateAgents: Bool? = nil, appearance: HUDAppearance? = nil, material: HUDMaterial? = nil,
-                glow: Glow = Glow()) {
+                transparency: Double? = nil, glow: Glow = Glow()) {
         self.mode = mode
         self.edge = edge
         self.position = position
@@ -82,6 +84,7 @@ public struct HUDStyle: Hashable, Sendable {
         self.separateAgents = separateAgents
         self.appearance = appearance
         self.material = material
+        self.transparency = transparency
         self.glow = glow
     }
 
@@ -106,6 +109,7 @@ public struct HUDStyle: Hashable, Sendable {
         if let separateAgents { next.separatesAgents = separateAgents }
         if let appearance { next.appearance = appearance }
         if let material { next.material = material }
+        if let transparency { next.glassTransparency = transparency }
         return next
     }
 
@@ -130,6 +134,7 @@ public struct HUDStyle: Hashable, Sendable {
                   simpleSize: placement.simpleSize, ringWidth: placement.ringWidth, showRings: placement.showsRings,
                   showNumbers: placement.showsNumbers, bots: placement.simpleBots, separateAgents: placement.separatesAgents,
                   appearance: placement.appearance, material: placement.material,
+                  transparency: placement.glassTransparency,
                   glow: Glow(style: glow.style, effect: glow.effect, brightness: glow.brightness, range: glow.range,
                              blur: glow.blur, speed: glow.breathSeconds, amplitude: glow.breathAmplitude,
                              outwardOnly: glow.outwardOnly))
@@ -203,7 +208,7 @@ extension HUDStyle {
     /// A field of a screen's placement an agent can set, by the name it uses for it.
     enum Field: String, CaseIterable, Sendable {
         case mode, edge, position, logoSize, logoGap, edgeDistance, showLogos, simpleSize, ringWidth, showRings,
-             showNumbers, bots, separateAgents, appearance, material
+             showNumbers, bots, separateAgents, appearance, material, transparency
 
         /// The range a number keeps within, Settings' own; nil for a field that is no number.
         var range: ClosedRange<Double>? {
@@ -214,15 +219,15 @@ extension HUDStyle {
             case .edgeDistance: ScreenPlacement.logoEdgeDistanceRange
             case .simpleSize: ScreenPlacement.simpleSizeRange
             case .ringWidth: ScreenPlacement.ringWidthRange
+            case .transparency: ScreenPlacement.glassTransparencyRange
             case .mode, .edge, .showLogos, .showRings, .showNumbers, .bots, .separateAgents, .appearance, .material: nil
             }
         }
 
-        /// The modes whose HUD the field changes, as Settings shows it for them. The look's fields change every mode's,
-        /// but for the notch's on a screen that has one (`ScreenPlacement.drawsLook(hasNotch:)`).
+        /// The modes whose HUD the field changes, as Settings shows it for them. The look's fields change every mode's.
         var modes: [HUDMode] {
             switch self {
-            case .mode, .appearance, .material: HUDMode.allCases
+            case .mode, .appearance, .material, .transparency: HUDMode.allCases
             case .edge, .position, .separateAgents: [.logos, .simple]
             case .logoSize, .logoGap, .edgeDistance, .showLogos: [.logos]
             case .simpleSize, .ringWidth, .showRings, .showNumbers, .bots: [.simple]
@@ -264,6 +269,7 @@ extension HUDStyle {
         case .separateAgents: separateAgents.map(JSONValue.bool)
         case .appearance: appearance.map { .string($0.rawValue) }
         case .material: material.map { .string($0.rawValue) }
+        case .transparency: transparency.map(JSONValue.number)
         }
     }
 
@@ -286,6 +292,7 @@ extension HUDStyle {
         case .separateAgents: separateAgents = json.boolValue
         case .appearance: appearance = json.stringValue.flatMap(HUDAppearance.init(rawValue:))
         case .material: material = json.stringValue.flatMap(HUDMaterial.init(rawValue:))
+        case .transparency: transparency = number
         }
     }
 

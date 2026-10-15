@@ -102,9 +102,8 @@ struct Theme {
     private(set) var raisedSurface: Color
     /// A box set into a card, such as a request's command inside the request's own card.
     private(set) var insetSurface: Color
-    /// What glass is tinted with under the HUD's ink (`HUDSurface`): `islandFill` thinned, which darkens dark glass and
-    /// lightens light glass enough for the HUD's fixed text and status colours to keep their contrast over any desktop.
-    /// Where nothing is behind to blur, it is glass's stand-in on its own.
+    /// What glass is covered with under the HUD's ink, before the screen's transparency thins it (`HUDLook.glassCover`):
+    /// the island's own surface, black on dark glass and the light window's near-white on light glass.
     private(set) var glassTint: Color
     /// The alerts' accents (`IslandAlert.accent`) as text and thin glyphs: a finished turn's blue, calm news's green and
     /// a warning's warm. On the dark HUD they are the accents themselves; on a light one, darker versions that stay
@@ -194,7 +193,7 @@ struct Theme {
         onAccent: Color.black,
         raisedSurface: Color(hex: 0x282828),
         insetSurface: Color.white.opacity(0.05),
-        glassTint: Color.black.opacity(0.75),
+        glassTint: Color.black,
         alertTurnText: Color(IslandAlert.turnAccent),
         alertCalmText: Color(IslandAlert.calmAccent),
         alertWarningText: Color(IslandAlert.warningAccent)
@@ -232,7 +231,7 @@ struct Theme {
         onAccent: Color.black,
         raisedSurface: Color.white,
         insetSurface: Color.black.opacity(0.04),
-        glassTint: Color(hex: 0xf5f5f7).opacity(0.7),
+        glassTint: Color(hex: 0xf5f5f7),
         alertTurnText: Color(hex: 0x2f62d0),
         alertCalmText: Color(hex: 0x0f7b57),
         alertWarningText: Color(hex: 0xa8521c)

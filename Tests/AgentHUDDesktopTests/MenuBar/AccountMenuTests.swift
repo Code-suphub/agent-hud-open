@@ -210,6 +210,44 @@ final class AccountMenuTests: XCTestCase {
         XCTAssertEqual([StatusLevel.warning, .ok, nil].map { StatusItemController.valueColor($0) }, [.secondaryLabelColor, .secondaryLabelColor, .secondaryLabelColor])
     }
 
+    /// A critical figure is coloured for the menu it is in, drawn light or dark, which under Match screen is the HUD's
+    /// look rather than macOS's; any other figure is the menu's own secondary colour.
+    @MainActor
+    func testAFiguresColourFollowsTheMenusShade() {
+        for light in [true, false] {
+            XCTAssertEqual(StatusItemController.valueColor(.critical, light: light),
+                           NSColor(StatusPalette.textColor(for: .critical, light: light)), "\(light)")
+            XCTAssertEqual([StatusLevel.warning, .ok, nil].map { StatusItemController.valueColor($0, light: light) },
+                           [.secondaryLabelColor, .secondaryLabelColor, .secondaryLabelColor])
+        }
+        XCTAssertNotEqual(StatusItemController.valueColor(.critical, light: true),
+                          StatusItemController.valueColor(.critical, light: false))
+    }
+
+    /// Under Match screen the menu is as dark or light as the look its screen gives it (`WindowLook`), whatever macOS is
+    /// set to; under any other Appearance it takes none of its own and follows the app.
+    @MainActor
+    func testTheMenuTakesTheLookOfItsScreen() throws {
+        let suite = "AccountMenuTests.\(UUID().uuidString)", defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        _ = NSApplication.shared
+        let saved = WindowLook.source
+        defer { WindowLook.source = saved }
+        let settings = SettingsStore(defaults: defaults, defaultAgents: [])
+        let controller = StatusItemController(store: UsageStore(provider: DemoUsageProvider(), settings: settings),
+                                              settings: settings)
+        let menu = NSMenu()
+        for (look, name) in [(HUDLook(appearance: .light), NSAppearance.Name.aqua),
+                             (HUDLook(appearance: .dark, material: .glass), .darkAqua)] {
+            WindowLook.source = { _ in look }
+            controller.menuNeedsUpdate(menu)
+            XCTAssertEqual(menu.appearance?.name, name)
+        }
+        WindowLook.source = { _ in nil }
+        controller.menuNeedsUpdate(menu)
+        XCTAssertNil(menu.appearance)
+    }
+
     /// The menu `StatusItemController` builds over `report` at `now`, in English, with the rows of `agents` shown.
     @MainActor
     private func buildMenu(showing report: UsageReport, agents: [AgentDescriptor], now: Date,
