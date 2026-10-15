@@ -105,11 +105,16 @@ extension HoverPanelView {
         }
     }
 
+    /// Where a quota block's logo and name lead: back to the vendor's latest session that names a destination.
+    private func openAgent(_ vendor: String) -> (() -> Void)? {
+        Self.latestDestination(store, vendor: vendor).map { id in { onOpenListedSession(id) } }
+    }
+
     @ViewBuilder
     private func whole(_ block: Block, divided: Bool, spacing: PanelSpacingMetrics, divider: Color) -> some View {
         switch block {
         case .quota(let plan, let rows):
-            ProviderQuotaBlock(store: store, rows: rows, plan: plan)
+            ProviderQuotaBlock(store: store, rows: rows, plan: plan, onOpenAgent: openAgent(plan.key))
                 .padding(.top, divided ? spacing.divided : 0)
                 .topDivider(divided ? divider : .clear)
         case .billing(_, let accounts):
@@ -145,7 +150,7 @@ extension HoverPanelView {
     private func half(_ block: Block, spacing: PanelSpacingMetrics, divider: Color) -> some View {
         switch block {
         case .quota(let plan, let rows):
-            ProviderQuotaBlock(store: store, rows: rows, plan: plan)
+            ProviderQuotaBlock(store: store, rows: rows, plan: plan, onOpenAgent: openAgent(plan.key))
         case .billing(_, let accounts):
             VStack(alignment: .leading, spacing: spacing.blocks) {
                 ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in

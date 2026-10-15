@@ -75,13 +75,15 @@ public struct LogPager {
 }
 
 /// The lines of a log, newest first, from a position just past a newline back to the log's start; each range leaves
-/// its newline out, and empty lines are passed over. Only the newlines are looked for, a chunk at a time, so a long
-/// line is never held.
+/// its newline out, and empty lines are passed over. Only the newlines are looked for, a chunk at a time and by the C
+/// library, so a long line is never held and costs little to pass.
 struct LinesBack {
     private let handle: FileHandle
     private let chunkSize: Int
-    private var chunk = Data()
+    /// Where the chunks read so far begin.
     private var chunkStart: Int
+    /// The newlines found in them and not passed yet, in order.
+    private var newlines: [Int] = []
     /// Where the line still to be returned ends: the position of its newline.
     private var lineEnd: Int
 
@@ -94,27 +96,31 @@ struct LinesBack {
 
     mutating func next() throws -> Range<Int>? {
         while lineEnd >= 0 {
-            var searchEnd = lineEnd
-            var newline: Int?
-            while newline == nil {
-                if searchEnd <= chunkStart {
-                    guard chunkStart > 0 else { break }
-                    let start = max(0, chunkStart - chunkSize)
-                    try handle.seek(toOffset: UInt64(start))
-                    chunk = try handle.read(upToCount: chunkStart - start) ?? Data()
-                    chunkStart = start
-                }
-                let count = min(searchEnd - chunkStart, chunk.count), offset = chunkStart
-                newline = chunk.withUnsafeBytes { bytes in
-                    UnsafeRawBufferPointer(rebasing: bytes[0..<count]).lastIndex(of: 0x0A).map { offset + $0 }
-                }
-                if newline == nil { searchEnd = chunkStart }
+            while let last = newlines.last, last >= lineEnd { newlines.removeLast() }
+            while newlines.isEmpty, chunkStart > 0 {
+                let start = max(0, chunkStart - chunkSize)
+                try handle.seek(toOffset: UInt64(start))
+                newlines = Self.newlines(in: try handle.read(upToCount: chunkStart - start) ?? Data(), at: start)
+                chunkStart = start
             }
-            let start = newline.map { $0 + 1 } ?? 0
-            let line = start..<lineEnd
+            let newline = newlines.popLast()
+            let line = (newline.map { $0 + 1 } ?? 0)..<lineEnd
             lineEnd = newline ?? -1
             if !line.isEmpty { return line }
         }
         return nil
+    }
+
+    private static func newlines(in chunk: Data, at offset: Int) -> [Int] {
+        chunk.withUnsafeBytes { bytes in
+            guard let base = bytes.baseAddress else { return [] }
+            var found: [Int] = [], at = 0
+            while at < bytes.count, let hit = memchr(base + at, 0x0A, bytes.count - at) {
+                let index = base.distance(to: UnsafeRawPointer(hit))
+                found.append(offset + index)
+                at = index + 1
+            }
+            return found
+        }
     }
 }

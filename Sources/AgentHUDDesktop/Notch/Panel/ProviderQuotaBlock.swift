@@ -82,20 +82,30 @@ struct ProviderQuotaBlock: View {
     let store: UsageStore
     let rows: [AgentRow]
     let plan: PanelBlockPlan
+    /// Back to the vendor's latest session; nil when no session of it names a destination.
+    var onOpenAgent: (() -> Void)? = nil
     @State private var metric: PanelMeasure
     @Environment(\.panelSpacing) private var spacing
     @Environment(\.panelHalf) private var half
     private let theme = Theme.island
 
-    init(store: UsageStore, rows: [AgentRow], plan: PanelBlockPlan) {
+    init(store: UsageStore, rows: [AgentRow], plan: PanelBlockPlan, onOpenAgent: (() -> Void)? = nil) {
         self.store = store
         self.rows = rows
         self.plan = plan
+        self.onOpenAgent = onOpenAgent
         _metric = State(initialValue: plan.measure)
     }
 
     /// A quota block's key is its vendor's id.
     private var vendor: String { plan.key }
+
+    private var logo: some View {
+        AgentLogo(vendor: vendor, size: 14)
+            .frame(width: IslandRowLayout.inset * 2 + IslandRowLayout.markerWidth)
+    }
+
+    private static var openAgentHelp: String { L10n.text("回到最近的会话", "Back to the latest session") }
 
     /// Whether the block shows reset times: where Settings shows them and the layout does not hide them here.
     private var showsCountdown: Bool { store.settings.settings.showResetCountdown && plan.countdown }
@@ -108,19 +118,23 @@ struct ProviderQuotaBlock: View {
         let chartColumns: [TokenColumn] = charted ? store.hudTokenColumns(consumerIDs: Set(chartConsumers.map(\.id))) : []
         VStack(alignment: .leading, spacing: spacing.blockParts) {
             HStack(spacing: 6) {
-                AgentLogo(vendor: vendor, size: 14)
-                    .frame(width: IslandRowLayout.inset * 2 + IslandRowLayout.markerWidth)
                 if half {
                     // The name is given its room first and keeps one line: the spinner gives way where both have no
                     // room, and a name longer than any the app gives an agent (`PanelLines.widestHeading`) wraps.
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 6) { name.lineLimit(1); spinner }
-                        name.lineLimit(1)
-                        name
+                    HStack(spacing: 6) {
+                        logo
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 6) { name.lineLimit(1); spinner }
+                            name.lineLimit(1)
+                            name
+                        }
                     }
+                    .clickTarget(onOpenAgent, help: Self.openAgentHelp)
                     .layoutPriority(1)
                 } else {
-                    name
+                    // The logo and the name lead back to the agent's latest session, looking as they always do.
+                    HStack(spacing: 6) { logo; name }
+                        .clickTarget(onOpenAgent, help: Self.openAgentHelp)
                     spinner
                 }
                 Spacer()

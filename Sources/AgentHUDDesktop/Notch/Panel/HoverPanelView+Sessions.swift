@@ -242,6 +242,16 @@ extension HoverPanelView {
         rows.noneMatch ? L10n.text("没有符合条件的会话", "No sessions match") : L10n.text("还没有会话", "No sessions yet")
     }
 
+    /// The vendor's newest session, among those of the past week drawn with its mark, that its client names a
+    /// destination for: where the vendor's logo and name in the quota list lead. Nil when none does.
+    static func latestDestination(_ store: UsageStore, vendor: String) -> String? {
+        let mark = AgentArtwork.markKey(vendor)
+        return store.view.recentSessions.first {
+            !$0.session.accountWide && $0.session.navigationTarget != nil
+                && ($0.source.agentVendor ?? $0.source.vendor).map(AgentArtwork.markKey) == mark
+        }?.id
+    }
+
     /// The questions this session is waiting on: only a question put to this exact session reaches its row.
     static func questionRequests(for session: LiveSession, waiting: [PermissionRequest]) -> [PermissionRequest] {
         waiting.filter { $0.sessionID == session.id && $0.isQuestion }
