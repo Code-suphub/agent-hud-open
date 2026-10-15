@@ -111,8 +111,11 @@ final class CollectionSignalTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(initial)
         let before = await a.changedPaths.count
         await store.refreshAccounts()
-        let fetches = await a.fetches, after = await a.changedPaths.dropFirst(before)
-        XCTAssertEqual(fetches, 2, "opening the panel still reads")
+        // A refresh that arrives during a pass is served by the next pass, after the read spacing, so it can return
+        // before the read. A has no account steps, so here a pass is nearly always running.
+        let read = try await wait { await a.fetches >= 2 }
+        XCTAssertTrue(read, "opening the panel still reads")
+        let after = await a.changedPaths.dropFirst(before)
         XCTAssertFalse(after.contains { $0 == nil }, "a nil would make every listing list all its roots: \(after)")
     }
 
