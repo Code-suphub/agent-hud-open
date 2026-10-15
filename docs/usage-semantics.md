@@ -120,7 +120,7 @@ Reads never run in parallel: the usage store runs one pass of source reads or on
 | Concept | Code |
 | --- | --- |
 | Token kinds and dimensions, bar buckets | `Sources/AgentHUDCore/Models/Usage/TokenKinds.swift`, `Sources/AgentHUDCore/Logic/ChartData.swift` |
-| List prices, platforms, context windows | `Sources/AgentHUDCore/Models/Catalog/ModelCatalog.swift`, `ModelPriceList.swift`, `PriceRegions.swift` |
+| List prices, platforms, context windows, calls priced per model and tier | `Sources/AgentHUDCore/Models/Catalog/ModelCatalog.swift`, `ModelPriceList.swift`, `PriceRegions.swift`, `ListPricing.swift` |
 | Today, seven and thirty days | `Sources/AgentHUDCore/Models/Usage/UsagePeriods.swift`, `Ledger/UsageLedger.swift` |
 | Alert levels, thresholds and reading age, status colors | `Sources/AgentHUDCore/Logic/Alerts/AlertPolicy.swift`, `StatusLevel.swift`; `Sources/AgentHUDDesktop/Theme/StatusPalette.swift` |
 | Reading status and assessment | `Sources/AgentHUDCore/Models/Accounts/ReadingStatus.swift` |
