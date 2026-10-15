@@ -36,15 +36,19 @@ public enum QuotaMath {
 
     /// A window's burn rate, how long its rest lasts at that rate, and the times it hit its cap, from its stored readings
     /// since `historyStart(for:now:)`. The burn rate takes the readings of the current cycle; cap hits are counted over
-    /// the last week. Without a reading there is no burn rate, only cap hits.
+    /// the last week. Without a reading there is no burn rate, only cap hits. A series too short for a burn rate has its
+    /// sampling progress instead.
     public static func insights(snapshot: UsageSnapshot?, samples: [QuotaSample], now: Date) -> UsageInsights {
-        let burn = snapshot?.remainingPct == nil ? nil : UsageAnalytics.burnRate(samples: samples, cycle: snapshot?.cycle, now: now)
+        let pace: (burnRate: BurnRate?, sampling: QuotaSampling?) = snapshot?.remainingPct == nil ? (nil, nil)
+            : UsageAnalytics.pace(samples: samples, cycle: snapshot?.cycle, now: now)
+        let burn = pace.burnRate
         let week = now.addingTimeInterval(-AlertPolicy.insightsLookback)
         let caps = UsageAnalytics.capStats(samples: samples.filter { $0.timestamp >= week }, now: now)
         return UsageInsights(burnRatePctPerHour: burn?.pctPerHour,
                              timeToExhaust: snapshot.flatMap(\.remainingPct).flatMap { burn?.timeToExhaust(remainingPct: $0) },
                              weeklyCapHits: caps.hits, weeklyWaitTotal: caps.totalWait,
-                             weeklyWaitLongest: caps.longestWait, weeklyWaitLongestAt: caps.longestAt)
+                             weeklyWaitLongest: caps.longestWait, weeklyWaitLongestAt: caps.longestAt,
+                             sampling: pace.sampling)
     }
 
     /// The window's outlook at `now`.

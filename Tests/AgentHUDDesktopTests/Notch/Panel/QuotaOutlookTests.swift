@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import AgentHUDCore
 @testable import AgentHUDDesktop
@@ -25,6 +26,8 @@ final class QuotaOutlookTests: XCTestCase {
         let resetIn: TimeInterval?
         let duration: TimeInterval?
         let insights: (burn: Double?, exhaust: TimeInterval?)?
+        /// How far the window's readings have come while they are too few for a burn rate.
+        var sampling: QuotaSampling? = nil
     }
 
     private var grid: [Window] {
@@ -43,6 +46,10 @@ final class QuotaOutlookTests: XCTestCase {
             .init(name: "resetPassed", remaining: 50, resetIn: -10 * 60, duration: 5 * hour, insights: (10, 5 * hour)),
             .init(name: "weekly", remaining: 50, resetIn: 3 * 86400, duration: 7 * 86400, insights: (1, 50 * hour)),
             .init(name: "fullWindow", remaining: 100, resetIn: 2 * hour, duration: 5 * hour, insights: (nil, nil)),
+            .init(name: "sampling", remaining: 99, resetIn: 2 * hour, duration: 5 * hour, insights: (nil, nil),
+                  sampling: QuotaSampling(elapsed: 180, required: 15 * 60, afterReset: false)),
+            .init(name: "resampling", remaining: 100, resetIn: 7 * 86400 - 600, duration: 7 * 86400, insights: (nil, nil),
+                  sampling: QuotaSampling(elapsed: 30, required: hour, afterReset: true)),
         ]
     }
 
@@ -82,6 +89,11 @@ final class QuotaOutlookTests: XCTestCase {
             ("resetPassed", .init(hint: "Insufficient data", exhaustsIn: nil, projected: nil, detail: "—", tokensPerHour: nil)),
             ("weekly", .init(hint: "Exhausts ~50h", exhaustsIn: 50 * hour, projected: nil, detail: at(50 * hour), tokensPerHour: 1167)),
             ("fullWindow", .init(hint: "Insufficient data", exhaustsIn: nil, projected: nil, detail: "Insufficient data", tokensPerHour: 1000)),
+            // Readings too few for a burn rate say how far they have come, and whether they start again after a reset.
+            ("sampling", .init(hint: "Collecting initial readings for a forecast\nSampled 3m; at least 15m of readings needed",
+                               exhaustsIn: nil, projected: nil, detail: "Sampling", tokensPerHour: 1000)),
+            ("resampling", .init(hint: "Quota reset; collecting new readings\nSampled less than 1m; at least 1h of readings needed",
+                                 exhaustsIn: nil, projected: nil, detail: "Resampling", tokensPerHour: 0)),
         ]
         XCTAssertEqual(expected.map { $0.0 }, grid.map(\.name))
         try withStore(grid) { store in
@@ -100,6 +112,20 @@ final class QuotaOutlookTests: XCTestCase {
             XCTAssertEqual(try grid.map(\.name).filter { try metrics($0, in: store).runsOut },
                            ["exhausted", "nearlyExhausted", "exhaustsBeforeReset", "weekly"])
         }
+    }
+
+    /// The hover shows every line of a hint at its own length, however long the hint's lines are.
+    @MainActor
+    func testTheHoverShowsEveryLineOfAHint() {
+        let agent = AgentDescriptor(id: "window", vendor: "Codex", model: "Weekly", source: "", enabled: true)
+        func size(_ text: String) -> CGSize { NSHostingView(rootView: QuotaForecastDetails(agent: agent, hint: text)).fittingSize }
+        func width(_ line: String) -> CGFloat {
+            NSHostingView(rootView: Text(line).font(.ui(12, .medium)).monospacedDigit().fixedSize()).fittingSize.width
+        }
+        let first = "Quota reset; collecting new readings", second = "Sampled less than 1m; at least 15m of readings needed"
+        let one = size(first), both = size(first + "\n" + second)
+        XCTAssertGreaterThan(both.height, one.height + 10)
+        XCTAssertGreaterThanOrEqual(both.width, width(second) + 20 - 0.5)
     }
 
     /// The row's other measures on one window of the grid, and a window that runs out a week or more ahead, which the
@@ -182,7 +208,7 @@ final class QuotaOutlookTests: XCTestCase {
             insightsByAgent: Dictionary(uniqueKeysWithValues: windows.compactMap { window in
                 window.insights.map {
                     (window.name, UsageInsights(burnRatePctPerHour: $0.burn, timeToExhaust: $0.exhaust, weeklyCapHits: 0, weeklyWaitTotal: 0,
-                                                weeklyWaitLongest: 0, weeklyWaitLongestAt: nil))
+                                                weeklyWaitLongest: 0, weeklyWaitLongestAt: nil, sampling: window.sampling))
                 }
             }),
             sourceNotices: quotaNotices, quotaNotices: quotaNotices,
