@@ -694,12 +694,48 @@ final class CodexProviderTests: XCTestCase {
         XCTAssertEqual(report.turns.map(\.sessionID), ["child"])
     }
 
+    func testAMonthOfTokensListsTheSessionsOfTheLastSevenDaysWithTheirWholeTrees() async throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let now = Date()
+        func rollout(_ id: String, source: Any, model: String, daysAgo: Double) throws {
+            let at = now.addingTimeInterval(-daysAgo * 86400), file = dir.appendingPathComponent("rollout-\(id).jsonl")
+            let rows = [line(type: "session_meta", payload: ["id": id, "cwd": "/\(id)", "source": source], at: at.ISO8601Format()),
+                        line(payload: ["type": "task_started", "turn_id": "\(id)-turn"], at: at.ISO8601Format()),
+                        line(type: "turn_context", payload: ["model": model], at: at.ISO8601Format()),
+                        line(payload: ["type": "token_count", "info": ["total_token_usage": ["input_tokens": 100, "output_tokens": 10]]],
+                             at: at.ISO8601Format()),
+                        line(payload: ["type": "task_complete", "turn_id": "\(id)-turn"], at: at.addingTimeInterval(1).ISO8601Format())]
+            try (rows.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: at.addingTimeInterval(1)], ofItemAtPath: file.path)
+        }
+        try rollout("parent", source: "cli", model: "gpt-6-astra", daysAgo: 1)
+        // A sub-agent the recent session started weeks ago, and a session nobody has touched since then.
+        try rollout("child", source: ["subagent": ["thread_spawn": ["parent_thread_id": "parent"]]], model: "gpt-6-astra", daysAgo: 20)
+        try rollout("old", source: "cli", model: "gpt-6-sol", daysAgo: 20)
+        let ledger = UsageLedger.inMemory()
+        let provider = CodexUsageProvider(readLimits: { throw UsageProviderError("signed out") },
+            transcripts: CodexTranscriptStore(roots: [dir], ledger: ledger), history: QuotaHistoryStore(), clock: { now })
+        let report = try await provider.fetchUsage(agents: [], historyHours: 31 * 24 + 25)
+        XCTAssertEqual(report.sessions.map(\.id), ["parent"])
+        let parent = try XCTUnwrap(report.sessions.first)
+        XCTAssertEqual(parent.subagentSessions?.map(\.id), ["child"], "a listed session keeps its whole tree")
+        XCTAssertEqual(parent.subagentTranscripts?.map { URL(fileURLWithPath: $0).lastPathComponent }, ["rollout-child.jsonl"],
+                       "its breakdown still takes the older sub-agent's rollout")
+        XCTAssertEqual(Set(report.turns.map(\.sessionID)), ["parent", "child"])
+        XCTAssertEqual(report.completions.filter { $0.sessionID != "child" }.map(\.sessionID), ["parent"])
+        XCTAssertEqual(Set(report.consumers.map(\.id)), ["codex-model:gpt-6-astra", "codex-model:gpt-6-sol"])
+        let recorded = try await ledger.buckets(since: now.addingTimeInterval(-31 * 86400), source: "codex")
+        XCTAssertEqual(recorded.reduce(0) { $0 + $1.tokensIn }, 300, "every rollout of the month records its tokens")
+    }
+
     func testQuotaFailureKeepsLocalSessions() async throws {
         let dir = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
         let contents = line(type: "session_meta", payload: ["id":"cli", "source":"cli", "cwd":"/project"]) + "\n" + line(payload: ["type":"task_started"]) + "\n"
         try contents.write(to: dir.appendingPathComponent("rollout-cli.jsonl"), atomically: true, encoding: .utf8)
-        let provider = CodexUsageProvider(readLimits: { throw UsageProviderError("signed out") }, transcripts: CodexTranscriptStore(roots: [dir]), history: QuotaHistoryStore())
+        let now = self.now
+        let provider = CodexUsageProvider(readLimits: { throw UsageProviderError("signed out") }, transcripts: CodexTranscriptStore(roots: [dir]), history: QuotaHistoryStore(), clock: { now })
         let known = AgentDescriptor(id: "codex", vendor: "Codex", model: "5h", source: L10n.sourceCodexAppServer, enabled: true)
         let report = try await provider.fetchAccountAndLocalUsage(agents: [known], historyHours: 48)
         XCTAssertEqual(report.sessions.first?.client, "CLI")
@@ -722,8 +758,9 @@ final class CodexProviderTests: XCTestCase {
             line(payload: ["type": "task_complete", "turn_id": "turn", "last_agent_message": "Final answer"]),
         ].joined(separator: "\n") + "\n"
         try contents.write(to: dir.appendingPathComponent("rollout-session.jsonl"), atomically: true, encoding: .utf8)
+        let now = self.now
         let provider = CodexUsageProvider(readLimits: { throw UsageProviderError("signed out") },
-            transcripts: CodexTranscriptStore(roots: [dir], indexURL: index), history: QuotaHistoryStore())
+            transcripts: CodexTranscriptStore(roots: [dir], indexURL: index), history: QuotaHistoryStore(), clock: { now })
         let fallback = try await provider.fetchUsage(agents: [], historyHours: 48)
         XCTAssertEqual(fallback.completions.first?.task, "First question")
 

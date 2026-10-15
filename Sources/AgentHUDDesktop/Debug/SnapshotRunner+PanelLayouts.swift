@@ -107,7 +107,7 @@ extension SnapshotRunner {
                 discoveredAgents: sample.discoveredAgents + added, consumers: sample.consumers, usage: sample.usage,
                 insightsByAgent: sample.insightsByAgent, subscriptions: sample.subscriptions,
                 consumerIdsByQuota: sample.consumerIdsByQuota, billing: sample.billing, codexResetCredits: sample.codexResetCredits,
-                accounts: sample.accounts, sessionUsage: sample.sessionUsage, periods: sample.periods))
+                accounts: sample.accounts, sessionUsage: sample.sessionUsage, periods: sample.periods, recached: sample.recached))
             settings.panelLayout.propose(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring, columns: columns)]))
             settings.panelLayout.save()
             save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false),
