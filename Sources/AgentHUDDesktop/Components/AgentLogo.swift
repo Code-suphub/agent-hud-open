@@ -31,15 +31,15 @@ enum AgentArtwork {
     )
 
     /// The bundled artwork at its own resolution, for surfaces that draw the mark larger than the 16 pt
-    /// menu icon — the logo queue scales it up rather than blowing up the icon-sized copy.
-    @MainActor private static var originals: [String: NSImage] = [:]
-
+    /// menu icon — the logo queue scales it up rather than blowing up the icon-sized copy. It is read from its
+    /// file at each call and kept by no one: every caller keeps only what it makes from it at its own size, and
+    /// once drawn the artwork holds its pixels, OpenAI's tinted copy 12.5 MB of them.
+    ///
     /// - light: which background the mark will sit on. OpenCode ships a light and a dark variant; everything
     ///   else is the same artwork either way.
     @MainActor
     static func original(for vendor: String, light: Bool = false) -> NSImage? {
         let vendor = canonical(vendor, light: light)
-        if let hit = originals[vendor] { return hit }
         guard let name = fileNames[vendor],
               let url = AppResources.bundle.url(forResource: name, withExtension: "png"),
               let artwork = NSImage(contentsOf: url)
@@ -48,7 +48,6 @@ enum AgentArtwork {
         // for it is the same green the menu uses.
         let image = vendor == "ChatGPT" ? tinted(artwork, with: openAIGreen) : artwork
         image.isTemplate = monochromeVendors.contains(vendor)
-        originals[vendor] = image
         return image
     }
 
