@@ -66,6 +66,15 @@ public final class UsageStore {
     @ObservationIgnored private var built: (generation: Int, agents: [AgentDescriptor], settings: Settings, approvals: [String],
                                             waiting: [String: Date], hookTurns: [String: SessionPhase.HookTurn], failure: String?,
                                             view: ReportView)?
+    /// The HUD's token columns built from the current report up to one end, by period and models
+    /// (`hudTokenColumns(consumerIDs:period:)`).
+    @ObservationIgnored private var hudColumns: (generation: Int, end: Date, columns: [HUDColumnsKey: [TokenColumn]])?
+
+    /// What one set of the HUD's token columns is built for.
+    struct HUDColumnsKey: Hashable {
+        let period: PanelTokenPeriod
+        let consumerIDs: Set<String>?
+    }
 
     /// `hooks` let a host choose the history window, publish each provider report and merge it into the displayed report.
     public init(provider: any UsageProvider, settings: SettingsStore, accessAllowed: @escaping () -> Bool = { true },
@@ -183,6 +192,19 @@ public final class UsageStore {
                               hookTurns: hookTurns, now: now, failure: failure)
         built = (reportGeneration, agents, preferences, requests, waiting, hookTurns, failure, view)
         return view
+    }
+
+    /// The HUD's token columns for `key` ending at `end`: built once for the report shown and that end, then kept, so a
+    /// panel's body, evaluated on every pass, walks the report's buckets once a report rather than once a body. The
+    /// caller reads the report through `dataDate`, so a body that is handed kept columns still follows a new report.
+    func hudColumns(_ key: HUDColumnsKey, end: Date, build: () -> [TokenColumn]) -> [TokenColumn] {
+        if hudColumns?.generation != reportGeneration || hudColumns?.end != end {
+            hudColumns = (reportGeneration, end, [:])
+        }
+        if let columns = hudColumns?.columns[key] { return columns }
+        let columns = build()
+        hudColumns?.columns[key] = columns
+        return columns
     }
 
     /// `view.visibleAgents`.

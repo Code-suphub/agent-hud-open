@@ -6,7 +6,8 @@ import Foundation
 ///
 /// It hands the client's request to the running HUD and prints back whatever the user decided. Every failure — no HUD,
 /// a wedged HUD, a payload it cannot read — prints nothing, which leaves the client's own permission flow exactly as
-/// it would be with no hook installed. The wait itself is not bounded here: the client already set the limit it is
+/// it would be with no hook installed. So does a Claude Code run with no one else to ask (`ClaudeHeadlessRuns`), at once
+/// and without the HUD hearing of it. The wait itself is not bounded here: the client already set the limit it is
 /// willing to wait, and the HUD learns the request is over when this process goes away — which it also does on its
 /// own once the session record shows the user answered in the client instead.
 public enum PermissionHookClient {
@@ -23,6 +24,8 @@ public enum PermissionHookClient {
         alarm(5)
         let input = FileHandle.standardInput.readDataToEndOfFile()
         guard let payload = tagged(input, source: source) else { return }
+        // A run with no one else to ask denies the request itself once this hook returns; holding it only stalls its script.
+        if source == .claude, ClaudeHeadlessRuns.current() { return }
         guard let socket = UnixSocket.connect(to: PermissionRequests.socketPath) else { return }
         defer { close(socket) }
         guard UnixSocket.send(socket, payload) else { return }

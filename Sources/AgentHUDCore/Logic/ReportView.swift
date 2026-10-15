@@ -56,7 +56,8 @@ public struct ReportView: Sendable {
     /// same last event are ordered by vendor, then id.
     public let sessions: [Session]
 
-    private let report: UsageReport?
+    /// The report the view is made over, which the calculations kept beside their own types read (`QuotaMath.swift`).
+    let report: UsageReport?
     private let settings: Settings
     private let index: Index
     /// Why the last pass failed when every source failed to read; every reading then counts as failed.
@@ -172,7 +173,7 @@ public struct ReportView: Sendable {
 
     /// Whether a window's reading enters calculations: only the reading of a row that shows a level does. Any other is
     /// shown greyed, without a forecast.
-    private func counts(_ agentId: String) -> Bool { rows.contains { $0.id == agentId && $0.assessment.showsLevel } }
+    func counts(_ agentId: String) -> Bool { rows.contains { $0.id == agentId && $0.assessment.showsLevel } }
 
     /// Plans of the vendors that have an enabled row.
     public var subscriptions: [String: String] {
