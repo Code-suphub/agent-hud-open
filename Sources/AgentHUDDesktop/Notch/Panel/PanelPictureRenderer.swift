@@ -120,7 +120,7 @@ struct PanelPictureRenderer {
             .frame(height: height, alignment: .top)
             .background {
                 HUDSurface(shape, look: look, fill: look.theme.islandFill, contact: nil)
-                    .background { if look.material == .glass { shape.fill(HUDPictureRenderer.backdrop) } }
+                    .background { if look.seeThrough { shape.fill(HUDPictureRenderer.backdrop) } }
                     .environment(\.drawsGlassStandIn, true)
             }
     }

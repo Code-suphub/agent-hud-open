@@ -512,7 +512,7 @@ final class GlowWindowController {
                                 frame: CGRect) -> ShadowKey {
         let local = Self.canonicalIslandFrame(shell.frame, panel: frame, edge: geometry.edge)
         let drop = Self.shellShadowDrop(on: geometry.edge)
-        let cutouts: [ShellCutout] = look.material == .glass
+        let cutouts: [ShellCutout] = look.seeThrough
             ? [shells.surface, shells.dock].compactMap { $0 }.filter { !$0.bare }.map { other in
                 let place = Self.canonicalIslandFrame(other.frame, panel: frame, edge: geometry.edge)
                 return ShellCutout(shape: Self.shape(of: other, at: place),

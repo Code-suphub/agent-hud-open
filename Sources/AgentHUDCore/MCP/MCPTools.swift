@@ -137,8 +137,8 @@ public enum MCPTools {
             "material": text("Solid, or glass that shows the desktop through it blurred, in the appearance's colours; "
                              + "solid while Reduce Transparency is on. \(housingStaysBlack)",
                              oneOf: HUDMaterial.allCases.map(\.rawValue)),
-            "transparency": number("Glass: how much of the desktop shows through it, from the appearance's own surface "
-                                   + "laid over the glass whole to almost bare glass,", .transparency),
+            "transparency": number("How much of the desktop shows through, glass's or solid's as the material is: glass "
+                                   + "thins its frost and its cover, solid its fill,", .transparency),
             "glow": object([
                 "style": text("Glow style.", oneOf: GlowStyle.allCases.map(\.rawValue)),
                 "effect": text("What it plays.", oneOf: GlowEffect.allCases.map(\.rawValue)),

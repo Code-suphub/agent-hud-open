@@ -30,10 +30,11 @@ struct HUDShells: Equatable, Sendable {
 }
 
 extension HUDLook {
-    /// A light or glass HUD's shells cast shadows of their own (`HUDShells`): a light shell needs one to stand off a light
-    /// desktop, and glass needs its shadow round it rather than under it, where it would show through. The standard
+    /// A light or see-through HUD's shells cast shadows of their own (`HUDShells`): a light shell needs one to stand off a
+    /// light desktop, and glass or a see-through solid needs its shadow round it rather than under it, where it would
+    /// show through. The standard
     /// look keeps the one shadow it has always had, under the glow's island and only with the glow.
-    var castsShellShadows: Bool { appearance == .light || material == .glass }
+    var castsShellShadows: Bool { appearance == .light || seeThrough }
 }
 
 /// The shape a shell fills, as the island draws it (`IslandShape`, or a detached card's continuous rounded rectangle),
@@ -98,10 +99,10 @@ struct GlowCutout: Hashable, Sendable {
 }
 
 extension GlowCutout {
-    /// The cutout a glow round an island of `look` needs: one flared by `flare` where the look is glass, none where the
-    /// island is solid and hides the glow under it.
+    /// The cutout a glow round an island of `look` needs: one flared by `flare` where the desktop shows through the look
+    /// (`HUDLook.seeThrough`), none where the island is opaque and hides the glow under it.
     init?(look: HUDLook, flare: CGFloat) {
-        guard look.material == .glass else { return nil }
+        guard look.seeThrough else { return nil }
         self.init(flare: flare)
     }
 }

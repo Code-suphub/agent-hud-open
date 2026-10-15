@@ -2,10 +2,10 @@ import AppKit
 import SwiftUI
 import AgentHUDCore
 
-/// The look the app's own windows and the menu-bar menu take under Appearance → Match screen (`AppearanceMode.screen`):
+/// The look the app's own windows and the menu-bar menu take with Match screen on (`Settings.appearanceFollowsScreen`):
 /// each as dark or light as the HUD of the screen it is on, the panel's look there (`SettingsStore.effectiveLook(on:)`),
-/// and a window taken to another screen takes that screen's. Under any other Appearance nothing here applies, and the
-/// windows and the menu take the app's own, as they always have.
+/// and a window taken to another screen takes that screen's. With it off nothing here applies, and the windows and the
+/// menu take the app's Appearance, as they always have.
 ///
 /// A window takes the look through its appearance, which moves its tokens (`Theme.forScheme`), its controls, its sheets
 /// and its popovers together. Glass reaches a window only where macOS itself draws a window translucent, its sidebar
@@ -17,7 +17,7 @@ enum WindowLook {
     /// `DesktopApplication` at start.
     static var source: ((NSScreen?) -> HUDLook?)?
 
-    /// The look a window or the menu on `screen` takes; nil while Appearance is not Match screen.
+    /// The look a window or the menu on `screen` takes; nil while Match screen is off.
     static func look(on screen: NSScreen?) -> HUDLook? {
         source?(screen)
     }
@@ -32,10 +32,10 @@ enum WindowLook {
 }
 
 extension SettingsStore {
-    /// The look the app's windows and the menu take on `screen` (the main screen when nil): nil unless Appearance is
-    /// Match screen, else the look of that screen's HUD, as the panel that opens there draws it, style draft included.
+    /// The look the app's windows and the menu take on `screen` (the main screen when nil): nil unless Match screen is
+    /// on, else the look of that screen's HUD, as the panel that opens there draws it, style draft included.
     func windowLook(on screen: NSScreen?) -> HUDLook? {
-        guard settings.appearance == .screen, let screen = screen ?? NSScreen.main else { return nil }
+        guard settings.appearanceFollowsScreen, let screen = screen ?? NSScreen.main else { return nil }
         return effectiveLook(on: ScreenIdentity.key(for: screen))
     }
 }

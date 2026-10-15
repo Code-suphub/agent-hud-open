@@ -86,7 +86,7 @@ extension HUDStyle {
     /// mode `notch` on a screen without a notch, a field that the mode the HUD would have does not draw, as Settings
     /// shows each only for the modes it changes: an edge or a position beside the notch, a logo's size on a Simple panel,
     /// a glow on a Simple panel, which draws none, a range, feather or outward fade on a grid glow, and a breath's depth
-    /// under another effect, and a transparency for a HUD that would be solid, as Settings offers it only beside glass. It is asked of a style reduced to what it changes (`reduced(placement:glow:)`),
+    /// under another effect. It is asked of a style reduced to what it changes (`reduced(placement:glow:)`),
     /// so a field that only repeats what is saved is never one.
     ///
     /// - placement, glow: what the screen has saved, which the style is drawn over.
@@ -105,10 +105,6 @@ extension HUDStyle {
             let modes = field.modes.map { "\"\($0.agentName)\"" }.joined(separator: " or ")
             issues.append(PanelLayoutIssue(path: "hud.\(field.rawValue)", message: "\(field.rawValue) sets a \(modes) HUD, and "
                                            + "\(modeNamed). Leave it out, or set mode to \(modes)."))
-        }
-        if value(.transparency) != nil, placed.material != .glass {
-            issues.append(PanelLayoutIssue(path: "hud.transparency", message: "transparency sets glass, and the HUD of "
-                                           + "\(screen) would be solid. Set material to \"glass\" too, or leave it out."))
         }
         for field in GlowField.allCases where self.glow.value(field) != nil {
             let path = "hud.glow.\(field.rawValue)"

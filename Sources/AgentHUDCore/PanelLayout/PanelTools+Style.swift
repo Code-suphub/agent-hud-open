@@ -118,18 +118,18 @@ extension PanelTools {
     }
 
     /// The look one attached screen's resting HUD draws now, its panel and its cards with it, its style draft included:
-    /// its `appearance`, `dark` or `light`, `system` drawn as macOS is set, its `material`, `solid` or `glass`, and on
-    /// glass its `transparency`, with a `note` where it draws other than its style asks: Reduce Transparency draws glass
-    /// solid.
+    /// its `appearance`, `dark` or `light`, `system` drawn as macOS is set, its `material`, `solid` or `glass`, and its
+    /// `transparency`, with a `note` where it draws other than its style asks: Reduce Transparency draws glass solid,
+    /// and anything opaque.
     func lookInEffect(of screen: PanelScreen) -> JSONValue {
         let placement = store.settings.effectivePlacement(on: screen.key, hasNotch: screen.hasNotch)
         var look: [String: JSONValue] = [
             "appearance": .string(screen.drawsLight(placement) ? HUDAppearance.light.rawValue : HUDAppearance.dark.rawValue),
             "material": .string(screen.drawsGlass(placement) ? HUDMaterial.glass.rawValue : HUDMaterial.solid.rawValue),
         ]
-        if screen.drawsGlass(placement) { look["transparency"] = .number(placement.glassTransparency) }
-        if placement.material == .glass, screen.reducesTransparency {
-            look["note"] = .string("This Mac has Reduce Transparency on, so its glass is drawn solid.")
+        look["transparency"] = .number(screen.drawsTransparency(placement))
+        if screen.reducesTransparency, placement.material == .glass || placement.transparency > 0 {
+            look["note"] = .string("This Mac has Reduce Transparency on, so the HUD is drawn solid and opaque.")
         }
         return .object(look)
     }

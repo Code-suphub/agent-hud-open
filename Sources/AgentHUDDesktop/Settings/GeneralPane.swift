@@ -5,26 +5,27 @@ struct GeneralPane: View {
     let settings: SettingsStore
     let theme: Theme
 
-    /// What Match screen does, said while it is chosen.
-    private var appearanceNote: String? {
-        guard settings.settings.appearance == .screen else { return nil }
-        return L10n.text("每个窗口和菜单栏菜单采用所在屏幕的 HUD 外观，窗口移到另一块屏幕时跟着变；玻璃时设置的侧边栏是磨砂的。",
-                         "Each window and the menu-bar menu take the HUD look of the screen they are on, and change with "
-                            + "it when moved; with Glass, the Settings sidebar is frosted.")
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             SettingsSection(title: L10n.text("外观与语言", "Appearance & language"), theme: theme) {
-                SettingRow(label: L10n.text("外观", "Appearance"), subtitle: appearanceNote) {
+                SettingRow(label: L10n.text("外观", "Appearance")) {
                     Picker(L10n.text("外观", "Appearance"), selection: settings.binding(\.appearance)) {
                         Text(L10n.text("跟随系统", "System")).tag(AppearanceMode.system)
                         Text(L10n.text("浅色", "Light")).tag(AppearanceMode.light)
                         Text(L10n.text("深色", "Dark")).tag(AppearanceMode.dark)
-                        Text(L10n.text("跟随所在屏幕", "Match screen")).tag(AppearanceMode.screen)
                     }
                     .labelsHidden().pickerStyle(.segmented)
+                    // The windows take their screen's look instead while Match screen is on.
+                    .disabled(settings.settings.appearanceFollowsScreen)
                 }
+                SettingsDivider(theme: theme)
+                SettingsToggleRow(
+                    label: L10n.text("跟随所在屏幕", "Match screen"),
+                    subtitle: L10n.text("每个窗口和菜单栏菜单采用所在屏幕的 HUD 外观，窗口移到另一块屏幕时跟着变；玻璃时设置的侧边栏是磨砂的。",
+                                        "Each window and the menu-bar menu take the HUD look of the screen they are on, "
+                                            + "and change with it when moved; with Glass, the Settings sidebar is frosted."),
+                    isOn: settings.binding(\.appearanceFollowsScreen)
+                )
                 SettingsDivider(theme: theme)
                 SettingRow(label: L10n.text("语言", "Language")) {
                     Picker(L10n.text("语言", "Language"), selection: settings.binding(\.language)) {

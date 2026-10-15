@@ -58,4 +58,10 @@ public struct PanelScreen: Equatable, Sendable {
     func drawsGlass(_ placement: ScreenPlacement) -> Bool {
         placement.drawsGlass(reducesTransparency: reducesTransparency)
     }
+
+    /// How much of the desktop its resting HUD, drawing `placement`, lets through now
+    /// (`ScreenPlacement.drawsTransparency(reducesTransparency:)`).
+    func drawsTransparency(_ placement: ScreenPlacement) -> Double {
+        placement.drawsTransparency(reducesTransparency: reducesTransparency)
+    }
 }

@@ -37,7 +37,8 @@ extension HUDLook {
 /// Simple panel and the line that grows out of it, the body of a row's hover details. Every fill the HUD stands on is
 /// drawn here, so solid and glass part in one place.
 ///
-/// - Solid is `fill` in the shape, as the HUD has always been filled.
+/// - Solid is `fill` in the shape, as the HUD has always been filled, thinned as glass's cover is by the screen's
+///   transparency, which is 0 for a solid surface until chosen otherwise.
 /// - Glass is Liquid Glass on macOS 26 in a build made with Xcode 26 or later, and a frosted blur of what is behind the
 ///   window everywhere else (`FrostedGlass`). The screen's transparency thins both the frost (`HUDLook.glassFrost`), so
 ///   the desktop comes through sharper, and the look's own surface laid over it (`HUDLook.glassCover`), under the
@@ -90,6 +91,7 @@ struct HUDSurface<S: Shape>: View {
             switch drawing {
             case .solid:
                 shape.fill(fill)
+                    .opacity(look.coverOpacity)
                     .transition(.opacity)
             case .standIn:
                 shape.fill(look.glassCover)

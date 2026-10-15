@@ -34,7 +34,7 @@ public struct HUDStyle: Hashable, Sendable {
     public var appearance: HUDAppearance?
     /// Their surface, solid or glass.
     public var material: HUDMaterial?
-    /// How much of the desktop glass lets through, 0 to 0.9.
+    /// How much of the desktop the HUD lets through, 0 to 0.9: glass's, or solid's, as the material in effect is.
     public var transparency: Double?
     public var glow: Glow
 
@@ -109,7 +109,8 @@ public struct HUDStyle: Hashable, Sendable {
         if let separateAgents { next.separatesAgents = separateAgents }
         if let appearance { next.appearance = appearance }
         if let material { next.material = material }
-        if let transparency { next.glassTransparency = transparency }
+        // The material in effect, this style's or the saved one, is the one whose transparency it sets.
+        if let transparency { next.transparency = transparency }
         return next
     }
 
@@ -134,7 +135,7 @@ public struct HUDStyle: Hashable, Sendable {
                   simpleSize: placement.simpleSize, ringWidth: placement.ringWidth, showRings: placement.showsRings,
                   showNumbers: placement.showsNumbers, bots: placement.simpleBots, separateAgents: placement.separatesAgents,
                   appearance: placement.appearance, material: placement.material,
-                  transparency: placement.glassTransparency,
+                  transparency: placement.transparency,
                   glow: Glow(style: glow.style, effect: glow.effect, brightness: glow.brightness, range: glow.range,
                              blur: glow.blur, speed: glow.breathSeconds, amplitude: glow.breathAmplitude,
                              outwardOnly: glow.outwardOnly))

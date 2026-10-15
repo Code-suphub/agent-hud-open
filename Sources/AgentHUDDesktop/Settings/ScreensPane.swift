@@ -118,12 +118,12 @@ struct ScreensPane: View {
                 .padding(.horizontal, 16).padding(.bottom, 12)
             SettingsDivider(theme: theme)
             lookRow
-            if placement.material == .glass {
-                SettingsDivider(theme: theme)
-                SliderRow(label: L10n.text("透明度", "Transparency"), value: binding(\.glassTransparency),
-                          range: ScreenPlacement.glassTransparencyRange, step: 0.05,
-                          format: { "\(Int(($0 * 100).rounded()))%" }, theme: theme)
-            }
+            SettingsDivider(theme: theme)
+            // Glass and solid keep a transparency each; the slider shows the one of the material chosen.
+            SliderRow(label: L10n.text("透明度", "Transparency"), value: binding(\.transparency),
+                      range: ScreenPlacement.glassTransparencyRange, step: 0.05,
+                      format: { "\(Int(($0 * 100).rounded()))%" }, theme: theme)
+                .id(placement.material)
             SettingsDivider(theme: theme)
             SettingRow(label: L10n.text("位置", "Position"),
                        subtitle: L10n.text("回到这块屏幕的顶部安全位置。", "Return to a reachable position at the top of this display.")) {

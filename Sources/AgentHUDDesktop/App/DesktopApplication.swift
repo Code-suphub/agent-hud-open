@@ -297,9 +297,9 @@ public final class DesktopApplication {
     }
 
     private func applyAppearance() {
+        // With Match screen on, each window and the menu take their screen's over this (`WindowLook`).
         switch settings.settings.appearance {
-        // Under Match screen each window and the menu take their own (`WindowLook`); anything else follows macOS.
-        case .system, .screen: NSApp.appearance = nil
+        case .system: NSApp.appearance = nil
         case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
         case .light: NSApp.appearance = NSAppearance(named: .aqua)
         }

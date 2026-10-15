@@ -22,10 +22,9 @@ struct HUDLook: Equatable, Sendable {
 
     var appearance: Appearance
     var material: Material = .solid
-    /// How much of the desktop glass lets through, from 0, the look's own surface laid over the glass whole, to 1, the
-    /// glass bare: what the screen's Transparency chooses (`ScreenPlacement.glassTransparency`). A solid look keeps the
-    /// standard value, so that it compares equal whatever the screen once chose for glass.
-    var transparency: Double = ScreenPlacement.standardGlassTransparency
+    /// How much of the desktop the HUD lets through, from 0, the look's own surface drawn whole, to 1, bare: what the
+    /// screen's Transparency chooses for its material (`ScreenPlacement.transparency`). Opaque unless chosen otherwise.
+    var transparency: Double = 0
 
     /// The HUD as it has always been drawn: dark and solid. A screen has it until its settings choose another, and the
     /// island at rest in a hardware notch looks it whatever they choose.
@@ -59,20 +58,26 @@ struct HUDLook: Equatable, Sendable {
     }
 
     /// What glass is covered with under the HUD's ink (`HUDSurface`): the theme's `glassTint`, the look's own surface,
-    /// at the opacity the transparency leaves it (`glassCoverOpacity`). It darkens dark glass and lightens light glass,
+    /// at the opacity the transparency leaves it (`coverOpacity`). It darkens dark glass and lightens light glass,
     /// and holds the glass to the look's appearance over any desktop: Liquid Glass follows what is behind it, light over
     /// a light desktop, and the HUD's text and status colours are fixed. Where nothing is behind to blur, it is glass's
     /// stand-in on its own.
     var glassCover: Color {
-        theme.glassTint.opacity(glassCoverOpacity)
+        theme.glassTint.opacity(coverOpacity)
     }
 
-    /// How much of the look's own surface covers glass: all of it with no transparency, and at the most transparency
-    /// the screen can choose still half. Under half, dark glass over a white window turns the mid-grey that neither the
-    /// HUD's light ink nor its accents read on, and light glass over a black desktop the same grey from the other side;
-    /// the desktop's colours and shapes show through either way.
-    var glassCoverOpacity: Double {
+    /// How much of the look's own surface is drawn, glass's cover or a solid surface's fill: all of it with no
+    /// transparency, and at the most transparency the screen can choose still half. Under half, a dark surface over a
+    /// white window turns the mid-grey that neither the HUD's light ink nor its accents read on, and a light one over a
+    /// black desktop the same grey from the other side; the desktop's colours and shapes show through either way.
+    var coverOpacity: Double {
         1 - transparency * Self.coverGivenUp
+    }
+
+    /// Whether the desktop shows through the HUD: glass, or a solid surface with a transparency. What lies under the
+    /// HUD's surfaces, the glow and the shadows, is then kept out from under them (`GlowCutout`, `castsShellShadows`).
+    var seeThrough: Bool {
+        material == .glass || transparency > 0
     }
 
     /// The share of the cover the transparency takes away at its most: 0.9 of 0.55, leaving half.
@@ -109,10 +114,9 @@ extension HUDLook {
     /// Transparency on or off: the placement's appearance, `system` as macOS is set, and its material, glass drawn solid
     /// under Reduce Transparency, at the placement's transparency.
     init(drawing placement: ScreenPlacement, systemIsLight: Bool, reducesTransparency: Bool) {
-        let glass = placement.drawsGlass(reducesTransparency: reducesTransparency)
         self.init(appearance: placement.drawsLight(systemIsLight: systemIsLight) ? .light : .dark,
-                  material: glass ? .glass : .solid,
-                  transparency: glass ? placement.glassTransparency : ScreenPlacement.standardGlassTransparency)
+                  material: placement.drawsGlass(reducesTransparency: reducesTransparency) ? .glass : .solid,
+                  transparency: placement.drawsTransparency(reducesTransparency: reducesTransparency))
     }
 }
 
