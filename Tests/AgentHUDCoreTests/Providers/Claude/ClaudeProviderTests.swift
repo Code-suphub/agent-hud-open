@@ -1047,6 +1047,39 @@ final class ClaudeCodeProviderTests: XCTestCase {
                        "each account refresh asks the engine; how often is the collector's to decide")
     }
 
+    func testAMonthOfTokensListsOnlyTheSessionsOfTheLastSevenDays() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let now = Date()
+        func reply(_ session: String, model: String, daysAgo: Double) throws {
+            let at = now.addingTimeInterval(-daysAgo * 86400), file = directory.appendingPathComponent("\(session).jsonl")
+            try (#"{"sessionId":"\#(session)","type":"assistant","message":{"id":"msg_\#(session)","role":"assistant","model":"\#(model)","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":100,"output_tokens":20}},"timestamp":"\#(at.ISO8601Format())","entrypoint":"cli"}"# + "\n")
+                .write(to: file, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: at], ofItemAtPath: file.path)
+        }
+        try reply("recent", model: "claude-opus-5", daysAgo: 2)
+        try reply("old", model: "claude-haiku-4-5", daysAgo: 20)
+        let transcripts = ClaudeTranscriptStore(root: directory)
+        let provider = ClaudeCodeProvider(engine: nil, transcripts: transcripts, history: QuotaHistoryStore(), clock: { now })
+        // The host widens the hours to a month, as it does while the local network is on.
+        let report = try await provider.fetchUsage(agents: [], historyHours: 31 * 24 + 25)
+        XCTAssertEqual(report.sessions.map(\.id), ["recent"])
+        XCTAssertEqual(Set(report.consumers.map(\.id)), ["claude-model:claude-opus-5", "claude-model:claude-haiku-4-5"],
+                       "models still come from the month the tokens are read for")
+        let recorded = await transcripts.usage(since: now.addingTimeInterval(-31 * 86400))
+        XCTAssertEqual(recorded.reduce(0) { $0 + $1.tokensIn }, 200, "both logs' tokens are recorded")
+
+        // With no session of the week left, a failed engine read still keeps the month's local data.
+        try FileManager.default.removeItem(at: directory.appendingPathComponent("recent.jsonl"))
+        let quiet = ClaudeCodeProvider(engine: try fakeEngine(script: "#!/bin/bash\nread -r l\necho boom >&2\nexit 1\n"),
+                                       transcripts: ClaudeTranscriptStore(root: directory), history: QuotaHistoryStore(), clock: { now })
+        let local = try await quiet.fetchAccountAndLocalUsage(agents: [], historyHours: 31 * 24 + 25)
+        XCTAssertEqual(local.sessions.map(\.id), [])
+        XCTAssertEqual(local.consumers.map(\.id), ["claude-model:claude-haiku-4-5"])
+        XCTAssertEqual(local.typedReadingIssues["Claude"]?.kind, .readFailed, "the engine's failure is the report's notice")
+    }
+
     func testASessionKeepsRunningWhileItsSubagentsWork() async throws {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("agenthud-\(UUID().uuidString)", isDirectory: true)
         let project = base.appendingPathComponent("projects/-p", isDirectory: true)

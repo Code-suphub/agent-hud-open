@@ -64,7 +64,12 @@ public actor DeepSeekUsageProvider: UsageProvider, LedgerRecording {
         let now = clock(), weekAgo = now.addingTimeInterval(-7 * 86400)
         let cutoff = min(weekAgo, now.addingTimeInterval(-Double(historyHours) * 3600))
         let indexed = await transcripts.index(since: cutoff)
-        let processStarts = await processStarts(for: indexed.sessions, now: now)
+        // Tokens and models come from every log of `historyHours`; sessions only from those active in the session window.
+        let sessionStart = SessionWindow.start(at: now)
+        let recent = indexed.sessions.filter {
+            ($0.transcript.lastActivityAt ?? $0.transcript.startedAt ?? $0.modifiedAt) >= sessionStart
+        }
+        let processStarts = await processStarts(for: recent, now: now)
         let balance: DeepSeekBalance?, balanceAt: Date?, balanceNotice: String?
         switch lastBalance?.result {
         case .success(let value): (balance, balanceAt, balanceNotice) = (value, value == nil ? nil : lastBalance?.at, nil)
@@ -75,7 +80,7 @@ public actor DeepSeekUsageProvider: UsageProvider, LedgerRecording {
         let models = Set(indexed.sessions.flatMap { [$0.transcript.model] + $0.transcript.models }).sorted()
         let consumers = models.map { AgentDescriptor(id: "deepseek-model:\($0)", vendor: "DeepSeek", model: ModelCatalog.consumerName(of: "deepseek-model:\($0)"),
                                                      source: L10n.sourceDeepSeekSessions, enabled: true) }
-        let sessions = indexed.sessions.filter { !$0.transcript.isSubagent }.map { session in
+        let sessions = recent.filter { !$0.transcript.isSubagent }.map { session in
             let t = session.transcript
             return LiveSession(id: "deepseek:\(t.id!)", agentId: "deepseek-model:\(t.model)",
                                task: t.title ?? t.cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "DeepSeek Harness",
@@ -98,7 +103,7 @@ public actor DeepSeekUsageProvider: UsageProvider, LedgerRecording {
         let notice = [indexed.notice, balanceNotice].compactMap { $0 }.joined(separator: " · ")
         let costs = await transcripts.costs(since: cutoff)
         var sessionCosts: [String: [String: Decimal]] = [:]
-        for session in indexed.sessions {
+        for session in recent {
             if let estimate = costs.logs[session.path] { sessionCosts["deepseek:\(session.transcript.id!)"] = estimate }
         }
         let balances = (balance?.balances ?? []).map {
@@ -113,8 +118,8 @@ public actor DeepSeekUsageProvider: UsageProvider, LedgerRecording {
                            sourceNotices: notice.isEmpty ? [:] : ["DeepSeek": notice], quotaNotices: balanceNotice.map { ["DeepSeek": $0] } ?? [:],
                            readingIssues: balanceNotice.map { ["DeepSeek": .readFailed($0)] } ?? [:],
                            billing: installed ? [billing] : [],
-                           completions: indexed.sessions.flatMap { $0.transcript.completions ?? [] },
-                           turns: indexed.sessions.flatMap { $0.transcript.sessionTurns })
+                           completions: recent.flatMap { $0.transcript.completions ?? [] },
+                           turns: recent.flatMap { $0.transcript.sessionTurns })
     }
 
     /// Process starts only decide a running turn whose log went quiet, so the process table is inspected only once a log

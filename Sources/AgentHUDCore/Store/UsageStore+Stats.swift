@@ -123,10 +123,12 @@ public extension UsageStore {
     /// The platform each model's calls are priced on: the one its client reaches.
     var priceRegions: PriceRegions { PriceRegions(report: report) }
 
-    /// What each agent spent in the charted range, the most tokens of the selected kinds first.
+    /// What each agent spent in the charted range, the most tokens of the selected kinds first. Its sessions are those the
+    /// Sessions page lists, whatever the range: a 30-day card picks its sessions from the last seven days, while its
+    /// tokens, price and cache rewrites come from the ledger for the whole range.
     var agentUsage: [AgentUsage] {
-        AgentUsage.build(usage: report?.usage ?? [], consumers: consumers, sessions: sessions, breakdowns: report?.sessionUsage ?? [:],
-                         vendor: { self.sessionSource($0).vendor }, interval: statsInterval, dimensions: tokenDimensions,
+        AgentUsage.build(usage: report?.usage ?? [], recached: report?.recached ?? [], consumers: consumers, sessions: statsSessions,
+                         breakdowns: report?.sessionUsage ?? [:], vendor: { self.sessionSource($0).vendor }, interval: statsInterval, dimensions: tokenDimensions,
                          region: priceRegions.region(for:))
     }
 
