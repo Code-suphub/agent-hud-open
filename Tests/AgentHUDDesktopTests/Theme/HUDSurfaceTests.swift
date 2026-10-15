@@ -122,6 +122,18 @@ final class HUDSurfaceTests: XCTestCase {
         XCTAssertGreaterThan(light, backdrop, "light glass is lighter than what is behind it")
     }
 
+    /// The transparency thins the glass's frost as well as its cover, so that the desktop comes through sharper: all of
+    /// the frost with no transparency, half at the standard one, a tenth at the most. Thinning the cover alone left a
+    /// window behind the HUD blurred into an even tone, light glass over a white window plain white at any setting.
+    func testTheTransparencyThinsTheFrost() {
+        for appearance in [HUDLook.Appearance.dark, .light] {
+            for (transparency, frost) in [(0.0, 1.0), (ScreenPlacement.standardGlassTransparency, 0.5), (0.9, 0.1)] {
+                let look = HUDLook(appearance: appearance, material: .glass, transparency: transparency)
+                XCTAssertEqual(look.glassFrost, frost, accuracy: 0.0001, "\(appearance) \(transparency)")
+            }
+        }
+    }
+
     /// At the standard transparency the look's text reads on its glass over the backdrop the HUD's pictures have as on
     /// a page, about 17:1 on dark glass and 9:1 on light glass, and over a desktop of the other shade, which a recording
     /// shows unblurred, about 8.6:1 for dark glass over white and 7.9:1 for light glass over black. At the most

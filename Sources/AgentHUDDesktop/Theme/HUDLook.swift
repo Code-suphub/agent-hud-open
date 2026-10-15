@@ -78,6 +78,14 @@ struct HUDLook: Equatable, Sendable {
     /// The share of the cover the transparency takes away at its most: 0.9 of 0.55, leaving half.
     static let coverGivenUp = 0.55
 
+    /// How much of the glass's frost is drawn: all of it with no transparency, less as the transparency rises, so the
+    /// desktop's own shapes and words come through the glass sharper, and a tenth at the most. The frost alone, however
+    /// thin the cover over it, blurs a window behind the HUD into an even tone, light glass over a white window into
+    /// plain white, and a transparency that only thinned the cover would show nothing there.
+    var glassFrost: Double {
+        1 - transparency
+    }
+
     /// The same for AppKit: the appearance of a hosting view or a window that draws the HUD, a hover popover's or a
     /// picture's, which a scroller, a text field's caret and a template image follow.
     var appearanceName: NSAppearance.Name {

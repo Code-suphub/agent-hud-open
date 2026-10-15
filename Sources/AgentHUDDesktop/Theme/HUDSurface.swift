@@ -39,8 +39,9 @@ extension HUDLook {
 ///
 /// - Solid is `fill` in the shape, as the HUD has always been filled.
 /// - Glass is Liquid Glass on macOS 26 in a build made with Xcode 26 or later, and a frosted blur of what is behind the
-///   window everywhere else (`FrostedGlass`). Either is covered with the look's own surface at the opacity the screen's
-///   transparency leaves it (`HUDLook.glassCover`), under the HUD's ink. The cover is what holds the glass to the look:
+///   window everywhere else (`FrostedGlass`). The screen's transparency thins both the frost (`HUDLook.glassFrost`), so
+///   the desktop comes through sharper, and the look's own surface laid over it (`HUDLook.glassCover`), under the
+///   HUD's ink. The cover is what holds the glass to the look:
 ///   Liquid Glass turns light over a light desktop and dark over a dark one whatever it is tinted, and the HUD's text and
 ///   status colours are fixed, so dark glass over a white window would otherwise carry white text on pale grey.
 /// - Where nothing is behind to blur (`drawsGlassStandIn`), glass is its cover alone.
@@ -96,10 +97,12 @@ struct HUDSurface<S: Shape>: View {
             case .frosted:
                 FrostedGlass(appearance: look.appearanceName)
                     .clipShape(shape)
+                    .opacity(look.glassFrost)
                     .overlay { shape.fill(look.glassCover) }
                     .transition(.opacity)
             case .liquid:
                 liquid
+                    .opacity(look.glassFrost)
                     .overlay { shape.fill(look.glassCover) }
                     .transition(.opacity)
             }
