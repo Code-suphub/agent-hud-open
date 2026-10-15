@@ -375,7 +375,9 @@ final class GlowPreparationTests: XCTestCase {
         // The island's middle, a point below its foot and one inside a flare, in points from the bitmap's lower left.
         let middle = CGPoint(x: soft.padding + glow.sideInset + island.width / 2, y: soft.padding + glow.sideInset + island.height / 2)
         let below = CGPoint(x: middle.x, y: soft.padding + glow.sideInset / 2)
-        let flare = CGPoint(x: soft.padding + glow.sideInset - 2, y: soft.padding + glow.sideInset + island.height - 2)
+        // Spelled out step by step: Xcode 16.4's Swift finds the one-line sums of CGFloat and Double ambiguous.
+        let corner: CGFloat = soft.padding + glow.sideInset
+        let flare = CGPoint(x: corner - 2, y: corner + island.height - 2)
         XCTAssertEqual(try alpha(of: soft, at: middle), 0, "Glass shows no glow under the island")
         XCTAssertEqual(try alpha(of: soft, at: flare), 0, "nor under its flares")
         XCTAssertGreaterThan(try alpha(of: filled, at: middle), 0, "A solid island hides the glow it covers")
