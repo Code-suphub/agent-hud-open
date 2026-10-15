@@ -415,7 +415,11 @@ final class PermissionHookTests: XCTestCase, @unchecked Sendable {
         // The reader of the logs is what remembers, and the newest turns are the ones kept.
         var rollout = CodexTranscript()
         let turn = "turn-\(UUID().uuidString)"
-        rollout.ingest(Data(#"{"timestamp":"2026-10-14T03:00:00.000Z","type":"turn_context","payload":{"turn_id":"\#(turn)","approvals_reviewer":"user","model":"gpt"}}"#.utf8))
+        // Written a minute ago: a record older than `CodexTurnReviewers.recent` is passed over.
+        let stamps = ISO8601DateFormatter()
+        stamps.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let written = stamps.string(from: Date().addingTimeInterval(-60))
+        rollout.ingest(Data(#"{"timestamp":"\#(written)","type":"turn_context","payload":{"turn_id":"\#(turn)","approvals_reviewer":"user","model":"gpt"}}"#.utf8))
         XCTAssertEqual(CodexTurnReviewers.shared.reviewer(of: turn), .some("user"))
         XCTAssertNil(CodexTurnReviewers.shared.reviewer(of: "turn-never-read"))
         let now = Date()
