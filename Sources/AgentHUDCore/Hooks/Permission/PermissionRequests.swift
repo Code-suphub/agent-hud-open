@@ -2,6 +2,10 @@ import AgentHUDSupport
 import Foundation
 import Network
 
+/// A failure whose description can go into the log as it is: its case and any reason the client gave, never an answer
+/// or what a request is about.
+protocol LoggableFailure: Error, CustomStringConvertible {}
+
 /// The requests a user is being asked about right now, and the channel their clients are waiting on.
 ///
 /// A hook request lives as long as its connection; a native request lives as long as the client's waiting step.
@@ -203,11 +207,26 @@ public final class PermissionRequests {
                 catch {
                     guard !Task.isCancelled else { return }
                     self?.dismissedNative.removeValue(forKey: id)
-                    NSLog("[AgentHUD] Native approval answer failed for %@", request.vendor)
+                    NSLog("[AgentHUD] %@", Self.answerFailure(request, error))
                 }
             }
             nativeAnswers[id] = (request.source, task)
         }
+    }
+
+    /// The log's account of an answer a native client did not take: whose request, what kind and why. It leaves out the
+    /// answer and what the request is about, either of which can hold what the user typed or browsed.
+    nonisolated static func answerFailure(_ request: PermissionRequest, _ error: any Error) -> String {
+        let kind = [request.isQuestion ? "question" : "approval", request.toolName].compactMap { $0 }.joined(separator: " ")
+        return "Native approval answer failed for \(request.vendor) (\(kind)): \(reason(error))"
+    }
+
+    /// A failure that words itself for the log gives its case and the client's reason; any other error only its domain,
+    /// code and sentence, since a full dump can carry the values it failed on, an answer among them.
+    nonisolated static func reason(_ error: any Error) -> String {
+        if let failure = error as? any LoggableFailure { return failure.description }
+        let bridged = error as NSError
+        return "\(bridged.domain) \(bridged.code): \(bridged.localizedDescription)"
     }
 
     private func scheduleExpiry(_ request: PermissionRequest) {
