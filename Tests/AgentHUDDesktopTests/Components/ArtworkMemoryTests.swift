@@ -1,6 +1,5 @@
 import AppKit
 import CryptoKit
-import SwiftUI
 import XCTest
 @testable import AgentHUDDesktop
 
@@ -49,19 +48,6 @@ final class ArtworkMemoryTests: XCTestCase {
             XCTAssertEqual(bytes(again?.field), bytes(form?.field), vendor)
             XCTAssertEqual(again?.logoReach, form?.logoReach, vendor)
         }
-    }
-
-    func testTheWallpaperIsReadAgainOnceNoPreviewShowsIt() throws {
-        try autoreleasepool {
-            let hosting = NSHostingView(rootView: SettingsPreview { Color.clear.frame(width: 200, height: 120) })
-            hosting.frame = CGRect(x: 0, y: 0, width: 200, height: 120)
-            hosting.layoutSubtreeIfNeeded()
-            _ = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds).map { hosting.cacheDisplay(in: hosting.bounds, to: $0) }
-            XCTAssertNotNil(SettingsPreviewArtwork.shown, "a preview on screen shares the one wallpaper")
-            XCTAssertTrue(SettingsPreviewArtwork.wallpaper === SettingsPreviewArtwork.shown)
-            withExtendedLifetime(hosting) {}
-        }
-        XCTAssertNil(SettingsPreviewArtwork.shown, "with no preview left, nothing keeps its pixels")
     }
 
     /// Explicit local probe: `AGENT_HUD_PROBE_ARTWORK_OUTPUT=<file>` runs it.

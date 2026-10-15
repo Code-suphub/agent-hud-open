@@ -65,16 +65,7 @@ struct SettingsPreview<Content: View>: View {
     }
 }
 
-/// The preview's wallpaper, shared by the previews on screen and read again once none shows it: drawn, it
-/// holds 6 MB of pixels, which a settings page seen once would otherwise keep for good.
 @MainActor
-enum SettingsPreviewArtwork {
-    private(set) static weak var shown: NSImage?
-
-    static var wallpaper: NSImage {
-        if let shown { return shown }
-        let image = NSImage(contentsOf: AppResources.bundle.url(forResource: "settings-wallpaper", withExtension: "png")!)!
-        shown = image
-        return image
-    }
+private enum SettingsPreviewArtwork {
+    static let wallpaper = NSImage(contentsOf: AppResources.bundle.url(forResource: "settings-wallpaper", withExtension: "png")!)!
 }
