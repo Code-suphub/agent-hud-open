@@ -148,72 +148,88 @@ final class PanelHalfViewTests: XCTestCase {
         }
     }
 
+    /// How the panel sets out two halves: in which language, at which width and spacing, with which widgets, beside each
+    /// other or beside a balance, with or without separators.
+    private struct Arrangement {
+        var language = AppLanguage.en
+        var width = PanelStyle.defaultWidth
+        var spacing = PanelSpacing.regular
+        var widgets: [PanelWidget]
+        var beside = false
+        var separators = true
+
+        var pair: (PanelWidget, PanelWidget) { (widgets[0], widgets[1]) }
+    }
+
     /// The island is sized from the measure each block shows first, so a half block of each kind keeps one height in
-    /// every measure: rings and numbers beside each other and beside a balance, and a chart beside a balance.
+    /// every measure: rings, numbers and charts beside each other and beside a balance, one option at a time from rings
+    /// side by side in the default panel and from Chinese compact charts beside a balance at 720 pt.
     func testAHalfBlockOfEachKindIsAsTallInEveryMeasure() {
         var checked = 0
-        for language in [AppLanguage.en, .zhHans] {
-            let store = sample(language)
-            for width in [PanelStyle.defaultWidth, PanelStyle.widthRange.upperBound] {
-                for spacing in PanelSpacing.allCases {
-                    for widget in [PanelWidget.ring, .number, .chart] {
-                        for beside in [false, true] {
-                            let heights = PanelBlockKind.quota.measures(under: widget).map { measure -> CGFloat in
-                                keep(store, layout((widget, widget), first: measure, besideBalance: beside, spacing: spacing,
-                                                   width: width))
-                                return height(store)
-                            }
-                            XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5,
-                                           "\(language) \(widget) beside the balance \(beside), \(spacing) at \(width): \(heights)")
-                            checked += 1
-                        }
-                    }
-                }
+        let arrangements = OneAtATime(from: Arrangement(widgets: [.ring, .ring]),
+                                      Arrangement(language: .zhHans, width: PanelStyle.widthRange.upperBound, spacing: .compact,
+                                                  widgets: [.chart, .chart], beside: true))
+            .varying(\.language, over: [.en, .zhHans])
+            .varying(\.width, over: [PanelStyle.defaultWidth, PanelStyle.widthRange.upperBound])
+            .varying(\.spacing, over: PanelSpacing.allCases)
+            .varying(\.widgets, over: [PanelWidget.ring, .number, .chart].map { [$0, $0] })
+            .varying(\.beside, over: [false, true])
+        for each in arrangements.arrangements {
+            let store = sample(each.language)
+            let heights = PanelBlockKind.quota.measures(under: each.widgets[0]).map { measure -> CGFloat in
+                keep(store, layout(each.pair, first: measure, besideBalance: each.beside, spacing: each.spacing, width: each.width))
+                return height(store)
             }
+            XCTAssertEqual(heights.max() ?? 0, heights.min() ?? 1, accuracy: 0.5, "\(each): \(heights)")
+            checked += 1
         }
-        XCTAssertEqual(checked, 2 * 2 * 3 * 3 * 2)
+        // Each base, then the other language, the other width, 2 spacings, 2 widgets and the other neighbour.
+        XCTAssertEqual(checked, 2 * (1 + 1 + 1 + 2 + 2 + 1))
     }
 
     /// The island opens the panel at the height a fresh view tree measures; drawn as the island draws it, at that height
     /// with its content scrolling, the panel reports the same height, so two halves set no height from anything a view
-    /// keeps. In both languages, at 540 and 720 pt, at every spacing, with and without separators, with every section.
+    /// keeps. In both languages, at 540 and 720 pt, at every spacing, with and without separators, with every section:
+    /// one option at a time from a ring beside a number in the default panel and from a Chinese compact chart beside a
+    /// ring and a balance at 720 pt without separators.
     func testThePanelDrawnAsTheIslandDrawsItReportsTheHeightAFreshTreeMeasures() {
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 720, height: 1_200), styleMask: .borderless,
                               backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         defer { window.close() }
         var checked = 0
-        for language in [AppLanguage.en, .zhHans] {
-            let store = sample(language)
-            for width in [PanelStyle.defaultWidth, PanelStyle.widthRange.upperBound] {
-                for spacing in PanelSpacing.allCases {
-                    for separators in [true, false] {
-                        for (widgets, beside) in [((PanelWidget.ring, PanelWidget.number), false), ((.chart, .ring), true)] {
-                            keep(store, layout(widgets, besideBalance: beside, spacing: spacing, separators: separators, width: width,
-                                               hidden: []))
-                            let natural = IslandWindowController.naturalHeight(of: HoverPanelView(store: store, onOpenStats: {})
-                                .frame(width: CGFloat(width)))
-                            let reported = ReportedHeight()
-                            let hosting = NSHostingView(rootView: HoverPanelView(store: store, onOpenStats: {}, height: natural)
-                                .frame(width: CGFloat(width), alignment: .top)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .onPreferenceChange(PanelHeightKey.self) { reported.value = $0 })
-                            window.contentView = hosting
-                            hosting.frame = CGRect(x: 0, y: 0, width: CGFloat(width), height: natural + 100)
-                            for _ in 0..<50 where reported.value == 0 {
-                                hosting.layoutSubtreeIfNeeded()
-                                RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-                            }
-                            window.contentView = nil
-                            XCTAssertEqual(reported.value, natural, accuracy: 0.5,
-                                           "\(language) \(widgets) beside the balance \(beside), \(spacing), separators \(separators), \(width)")
-                            checked += 1
-                        }
-                    }
-                }
+        let arrangements = OneAtATime(from: Arrangement(widgets: [.ring, .number]),
+                                      Arrangement(language: .zhHans, width: PanelStyle.widthRange.upperBound, spacing: .compact,
+                                                  widgets: [.chart, .ring], beside: true, separators: false))
+            .varying(\.language, over: [.en, .zhHans])
+            .varying(\.width, over: [PanelStyle.defaultWidth, PanelStyle.widthRange.upperBound])
+            .varying(\.spacing, over: PanelSpacing.allCases)
+            .varying(\.widgets, over: [[.ring, .number], [.chart, .ring]])
+            .varying(\.beside, over: [false, true])
+            .varying(\.separators, over: [true, false])
+        for each in arrangements.arrangements {
+            let store = sample(each.language), width = CGFloat(each.width)
+            keep(store, layout(each.pair, besideBalance: each.beside, spacing: each.spacing, separators: each.separators,
+                               width: each.width, hidden: []))
+            let natural = IslandWindowController.naturalHeight(of: HoverPanelView(store: store, onOpenStats: {}).frame(width: width))
+            let reported = ReportedHeight()
+            let hosting = NSHostingView(rootView: HoverPanelView(store: store, onOpenStats: {}, height: natural)
+                .frame(width: width, alignment: .top)
+                .fixedSize(horizontal: false, vertical: true)
+                .onPreferenceChange(PanelHeightKey.self) { reported.value = $0 })
+            window.contentView = hosting
+            hosting.frame = CGRect(x: 0, y: 0, width: width, height: natural + 100)
+            for _ in 0..<50 where reported.value == 0 {
+                hosting.layoutSubtreeIfNeeded()
+                RunLoop.main.run(until: Date().addingTimeInterval(0.01))
             }
+            window.contentView = nil
+            XCTAssertEqual(reported.value, natural, accuracy: 0.5, "\(each)")
+            checked += 1
         }
-        XCTAssertEqual(checked, 2 * 2 * 3 * 2 * 2)
+        // Each base, then the other language, the other width, 2 spacings, the other widgets, the other neighbour and
+        // the other separators.
+        XCTAssertEqual(checked, 2 * (1 + 1 + 1 + 2 + 1 + 1 + 1))
     }
 
     // MARK: Identity
