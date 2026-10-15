@@ -87,11 +87,14 @@ public struct ClaudeCodeProvider: UsageProvider, LedgerRecording {
         let weekAgo = now.addingTimeInterval(-AlertPolicy.insightsLookback)
         let cutoff = min(weekAgo, now.addingTimeInterval(-TimeInterval(historyHours) * 3600))
 
-        // Local data: one cooperative indexing step (newest files first); the rest continues on later polls.
+        // Local data: one cooperative indexing step (newest files first); the rest continues on later polls. Tokens and
+        // models come from every log of `historyHours`; sessions only from those active in the session window.
         let indexed = await transcripts.index(modifiedSince: cutoff)
-        let sessions = indexed.sessions
-        let indexing = indexed.pending > 0 ? IndexProgress(done: sessions.count, total: sessions.count + indexed.pending) : nil
-        let observations: [(modelId: String, seenAt: Date)] = sessions.flatMap { session in
+        let sessionStart = SessionWindow.start(at: now)
+        let sessions = indexed.sessions.filter { $0.lastActivityAt >= sessionStart }
+        let indexing = indexed.pending > 0
+            ? IndexProgress(done: indexed.sessions.count, total: indexed.sessions.count + indexed.pending) : nil
+        let observations: [(modelId: String, seenAt: Date)] = indexed.sessions.flatMap { session in
             session.modelsSeen.map { (modelId: $0.key, seenAt: $0.value) }
         }
         // All observed models are consumers; quota rows remain the plan's independent windows below.
@@ -117,8 +120,9 @@ public struct ClaudeCodeProvider: UsageProvider, LedgerRecording {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            // Quota availability does not determine whether a local turn completed.
-            guard !sessions.isEmpty else { throw error }
+            // Quota availability does not determine whether a local turn completed. Any log read, listed or not, is local
+            // data whose tokens and models the report keeps.
+            guard !indexed.sessions.isEmpty else { throw error }
             notice = error.localizedDescription
             failure = notice
         }

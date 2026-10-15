@@ -290,12 +290,9 @@ public struct ReportView: Sendable {
     /// The sessions in flight, newest first.
     public var liveSessions: [Session] { sessions.filter(\.phase.isInFlight) }
 
-    /// How long after its last event a session stays on the Sessions page.
-    static let listRecency: TimeInterval = 7 * 86400
-
-    /// The sessions whose last event is at most `listRecency` old, newest first: those the Sessions page lists.
+    /// The sessions whose last event is inside `SessionWindow`, newest first: those the Sessions page lists.
     public var recentSessions: [Session] {
-        let cutoff = now.addingTimeInterval(-Self.listRecency)
+        let cutoff = SessionWindow.start(at: now)
         return sessions.filter { $0.lastEventAt >= cutoff }
     }
 

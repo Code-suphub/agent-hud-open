@@ -126,8 +126,9 @@ final class UsageCollector {
     }
 
     func refresh() async {
-        // An explicit refresh is also a request to reconcile files even if a directory event is still in flight.
-        await provider.fileChanges(nil)
+        // Without a working watch, an explicit refresh reconciles every file. With one, the pass takes the paths it
+        // reported, and an event still in flight wakes the loop when it arrives: opening the panel lists nothing again.
+        if changes?.isWatching != true { await provider.fileChanges(nil) }
         needsFetch = true
         _ = await collect(force: true)
         wake?.yield()

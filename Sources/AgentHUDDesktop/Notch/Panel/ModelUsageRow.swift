@@ -194,6 +194,7 @@ struct QuotaRowMetrics {
             guard let outlook else { return "—" }
             // The row gives the time the rest runs out at, where the hint gives how long it lasts.
             if let exhaustionTimeLabel { return exhaustionTimeLabel }
+            if let sampling = QuotaForecast.sampling(outlook: outlook, insights: insights) { return sampling.label }
             return QuotaForecast.text(of: outlook, projectedUsedAtReset: projectedAtReset) ?? "—"
         case .tokens:
             return tokensPerHour.map { TokenFormat.short(Int(($0 * 24).rounded())) + L10n.text(" / 天", " / day") } ?? "—"

@@ -48,7 +48,7 @@ Agent HUD Open is a Swift package with three libraries and one executable. `Agen
 ### Collection hooks
 
 - A host passes `UsageCollectionHooks` to `UsageStore`; every hook is optional, and without them the store displays the provider's report and loads `UsageStore.historyHours` hours, the seven-day range plus the partial hour.
-- `historyHours` is asked before every local poll and account step, so a host can widen the window providers read.
+- `historyHours` is asked before every local poll and account step, so a host can widen the window providers read tokens for. It does not widen the sessions: a provider builds sessions only for those active within `SessionWindow.recency`, seven days, each with its whole sub-agent tree, and reports the turns and completions of those sessions and trees.
 - `publish` receives each report the provider returned and `merge` turns it into the displayed report, for example to add other data. Both are awaited inside the pass, after the provider fetch and before the report is displayed; no provider reads and nothing writes the ledger meanwhile, so a hook that reads the ledger stays serial with collection.
 - The merged report keeps the provider's discovered agents, accounts, active quota pools, completions and turns: the agent list and island events read them from `UsageStore.report`.
 - `UsageStore.remerge()` runs only `merge` again on the provider's last report, for data the host merges that changed since the pass. It never overlaps a local poll: a poll in progress merges for it, or merges again when its own merge had already started. A report installed with `replace(report:)` is not merged over.

@@ -69,6 +69,7 @@ Core Animation's software renderer draws the frames, and `--snapshot` stills too
 | `--probe-open-agents` | Indexes the last seven days of local OpenCode, Kimi and Pi sessions and prints, per client, the session count, running count, distinct usage events, In / Out / Cache totals and the read status. No network requests, no transcript text, no credentials in the output. |
 | `AGENT_HUD_PROBE_ADDITIONAL=1 swift test --filter AdditionalProviderTests/testInstalledSourcesReadOnlyProbe` | Read-only probe of the installed Antigravity, Cursor and Grok sources from the test suite; the test is skipped unless the variable is set. |
 | `AGENT_HUD_PROBE_ANTIGRAVITY=1 swift test --filter AntigravityPermissionsTests/testInstalledAntigravityPermissionsReadOnlyProbe` | Reads Antigravity's native waiting permissions and prints their count. Sends no approval or rejection and prints no command, conversation text or credential. |
+| `AGENT_HUD_PROBE_SESSION_USAGE=1 AGENT_HUD_PROBE_LEDGER=<ledger> AGENT_HUD_PROBE_REPORT=<report> AGENT_HUD_PROBE_OUTPUT=<file> swift test -c release --filter SessionUsageProbeTests` | Reads the breakdown of every session a retained `last-usage-report.json` lists from a consistent copy of a usage ledger (one `sqlite3 <ledger> ".backup <copy>"` makes), writes them to the output file as JSON with sorted keys, to compare two builds byte for byte, and prints the number of sessions and calls and how long reading all of them, and the largest alone, takes. The ledger itself is only copied, never opened. |
 
 ## Adapter commands
 
@@ -122,6 +123,7 @@ codex mcp remove agent-hud
 | `AGENTHUD_SNAPSHOT_PREFIX` | Limits `--snapshot` to snapshots whose name starts with the prefix |
 | `AGENT_HUD_PROBE_ADDITIONAL` | Enables the read-only probe test above |
 | `AGENT_HUD_PROBE_ANTIGRAVITY` | Enables the read-only native permission probe above |
+| `AGENT_HUD_PROBE_SESSION_USAGE` | Enables the session breakdown probe above, which reads `AGENT_HUD_PROBE_LEDGER`, `AGENT_HUD_PROBE_REPORT` and `AGENT_HUD_PROBE_OUTPUT` |
 | Client home overrides and provider keys (`CODEX_HOME`, `DSH_HOME`, `PI_CODING_AGENT_DIR`, …) | Read from the process environment ([providers](providers.md)); a directory variable that is empty or only whitespace counts as unset. An application started from Finder or Launch Services inherits the login session's environment, not the exports of a terminal shell. |
 
 ## Code map
