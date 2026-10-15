@@ -8,17 +8,11 @@ import XCTest
 /// as the look it is given changes.
 @MainActor
 final class WindowLookTests: XCTestCase {
-    private var savedSource: ((NSScreen?) -> HUDLook?)?
-
-    override func setUp() {
-        super.setUp()
+    /// Sets where the windows' look comes from for one test, and when it ends gives back none, as a process without
+    /// `DesktopApplication` has. Kept in the test rather than in `setUp`, which is not on the main actor.
+    private func giveLooks(_ source: @escaping (NSScreen?) -> HUDLook?) {
         _ = NSApplication.shared
-        savedSource = WindowLook.source
-    }
-
-    override func tearDown() {
-        WindowLook.source = savedSource
-        super.tearDown()
+        WindowLook.source = source
     }
 
     private func store() -> SettingsStore {
@@ -78,7 +72,8 @@ final class WindowLookTests: XCTestCase {
         XCTAssertNil(window.appearance)
 
         var look: HUDLook? = HUDLook(appearance: .light)
-        WindowLook.source = { _ in look }
+        giveLooks { _ in look }
+        defer { WindowLook.source = nil }
         controller.refreshLook()
         XCTAssertEqual(window.appearance?.name, .aqua)
 
@@ -98,10 +93,11 @@ final class WindowLookTests: XCTestCase {
         // Never shown: the app's windows are every one it has, on screen or not.
         let windows = try [XCTUnwrap(one.window), XCTUnwrap(two.window)]
 
-        WindowLook.source = { _ in HUDLook(appearance: .light) }
+        giveLooks { _ in HUDLook(appearance: .light) }
+        defer { WindowLook.source = nil }
         WindowLook.refreshAll()
         XCTAssertEqual(windows.map { $0.appearance?.name }, [.aqua, .aqua])
-        WindowLook.source = { _ in nil }
+        giveLooks { _ in nil }
         WindowLook.refreshAll()
         XCTAssertEqual(windows.map { $0.appearance?.name }, [nil, nil])
     }
