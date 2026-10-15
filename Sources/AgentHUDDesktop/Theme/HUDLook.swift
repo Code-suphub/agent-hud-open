@@ -12,9 +12,18 @@ struct HUDLook: Equatable, Sendable {
         case light
     }
 
-    var appearance: Appearance
+    /// What the surface is made of: an opaque fill, or glass that lets the desktop behind it show through blurred.
+    /// Glass keeps the look's appearance, dark glass with light ink or light glass with dark ink, whatever is behind it.
+    enum Material: Equatable, Sendable {
+        case solid
+        case glass
+    }
 
-    /// The HUD as it has always been drawn: dark. Every screen has it until a setting of its own chooses another.
+    var appearance: Appearance
+    var material: Material = .solid
+
+    /// The HUD as it has always been drawn: dark and solid. Every screen has it until a setting of its own chooses
+    /// another.
     static let standard = HUDLook(appearance: .dark)
 
     /// The tokens the HUD draws with: the island's own for a dark HUD, the light window's for a light one.
