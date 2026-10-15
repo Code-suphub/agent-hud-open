@@ -126,7 +126,7 @@ Reads never run in parallel: the usage store runs one pass of source reads or on
 | Which rows are present, levels, glow segments, menu figure and hints | `Sources/AgentHUDCore/Logic/ReportView.swift` |
 | Alert tracker, added usage resets, island events, forecast | `Sources/AgentHUDCore/Logic/Alerts/QuotaAlerts.swift`, `ResetCreditGrants.swift`, `IslandEvents.swift`, `Logic/Quota/QuotaForecast.swift` |
 | Event union, analytics, history retention | `Sources/AgentHUDCore/Providers/Kit/UsageAggregation.swift`, `Ledger/QuotaHistoryStore.swift`, `Logic/Quota/UsageAnalytics.swift` |
-| A window's remaining share, insights, outlook, projection and token rate | `Sources/AgentHUDCore/Logic/Quota/QuotaMath.swift` |
+| A window's remaining share, insights, outlook, projection, token rate and list cost | `Sources/AgentHUDCore/Logic/Quota/QuotaMath.swift` |
 | Window names: full and short names, period words | `Sources/AgentHUDCore/Formatting/WindowNames.swift`, `Localization.swift`, `Models/Agents/AgentDescriptor.swift`; each provider's reader |
 | A balance's trend | `Sources/AgentHUDCore/Logic/Quota/BalanceTrend.swift`, `Ledger/BalanceSample.swift` |
 | Session liveness and its limits, retained readings | `Sources/AgentHUDCore/Logic/SessionPhase.swift`, `Sources/AgentHUDCore/Models/Sessions/LiveSession.swift`, `Sources/AgentHUDCore/Providers/RetainedUsageProvider.swift` |
