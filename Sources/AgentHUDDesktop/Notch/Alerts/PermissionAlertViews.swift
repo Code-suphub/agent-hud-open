@@ -50,19 +50,21 @@ struct PermissionAlertCompactView: View {
 
     /// A length at the scale of the dock this reminder grows from.
     private func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
+    /// The size of its words or of the symbol beside them, from their size beside the notch: a size smaller on a dock.
+    private func t(_ value: CGFloat) -> CGFloat { s(CompactWings.size(value, onDock: wings != nil)) }
 
     var body: some View {
         HStack(spacing: 0) {
             HStack(spacing: s(8)) {
                 BotMark(vendor: request.vendor, size: s(17), phase: .asking)
                 Text(request.project ?? request.vendor)
-                    .font(.ui(s(13), .semibold)).lineLimit(1).minimumScaleFactor(0.78)
+                    .font(.ui(t(13), .semibold)).lineLimit(1).minimumScaleFactor(0.78)
             }.frame(width: wings?.leading ?? s(IslandController.alertWingWidth), alignment: .leading)
             Color.clear.frame(width: wings?.gap ?? cameraWidth)
             HStack(spacing: s(7)) {
-                PermissionSymbol(requestID: request.id, size: s(14))
+                PermissionSymbol(requestID: request.id, size: t(14))
                 Text(Self.status(of: request))
-                    .font(.ui(s(12), .medium))
+                    .font(.ui(t(12), .medium))
                 WaitingCount(waiting: waiting, scale: scale)
             }.frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
         }

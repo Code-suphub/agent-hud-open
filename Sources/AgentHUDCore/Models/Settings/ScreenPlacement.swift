@@ -43,7 +43,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// separate marks rather than one queue.
     public static let gapScaleRange: ClosedRange<Double> = 0.1...0.6
     /// Diameter of one ring in Simple mode, in points. The marks and numbers are sized from it.
-    public static let simpleSizeRange: ClosedRange<Double> = 16...40
+    public static let simpleSizeRange: ClosedRange<Double> = 20...50
     /// Stroke of that ring, in points.
     public static let ringWidthRange: ClosedRange<Double> = 1...4
     public var mode: HUDMode

@@ -56,9 +56,9 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 ### Type sizes
 
 - Two tiers. What a dock answers a glance with is written to the dock's scale; what opens as a card has one fixed scale.
-- The dock's scale makes a compact reminder's pill and the Simple panel's hover line as tall as one of the dock's marks: a Simple panel's ring (its Size, 16–40 pt, whether or not the rings are drawn) or a Dynamic dock's logo (12–36 pt). Both are 26 pt high at scale 1, so the scale is the mark's size over 26. It is never below 1: beside a mark of 26 pt or less, which both defaults are (a 22 pt ring, a 20 pt logo), everything is written as at the default. The notch has no size to follow and its scale is always 1.
+- The dock's scale makes a compact reminder's pill and the Simple panel's hover line as tall as one of the dock's marks: a Simple panel's ring (its Size, 20–50 pt, whether or not the rings are drawn) or a Dynamic dock's logo (12–36 pt). Both are 26 pt high at scale 1, so the scale is the mark's size over 26. It is never below 1: beside a mark of 26 pt or less, which both defaults are (a 22 pt ring, a 20 pt logo), everything is written as at the default. The notch has no size to follow and its scale is always 1.
 - Written to the dock's scale: the Simple panel's hover line (12 pt at the default, 14 pt beside a 30 pt ring, 17 pt beside a 36 pt one), the Dynamic dock's hover bubble, and a compact reminder, with their marks, gaps and heights.
-- A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt at the default for a 17 pt mark and 13 pt text, 30 pt beside a 30 pt ring for a 20 pt mark and 15 pt text. It is as long as what it says: who on one side and what on the other, each as wide as its words and no wider than one of the notch's wings (112 pt), 14 pt apart. Beside the notch the two are wings of that fixed width with the camera between them.
+- A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt at the default for a 17 pt mark, a 12 pt name and an 11 pt status, 30 pt beside a 30 pt ring for a 20 pt mark and 14 pt and 13 pt text. Its words and the symbol beside the status are a size under those beside the notch (a 13 pt name, a 12 pt status), so they sit in the pill with room above and below; the agent's mark keeps its size. It is as long as what it says: who on one side and what on the other, each as wide as its words and no wider than one of the notch's wings (112 pt), 14 pt apart. Beside the notch the two are wings of that fixed width with the camera between them.
 - Cards — the usage panel, an agent's own panel, a reminder's card — use one size per role: the agent's name 13 semibold, at most one 15 pt headline, rows 12, a status beside the name 12 medium, secondary text 11. 10 pt is for badges and counts only.
 
 ### What the Simple panel shows
@@ -69,7 +69,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - An item reports its most used window among the readings that show a level, as the menu bar's figure does: a ring round the mark filled to that share, the whole percentage beside it, or both. Each can be switched off, and with both off the panel is the marks alone. A window with no reading shows an empty ring and a dash.
 - The ring and the number take that window's level colour. No glow is drawn behind it, collapsed or open.
 - Its marks follow `botLogos`, as the dock's do: a working agent's mark is its bot and an idle one visits as a bot now and then. With `botLogos` off, or Reduce Motion on, nothing in the panel moves.
-- One length sizes the panel, 16–40 pt: the ring's diameter, with the mark and the number scaled from it. The ring's stroke is 1–4 pt.
+- One length sizes the panel, 20–50 pt: the ring's diameter, with the mark and the number scaled from it. The ring's stroke is 1–4 pt.
 - It parks and drags like the dock, 3 pt in from its edge: a row on the top and bottom, a column on the sides with the numbers lined up on the right. Hovering grows the panel itself into the usage panel: the same frame, still 3 pt off its edge and rounded on every corner, enlarges inward round the figures, which keep their place, and shrinks back into the small panel on leaving. An event takes the figures' place in that frame while it shows.
 
 ### Hovering and events
@@ -174,7 +174,7 @@ DeepSeek Harness questions can be answered on the HUD when its web host exposes 
 | `screens[…].logoSize` / `gapScale` | 12–36 pt / 0.1–0.6 of the logo | 20 pt / 0.4 |
 | `screens[…].logoEdgeDistance` | 0–20 pt from the visible logo, outline included, to its edge | 2 pt |
 | `screens[…].showsLogos` | Draw the marks, or the backdrop alone | `true` |
-| `screens[…].simpleSize` / `ringWidth` | 16–40 pt ring diameter / 1–4 pt ring stroke, in Simple mode | 22 pt / 1.5 pt |
+| `screens[…].simpleSize` / `ringWidth` | 20–50 pt ring diameter / 1–4 pt ring stroke, in Simple mode | 22 pt / 1.5 pt |
 | `screens[…].showsRings` / `showsNumbers` | Draw the ring round each mark / write the percentage beside it | `true` / `true` |
 | `screenGlow[<display UUID>].style` | `blur`, `dots`, `ascii`, `blocks`, `braille`, `binary` | `blur` |
 | `screenGlow[…].effect` | `breathe`, `flow`, `scan`, `ripple`, `shimmer`, `boot` | `breathe` |

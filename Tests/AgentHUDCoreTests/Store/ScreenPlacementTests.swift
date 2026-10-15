@@ -40,7 +40,7 @@ final class ScreenPlacementTests: XCTestCase {
             #"{"mode":"simple","edge":"left","simpleSize":100,"ringWidth":0.2,"showsRings":false}"#.utf8))
         XCTAssertEqual(saved.mode, .simple)
         XCTAssertEqual(saved.edge, .left)
-        XCTAssertEqual(saved.simpleSize, 40)
+        XCTAssertEqual(saved.simpleSize, 50)
         XCTAssertEqual(saved.ringWidth, 1)
         XCTAssertFalse(saved.showsRings)
         XCTAssertTrue(saved.showsNumbers)
