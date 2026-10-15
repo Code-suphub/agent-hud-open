@@ -74,7 +74,8 @@ grouped by the application's own functions, shows which part is paying; a mean a
   with an earlier commit's, and `AGENT_HUD_BENCH_BOTS=1 swift test --filter BotFrameTests` times a frame.
 - The Antigravity and DeepSeek observers poll their client's local service every two seconds, and look for that
   service in the process list at most every ten. A listing is half a megabyte on a busy Mac and is searched, not
-  split into lines.
+  split into lines. A Mac without the client takes no listing: Antigravity is looked for only while one of its apps,
+  or a folder it or agy keeps its data in, exists, and Harness only while its home holds profiles or sessions.
 
 ## 2026-10-11 local validation
 
