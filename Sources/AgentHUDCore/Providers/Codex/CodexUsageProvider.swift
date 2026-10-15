@@ -257,8 +257,8 @@ public actor CodexUsageProvider: UsageProvider, LedgerRecording {
             byAgent[snapshot.agentId] = QuotaMath.insights(snapshot: snapshot, samples: samples, now: now)
         }
         func liveSession(_ session: CodexTranscriptStore.Session, ancestors: Set<String> = []) -> LiveSession {
-            let t = session.transcript, id = t.id!
-            let live = SessionPhase.read(t.evidence, rule: .rollout, at: now).inFlight
+            let t = session.transcript, id = t.id!, evidence = t.evidence
+            let live = SessionPhase.read(evidence, rule: .rollout, at: now).inFlight
             let seen = ancestors.union([id])
             let agents = (children[id] ?? []).filter {
                 !$0.transcript.isInternal && !seen.contains($0.transcript.id!)
@@ -274,7 +274,7 @@ public actor CodexUsageProvider: UsageProvider, LedgerRecording {
                                endedAt: live ? nil : (t.lastActivityAt ?? session.modifiedAt),
                                pctOfWindow: nil, tokensIn: t.inputTokens,
                                tokensOut: t.outputTokens, client: t.client, transcriptPath: session.path,
-                               cacheReadTokens: t.cachedInputTokens, observedAt: now, workingDirectory: t.cwd,
+                               cacheReadTokens: t.cachedInputTokens, observedAt: evidence.newest, workingDirectory: t.cwd,
                                subagentTranscripts: descendants(of: id).map(\.path).sorted(), agentName: t.agentName, subagentSessions: agents,
                                lastActivityAt: t.lastEventAt, navigationTarget: navigationTarget(for: t))
         }

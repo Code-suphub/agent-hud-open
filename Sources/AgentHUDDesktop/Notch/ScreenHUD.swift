@@ -208,7 +208,6 @@ final class ScreenHUD {
         /// The layout also says which agents the resting HUD shows, which the appearance below follows.
         let layout: PanelLayout
         let draft: Bool
-        let hookTurns: [String: SessionPhase.HookTurn]
         let now: Date
         let dataDate: Date
         let error: String?
@@ -253,7 +252,7 @@ final class ScreenHUD {
     private var panelInputs: PanelInputs {
         PanelInputs(report: store.report, settings: settings.settings, agents: settings.agents,
                       layout: settings.panelLayout.effective(for: key), draft: settings.panelLayout.hasDraft(on: key),
-                      hookTurns: store.hookTurns, now: store.now, dataDate: store.dataDate,
+                      now: store.now, dataDate: store.dataDate,
                       error: store.lastError, loading: store.isLoading, range: store.statsRange,
                       bucketSize: store.tokenBucketSize, dimensions: store.tokenDimensions,
                       requests: PermissionRequests.shared.pending, geometry: geometry, light: systemIsLight,
