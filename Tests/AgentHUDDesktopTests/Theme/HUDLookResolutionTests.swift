@@ -104,7 +104,7 @@ final class HUDLookResolutionTests: XCTestCase {
     }
 
     /// A screen of glass gives its look the transparency it has saved, or its style draft's, unless Reduce Transparency
-    /// draws it solid.
+    /// draws it solid and opaque.
     func testAScreensGlassTakesItsTransparencyAndItsDrafts() {
         let suite = "app.agenthud.tests.hud-look-resolution.\(UUID().uuidString)"
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
@@ -112,12 +112,12 @@ final class HUDLookResolutionTests: XCTestCase {
         let key = "screen:away"
         let reduces = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         settings.update { $0.screens[key] = ScreenPlacement(mode: .simple, material: .glass, glassTransparency: 0.2) }
-        XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? ScreenPlacement.standardGlassTransparency : 0.2)
+        XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.2)
         settings.panelLayout.proposeStyle(HUDStyle(transparency: 0.7), for: key, hasNotch: false)
-        XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? ScreenPlacement.standardGlassTransparency : 0.7,
+        XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.7,
                        "the style draft is drawn over the settings")
         settings.panelLayout.discardStyle(key)
-        XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? ScreenPlacement.standardGlassTransparency : 0.2)
+        XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.2)
     }
 
     /// A picture or a preview of the resting HUD draws the island in Notch mode at a hardware notch in the standard look,
