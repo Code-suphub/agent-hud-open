@@ -98,8 +98,9 @@ final class HUDSurfaceTests: XCTestCase {
     }
 
     /// Glass is covered with its look's own surface, which the theme gives opaque, at the opacity the transparency
-    /// leaves it: whole at 0, half at the standard transparency, a tenth at the range's top, where the desktop shows
-    /// through most. A dark cover darkens and a light one lightens what is behind, whatever it is.
+    /// leaves it: whole at 0, under three quarters at the standard transparency, and still half at the range's top,
+    /// where the desktop shows through most: thinner, either look's glass turns the mid-grey of the other over a
+    /// desktop of the other shade. A dark cover darkens and a light one lightens what is behind, whatever it is.
     func testGlassIsCoveredWithItsSurfaceAtTheTransparency() throws {
         for (appearance, theme) in [(HUDLook.Appearance.dark, Theme.dark), (.light, Theme.light)] {
             let tint = try sRGB(theme.glassTint), surface = try sRGB(theme.islandFill)
@@ -107,7 +108,7 @@ final class HUDSurfaceTests: XCTestCase {
             XCTAssertEqual(tint.green, surface.green, accuracy: 0.002, "\(appearance)")
             XCTAssertEqual(tint.blue, surface.blue, accuracy: 0.002, "\(appearance)")
             XCTAssertEqual(tint.alpha, 1, accuracy: 0.002, "the transparency alone thins it")
-            for (transparency, alpha) in [(0.0, 1.0), (ScreenPlacement.standardGlassTransparency, 0.5), (0.9, 0.1)] {
+            for (transparency, alpha) in [(0.0, 1.0), (ScreenPlacement.standardGlassTransparency, 0.725), (0.9, 0.505)] {
                 let cover = try sRGB(HUDLook(appearance: appearance, material: .glass, transparency: transparency).glassCover)
                 XCTAssertEqual(cover.red, surface.red, accuracy: 0.002, "\(appearance) \(transparency)")
                 XCTAssertEqual(cover.blue, surface.blue, accuracy: 0.002, "\(appearance) \(transparency)")
@@ -122,16 +123,22 @@ final class HUDSurfaceTests: XCTestCase {
     }
 
     /// At the standard transparency the look's text reads on its glass over the backdrop the HUD's pictures have as on
-    /// a page, 16:1 on dark glass and 5.6:1 on light glass, and still reads over a desktop of the other shade, which a
-    /// recording shows unblurred: 3.6:1 for dark glass over white and 4:1 for light glass over black.
+    /// a page, about 17:1 on dark glass and 9:1 on light glass, and over a desktop of the other shade, which a recording
+    /// shows unblurred, about 8.6:1 for dark glass over white and 7.9:1 for light glass over black. At the most
+    /// transparency the look's text still holds 3:1 there.
     func testGlassHoldsItsTextAtTheStandardTransparency() throws {
         let backdrop = try sRGB(HUDPictureRenderer.backdrop).red
         let dark = try sRGB(Self.darkGlass.glassCover), light = try sRGB(Self.lightGlass.glassCover)
         let darkText = try sRGB(Self.darkGlass.theme.text).red, lightText = try sRGB(Self.lightGlass.theme.text).red
         XCTAssertGreaterThan(contrast(darkText, over(dark, backdrop)), 4.5)
         XCTAssertGreaterThan(contrast(lightText, over(light, backdrop)), 4.5)
-        XCTAssertGreaterThan(contrast(darkText, over(dark, 1)), 3, "dark glass over a white desktop")
-        XCTAssertGreaterThan(contrast(lightText, over(light, 0)), 3, "light glass over a black desktop")
+        XCTAssertGreaterThan(contrast(darkText, over(dark, 1)), 7, "dark glass over a white desktop")
+        XCTAssertGreaterThan(contrast(lightText, over(light, 0)), 7, "light glass over a black desktop")
+        let top = ScreenPlacement.glassTransparencyRange.upperBound
+        let thinDark = try sRGB(HUDLook(appearance: .dark, material: .glass, transparency: top).glassCover)
+        let thinLight = try sRGB(HUDLook(appearance: .light, material: .glass, transparency: top).glassCover)
+        XCTAssertGreaterThan(contrast(darkText, over(thinDark, 1)), 3, "dark glass at its most transparent over white")
+        XCTAssertGreaterThan(contrast(lightText, over(thinLight, 0)), 3, "light glass at its most transparent over black")
         XCTAssertGreaterThan(try contrast(sRGB(Self.darkGlass.theme.secondary).red, over(dark, backdrop)), 4.5,
                              "dark glass's secondary text over the backdrop")
     }

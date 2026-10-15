@@ -59,12 +59,24 @@ struct HUDLook: Equatable, Sendable {
     }
 
     /// What glass is covered with under the HUD's ink (`HUDSurface`): the theme's `glassTint`, the look's own surface,
-    /// at the opacity the transparency leaves it. It darkens dark glass and lightens light glass, and holds the glass to
-    /// the look's appearance over any desktop: Liquid Glass follows what is behind it, light over a light desktop, and
-    /// the HUD's text and status colours are fixed. Where nothing is behind to blur, it is glass's stand-in on its own.
+    /// at the opacity the transparency leaves it (`glassCoverOpacity`). It darkens dark glass and lightens light glass,
+    /// and holds the glass to the look's appearance over any desktop: Liquid Glass follows what is behind it, light over
+    /// a light desktop, and the HUD's text and status colours are fixed. Where nothing is behind to blur, it is glass's
+    /// stand-in on its own.
     var glassCover: Color {
-        theme.glassTint.opacity(1 - transparency)
+        theme.glassTint.opacity(glassCoverOpacity)
     }
+
+    /// How much of the look's own surface covers glass: all of it with no transparency, and at the most transparency
+    /// the screen can choose still half. Under half, dark glass over a white window turns the mid-grey that neither the
+    /// HUD's light ink nor its accents read on, and light glass over a black desktop the same grey from the other side;
+    /// the desktop's colours and shapes show through either way.
+    var glassCoverOpacity: Double {
+        1 - transparency * Self.coverGivenUp
+    }
+
+    /// The share of the cover the transparency takes away at its most: 0.9 of 0.55, leaving half.
+    static let coverGivenUp = 0.55
 
     /// The same for AppKit: the appearance of a hosting view or a window that draws the HUD, a hover popover's or a
     /// picture's, which a scroller, a text field's caret and a template image follow.

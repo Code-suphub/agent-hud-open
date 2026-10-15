@@ -109,13 +109,15 @@ struct HUDSurface<S: Shape>: View {
 
     /// Liquid Glass in the shape, run past the screen edge the surface stands on, in the look's colour scheme. Its
     /// colours are the cover's (`HUDLook.glassCover`), drawn over it: a tint of its own is taken as a hint the glass
-    /// lets the desktop overrule.
+    /// lets the desktop overrule. It is the clear glass: the regular one turns light or dark with the size of the piece
+    /// it is drawn in, a narrow panel light and a wide card dark over the same window, so pieces of one HUD side by side
+    /// would part in colour; the clear one is the same at any size, and lets more of the desktop through.
     @ViewBuilder
     private var liquid: some View {
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
             Color.clear
-                .glassEffect(.regular, in: ContactBleed(base: shape, edge: contact, depth: HUDGlass.bleed))
+                .glassEffect(.clear, in: ContactBleed(base: shape, edge: contact, depth: HUDGlass.bleed))
                 .environment(\.colorScheme, look.colorScheme)
         }
         #endif
