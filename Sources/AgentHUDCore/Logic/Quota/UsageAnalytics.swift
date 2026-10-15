@@ -19,6 +19,16 @@ public enum UsageAnalytics {
         return BurnRate(pctPerHour: max(0, first.remainingPct - last.remainingPct) / (elapsed / 3600))
     }
 
+    /// Older readings prove a previous series existed. Without that evidence, describe initial sampling rather
+    /// than guessing a reset from a full quota. Wall-clock time without another reading never advances the span.
+    public static func sampling(samples: [QuotaSample], cycle: QuotaCycle?, now: Date) -> QuotaSampling? {
+        guard let cycle, now >= cycle.start, now < cycle.resetAt else { return nil }
+        let sampled = sampledQuota(samples, cycle: cycle, now: now)
+        guard let first = sampled.first, let last = sampled.last else { return nil }
+        return QuotaSampling(elapsed: last.timestamp.timeIntervalSince(first.timestamp), required: cycle.sampleInterval,
+                             afterReset: samples.contains { $0.timestamp < first.timestamp })
+    }
+
     /// Keep the observed baseline, each cycle-aligned bucket's last reading, and the latest partial bucket.
     /// A rise of `resetRise` points or more breaks the series (for example an early reset); never bridge across it.
     static func sampledQuota(_ samples: [QuotaSample], cycle: QuotaCycle, now: Date) -> [QuotaSample] {

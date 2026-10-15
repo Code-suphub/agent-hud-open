@@ -10,7 +10,11 @@ public enum QuotaForecast {
     public static func hint(snapshot: UsageSnapshot, insights: UsageInsights?, now: Date) -> String? {
         guard let remaining = snapshot.remainingPct else { return nil }
         let used = max(0, min(100, 100 - remaining))
-        return text(of: QuotaMath.outlook(snapshot: snapshot, insights: insights, now: now),
+        let outlook = QuotaMath.outlook(snapshot: snapshot, insights: insights, now: now)
+        if outlook == .insufficientData, let sampling = insights?.sampling, sampling.elapsed < sampling.required {
+            return sampling.hint
+        }
+        return text(of: outlook,
                     projectedUsedAtReset: QuotaMath.projectedUsedAtReset(usedPct: used, insights: insights, resetAt: snapshot.resetAt, now: now))
     }
 

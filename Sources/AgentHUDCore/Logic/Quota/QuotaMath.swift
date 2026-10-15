@@ -44,7 +44,8 @@ public enum QuotaMath {
         return UsageInsights(burnRatePctPerHour: burn?.pctPerHour,
                              timeToExhaust: snapshot.flatMap(\.remainingPct).flatMap { burn?.timeToExhaust(remainingPct: $0) },
                              weeklyCapHits: caps.hits, weeklyWaitTotal: caps.totalWait,
-                             weeklyWaitLongest: caps.longestWait, weeklyWaitLongestAt: caps.longestAt)
+                             weeklyWaitLongest: caps.longestWait, weeklyWaitLongestAt: caps.longestAt,
+                             sampling: UsageAnalytics.sampling(samples: samples, cycle: snapshot?.cycle, now: now))
     }
 
     /// The window's outlook at `now`.
