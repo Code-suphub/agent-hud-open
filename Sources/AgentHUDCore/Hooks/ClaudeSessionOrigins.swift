@@ -104,7 +104,9 @@ public enum ClaudeSessionOrigins {
         return .iTermSession(id: id)
     }
 
-    private static func engineArguments(ancestors: [HookProcessOrigins.Ancestor], executablePaths: Set<String>) -> [String]? {
+    /// The arguments of the engine that started the hook, its executable first; nil when the nearest process past the
+    /// shells is not an installed engine.
+    static func engineArguments(ancestors: [HookProcessOrigins.Ancestor], executablePaths: Set<String>) -> [String]? {
         let shells: Set<String> = ["/bin/sh", "/bin/bash", "/bin/zsh"]
         guard let process = ancestors.first(where: { !shells.contains($0.executable) }) else { return nil }
         let executable = URL(fileURLWithPath: process.executable).resolvingSymlinksInPath().path
@@ -119,22 +121,26 @@ public enum ClaudeSessionOrigins {
         return arguments
     }
 
+    /// Engine options whose value is the next argument, so that value is never read as a flag.
+    static let valueOptions: Set<String> = ["--agent", "--agents", "--append-system-prompt", "--append-system-prompt-file",
+                                            "--effort", "--fallback-model", "--json-schema", "--mcp-config", "--model",
+                                            "--permission-mode", "--plugin-dir", "--plugin-url", "--session-id", "--settings",
+                                            "--setting-sources", "--system-prompt", "--system-prompt-file", "--max-turns",
+                                            "--max-budget-usd", "--name", "-n", "--input-format", "--output-format",
+                                            "--permission-prompt-tool", "--permission-prompts"]
+
     /// Command mode supplements the engine's entrypoint marker. Never interpret an option value or prompt as a flag.
     static func interactive(_ arguments: [String]) -> Bool {
         guard !arguments.isEmpty else { return false }
         let noninteractive: Set<String> = ["-p", "--print", "--background", "--bg", "--init-only", "--cloud", "--remote",
                                            "--sdk-url", "--input-format", "--output-format"]
-        let values: Set<String> = ["--agent", "--agents", "--append-system-prompt", "--append-system-prompt-file", "--effort",
-                                   "--fallback-model", "--json-schema", "--mcp-config", "--model", "--permission-mode",
-                                   "--plugin-dir", "--plugin-url", "--session-id", "--settings", "--setting-sources",
-                                   "--system-prompt", "--system-prompt-file", "--max-turns", "--max-budget-usd", "--name", "-n"]
         var index = 1
         while index < arguments.count {
             let argument = arguments[index]
             if argument == "--" { break }
             let option = argument.split(separator: "=", maxSplits: 1).first.map(String.init) ?? argument
             if noninteractive.contains(option) { return false }
-            if values.contains(option), !argument.contains("=") { index += 2 } else { index += 1 }
+            if valueOptions.contains(option), !argument.contains("=") { index += 2 } else { index += 1 }
         }
         return true
     }
