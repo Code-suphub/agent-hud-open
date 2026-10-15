@@ -9,6 +9,8 @@ enum MCPAppClient {
         case reply(MCPToolReply)
         /// No socket in the data directory, or nothing accepts on it.
         case notRunning
+        /// The application runs and serves no socket: its agent tools are switched off in Settings → Experimental.
+        case off
         /// The application took the call and gave no reply that can be read in time.
         case unanswered
     }
@@ -18,6 +20,24 @@ enum MCPAppClient {
     /// The largest reply read; a longer one counts as none. A picture of the panel travels in the reply, and a PNG of
     /// 1,080 by 2,400 pixels does not reach it even stored uncompressed and written in base64, about 14 MB.
     static let replyLimit = 16 * 1024 * 1024
+
+    /// `call(_:socket:timeout:)` with a socket nobody serves told apart: `off` when a copy of the application runs that
+    /// keeps its data in the directory named `dataDirectoryName`, as the instance lock at `lock` says without being
+    /// taken, and `notRunning` when none does. A copy of another application built on these libraries, which keeps its
+    /// data elsewhere, does not count.
+    static func call(_ request: MCPToolRequest, socket path: String, lock: URL, dataDirectoryName: String,
+                     timeout: TimeInterval = timeout) -> Answer {
+        let answer = call(request, socket: path, timeout: timeout)
+        guard answer == .notRunning, applicationRuns(lock: lock, dataDirectoryName: dataDirectoryName) else { return answer }
+        return .off
+    }
+
+    /// Whether the application holding the lock at `lock` keeps its data in the directory named `dataDirectoryName`.
+    static func applicationRuns(lock: URL, dataDirectoryName: String) -> Bool {
+        guard let holder = InstanceLock.runningApplication(at: lock) else { return false }
+        let bundle = holder.pathExtension == "app" ? Bundle(url: holder) : nil
+        return AppSupport.directoryName(of: bundle) == dataDirectoryName
+    }
 
     static func call(_ request: MCPToolRequest, socket path: String, timeout: TimeInterval = timeout) -> Answer {
         guard let descriptor = UnixSocket.connect(to: path) else { return .notRunning }

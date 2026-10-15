@@ -199,12 +199,14 @@ public enum SnapshotRunner {
         save("island-scroll-bottom", scrollScene, folder: folder, scheme: .dark, scrollToBottom: true)
         save("menubar-dark", MenuBarStrip(store: store, light: false), folder: folder, scheme: .dark)
         save("menubar-light", MenuBarStrip(store: store, light: true), folder: folder, scheme: .light)
-        for tab in SettingsTab.allCases {
+        // Experimental's stills stand in for this Mac's clients (`saveExperimental`).
+        for tab in SettingsTab.allCases where tab != .experimental {
             save("settings-\(tab.slug)-dark", SettingsView(settings: settings, store: store, initialTab: tab).frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
             save("settings-\(tab.slug)-light", SettingsView(settings: settings, store: store, initialTab: tab).frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .light)
             save("settings-\(tab.slug)-small-dark", SettingsView(settings: settings, store: store, initialTab: tab).frame(width: SettingsWindowLayout.minimum.width, height: SettingsWindowLayout.minimum.height), folder: folder, scheme: .dark)
         }
         saveAgentSettings(settings: settings, store: store, folder: folder)
+        saveExperimental(settings: settings, store: store, folder: folder)
         saveGrokQuota(settings: settings, store: store, folder: folder)
         save("settings-display-bottom-dark", SettingsView(settings: settings, store: store, initialTab: .display).frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark, scrollToBottom: true)
         save("settings-display-small-bottom-dark", SettingsView(settings: settings, store: store, initialTab: .display).frame(width: SettingsWindowLayout.minimum.width, height: SettingsWindowLayout.minimum.height), folder: folder, scheme: .dark, scrollToBottom: true)

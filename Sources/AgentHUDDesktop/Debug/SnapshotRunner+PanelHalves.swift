@@ -8,8 +8,10 @@ extension SnapshotRunner {
     /// Half blocks in the hover panel: Claude's rings beside Codex's numbers at the default width and at the widest; a
     /// chart beside a balance, with Codex's bars across the line below; three half blocks, Claude's rings beside the
     /// balance and Codex's numbers alone on the line below, so across the whole of it in four columns; and the rings and
-    /// numbers at the narrowest width, where a half would be too narrow and each block takes the whole line. They are
-    /// drawn from a settings store of their own, with the preferences the other stills have at this point.
+    /// numbers at the narrowest width, where a half would be too narrow and each block takes the whole line; and
+    /// Claude's and Codex's rings side by side, three windows each, two and one centred under them
+    /// (`panel-layout-triangle-half`). They are drawn from a settings store of their own, with the preferences the
+    /// other stills have at this point.
     static func saveHalves(preferences: AgentHUDCore.Settings, folder: URL) {
         let suite = "app.agenthud.open.snapshot.layout-halves"
         let defaults = UserDefaults(suiteName: suite)!
@@ -41,6 +43,12 @@ extension SnapshotRunner {
         shoot("lone", PanelLayout(blocks: lone, order: ["Claude", balance, "Codex"]))
         shoot("rings-numbers-\(PanelStyle.widthRange.lowerBound)",
               PanelLayout(blocks: ringsAndNumbers, style: PanelStyle(width: PanelStyle.widthRange.lowerBound)))
+        // Three windows two to a line in each half: two, and one centred under them.
+        settings.panelLayout.propose(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring, span: .half),
+                                                          "Codex": PanelLayout.Block(widget: .ring, span: .half)]))
+        settings.panelLayout.save()
+        save("panel-layout-triangle-half", IslandScene(store: store, settings: settings, open: true, light: false),
+             folder: folder, scheme: .dark)
         settings.panelLayout.reset()
     }
 }

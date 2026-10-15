@@ -7,7 +7,8 @@ import Foundation
 /// they arrived.
 ///
 /// Like a hook command it starts no interface, takes no instance lock and queries no account, and it never starts
-/// the application: a tool call made while none runs comes back saying so.
+/// the application: a tool call made while none runs comes back saying so, and one made while the application runs
+/// with its agent tools switched off says that instead.
 enum MCPStdio {
     static let argument = "--mcp"
 
@@ -22,7 +23,10 @@ enum MCPStdio {
         signal(SIGPIPE, SIG_IGN)
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
         let socket = MCPAppChannel.socketPath()
-        let server = MCPServer(version: version) { MCPAppClient.call($0, socket: socket) }
+        let directoryName = AppSupport.directoryName(of: .main)
+        let server = MCPServer(version: version) {
+            MCPAppClient.call($0, socket: socket, lock: InstanceLock.sharedURL, dataDirectoryName: directoryName)
+        }
         return run(server, input: STDIN_FILENO, output: STDOUT_FILENO)
     }
 

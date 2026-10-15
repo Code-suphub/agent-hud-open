@@ -2,8 +2,9 @@ import SwiftUI
 import AgentHUDCore
 
 /// An account's quota windows side by side, `columns` to a line (the layout's, four by default), each in an equal
-/// share of the width. A last line with fewer windows keeps the columns of the lines above it. The gaps between lines
-/// and around the grid follow the panel's spacing; the gap between cells does not.
+/// share of the width. A last line with fewer windows keeps the columns' width and stands centred under the lines
+/// above it, so three windows two to a line make a triangle; a single line shares the width among its windows. The
+/// gaps between lines and around the grid follow the panel's spacing; the gap between cells does not.
 struct QuotaCellGrid<Cell: View>: View {
     let rows: [AgentRow]
     var columns = 4
@@ -29,13 +30,14 @@ struct QuotaCellGrid<Cell: View>: View {
         let perLine = max(1, columns)
         VStack(alignment: .leading, spacing: spacing.cellLines) {
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                HStack(alignment: .top, spacing: Self.cellGap) {
-                    ForEach(line) { row in
-                        cell(row).frame(maxWidth: .infinity)
+                if lines.count > 1, line.count < perLine {
+                    CentredGridLine(columns: perLine, gap: Self.cellGap) {
+                        ForEach(line) { row in cell(row).frame(maxWidth: .infinity) }
                     }
-                    if lines.count > 1 {
-                        ForEach(0..<(perLine - line.count), id: \.self) { _ in
-                            Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
+                } else {
+                    HStack(alignment: .top, spacing: Self.cellGap) {
+                        ForEach(line) { row in
+                            cell(row).frame(maxWidth: .infinity)
                         }
                     }
                 }
@@ -43,6 +45,49 @@ struct QuotaCellGrid<Cell: View>: View {
         }
         .padding(.horizontal, IslandRowLayout.inset)
         .padding(.vertical, spacing.cellPadding)
+    }
+}
+
+/// A grid's last line that is not full: its cells as wide as a full line's `columns`, `gap` apart, centred in the line
+/// and set from its top, the line as tall as its tallest cell.
+struct CentredGridLine: Layout {
+    let columns: Int
+    let gap: CGFloat
+
+    /// The x of each of `count` cells' leading edges in a line `width` wide.
+    static func origins(count: Int, columns: Int, gap: CGFloat, width: CGFloat) -> [CGFloat] {
+        let cell = cellWidth(columns: columns, gap: gap, width: width)
+        let used = CGFloat(count) * cell + CGFloat(max(0, count - 1)) * gap
+        let start = (width - used) / 2
+        return (0..<count).map { start + CGFloat($0) * (cell + gap) }
+    }
+
+    static func cellWidth(columns: Int, gap: CGFloat, width: CGFloat) -> CGFloat {
+        let count = CGFloat(max(1, columns))
+        return max(0, (width - (count - 1) * gap) / count)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? idealWidth(subviews)
+        let cell = Self.cellWidth(columns: columns, gap: gap, width: width)
+        let height = subviews.map { $0.sizeThatFits(ProposedViewSize(width: cell, height: proposal.height)).height }.max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let cell = Self.cellWidth(columns: columns, gap: gap, width: bounds.width)
+        let origins = Self.origins(count: subviews.count, columns: columns, gap: gap, width: bounds.width)
+        for (subview, x) in zip(subviews, origins) {
+            subview.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: cell, height: proposal.height))
+        }
+    }
+
+    /// With no width proposed, a full line of the widest cell.
+    private func idealWidth(_ subviews: Subviews) -> CGFloat {
+        let widest = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let count = CGFloat(max(1, columns))
+        return count * widest + (count - 1) * gap
     }
 }
 

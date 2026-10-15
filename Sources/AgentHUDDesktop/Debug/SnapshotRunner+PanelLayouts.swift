@@ -78,41 +78,46 @@ extension SnapshotRunner {
     }
 
     /// Claude's block with six windows, three more of its models' weeks than the sample has, as rings in two columns
-    /// and in six: three lines of two, and one line of six.
+    /// and in six: three lines of two, and one line of six. Then with five, two more weeks than the sample has, four
+    /// to a line: four, and one centred under them (`panel-layout-triangle-five`).
     private static func saveColumns(preferences: AgentHUDCore.Settings, folder: URL) {
-        let suite = "app.agenthud.open.snapshot.layout-columns"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let now = DemoClock.now
-        let used: [String: Double] = ["opus": 35, "sonnet": 22, "haiku": 8]
-        let weeks = ClaudeUsage(fiveHour: nil, sevenDay: nil, modelWeekly: used.mapValues {
-            ClaudeUsageWindow(utilizationPct: $0, resetsAt: nil)
-        }).rows
-        let added = weeks.map { row in
-            AgentDescriptor(id: DemoData.claudeAccount.windowID(row.id), vendor: "Claude", model: row.label,
-                            source: L10n.sourceClaudeCode, enabled: true, account: DemoData.claudeAccount, allModels: false)
-        }
-        let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents + added)
-        settings.update { $0 = preferences }
-        let sample = DemoUsageProvider.report(agents: DemoData.agents, historyHours: UsageStore.historyHours, now: now)
-        let readings = zip(weeks, added).map { row, agent in
-            UsageSnapshot(agentId: agent.id, remainingPct: QuotaMath.remaining(usedPercent: row.window.utilizationPct),
-                          resetAt: now.addingTimeInterval(5 * 86400), windowDuration: 7 * 86400, updatedAt: now)
-        }
-        let store = demoStore(settings)
-        store.replace(report: UsageReport(
-            generatedAt: now, snapshots: sample.snapshots + readings, sessions: sample.sessions,
-            discoveredAgents: sample.discoveredAgents + added, consumers: sample.consumers, usage: sample.usage,
-            insightsByAgent: sample.insightsByAgent, subscriptions: sample.subscriptions,
-            consumerIdsByQuota: sample.consumerIdsByQuota, billing: sample.billing, codexResetCredits: sample.codexResetCredits,
-            accounts: sample.accounts, sessionUsage: sample.sessionUsage, periods: sample.periods))
-        for columns in [2, 6] {
+        func shoot(_ name: String, weeks used: [String: Double], columns: Int) {
+            let suite = "app.agenthud.open.snapshot.layout-columns"
+            let defaults = UserDefaults(suiteName: suite)!
+            defaults.removePersistentDomain(forName: suite)
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let now = DemoClock.now
+            let weeks = ClaudeUsage(fiveHour: nil, sevenDay: nil, modelWeekly: used.mapValues {
+                ClaudeUsageWindow(utilizationPct: $0, resetsAt: nil)
+            }).rows
+            let added = weeks.map { row in
+                AgentDescriptor(id: DemoData.claudeAccount.windowID(row.id), vendor: "Claude", model: row.label,
+                                source: L10n.sourceClaudeCode, enabled: true, account: DemoData.claudeAccount, allModels: false)
+            }
+            let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents + added)
+            settings.update { $0 = preferences }
+            let sample = DemoUsageProvider.report(agents: DemoData.agents, historyHours: UsageStore.historyHours, now: now)
+            let readings = zip(weeks, added).map { row, agent in
+                UsageSnapshot(agentId: agent.id, remainingPct: QuotaMath.remaining(usedPercent: row.window.utilizationPct),
+                              resetAt: now.addingTimeInterval(5 * 86400), windowDuration: 7 * 86400, updatedAt: now)
+            }
+            let store = demoStore(settings)
+            store.replace(report: UsageReport(
+                generatedAt: now, snapshots: sample.snapshots + readings, sessions: sample.sessions,
+                discoveredAgents: sample.discoveredAgents + added, consumers: sample.consumers, usage: sample.usage,
+                insightsByAgent: sample.insightsByAgent, subscriptions: sample.subscriptions,
+                consumerIdsByQuota: sample.consumerIdsByQuota, billing: sample.billing, codexResetCredits: sample.codexResetCredits,
+                accounts: sample.accounts, sessionUsage: sample.sessionUsage, periods: sample.periods))
             settings.panelLayout.propose(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring, columns: columns)]))
             settings.panelLayout.save()
-            save("panel-layout-columns-\(columns)", IslandScene(store: store, settings: settings, open: true, light: false),
+            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false),
                  folder: folder, scheme: .dark)
         }
+        let three: [String: Double] = ["opus": 35, "sonnet": 22, "haiku": 8]
+        for columns in [2, 6] {
+            shoot("columns-\(columns)", weeks: three, columns: columns)
+        }
+        shoot("triangle-five", weeks: ["opus": 35, "sonnet": 22], columns: 4)
     }
 }
 #endif

@@ -199,6 +199,7 @@ struct MCPServer {
             }
         case .reply(.failure(let sentence)): text = sentence
         case .notRunning: text = "Agent HUD is not running. Open Agent HUD and try again."
+        case .off: text = "Agent HUD's agent tools are off. Turn them on in Settings › Experimental."
         case .unanswered: text = "Agent HUD did not answer. Try again."
         }
         let block: JSONValue = .object(["type": .string("text"), "text": .string(text)])
