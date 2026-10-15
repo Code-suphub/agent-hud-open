@@ -24,6 +24,26 @@ public struct LedgerWriter {
         try storage.connection.run("DELETE FROM source_file WHERE source = ? AND path = ?", [.text(source), .text(path)])
     }
 
+    /// Moves a file's stored state to the path `new`, replacing any state stored there.
+    public func renameFile(source: String, path old: String, to new: String) throws {
+        guard old != new else { return }
+        try removeFile(source: source, path: new)
+        try storage.connection.run("UPDATE source_file SET path = ? WHERE source = ? AND path = ?", [.text(new), .text(source), .text(old)])
+    }
+
+    /// Gives a contribution the key `new` with everything it holds: its usage, costs, marks and counting flag, which stay
+    /// in the buckets as they are. Whatever the ledger held under `new` goes first. Nothing happens when it holds nothing
+    /// under `old`.
+    public func rename(source: String, contribution old: String, to new: String) throws {
+        var found = false
+        try storage.connection.query("SELECT 1 FROM contribution WHERE source = ? AND key = ?", [.text(source), .text(old)]) { _ in found = true }
+        guard old != new, found else { return }
+        try remove(source: source, contribution: new)
+        try storage.connection.run("UPDATE contribution SET key = ? WHERE source = ? AND key = ?", [.text(new), .text(source), .text(old)])
+        storage.touch(old)
+        storage.touch(new)
+    }
+
     /// Moves a consumer's usage to the id `new`, adding it to usage already recorded there. Nothing happens when the
     /// ledger does not know `old`.
     public func moveConsumer(_ old: String, to new: String) throws {

@@ -18,6 +18,9 @@ protocol TailLog: Sendable {
     /// The decoded log from `start`, for a format that cannot be read from an offset, with the places a later read can
     /// start from; nil reads the file itself from where the last read stopped.
     static func contents(of url: URL, from start: DecodedPosition) async throws -> DecodedLog?
+    /// The suffix the client adds to a log it compresses where it lies, as one Zstandard frame, such as Codex's `.zst`;
+    /// nil for a format whose logs are never compressed. See `CompressedLogs`.
+    static var compressedSuffix: String? { get }
     /// Reads one or more complete lines, each ending in a newline, that begin `offset` bytes into the log (into its
     /// decoded text, for a log that has to be decoded), and returns the usage they added. An event is keyed by what it
     /// is or where it lies, never by the order lines are read in: a log's history is read after its end.
@@ -49,6 +52,7 @@ protocol TailLog: Sendable {
 extension TailLog {
     static func copyName(_ path: String) -> String? { nil }
     static func contents(of url: URL, from start: DecodedPosition) async throws -> DecodedLog? { nil }
+    static var compressedSuffix: String? { nil }
     static func drainMarks(_ summary: inout Summary) -> [UsageLedger.Mark] { [] }
     static func finishRead(_ summary: inout Summary, now: Date) {}
     static func group(_ summary: Summary) -> String? { nil }
@@ -79,7 +83,9 @@ struct DecodedLog: Sendable {
 /// growing, is read again from the start and replaces what it recorded, and so is one whose stored state has another
 /// version, even when it is older than the cutoff, while the ledger still holds its usage. A stored log missing from the
 /// listing leaves the ledger; one that is listed keeps its contribution even when it cannot be read, and is tried again
-/// once its pause is over (`FailedReads`).
+/// once its pause is over (`FailedReads`). A log its client compressed where it lies is the same log under another name
+/// (`CompressedLogs`): its state and contribution move to that name without a read, and it is read from its start,
+/// through its decoded text, only where the ledger does not hold all of it.
 final class TailLogStore<Log: TailLog> {
     struct Entry {
         var modified: Date
@@ -135,6 +141,7 @@ final class TailLogStore<Log: TailLog> {
     /// How long a poll reads history, apart from what logs gained: a small share of the processor while history lasts.
     var historyBudget: TimeInterval = 0.1
     private var failureReasons: [String: any Error] = [:]
+    private var compressed = Log.compressedSuffix.map(CompressedLogs.init(suffix:))
 
     /// - watchesChanges: after the first listing, polls look only at logs a directory watch reports changed.
     init(roots: [URL], ledger: UsageLedger, watchesChanges: Bool, accepts: @escaping (URL) -> Bool) {
@@ -175,7 +182,8 @@ final class TailLogStore<Log: TailLog> {
             pass.reloaded = true
         }
         pass.gaps = files.refresh(now: started)
-        let listing = Self.counting(files.files)
+        let listing = Self.counting(compressed?.listing(files.files) ?? files.files)
+        let handovers = handOver(listing)
         var changing: [(path: String, file: LogFiles.File)] = []
         for (path, file) in listing where file.modified >= cutoff {
             pass.logs.append((path, file))
@@ -235,7 +243,7 @@ final class TailLogStore<Log: TailLog> {
         }
 
         let removed = Set(entries.keys).union(stored.keys).union(outdated).filter { listing[$0] == nil }
-        guard !updates.isEmpty || !removed.isEmpty else { return pass }
+        guard !updates.isEmpty || !removed.isEmpty || !handovers.isEmpty else { return pass }
         var nextGroups = groups, nextModified = modified
         for (path, update) in updates {
             nextGroups[path] = Log.group(update.entry.summary)
@@ -250,6 +258,10 @@ final class TailLogStore<Log: TailLog> {
         let source = Log.source, written = Set(updates.keys)
         do {
             try await ledger.write { writer in
+                for move in handovers {
+                    try writer.rename(source: source, contribution: move.from, to: move.to)
+                    try writer.renameFile(source: source, path: move.from, to: move.to)
+                }
                 for write in writes {
                     if write.reset { try writer.remove(source: source, contribution: write.path) }
                     try writer.upsert(source: source, contribution: write.path, counted: write.counted, events: write.events)
@@ -269,13 +281,30 @@ final class TailLogStore<Log: TailLog> {
             outdated.subtract(written.union(removed))
             groups = nextGroups
             modified = nextModified
-            pass.changed = Array(updates.keys)
-            pass.removed = Array(removed)
+            pass.changed = Array(Set(updates.keys).union(handovers.map(\.to)))
+            pass.removed = Array(removed.union(handovers.map(\.from)))
         } catch {
-            // Positions stay where the ledger has them, so the next poll reads the same bytes again.
+            // Positions stay where the ledger has them, so the next poll reads the same bytes again. Names this store
+            // moved ahead of the ledger are read from it again.
             pass.pending += updates.count
+            if !handovers.isEmpty { loadedGeneration = nil }
         }
         return pass
+    }
+
+    /// Moves the state of each stored log that changed form to its new name, ahead of the ledger write that renames its
+    /// contribution and stored state (`CompressedLogs.handovers`).
+    private func handOver(_ listing: [String: LogFiles.File]) -> [(from: String, to: String)] {
+        guard let compressed else { return [] }
+        let moves = compressed.handovers(stored: Set(entries.keys).union(stored.keys).union(outdated), listing: listing)
+        for (from, to) in moves {
+            entries[to] = entries.removeValue(forKey: from)
+            stored[to] = stored.removeValue(forKey: from)
+            if outdated.remove(from) != nil { outdated.insert(to) }
+            groups[to] = groups.removeValue(forKey: from)
+            modified[to] = modified.removeValue(forKey: from)
+        }
+        return moves
     }
 
     /// Reads what the log gained since its entry, or, once rewritten, all of it: from its start, or for a log that tells
@@ -287,8 +316,10 @@ final class TailLogStore<Log: TailLog> {
         var events: [UsageLedger.Event] = [], marks: [UsageLedger.Mark] = []
         var reset = outdated.contains(path) || previous.map { file.size < $0.size
             || (file.size == $0.size && !LedgerCopies.same($0.modified, file.modified)) } == true
+        let isCompressed = compressed?.isCompressed(path) == true
         // A log that has to be decoded is decoded from the last place before the first line not read yet.
-        var contents = try await Log.contents(of: url, from: reset ? DecodedPosition() : previous?.restart ?? DecodedPosition())
+        var contents = isCompressed ? nil
+            : try await Log.contents(of: url, from: reset ? DecodedPosition() : previous?.restart ?? DecodedPosition())
         if let previous, !reset, (contents.map { $0.start.decoded + $0.data.count } ?? file.size) < previous.offset {
             // What was read before is no longer there: the log was rewritten.
             reset = true
@@ -299,7 +330,7 @@ final class TailLogStore<Log: TailLog> {
             entry.summary = previous.summary
             entry.restart = previous.restart
             entry.back = previous.back
-        } else if contents == nil, let startsTurn = Log.startsTurn {
+        } else if contents == nil, !isCompressed, let startsTurn = Log.startsTurn {
             let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
             Log.head(try Self.head(of: handle, size: file.size), into: &entry.summary)
@@ -323,6 +354,15 @@ final class TailLogStore<Log: TailLog> {
                 entry.offset = base + end - data.startIndex
             } while Date() < deadline
             entry.restart = contents.restarts.last { $0.decoded <= entry.offset } ?? contents.start
+        } else if isCompressed {
+            let read = try compressed?.read(path, file: file, from: entry.offset, chunkSize: Self.chunkSize, deadline: deadline) { lines, at in
+                events += try Log.ingest(lines, at: at, into: &entry.summary)
+                marks += Log.drainMarks(&entry.summary)
+            }
+            pass.bytesRead += read?.decoded ?? 0
+            entry.offset = read?.offset ?? entry.offset
+            // Text left after the budget waits as complete lines do; a partial last line waits for the log to change.
+            entry.committed = read?.waiting == true ? max(file.size, entry.offset + 1) : entry.offset
         } else {
             let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
@@ -351,6 +391,21 @@ final class TailLogStore<Log: TailLog> {
     private func readPage(_ path: String, into update: inout Update, retained: Date, pass: inout Pass) throws {
         guard let back = update.entry.back, let startsTurn = Log.startsTurn else { return }
         let url = URL(fileURLWithPath: path)
+        if let compressed, compressed.isCompressed(path) {
+            // A log compressed before its history was read: the rest of its history is one page from its start.
+            var page = Log.summary(for: url), events: [UsageLedger.Event] = [], marks: [UsageLedger.Mark] = []
+            pass.bytesRead += try compressed.readHistory(path, before: back, headLength: Self.headLength, chunkSize: Self.chunkSize,
+                                                         head: { Log.head($0, into: &page) }) { lines, at in
+                events += try Log.ingest(lines, at: at, into: &page)
+                marks += Log.drainMarks(&page)
+            }
+            pass.filesRead += 1
+            Log.merge(older: page, into: &update.entry.summary)
+            update.events += events
+            update.marks += marks
+            update.entry.back = nil
+            return
+        }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         let pager = LogPager(handle: handle, startsTurn: startsTurn)
