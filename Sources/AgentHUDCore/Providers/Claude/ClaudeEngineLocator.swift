@@ -8,6 +8,11 @@ import Foundation
 public enum ClaudeEngineLocator {
     public static func candidates(home: URL = FileManager.default.homeDirectoryForCurrentUser,
                                   path: String = ProcessInfo.processInfo.environment["PATH"] ?? "") -> [URL] {
+        cli(home: home, path: path) + desktop(home: home)
+    }
+
+    /// The CLI's install places and `PATH`, without the desktop app's engines.
+    static func cli(home: URL, path: String) -> [URL] {
         let list = [
             home.appendingPathComponent(".local/bin/claude"),
             home.appendingPathComponent(".claude/local/claude"),
@@ -15,7 +20,7 @@ public enum ClaudeEngineLocator {
             URL(fileURLWithPath: "/usr/local/bin/claude"),
         ]
         let versions = home.appendingPathComponent(".local/share/claude/versions", isDirectory: true)
-        return list + newestFirst(in: versions) + Executables.onPath("claude", path: path) + desktop(home: home)
+        return list + newestFirst(in: versions) + Executables.onPath("claude", path: path)
     }
 
     public static func find(home: URL = FileManager.default.homeDirectoryForCurrentUser, fileManager: FileManager = .default,
