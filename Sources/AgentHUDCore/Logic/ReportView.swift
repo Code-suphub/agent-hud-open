@@ -15,8 +15,8 @@ public struct ReportView: Sendable {
         /// turn without a start counting from when it was observed, then the one observed last, the later listed of equals.
         public let turn: SessionTurn?
         /// When the session last did something: its newest turn event from any provider, or its end when that is later;
-        /// without turns, its end, or while in flight when its log last recorded anything, else the reading that last saw
-        /// it. A permission request waiting for an answer is an event too.
+        /// without turns, its end, or while in flight when its log last recorded anything, else the newest evidence that
+        /// it runs. A permission request waiting for an answer is an event too.
         public let lastEventAt: Date
         /// What the agent last said: the message of the newest turn that carries one, from the providers `turn` comes
         /// from. Nil while live status is off.

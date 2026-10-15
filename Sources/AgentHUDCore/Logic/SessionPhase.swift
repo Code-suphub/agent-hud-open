@@ -46,7 +46,8 @@ public struct SessionPhase: Hashable, Sendable {
         /// A running turn this quiet was abandoned: its client was killed, or its logs stopped reaching this Mac. One tool
         /// call can keep a log quiet for minutes, so silence alone ends a turn only after this long.
         public static let abandoned: TimeInterval = 30 * 60
-        /// How long after a reading that had a session in flight the Mac still vouches for it.
+        /// How long after the newest evidence that has a session in flight (`LiveSession.observedAt`) the Mac still vouches
+        /// for it.
         public static let vouched: TimeInterval = 30 * 60
         /// A Pi run whose observer snapshot is this old is over; the observer refreshes it every 15 seconds while the run
         /// is active.
@@ -108,14 +109,30 @@ public struct SessionPhase: Hashable, Sendable {
         /// Whether a process that holds the client's profile started no later than the newest turn. Nil when the process
         /// table was not read.
         public var processOutlivesTurn: Bool?
+        /// When the process table behind `processOutlivesTurn` was read.
+        public var processCheckedAt: Date?
 
         public init(turn: SessionTurn?, lastWriteAt: Date? = nil, subagentsAt: Date? = nil, approval: Approval? = nil,
-                    processOutlivesTurn: Bool? = nil) {
+                    processOutlivesTurn: Bool? = nil, processCheckedAt: Date? = nil) {
             self.turn = turn
             self.lastWriteAt = lastWriteAt
             self.subagentsAt = subagentsAt
             self.approval = approval
             self.processOutlivesTurn = processOutlivesTurn
+            self.processCheckedAt = processCheckedAt
+        }
+
+        /// The newest of this evidence, which the session's `LiveSession.observedAt` holds: the turn's latest observation,
+        /// the source's last record, the newest line of its sub-agents in flight and the client's request for approval, and
+        /// for a turn in flight that a process outlives, when the process table said so. Nil when there is none. Reading
+        /// the source again without new evidence does not move it.
+        public var newest: Date? {
+            var times = [lastWriteAt, subagentsAt, approval?.at].compactMap { $0 }
+            if let turn {
+                times.append(RecordCoding.date(turn.observedAtMs))
+                if turn.state.isInFlight, processOutlivesTurn == true, let processCheckedAt { times.append(processCheckedAt) }
+            }
+            return times.max()
         }
     }
 
@@ -198,9 +215,9 @@ public struct SessionPhase: Hashable, Sendable {
     /// The phase the Mac shows at `now` for a session its source reported, given its newest turn, when it last did
     /// something and whether its vendor's live status is on:
     /// - live status off: idle since the last event;
-    /// - in flight by a reading less than `Limits.vouched` old: waiting for approval while the newest turn does, else
+    /// - in flight by evidence less than `Limits.vouched` old: waiting for approval while the newest turn does, else
     ///   running; since the turn's start, else the session's;
-    /// - in flight by an older reading, unverified; ended, idle; both since the last event.
+    /// - in flight by older evidence, unverified; ended, idle; both since the last event.
     public init(session: LiveSession, turn: SessionTurn?, lastEventAt: Date, liveStatus: Bool, now: Date) {
         guard liveStatus else {
             self.init(state: .idle, since: lastEventAt, validUntil: nil)

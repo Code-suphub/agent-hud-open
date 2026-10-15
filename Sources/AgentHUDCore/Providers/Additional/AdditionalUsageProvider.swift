@@ -171,14 +171,15 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
             guard let start = item.startedAt ?? item.events.map(\.timestamp).min(), let end = item.lastSeen else { return nil }
             let model = item.events.max { $0.timestamp < $1.timestamp }?.model ?? "Unknown"
             // The newest turn is the one observed last.
-            let turn = item.turns.max { $0.observedAtMs < $1.observedAtMs }
-            let isRunning = SessionPhase.read(.init(turn: turn), rule: .turns, at: now).inFlight
+            let evidence = SessionPhase.SourceEvidence(turn: item.turns.max { $0.observedAtMs < $1.observedAtMs })
+            let isRunning = SessionPhase.read(evidence, rule: .turns, at: now).inFlight
             return LiveSession(id: item.id, agentId: "\(source.rawValue)-model:\(model)", task: item.title,
                                terminal: item.workspace.map { URL(fileURLWithPath: $0).lastPathComponent },
                                startedAt: start, endedAt: isRunning ? nil : end, pctOfWindow: nil,
                                tokensIn: item.events.reduce(0) { $0 + $1.input }, tokensOut: item.events.reduce(0) { $0 + $1.output },
                                client: item.client, transcriptPath: item.path,
-                               cacheReadTokens: item.events.reduce(0) { $0 + $1.cacheRead }, accountWide: item.accountWide, observedAt: now,
+                               cacheReadTokens: item.events.reduce(0) { $0 + $1.cacheRead }, accountWide: item.accountWide,
+                               observedAt: evidence.newest,
                                workingDirectory: item.workspace, lastActivityAt: end, navigationTarget: item.navigationTarget)
         }
         let snapshots = windows.map {
