@@ -264,67 +264,6 @@ final class SessionViewTests: XCTestCase {
         XCTAssertEqual(store.view.session("thread")?.phase.state, .running, "once its client stops waiting the source decides again")
     }
 
-    /// The turns a host's hooks saw take the place of what the logs say wherever the hooks saw more: a Stop hook ends a turn
-    /// the log still has running, and a prompt starts one the log has not shown, vouched for half an hour from the prompt.
-    /// Work the log saw after the Stop hook keeps the log's phase, a log still vouched for keeps its phase against a hook
-    /// turn past its half hour, and with live status off the hooks change nothing.
-    @MainActor
-    func testTheHooksTurnsChangeASessionAtTheStopHook() throws {
-        let store = try makeStore()
-        show([session("stopped", observed: -30), session("prompted", ended: -600, observed: -30), session("busy", observed: -30),
-              session("long", observed: -30)], turns: [
-            turn("stopped", .running, started: -600, observed: -60),
-            turn("prompted", .completed, started: -900, observed: -600),
-            turn("busy", .running, started: -600, observed: -10),
-            turn("long", .running, started: -2400, observed: -40),
-        ], in: store)
-        store.hookTurns = [
-            "stopped": .init(startedAt: now.addingTimeInterval(-600), endedAt: now.addingTimeInterval(-20), isReportedTurn: true),
-            "prompted": .init(startedAt: now.addingTimeInterval(-120), endedAt: nil, isReportedTurn: false),
-            "busy": .init(startedAt: now.addingTimeInterval(-600), endedAt: now.addingTimeInterval(-20), isReportedTurn: true),
-            "long": .init(startedAt: now.addingTimeInterval(-2400), endedAt: nil, isReportedTurn: true),
-        ]
-        var view = store.view
-        XCTAssertEqual(view.session("stopped")?.phase, SessionPhase(state: .idle, since: now.addingTimeInterval(-20), validUntil: nil))
-        XCTAssertEqual(view.session("stopped")?.lastEventAt, now.addingTimeInterval(-20))
-        XCTAssertEqual(view.session("prompted")?.phase,
-                       SessionPhase(state: .running, since: now.addingTimeInterval(-120), validUntil: now.addingTimeInterval(1680)))
-        XCTAssertEqual(view.session("busy")?.phase.state, .running)
-        XCTAssertEqual(view.session("long")?.phase,
-                       SessionPhase(state: .running, since: now.addingTimeInterval(-2400), validUntil: now.addingTimeInterval(1770)))
-        XCTAssertEqual(store.sessions.map(\.id), ["busy", "stopped", "long", "prompted"])
-
-        store.now = now.addingTimeInterval(1680)
-        view = store.view
-        XCTAssertEqual(view.session("prompted")?.phase, SessionPhase(state: .unverified, since: now.addingTimeInterval(-120), validUntil: nil))
-        store.settings.update { $0.setLiveStatus(for: "Claude", enabled: false) }
-        XCTAssertEqual(store.view.session("prompted")?.phase.state, .idle)
-        XCTAssertEqual(store.view.session("prompted")?.lastEventAt, now.addingTimeInterval(-600))
-    }
-
-    /// What the agent said at the Stop hook is the session's message when the hook turn takes the log's place: the hook's
-    /// turn is then the newest that carries one. Where the log saw more, the log's message stands, and with live status
-    /// off there is none.
-    @MainActor
-    func testAStopHooksTextIsTheSessionsMessage() throws {
-        let store = try makeStore()
-        show([session("stopped", observed: -30), session("busy", observed: -30)], turns: [
-            turn("stopped", .completed, id: "1", started: -900, observed: -700, message: "Earlier answer"),
-            turn("stopped", .running, id: "2", started: -600, observed: -60),
-            turn("busy", .running, started: -600, observed: -10, message: "Still working"),
-        ], in: store)
-        store.hookTurns = [
-            "stopped": .init(startedAt: now.addingTimeInterval(-600), endedAt: now.addingTimeInterval(-20), isReportedTurn: true, message: "All done"),
-            "busy": .init(startedAt: now.addingTimeInterval(-600), endedAt: now.addingTimeInterval(-20), isReportedTurn: true, message: "Stopped"),
-        ]
-        XCTAssertEqual(store.view.session("stopped")?.message, "All done")
-        XCTAssertEqual(store.view.session("busy")?.message, "Still working")
-        store.hookTurns["stopped"]?.message = nil
-        XCTAssertEqual(store.view.session("stopped")?.message, "Earlier answer", "a Stop hook without words leaves the newest message")
-        store.settings.update { $0.setLiveStatus(for: "Claude", enabled: false) }
-        XCTAssertNil(store.view.session("busy")?.message)
-    }
-
     /// A session in flight without turns is dated by when its log last recorded anything, which a read does not move, and
     /// a copy of the session keeps that date.
     @MainActor

@@ -153,9 +153,8 @@ public struct ClaudeCodeProvider: UsageProvider, LedgerRecording {
         let agents = Self.workingAgents(sessions, now: now)
         let requests = AttentionHooks.read(source: AttentionHooks.Source.claude, now: now)
         let candidates = sessions.filter { !$0.isSubagent }.map { session in
-            (session: session, reading: SessionPhase.read(session.evidence(subagentsAt: agents[session.path],
-                                                                           approval: requests[session.id]?.approval),
-                                                          rule: .transcript, at: now))
+            let evidence = session.evidence(subagentsAt: agents[session.path], approval: requests[session.id]?.approval)
+            return (session: session, evidence: evidence, reading: SessionPhase.read(evidence, rule: .transcript, at: now))
         }.sorted { lhs, rhs in
             if lhs.reading.inFlight != rhs.reading.inFlight { return lhs.reading.inFlight }
             return lhs.session.lastActivityAt > rhs.session.lastActivityAt
@@ -212,7 +211,7 @@ public struct ClaudeCodeProvider: UsageProvider, LedgerRecording {
             }
             return ClaudeSessionOrigins.desktopHost(session.entrypoint).flatMap { desktopTarget(for: session.id, host: $0) }
         }
-        let listed = candidates.map { session, reading -> LiveSession in
+        let listed = candidates.map { session, evidence, reading -> LiveSession in
             let live = reading.inFlight
             let share = windowTotal > 0 ? Double(windowTokens[session.path] ?? 0) / Double(windowTotal) : 0
             let agentId = session.dominantAgentId
@@ -229,7 +228,7 @@ public struct ClaudeCodeProvider: UsageProvider, LedgerRecording {
                 tokensOut: session.tokensOut,
                 client: ClaudeEntrypoint.clientLabel(session.entrypoint),
                 transcriptPath: session.path,
-                cacheReadTokens: session.cacheReadTokens, observedAt: now, workingDirectory: session.cwd,
+                cacheReadTokens: session.cacheReadTokens, observedAt: evidence.newest, workingDirectory: session.cwd,
                 lastActivityAt: session.lastActivityAt,
                 navigationTarget: navigationTarget(for: session)
             )
