@@ -66,6 +66,8 @@ final class QuotaSamplingTests: XCTestCase {
             let snapshot = weeklySnapshot()
             let insights = QuotaMath.insights(snapshot: snapshot, samples: [sample(-3600, 100), sample(0, remaining)], now: now)
             XCTAssertEqual(QuotaForecast.hint(snapshot: snapshot, insights: insights, now: now), expected)
+            // A series long enough for a burn rate keeps no sampling progress.
+            XCTAssertNil(insights.sampling)
         }
         let snapshot = UsageSnapshot(agentId: "window", remainingPct: 99, resetAt: now.addingTimeInterval(3600),
                                      windowDuration: 5 * 3600, updatedAt: now)

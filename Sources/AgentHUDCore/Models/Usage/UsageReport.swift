@@ -5,7 +5,8 @@ public struct UsageInsights: Hashable, Codable, Sendable {
     public let burnRatePctPerHour: Double?
     /// Seconds until this quota window is exhausted at its recent burn rate.
     public let timeToExhaust: TimeInterval?
-    /// Optional so reports written before sampling details were introduced still decode.
+    /// How far the readings have come while they are too few for a burn rate; nil once there is one. Optional so
+    /// reports written before sampling details were introduced still decode.
     public let sampling: QuotaSampling?
     public let weeklyCapHits: Int
     public let weeklyWaitTotal: TimeInterval
