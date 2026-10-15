@@ -27,52 +27,69 @@ struct BotStill {
         let width: Int
         let space: CGColorSpace?
         let transform: CGAffineTransform
+        /// The moment of the morph and the turn last drawn on this kind of bitmap.
         var morph: CGFloat
         var turn: CGFloat
-        var bytes: [UInt8]
+        /// The still part at that moment, once it has been drawn there twice; until then nothing is copied, so a
+        /// bot that is morphing or spinning, whose every frame is a new moment, pays for no copy it never uses.
+        var bytes: [UInt8] = []
+        var held = false
 
-        init(_ still: BotStill, bytes: [UInt8]) {
+        init(_ still: BotStill) {
             form = still.form
             width = still.context.width
             space = still.context.colorSpace
             transform = still.context.ctm
             morph = still.morph
             turn = still.turn
-            self.bytes = bytes
         }
     }
 
+    /// Kept parts, the one used longest ago first.
     private static var slots: [Slot] = []
-    /// Two queues of every bot there is; more than that and the marks are being resized.
-    private static let most = 24
+    /// Two queues of every bot that draws a body (18 of the 19 today), on displays whose sizes or colours differ.
+    /// Past that, the part used longest ago goes.
+    private static let most = 36
 
-    private var slot: Slot? {
-        Self.slots.first {
+    /// Where this bitmap's kept part is, moved to the end as the one used last.
+    private func slot() -> Slot? {
+        guard let index = Self.slots.firstIndex(where: {
             $0.form === form && $0.width == context.width && $0.space == context.colorSpace && $0.transform == context.ctm
-        }
+        }) else { return nil }
+        let slot = Self.slots.remove(at: index)
+        Self.slots.append(slot)
+        return slot
     }
 
     private var size: Int { context.bytesPerRow * context.height }
 
     /// Copies the kept part into the bitmap, when one was kept for this moment of the morph and the turn.
     func restore() -> Bool {
-        guard let slot, slot.morph == morph, slot.turn == turn, slot.bytes.count == size, let data = context.data
+        guard let slot = slot(), slot.held, slot.morph == morph, slot.turn == turn, slot.bytes.count == size,
+              let data = context.data
         else { return false }
         slot.bytes.withUnsafeBytes { _ = memcpy(data, $0.baseAddress!, $0.count) }
         return true
     }
 
-    /// Keeps what the bitmap holds now as the still part for this moment.
+    /// Notes what the bitmap holds now as the still part for this moment, and keeps a copy of it when this moment
+    /// was also the last one drawn: a bot that has stopped moving is kept from its second still frame on.
     func keep() {
         guard let data = context.data else { return }
-        if let slot, slot.bytes.count == size {
-            slot.morph = morph
-            slot.turn = turn
-            slot.bytes.withUnsafeMutableBytes { _ = memcpy($0.baseAddress!, data, $0.count) }
+        guard let slot = slot() else {
+            if Self.slots.count >= Self.most { Self.slots.removeFirst() }
+            Self.slots.append(Slot(self))
             return
         }
-        if Self.slots.count >= Self.most { Self.slots.removeFirst() }
-        Self.slots.append(Slot(self, bytes: [UInt8](UnsafeRawBufferPointer(start: data, count: size))))
+        guard slot.morph == morph, slot.turn == turn else {
+            slot.morph = morph
+            slot.turn = turn
+            slot.held = false
+            return
+        }
+        if slot.bytes.count != size { slot.bytes = [UInt8](repeating: 0, count: size) }
+        slot.bytes.withUnsafeMutableBytes { _ = memcpy($0.baseAddress!, data, $0.count) }
+        slot.held = true
     }
 
     /// Lets every kept part go, so the next frame of every bot is drawn whole.

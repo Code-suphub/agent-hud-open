@@ -5,7 +5,8 @@ import XCTest
 @testable import AgentHUDDesktop
 
 /// A bot's frames are drawn from kept parts wherever they can be. These hold every such frame to the one drawn
-/// whole, byte for byte, and measure what a frame costs.
+/// whole, the outline and the hairline to the ones drawn before they were made cheaper, byte for byte, and measure
+/// what a frame costs.
 @MainActor
 final class BotFrameTests: XCTestCase {
     /// A pointer that keeps moving, so the eyes keep following it.
@@ -42,66 +43,151 @@ final class BotFrameTests: XCTestCase {
         (image?.dataProvider?.data as Data?) ?? Data()
     }
 
-    /// Every bot through a morph, its acts, an alert and back, drawn as two queues on two displays would draw it,
-    /// and each frame drawn again whole in a new bitmap.
+    /// The ways a queue draws a bot: its size, its hairline and its display's colours.
+    private struct Setting {
+        var side: CGFloat
+        var outline: Int
+        var space: CGColorSpace?
+    }
+
+    /// The settings the app draws in, side by side: a 20 pt mark at 2x with its hairline on a P3 display, the
+    /// stand-alone mark without one, a mark at 1x, sizes that are not even, colours that are not the usual ones,
+    /// and the main display's own.
+    private static let settings: [Setting] = {
+        var settings = [Setting(side: 40, outline: 1, space: CGColorSpace(name: CGColorSpace.displayP3)),
+                        Setting(side: 40, outline: 0, space: nil),
+                        Setting(side: 20, outline: 1, space: CGColorSpace(name: CGColorSpace.sRGB)),
+                        Setting(side: 37, outline: 0, space: CGColorSpace(name: CGColorSpace.adobeRGB1998))]
+        let display = CGDisplayCopyColorSpace(CGMainDisplayID())
+        if display.model == .rgb { settings.append(Setting(side: 44, outline: 1, space: display)) }
+        return settings
+    }()
+
+    private static func draw(_ form: BotForm, _ motion: BotMotion, _ setting: Setting) -> CGImage? {
+        BotRenderer.image(form, motion: motion, side: setting.side, outline: setting.outline, space: setting.space)
+    }
+
+    /// The same frame with nothing kept from any earlier one.
+    private static func drawnWhole(_ form: BotForm, _ motion: BotMotion, _ setting: Setting) -> Data {
+        BotCanvas.forget()
+        BotStill.forget()
+        return bytes(draw(form, motion, setting))
+    }
+
+    /// Every bot through a morph, its acts, an alert and back, drawn as two queues would draw it in every setting
+    /// in turn, and each frame drawn again whole in a new bitmap.
     func testAFrameFromKeptPartsIsTheFrameDrawnWhole() throws {
-        let spaces = [CGColorSpace(name: CGColorSpace.sRGB), CGColorSpace(name: CGColorSpace.displayP3)]
         var frames = 0, differing: [String] = []
         for vendor in AgentArtwork.allVendors {
             let form = try XCTUnwrap(BotForm.form(for: vendor))
             let screens = (0..<2).map { Self.motions(of: form, seed: UInt64($0 + 1), until: 9, phases: Self.phases) }
-            // Both screens' frames in turn, the way the clock draws them, from whatever is kept.
-            var kept: [[Data]] = [[], []]
+            // Both screens' frames, in every setting, in turn the way the clock draws them, from whatever is kept.
+            var kept: [[[Data]]] = Array(repeating: Array(repeating: [], count: Self.settings.count), count: 2)
             for index in 0..<screens.map(\.count).max()! {
                 for (screen, motions) in screens.enumerated() where index < motions.count {
-                    kept[screen].append(Self.bytes(BotRenderer.image(form, motion: motions[index], side: 40, outline: 1,
-                                                                     space: spaces[screen])))
+                    for (place, setting) in Self.settings.enumerated() {
+                        kept[screen][place].append(Self.bytes(Self.draw(form, motions[index], setting)))
+                    }
                 }
             }
             // Then each frame again with nothing kept.
             for (screen, motions) in screens.enumerated() {
                 for (index, motion) in motions.enumerated() {
-                    BotCanvas.forget()
-                    BotStill.forget()
-                    let whole = Self.bytes(BotRenderer.image(form, motion: motion, side: 40, outline: 1, space: spaces[screen]))
-                    frames += 1
-                    if kept[screen][index] != whole { differing.append("\(vendor) screen \(screen) frame \(index)") }
+                    for (place, setting) in Self.settings.enumerated() {
+                        frames += 1
+                        if kept[screen][place][index] != Self.drawnWhole(form, motion, setting) {
+                            differing.append("\(vendor) screen \(screen) setting \(place) frame \(index)")
+                        }
+                    }
                 }
             }
         }
-        XCTAssertGreaterThan(frames, 5000)
-        XCTAssertEqual(differing, [], "\(differing.count) of \(frames) frames differ")
+        XCTAssertGreaterThan(frames, 25000)
+        XCTAssertEqual(differing.prefix(20), [], "\(differing.count) of \(frames) frames differ")
     }
 
-    func testTheHairlineIsTheOneCoreGraphicsLays() throws {
+    /// Every bot at once, frame by frame, in more settings than there is room to keep, so kept parts are shared,
+    /// passed between bots and let go.
+    func testFramesOfManyBotsInTurnAreTheFramesDrawnWhole() throws {
+        let bots = try AgentArtwork.allVendors.map { vendor in
+            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            return (vendor, form, Self.motions(of: form, seed: 5, until: 9, phases: Self.phases))
+        }
+        let settings = Array(Self.settings.prefix(3))
+        var kept: [[[Data]]] = bots.map { _ in settings.map { _ in [] } }
+        for index in 0..<bots.map(\.2.count).max()! {
+            for (bot, (_, form, motions)) in bots.enumerated() where index < motions.count {
+                for (place, setting) in settings.enumerated() {
+                    kept[bot][place].append(Self.bytes(Self.draw(form, motions[index], setting)))
+                }
+            }
+        }
+        var frames = 0, differing: [String] = []
+        for (bot, (vendor, form, motions)) in bots.enumerated() {
+            for (index, motion) in motions.enumerated() {
+                for (place, setting) in settings.enumerated() {
+                    frames += 1
+                    if kept[bot][place][index] != Self.drawnWhole(form, motion, setting) {
+                        differing.append("\(vendor) setting \(place) frame \(index)")
+                    }
+                }
+            }
+        }
+        XCTAssertGreaterThan(frames, 10000)
+        XCTAssertEqual(differing.prefix(20), [], "\(differing.count) of \(frames) frames differ")
+    }
+
+    /// The outline built from kept directions, and handed back when it is asked for again, is the one built a
+    /// point at a time, at every moment of every bot's morph and turn.
+    func testTheOutlineIsTheOneBuiltBefore() throws {
+        var outlines = 0, differing: [String] = []
+        for vendor in AgentArtwork.allVendors {
+            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            var moments = Self.motions(of: form, seed: 3, until: 9, phases: Self.phases)
+                .map { (BotMotion.easeInOut($0.morph), $0.turn) }
+            moments += [(0, 0), (1, 0), (0.5, 359.75), (1, -12.5), (0.25, 721.5), (1, 0)]
+            for (eased, turn) in moments {
+                outlines += 1
+                if BotFramesAsBefore.elements(of: form.outline(eased: eased, turn: turn))
+                    != BotFramesAsBefore.elements(of: BotFramesAsBefore.outline(form, eased: eased, turn: turn)) {
+                    differing.append("\(vendor) at \(eased), turned \(turn)")
+                }
+            }
+        }
+        XCTAssertGreaterThan(outlines, 3000)
+        XCTAssertEqual(differing.prefix(20), [], "\(differing.count) of \(outlines) outlines differ")
+    }
+
+    /// Whole frames with their hairline, from every bot in every setting that has one, are the same frames drawn
+    /// without it with the hairline then laid as it was before.
+    func testTheHairlineIsTheOneLaidBefore() throws {
         for space in [CGColorSpace(name: CGColorSpace.sRGB)!, CGColorSpace(name: CGColorSpace.displayP3)!] {
             let probe = try XCTUnwrap(BotCanvas.clear(66, space: space))
             XCTAssertNotNil(BotHairline.strengths(for: probe), "\(space): Accelerate lays the hairline as Core Graphics does")
         }
-        for vendor in ["Claude", "GitHub Copilot", "OpenClaw", "Grok"] {
+        var frames = 0, differing: [String] = []
+        for vendor in AgentArtwork.allVendors {
             let form = try XCTUnwrap(BotForm.form(for: vendor))
-            for motion in Self.motions(of: form, seed: 3, until: 6, phases: Self.phases).enumerated()
-                .filter({ $0.offset % 5 == 0 }).map(\.element) {
-                let bot = try XCTUnwrap(BotRenderer.image(form, motion: motion, side: 40))
-                var laid: [Data] = []
-                for byCoreGraphics in [false, true] {
-                    // The bot with room for its hairline, then the hairline laid one way or the other.
-                    let side = bot.width + 2
-                    let canvas = try XCTUnwrap(CGContext(data: nil, width: side, height: side, bitsPerComponent: 8,
-                                                         bytesPerRow: side * 4, space: CGColorSpace(name: CGColorSpace.displayP3)!,
-                                                         bitmapInfo: BotCanvas.layout.rawValue))
-                    canvas.draw(bot, in: CGRect(x: 1, y: 1, width: bot.width, height: bot.height))
-                    BotHairline.lay(on: canvas, reach: 1, byCoreGraphics: byCoreGraphics)
-                    laid.append(Self.bytes(canvas.makeImage()))
+            let motions = Self.motions(of: form, seed: 3, until: 9, phases: Self.phases)
+            for (index, motion) in motions.enumerated() where index % 3 == 0 {
+                for setting in Self.settings where setting.outline > 0 {
+                    let laid = Self.bytes(Self.draw(form, motion, setting))
+                    let bare = try XCTUnwrap(BotRenderer.bare(form, motion: motion, side: setting.side,
+                                                              outline: setting.outline, space: setting.space))
+                    frames += 1
+                    if laid != Self.bytes(BotFramesAsBefore.hairlined(bare, reach: setting.outline)) {
+                        differing.append("\(vendor) frame \(index) at \(setting.side)")
+                    }
                 }
-                XCTAssertEqual(laid[0], laid[1], vendor)
             }
         }
+        XCTAssertGreaterThan(frames, 2000)
+        XCTAssertEqual(differing.prefix(20), [], "\(differing.count) of \(frames) frames differ")
     }
 
     /// Not a benchmark unless asked for: `AGENT_HUD_BENCH_BOTS=1 swift test --filter BotFrameTests`, in a debug or
-    /// a release build. A typical Dynamic-mode queue on two displays, a minute of it at 30 frames a second, timed in
-    /// thread CPU time, the drawing alone and then each whole tick of the clock as `BotClock` runs it.
+    /// a release build. A typical Dynamic-mode queue on two displays, timed in thread CPU time: a minute of its
+    /// drawing alone, then two minutes of the clock ticking 30 times a second as `BotClock` runs it.
     func testFrameCost() throws {
         guard ProcessInfo.processInfo.environment["AGENT_HUD_BENCH_BOTS"] == "1" else {
             throw XCTSkip("Set AGENT_HUD_BENCH_BOTS=1 to time a bot's frames")
