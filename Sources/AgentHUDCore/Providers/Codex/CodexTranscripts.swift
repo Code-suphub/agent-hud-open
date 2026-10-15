@@ -394,6 +394,7 @@ public struct CodexTranscript: Codable, Sendable {
 
 /// Cooperative tail reader over the usage ledger. A partially written final line is retried on the next poll.
 /// Each rollout is one ledger contribution; when a session's rollout exists in several places, only its newest copy counts.
+/// A rollout Codex compressed stays the same contribution under its `.jsonl.zst` name.
 public actor CodexTranscriptStore {
     public struct Session: Sendable {
         public let transcript: CodexTranscript
@@ -418,7 +419,7 @@ public actor CodexTranscriptStore {
         self.roots = roots
         self.indexURL = indexURL
         self.ledger = ledger
-        logs = TailLogStore(roots: roots, ledger: ledger, watchesChanges: watchesChanges) { $0.pathExtension == "jsonl" && $0.lastPathComponent.hasPrefix("rollout-") }
+        logs = TailLogStore(roots: roots, ledger: ledger, watchesChanges: watchesChanges, accepts: CodexRollouts.accepts)
     }
 
     public static func standard(directory: URL = CodexLocator.dataDirectory, ledger: UsageLedger = .inMemory()) -> CodexTranscriptStore {
@@ -501,4 +502,14 @@ enum CodexRollouts: TailLog {
     static func drainMarks(_ transcript: inout CodexTranscript) -> [UsageLedger.Mark] { transcript.drainMarks() }
 
     static func group(_ transcript: CodexTranscript) -> String? { transcript.id ?? "" }
+
+    /// Codex compresses a rollout it has not written for a week into `<rollout>.jsonl.zst`, and turns it back into the
+    /// plain rollout before it writes to that session again.
+    static let compressedSuffix: String? = ".zst"
+
+    /// A rollout, plain or compressed.
+    static func accepts(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        return name.hasPrefix("rollout-") && (name.hasSuffix(".jsonl") || name.hasSuffix(".jsonl.zst"))
+    }
 }

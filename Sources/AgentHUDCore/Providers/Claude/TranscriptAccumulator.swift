@@ -117,6 +117,11 @@ public struct TranscriptAccumulator: Hashable, Sendable, Codable {
                         // Stop hook's feedback. The turn that stopped is being worked on again.
                         currentTurn?.state = .running
                     }
+                } else if event.isStop, currentTurn?.state == .running, event.timestamp >= currentTurn!.observedAt {
+                    // Claude Code ran the Stop hooks or timed the turn once the agent stopped: a turn no end_turn
+                    // completed, such as one whose answer was cut off or failed, is over as well.
+                    currentTurn = Turn(startedAt: currentTurn?.startedAt, state: .completed, observedAt: event.timestamp,
+                                       message: currentTurn?.message)
                 }
                 // Only the conversation dates a running turn. An attachment or queue record can carry a later time than
                 // the answer written after it, which would then look older than the turn and leave it running.
