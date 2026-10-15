@@ -105,6 +105,16 @@ public final class UsageStore {
         collector.remind(paths: paths)
     }
 
+    /// Asks for a pass that reads the sources owning `paths` at `date`, on the wall clock, or at the next pass when nil,
+    /// for a host that reads something of its own in the after-pass hook (`UsageCollectionHooks.afterPass`) and needs a
+    /// pass by then that no file event may bring, such as a transcript it put off until that time. The pass waits for the
+    /// read spacing as any pass does. A request is not a reminder: nothing changed, so the provider is told of no change,
+    /// the hook is named none of the paths, and nothing is looked at again after it. Requests for one path keep the
+    /// earliest time, and a path no watched source owns has every source read.
+    public func requestPass(for paths: Set<String>, at date: Date? = nil) {
+        collector.requestPass(for: paths, at: date)
+    }
+
     /// Installs a report directly (snapshots, tests) without going through the provider.
     public func replace(report: UsageReport) {
         self.report = report

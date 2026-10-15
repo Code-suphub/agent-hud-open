@@ -390,6 +390,63 @@ final class CollectionSignalTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(renamed, "the pass after it names the paths the watch saw")
     }
 
+    // MARK: Requested passes
+
+    /// A host's request for a pass reads the source that owns its paths at the time asked, once however many paths it
+    /// names. Nothing changed, so the provider is told of no change, the after-pass hook is named none of the paths, and
+    /// no look follows the request up.
+    @MainActor
+    func testARequestedPassReadsTheSourceThatOwnsItsPathsOnceAtTheTimeAsked() async throws {
+        let first = try directory(), second = try directory()
+        let a = Source(directory: first), b = Source(directory: second)
+        var handed: [Set<String>?] = []
+        let store = try await start(CombinedUsageProvider([.init("A", a), .init("B", b)]),
+                                    hooks: UsageCollectionHooks(afterPass: { handed.append($0) }))
+        let initial = try await wait { let x = await a.fetches; let y = await b.fetches; return x == 1 && y == 1 }
+        XCTAssertTrue(initial)
+        let paths = Set((0..<50).map { first.appendingPathComponent("session-\($0).jsonl").path })
+        let asked = Date().addingTimeInterval(UsageRefresh.readSpacing + 1)
+        store.requestPass(for: paths, at: asked)
+        let read = try await wait { await a.fetches >= 2 }
+        XCTAssertTrue(read, "the request reads A")
+        let times = await a.readTimes
+        XCTAssertGreaterThanOrEqual(times[1].timeIntervalSince(asked), 0, "not before the time asked")
+        try await Task.sleep(for: .seconds(Double(LogReminders.followUps + 1) * LogReminders.followUpInterval))
+        let (reads, others) = (await a.fetches, await b.fetches)
+        XCTAssertEqual(reads, 2, "one read for all the paths it names, and no look follows it up")
+        XCTAssertEqual(others, 1, "B keeps its last result")
+        let told = await a.changedPaths
+        XCTAssertFalse(told.contains { $0.map { !$0.isDisjoint(with: paths) } ?? false }, "the provider is told of no change")
+        XCTAssertEqual(handed.count, 2)
+        XCTAssertEqual(handed.last, Set<String>(), "the hook is named none of the paths")
+    }
+
+    /// A pass asked for at once still waits for the read spacing, as a reminder does not.
+    @MainActor
+    func testAPassAskedForAtOnceWaitsForTheReadSpacing() async throws {
+        let folder = try directory(), source = Source(directory: folder)
+        let store = try await start(CombinedUsageProvider([.init("A", source)]))
+        let initial = try await wait { await source.fetches == 1 }
+        XCTAssertTrue(initial)
+        store.requestPass(for: [folder.appendingPathComponent("session.jsonl").path])
+        let read = try await wait { await source.fetches >= 2 }
+        XCTAssertTrue(read)
+        let times = await source.readTimes
+        XCTAssertGreaterThan(times[1].timeIntervalSince(times[0]), UsageRefresh.readSpacing - 0.1)
+    }
+
+    /// A pass asked for paths no watched source owns still runs, and reads every source.
+    @MainActor
+    func testAPassAskedForAPathNoSourceOwnsReadsEverySource() async throws {
+        let a = Source(directory: try directory()), b = Source(directory: try directory())
+        let store = try await start(CombinedUsageProvider([.init("A", a), .init("B", b)]))
+        let initial = try await wait { let x = await a.fetches; let y = await b.fetches; return x == 1 && y == 1 }
+        XCTAssertTrue(initial)
+        store.requestPass(for: ["/nowhere/session.jsonl"])
+        let read = try await wait { let x = await a.fetches; let y = await b.fetches; return x == 2 && y == 2 }
+        XCTAssertTrue(read)
+    }
+
     /// A Stop hook makes the session's log be read at once, and the log, which recorded the turn's end before the hook ran,
     /// ends the turn: the panel follows the stop within one read, not the file watch and the spacing.
     @MainActor
