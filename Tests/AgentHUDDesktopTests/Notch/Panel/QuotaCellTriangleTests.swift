@@ -116,7 +116,7 @@ final class QuotaCellTriangleTests: XCTestCase {
 
     func testTheLineLayoutCentresItsCells() {
         XCTAssertEqual(CentredGridLine.origins(count: 1, columns: 2, gap: 8, width: 208), [54])
-        XCTAssertEqual(CentredGridLine.origins(count: 1, columns: 4, gap: 8, width: 424), [212 - 50])
+        XCTAssertEqual(CentredGridLine.origins(count: 1, columns: 4, gap: 8, width: 424), [212 - 50] as [CGFloat])
         XCTAssertEqual(CentredGridLine.origins(count: 2, columns: 4, gap: 8, width: 424), [108, 216])
         XCTAssertEqual(CentredGridLine.origins(count: 4, columns: 4, gap: 8, width: 424), [0, 108, 216, 324], "a full line is not moved")
         XCTAssertEqual(CentredGridLine.cellWidth(columns: 4, gap: 8, width: 424), 100)
