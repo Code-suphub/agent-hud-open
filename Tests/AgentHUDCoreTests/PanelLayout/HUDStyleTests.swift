@@ -94,7 +94,9 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertEqual(HUDStyle(material: .solid).applied(to: saved).glassTransparency, 0.4, "the transparency stays as saved")
         XCTAssertEqual(HUDStyle(every: saved, glow: GlowSettings()).transparency, 0.4)
         XCTAssertEqual(HUDStyle(every: .default(hasNotch: true), glow: GlowSettings()).json["transparency"],
-                       .number(ScreenPlacement.standardGlassTransparency), "a solid HUD lists the transparency glass would have")
+                       .number(0), "a solid HUD lists its own, opaque at first")
+        XCTAssertEqual(HUDStyle(transparency: 0.3).applied(to: ScreenPlacement()).solidTransparency, 0.3,
+                       "on a solid HUD it is solid's")
         XCTAssertEqual(HUDStyle(transparency: 0.4, glow: HUDStyle.Glow()).reduced(placement: saved, glow: GlowSettings()),
                        HUDStyle(), "a transparency that repeats what is saved changes nothing")
         XCTAssertEqual(HUDStyle(json: ["transparency": .integer(0)]), HUDStyle(transparency: 0), "a whole number is a number")
@@ -270,27 +272,26 @@ final class HUDStyleTests: XCTestCase {
         }
     }
 
-    /// A transparency sets glass, as Settings offers it only beside Glass: it is refused for a HUD that would be solid,
-    /// on any screen and in any mode, and taken where the HUD is glass already or the same style makes it so.
-    func testATransparencyNeedsGlass() {
+    /// A transparency is taken on any screen and in any mode, for the material in effect, the style's own or the one
+    /// saved: no HUD refuses one, as Settings offers it beside Solid and Glass alike.
+    func testATransparencyIsTakenForEitherMaterial() {
         let glow = GlowSettings()
         func issues(_ style: HUDStyle, _ placement: ScreenPlacement, hasNotch: Bool = false) -> [String] {
             style.issues(placement: placement, glow: glow, hasNotch: hasNotch, screen: "\"Display 2\"")
                 .map { "\($0.path): \($0.message)" }
         }
-        let sentence = "hud.transparency: transparency sets glass, and the HUD of \"Display 2\" would be solid. Set material "
-            + "to \"glass\" too, or leave it out."
         for mode in HUDMode.allCases {
-            XCTAssertEqual(issues(HUDStyle(transparency: 0.2), ScreenPlacement(mode: mode), hasNotch: true), [sentence],
-                           "\(mode)")
+            XCTAssertEqual(issues(HUDStyle(transparency: 0.2), ScreenPlacement(mode: mode), hasNotch: true), [], "\(mode)")
         }
-        XCTAssertEqual(issues(HUDStyle(transparency: 0.2), ScreenPlacement(mode: .logos)), [sentence])
-        XCTAssertEqual(issues(HUDStyle(material: .glass, transparency: 0.2), ScreenPlacement(mode: .logos)), [],
+        let solid = ScreenPlacement(mode: .logos), glass = ScreenPlacement(mode: .logos, material: .glass)
+        XCTAssertEqual(HUDStyle(transparency: 0.2).applied(to: solid).solidTransparency, 0.2)
+        XCTAssertEqual(HUDStyle(transparency: 0.2).applied(to: glass).glassTransparency, 0.2)
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: 0.2).applied(to: solid).glassTransparency, 0.2,
                        "with the glass it sets")
-        XCTAssertEqual(issues(HUDStyle(transparency: 0.2), ScreenPlacement(mode: .logos, material: .glass)), [],
-                       "on a HUD of glass already")
-        XCTAssertEqual(issues(HUDStyle(material: .solid, transparency: 0.2), ScreenPlacement(mode: .logos, material: .glass)),
-                       [sentence], "a style that makes the glass solid")
+        XCTAssertEqual(HUDStyle(material: .solid, transparency: 0.2).applied(to: glass).solidTransparency, 0.2,
+                       "with the solid it sets")
+        XCTAssertEqual(HUDStyle(material: .solid, transparency: 0.2).applied(to: glass).glassTransparency,
+                       ScreenPlacement.standardGlassTransparency, "glass's kept as saved")
     }
 
     // MARK: The panel's width

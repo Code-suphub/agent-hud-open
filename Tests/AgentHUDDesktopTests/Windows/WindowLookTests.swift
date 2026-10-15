@@ -23,8 +23,8 @@ final class WindowLookTests: XCTestCase {
 
     // MARK: Where the look comes from
 
-    /// Under System, Light or Dark the windows and the menu take the app's own Appearance, whatever a screen's HUD looks
-    /// like: there is no look for them on any screen.
+    /// With Match screen off the windows and the menu take the app's own Appearance, System, Light or Dark, whatever a
+    /// screen's HUD looks like: there is no look for them on any screen.
     func testOnlyMatchScreenGivesTheWindowsALook() {
         let settings = store()
         settings.update {
@@ -42,11 +42,11 @@ final class WindowLookTests: XCTestCase {
         }
     }
 
-    /// Under Match screen a window on a screen takes the look of that screen's HUD, as the panel that opens there draws
+    /// With Match screen on a window on a screen takes the look of that screen's HUD, as the panel that opens there draws
     /// it, its style draft included; with no screen named it takes the main screen's.
     func testMatchScreenGivesEachScreensHUDLook() throws {
         let settings = store()
-        settings.update { $0.appearance = .screen }
+        settings.update { $0.appearanceFollowsScreen = true }
         try XCTSkipIf(NSScreen.screens.isEmpty, "no display is attached to take a look from")
         for display in NSScreen.screens {
             let key = ScreenIdentity.key(for: display)

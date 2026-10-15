@@ -69,7 +69,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         Task { await store.refreshAccounts() }
         menu.removeAllItems()
-        // Under Appearance → Match screen the menu is as dark or light as the HUD of the screen its menu bar is on, and
+        // With Match screen on the menu is as dark or light as the HUD of the screen its menu bar is on, and
         // its dots, its critical figures and the agents' artwork are drawn for that; otherwise it follows macOS.
         let look = WindowLook.look(on: item.button?.window?.screen)
         menu.appearance = look.flatMap { NSAppearance(named: $0.appearanceName) }

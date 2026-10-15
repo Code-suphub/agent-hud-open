@@ -19,7 +19,8 @@ final class HUDLookResolutionTests: XCTestCase {
 
         for mode in HUDMode.allCases {
             let chosen = ScreenPlacement(mode: mode, appearance: .light, material: .glass)
-            XCTAssertEqual(look(chosen, light: true), HUDLook(appearance: .light, material: .glass), "\(mode)")
+            XCTAssertEqual(look(chosen, light: true), HUDLook(appearance: .light, material: .glass, transparency: ScreenPlacement.standardGlassTransparency),
+                           "\(mode)")
             XCTAssertEqual(look(chosen, reduces: true), HUDLook(appearance: .light, material: .solid), "\(mode)")
         }
 
@@ -27,26 +28,31 @@ final class HUDLookResolutionTests: XCTestCase {
         XCTAssertEqual(look(system, light: true), HUDLook(appearance: .light, material: .solid))
         XCTAssertEqual(look(system, light: false), .standard)
         XCTAssertEqual(look(ScreenPlacement(appearance: .dark), light: true), .standard, "dark stays dark on a light Mac")
-        XCTAssertEqual(look(ScreenPlacement(material: .glass)), HUDLook(appearance: .dark, material: .glass))
+        XCTAssertEqual(look(ScreenPlacement(material: .glass)),
+                       HUDLook(appearance: .dark, material: .glass, transparency: ScreenPlacement.standardGlassTransparency))
         XCTAssertEqual(look(ScreenPlacement(material: .glass), reduces: true), .standard)
     }
 
-    /// A look of glass carries the screen's transparency; a solid look, Reduce Transparency's included, carries the
-    /// standard one whatever the screen keeps for glass, so it is the same look as any other solid one of its colours.
-    func testOnlyGlassCarriesTheScreensTransparency() {
+    /// Each material carries its own transparency from the screen, glass's and solid's, and the one it does not draw
+    /// changes nothing; Reduce Transparency draws either opaque, the same look as any other opaque one of its colours.
+    func testEachMaterialCarriesItsOwnTransparency() {
         func look(_ placement: ScreenPlacement, reduces: Bool = false) -> HUDLook {
             HUDLook(drawing: placement, systemIsLight: false, reducesTransparency: reduces)
         }
-        XCTAssertEqual(HUDLook.standard.transparency, ScreenPlacement.standardGlassTransparency)
+        XCTAssertEqual(HUDLook.standard.transparency, 0, "the HUD as it was is opaque")
+        XCTAssertEqual(ScreenPlacement().solidTransparency, 0)
         for transparency in [0, 0.2, 0.9] {
-            let glass = ScreenPlacement(appearance: .light, material: .glass, glassTransparency: transparency)
+            let glass = ScreenPlacement(appearance: .light, material: .glass, glassTransparency: transparency,
+                                        solidTransparency: 0.4)
             XCTAssertEqual(look(glass).transparency, transparency)
             XCTAssertEqual(look(glass), HUDLook(appearance: .light, material: .glass, transparency: transparency))
             XCTAssertEqual(look(glass, reduces: true), HUDLook(appearance: .light), "glass drawn solid is plain solid")
-            XCTAssertEqual(look(glass, reduces: true).transparency, ScreenPlacement.standardGlassTransparency)
 
-            let solid = ScreenPlacement(material: .solid, glassTransparency: transparency)
-            XCTAssertEqual(look(solid), .standard, "a solid look compares equal whatever glass would have")
+            let solid = ScreenPlacement(material: .solid, glassTransparency: 0.4, solidTransparency: transparency)
+            XCTAssertEqual(look(solid), HUDLook(appearance: .dark, transparency: transparency), "solid's own")
+            XCTAssertEqual(look(solid, reduces: true), .standard, "Reduce Transparency draws it opaque")
+            XCTAssertEqual(look(ScreenPlacement(material: .solid, glassTransparency: transparency)), .standard,
+                           "glass's transparency changes nothing on a solid HUD")
         }
         XCTAssertNotEqual(look(ScreenPlacement(material: .glass, glassTransparency: 0.2)),
                           look(ScreenPlacement(material: .glass, glassTransparency: 0.3)),

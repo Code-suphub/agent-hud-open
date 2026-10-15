@@ -130,8 +130,8 @@ final class HUDPictureRendererTests: XCTestCase {
     /// short of the solid fill.
     func testAGlassPanelIsDrawnAsItsStandIn() throws {
         layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
-        let dark = try simplePanel(in: HUDLook(appearance: .dark, material: .glass))
-        let light = try simplePanel(in: HUDLook(appearance: .light, material: .glass))
+        let dark = try simplePanel(in: HUDLook(appearance: .dark, material: .glass, transparency: ScreenPlacement.standardGlassTransparency))
+        let light = try simplePanel(in: HUDLook(appearance: .light, material: .glass, transparency: ScreenPlacement.standardGlassTransparency))
         let solid = try simplePanel(in: HUDLook(appearance: .light))
         XCTAssertGreaterThan(dark.fill, 0.04, "the backdrop shows through dark glass")
         XCTAssertLessThan(dark.fill, 0.2, "darker than the backdrop")

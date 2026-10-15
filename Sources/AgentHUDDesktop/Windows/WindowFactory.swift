@@ -66,7 +66,7 @@ class HostedWindowController: NSWindowController, NSWindowDelegate {
         window?.makeKeyAndOrderFront(nil)
     }
 
-    /// Takes the look of the screen the window is on under Appearance → Match screen, or gives the window back the
+    /// Takes the look of the screen the window is on with Match screen on, or gives the window back the
     /// app's own (`WindowLook`).
     func refreshLook() {
         guard let window else { return }
