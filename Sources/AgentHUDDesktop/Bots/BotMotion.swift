@@ -106,6 +106,8 @@ struct BotMotion: Sendable {
     var crossesEyes = false
     /// It keeps a piece of its artwork above the body, which pulses while a request waits.
     var pulses = false
+    /// It has hands for fins, which flap (`flap`).
+    var finned = false
 
     private(set) var state = BotState()
     private(set) var since: TimeInterval = -10
@@ -118,6 +120,9 @@ struct BotMotion: Sendable {
     /// The piece a mark keeps above its body: how far it has hopped, and how big it is.
     private(set) var kept = (lift: CGFloat(0), scale: CGFloat(1))
     private(set) var limbs = BotLimbs()
+    /// How far a fish's hands are raised: on a tool's beats, at a start and over a reply's card, and one waving at a
+    /// greeting. Still otherwise, so the clock can rest.
+    private(set) var flap = BotFlap()
     /// The sign over its head, if any, and for `…` the dot that is lit.
     private(set) var sign: BotSign?
     private(set) var lit = 0
@@ -140,8 +145,9 @@ struct BotMotion: Sendable {
     private var botInterval: Range<TimeInterval>?
     /// The next act is a wave at whoever just opened the agent's card.
     private var greets = false
-    /// When a bot without arms that came up under the pointer hops to greet, and when that hop began.
-    private var greetAfter: TimeInterval?, greeting: TimeInterval?
+    /// When a bot without arms that came up under the pointer hops to greet, and when that hop began; and the side of
+    /// the hand a fish waves with, the pointer's.
+    private var greetAfter: TimeInterval?, greeting: TimeInterval?, greetSide: CGFloat = 1
     /// The event waiting for the bot to come up, with when it was asked for, and the event playing, with when it began.
     private var pending: (kind: BotEvent, asked: TimeInterval)?
     private var event: (kind: BotEvent, start: TimeInterval)?
@@ -177,6 +183,9 @@ struct BotMotion: Sendable {
         stepShare = spec.limbs.map { $0.pixel / 2 * spec.radius } ?? 0
         crossesEyes = spec.crossesEyes
         pulses = spec.keeps != nil
+        finned = spec.decor.contains { item in
+            if case .fins(let fins, _) = item { fins.contains { $0.hand != 0 } } else { false }
+        }
     }
 
     /// The look acted out.
@@ -279,9 +288,14 @@ struct BotMotion: Sendable {
         // A bot that came up under the pointer hops to say hello.
         if let after = greetAfter, now >= after, morph > 0.9, event == nil, pending == nil {
             greetAfter = nil
-            if greetsOnHover { greeting = now }
+            if greetsOnHover {
+                greeting = now
+                greetSide = aim.x < 0 ? -1 : 1
+            }
         }
-        if let start = greeting, now - start >= BotMoves.hopSeconds { greeting = nil }
+        // A fish waves on after its hop.
+        let greetLength = finned ? max(BotMoves.hopSeconds, BotMoves.finWaveSeconds) : BotMoves.hopSeconds
+        if let start = greeting, now - start >= greetLength { greeting = nil }
 
         // Random life while awake: one small act, a pause, another.
         if let running = act, now - running.start >= running.length {
@@ -326,6 +340,7 @@ struct BotMotion: Sendable {
         }
         if !limbed { played(on: &pose, at: now) }
         limbs = limbed && arrived ? stance(age: age, now: now, dozing: dozing) : BotLimbs()
+        flap = finned && arrived ? flapping(age: age, now: now) : BotFlap()
         // A sprite's steps and hops move the whole picture, a step of its art at a time.
         pose.x += CGFloat(limbs.x) * stepShare * morph
         pose.y += CGFloat(limbs.y) * stepShare * morph
@@ -546,6 +561,28 @@ struct BotMotion: Sendable {
             pose.scaleX *= 1 + (sigh.scaleX - 1) * morph
             pose.scaleY *= 1 + (sigh.scaleY - 1) * morph
             pose.footing = 0.5
+        }
+    }
+
+    /// How far a fish's hands are raised now: both on every beat of a tool's bob through a burst, both in a flap at a
+    /// start and in three over a reply's card, and the one on the pointer's side waving at a greeting, the left one while
+    /// the copy for sub-agents stands on the right.
+    private func flapping(age: TimeInterval, now: TimeInterval) -> BotFlap {
+        if let event {
+            return event.kind == .start ? BotFlap(both: BotMoves.finFlap(now - event.start) * morph) : BotFlap()
+        }
+        if let start = greeting {
+            // The copy for sub-agents stands in front of the hand on the right (`BotRenderer.helper`).
+            let wave = BotMoves.finWave(now - start) * morph
+            return greetSide < 0 || helper ? BotFlap(left: wave) : BotFlap(right: wave)
+        }
+        switch look {
+        case .tool where !state.holds:
+            return BotFlap(both: BotMoves.bob(at: now - beatsFrom) > 0 ? BotMoves.paddle * morph : 0)
+        case .done:
+            return BotFlap(both: BotMoves.cheer(age) * morph)
+        default:
+            return BotFlap()
         }
     }
 
