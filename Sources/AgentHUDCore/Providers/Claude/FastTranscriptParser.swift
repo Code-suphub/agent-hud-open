@@ -48,6 +48,12 @@ public enum FastTranscriptParser {
     private static let blockNameKey = Array("\"name\":\"".utf8)
     /// A result's call; a failed command's result writes it after the output, so it is searched for past the prefix.
     private static let toolUseIdKey = Array("\"tool_use_id\":\"".utf8)
+    /// A call's input, read only for the calls that ask the user something in the desktop app's own window.
+    private static let inputKey = Array("\"input\":{".utf8)
+    /// The mark a tool's result carries when the tool ended the turn, written after the result, close to the end.
+    private static let endTurnMarker = Array("\"claude/endTurn\":true".utf8)
+    /// A failed result's mark, which a failed command writes after its output.
+    private static let errorResultMarker = Array("\"is_error\":true".utf8)
     /// The message Claude Code writes in the model's place when the API failed, with its error and the limit behind it;
     /// current builds write these after the message, close to the end.
     private static let apiErrorMarker = Array("\"isApiErrorMessage\":true".utf8)
@@ -159,13 +165,19 @@ public enum FastTranscriptParser {
             stopReason = stringValue(after: stopReasonKey, in: line)
         }
         var toolName: String?, toolUseID: String?, toolResultID: String?, isThinking = false
-        var apiError: String?, limitResetsAt: Date?, retryAttempt: Int?
+        var apiError: String?, limitResetsAt: Date?, retryAttempt: Int?, ask: SessionActivity.Ask?
         if role == .assistant, let block = find(blockTypeKey, in: head) {
             let start = block + blockTypeKey.count
             switch value(after: [], in: line, head: head, from: start) {
             case "tool_use":
                 toolUseID = value(after: blockIdKey, in: line, head: head, from: start)
                 toolName = value(after: blockNameKey, in: line, head: head, from: start)
+                // Only these few calls have their input read, and it follows the name.
+                if let toolName, let toolUseID, ClaudeDesktopAsks.tools.contains(toolName),
+                   let key = find(inputKey, in: UnsafeRawBufferPointer(rebasing: line[start...])),
+                   let input = object(at: start + key + inputKey.count - 1, in: line) {
+                    ask = ClaudeDesktopAsks.ask(tool: toolName, input: input, id: toolUseID, response: messageId, at: timestamp)
+                }
             case "thinking", "redacted_thinking": isThinking = true
             default: break
             }
@@ -225,7 +237,9 @@ public enum FastTranscriptParser {
             isStop: role == .other && stopMarkers.contains { find($0, in: head) != nil },
             entrypoint: field(entrypointKey),
             returnsStructuredOutput: role == .assistant && find(structuredOutputMarker, in: head) != nil,
-            toolName: toolName, toolUseID: toolUseID, toolResultID: toolResultID, isThinking: isThinking,
+            toolName: toolName, toolUseID: toolUseID, toolResultID: toolResultID, ask: ask,
+            endsTurn: toolResultID != nil && find(endTurnMarker, in: tail, backwards: true) != nil,
+            failed: toolResultID != nil && find(errorResultMarker, in: line) != nil, isThinking: isThinking,
             apiError: apiError, limitResetsAt: limitResetsAt, retryAttempt: retryAttempt
         )
     }
@@ -335,11 +349,14 @@ public enum FastTranscriptParser {
         return (try? JSONSerialization.jsonObject(with: wrapped) as? [String])?.first
     }
 
-    /// The `usage` object as a dictionary (brace-matched slice fed to JSONSerialization). The real usage object is
-    /// the last one on the line, after the message content.
+    /// The `usage` object as a dictionary. The real usage object is the last one on the line, after the message content.
     private static func usageObject(in line: UnsafeRawBufferPointer) -> [String: Any]? {
         guard let keyOffset = find(usageKey, in: line, backwards: true) else { return nil }
-        let open = keyOffset + usageKey.count - 1
+        return object(at: keyOffset + usageKey.count - 1, in: line)
+    }
+
+    /// The JSON object whose opening brace is at `open`, as a dictionary (brace-matched slice fed to JSONSerialization).
+    private static func object(at open: Int, in line: UnsafeRawBufferPointer) -> [String: Any]? {
         var depth = 0
         var index = open
         var inString = false

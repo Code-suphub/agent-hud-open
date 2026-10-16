@@ -37,6 +37,58 @@ public struct SessionActivity: Hashable, Codable, Sendable {
         }
     }
 
+    /// A question the client puts to its user in its own window, with no hook to report it: the Claude desktop app's
+    /// next-step box and its card offering a task a session of its own. Only the call that asks it says what it asks.
+    public struct Ask: Hashable, Codable, Sendable {
+        public enum Kind: String, Hashable, Codable, Sendable {
+            /// The box a turn ends with: a recap, one question and one or two answers, each of which the app sends as the
+            /// user's next message. It stands until the next prompt.
+            case nextStep
+            /// A task the agent offers to start in a new session, while its turn waits for the user to choose a new
+            /// session or this one. It stands until the call's result.
+            case offer
+        }
+
+        /// One of the answers the client's window offers, with the words it sends for the user when one is given.
+        public struct Option: Hashable, Codable, Sendable {
+            public let label: String
+            public let message: String?
+
+            public init(label: String, message: String? = nil) {
+                self.label = label; self.message = message
+            }
+        }
+
+        /// The call that asks it, and the response that made the call: the other calls of that response leave it standing.
+        public let id: String
+        public let response: String?
+        public let kind: Kind
+        /// The question, or the offered task's title. Its words, the recap and the options are kept only while the app
+        /// runs, as a turn's message is: the ledger that keeps a log's summary stores no conversation text, so an ask read
+        /// back from it is empty and still says that the session waits.
+        public let question: String
+        /// What the agent says has been done, which the next-step box shows above the question.
+        public let recap: String?
+        public let options: [Option]
+        public let at: Date
+        enum CodingKeys: String, CodingKey { case id, response, kind, at }
+
+        /// Whether its words were read in this run.
+        public var isWorded: Bool { !question.isEmpty }
+
+        public init(id: String, response: String? = nil, kind: Kind, question: String, recap: String? = nil, options: [Option],
+                    at: Date) {
+            self.id = id; self.response = response; self.kind = kind; self.question = question; self.recap = recap
+            self.options = options; self.at = at
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(id: try c.decode(String.self, forKey: .id), response: try c.decodeIfPresent(String.self, forKey: .response),
+                      kind: try c.decode(Kind.self, forKey: .kind), question: "", options: [], at: try c.decode(Date.self, forKey: .at))
+        }
+    }
+
     /// What the newest line of the conversation holds.
     public enum Line: String, Hashable, Codable, Sendable {
         /// The prompt that started the turn.
@@ -71,6 +123,8 @@ public struct SessionActivity: Hashable, Codable, Sendable {
     /// When the client said it began compacting the conversation, while that is newer than the log's last line
     /// (`CompactionHooks`).
     public var compactingSince: Date?
+    /// The question the client asks its user in its own window, until the user answers it there; nil when none is open.
+    public private(set) var ask: Ask?
     /// The newest work the read under way brought in, which `settle()` takes into `work`.
     private var latest: Work?
 
@@ -99,12 +153,14 @@ public struct SessionActivity: Hashable, Codable, Sendable {
 
     // MARK: Reading
 
-    /// A new turn starts: nothing of the last one is open, and nothing it did says what this one does.
+    /// A new turn starts: nothing of the last one is open, and nothing it did says what this one does. Whatever the last
+    /// one asked has its answer: the prompt is it, or the user moved on.
     public mutating func startTurn() {
         calls = []
         work = nil
         toolAt = nil
         latest = nil
+        ask = nil
     }
 
     /// The turn is over: none of its calls waits for a result any more.
@@ -113,18 +169,27 @@ public struct SessionActivity: Hashable, Codable, Sendable {
         latest = nil
     }
 
-    /// A call made at `at`.
-    public mutating func open(_ id: String, work: Work?, at: Date) {
+    /// A call made at `at` by `response`, which asks the user `ask` in the client's own window when it is one that does.
+    /// A call of a later response takes back what an earlier one asked: the agent went on without the answer. The calls
+    /// one response makes together, such as a task list's last tick beside the next-step box, leave its question standing.
+    public mutating func open(_ id: String, work: Work?, at: Date, response: String? = nil, asking ask: Ask? = nil) {
         calls.removeAll { $0.id == id }
         calls.append(Call(id: id, work: work, at: at))
         if let work, work.isShown { latest = work }
         toolAt = max(toolAt ?? at, at)
+        if let ask {
+            self.ask = ask
+        } else if let asked = self.ask, asked.response == nil || asked.response != response {
+            self.ask = nil
+        }
     }
 
-    /// A call's result came back at `at`.
-    public mutating func close(_ id: String, at: Date) {
+    /// A call's result came back at `at`, `failed` when the client marked it an error. An offer is answered by its result;
+    /// a next-step box is shown by its own and stays until the next prompt, unless the result is the app refusing it.
+    public mutating func close(_ id: String, at: Date, failed: Bool = false) {
         calls.removeAll { $0.id == id }
         toolAt = max(toolAt ?? at, at)
+        if ask?.id == id, ask?.kind == .offer || failed { ask = nil }
     }
 
     /// Work the log records only once it is done, such as a file Codex changed, as if a call of it had been made and

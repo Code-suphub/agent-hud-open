@@ -1125,7 +1125,7 @@ final class ScreenHUD {
         // An open card, or the whole panel, is a look at the agents on it: a failure's badge has been seen.
         if machine.isOpen, activeAlert == nil, previewPlacement == nil { directions?.looked(at: focus.map { [$0.key] }) }
         if let id = answeringSessionID,
-           !PermissionRequests.shared.pending.contains(where: { $0.sessionID == id && $0.isQuestion }) {
+           !PermissionRequests.shared.pending.contains(where: { $0.sessionID == id && $0.answersQuestion }) {
             answeringSessionID = nil
             stopTyping()
         }

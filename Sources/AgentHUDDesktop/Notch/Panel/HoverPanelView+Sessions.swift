@@ -253,9 +253,10 @@ extension HoverPanelView {
         }?.id
     }
 
-    /// The questions this session is waiting on: only a question put to this exact session reaches its row.
+    /// The questions this session is waiting on that can be answered here: only a question put to this exact session
+    /// reaches its row.
     static func questionRequests(for session: LiveSession, waiting: [PermissionRequest]) -> [PermissionRequest] {
-        waiting.filter { $0.sessionID == session.id && $0.isQuestion }
+        waiting.filter { $0.sessionID == session.id && $0.answersQuestion }
     }
 
     /// A running session wears its agent's colour, one blocked on the user the warning colour, and an ended one grey.

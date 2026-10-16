@@ -150,8 +150,10 @@ private struct PermissionOpenRow: View {
                         .lineLimit(1).truncationMode(.middle)
                 }
             }
-            if request.isQuestion {
+            if request.answersQuestion {
                 PermissionQuestionCard(request: request, onDecide: onDecide)
+            } else if request.isQuestion {
+                ClientQuestionCard(request: request, onDecide: onDecide)
             } else if request.answersPlan {
                 PermissionPlanCard(request: request, onDecide: onDecide)
             } else if request.removed != nil || request.added != nil {
@@ -323,8 +325,10 @@ struct PermissionAlertInlineView: View {
                         .font(.ui(12, .medium))
                     WaitingCount(waiting: waiting)
                 }
-                if request.isQuestion {
+                if request.answersQuestion {
                     PermissionQuestionCard(request: request, onDecide: onDecide)
+                } else if request.isQuestion {
+                    ClientQuestionCard(request: request, onDecide: onDecide)
                 } else {
                     PermissionPlanCard(request: request, onDecide: onDecide, planHeight: 120)
                 }

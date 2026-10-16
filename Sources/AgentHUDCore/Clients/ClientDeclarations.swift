@@ -28,12 +28,16 @@ public enum ClientDeclarations {
             declaration.sessions = [log]
             declaration.usage = [log]
             declaration.state = [.running: [log], .waitingForApproval: [permissionHook, .hook("Notification")],
-                                 .waitingForAnswer: [permissionHook], .waitingForReply: [log]]
+                                 .waitingForAnswer: [permissionHook, log], .waitingForReply: [log]]
             // The hook follows the session log from 4 MB back until the call it holds has a result.
             let settled = [Channel.appended("call result in the session log")]
+            // The desktop app's own questions, its next-step box and its offer of a new session, go through no permission
+            // prompt: only the session log's call says what they ask, and its result or the next prompt that they were
+            // answered. The app takes the answer in its own window (`ClaudeDesktopAsks`).
             declaration.requests = [hookApproval([.allowOnce, .allowAlways, .deny], settled: settled),
                                     Request(kind: .question, arrives: permissionHook, answers: [.answers], settledElsewhere: settled),
-                                    Request(kind: .plan, arrives: permissionHook, settledElsewhere: settled)]
+                                    Request(kind: .plan, arrives: permissionHook, settledElsewhere: settled),
+                                    Request(kind: .question, arrives: log, settledElsewhere: [log])]
         case .codex:
             let rollout = Channel.appended("rollout"), thread = Channel.subscription("Codex Desktop thread")
             declaration.sessions = [rollout]
