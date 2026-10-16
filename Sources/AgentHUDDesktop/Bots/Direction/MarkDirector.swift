@@ -17,7 +17,8 @@ import Foundation
 /// 4. No news: a session in flight by evidence too old to vouch for, and none working.
 /// 5. Rest: idle, or asleep once every session has been idle for `asleepAfter`, or when there is none.
 ///
-/// Events are the mark's alone: a start when work begins after a long rest, a failure or a limit when a turn ends on one.
+/// Events are the mark's alone: a start when a prompt begins work after a long rest, a failure or a limit when a turn
+/// ends on one.
 /// Only what happened after the app started is news (`startedAt`). Badges stay as long as what they say holds.
 struct MarkDirector: Sendable {
     /// What one mark shows now.
@@ -72,11 +73,14 @@ struct MarkDirector: Sendable {
         for mark in queue {
             var state = marks[mark.key] ?? Mark()
             let want = Self.want(of: mark, owner: state.owner, at: now)
+            let restingSince = state.restingSince
             let rested = state.follow(want, at: now, restingFrom: mark.sessions.map(\.lastEventAt).max())
             state.hear(mark, after: startedAt, at: now)
+            // Only a prompt given during the rest starts work: a turn woken without one, by a task it left running or a
+            // sub-agent, goes on from before it.
             if rested, mark.requests.isEmpty,
                let owner = mark.sessions.first(where: { $0.sessionID == state.owner }),
-               let prompt = owner.turnStartedAt, prompt > startedAt {
+               let prompt = owner.turnStartedAt, prompt > max(startedAt, restingSince ?? .distantPast) {
                 state.tell(.start, at: now)
             }
             let look = state.look ?? .idle

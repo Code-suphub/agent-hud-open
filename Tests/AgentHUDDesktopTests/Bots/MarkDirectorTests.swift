@@ -305,6 +305,15 @@ final class MarkDirectorTests: XCTestCase {
         // Work found at the first read has no rest to come from.
         director = self.director(reading: [mark([commanding(opened: 20, observed: 20, turn: 20)])], at: 20)
         XCTAssertNil(director.directions["Claude"]?.cue)
+        // A turn woken with no prompt, by a background task or a sub-agent, starts nothing: its prompt came before the rest.
+        director = self.director(reading: [mark([commanding(opened: 10, observed: 10, turn: 10)])], at: 20)
+        read(&director, [mark([session("a", .idle, turn: 10, outcome: .completed, ended: 60)])], at: 61)
+        read(&director, [mark([session("a", activity: activity(subagents: 700), turn: 10, observed: 700)])], at: 700)
+        XCTAssertTrue(look(director)?.isWorking == true)
+        XCTAssertNil(director.directions["Claude"]?.cue)
+        director = self.director(reading: [mark([session("a", .idle, turn: 10, outcome: .completed, ended: 20)])], at: 30)
+        read(&director, [mark([commanding(opened: 700, observed: 700, turn: 10)])], at: 700)
+        XCTAssertNil(director.directions["Claude"]?.cue)
     }
 
     func testATurnEndingOnAnErrorOrALimitIsAnEventOnce() {
