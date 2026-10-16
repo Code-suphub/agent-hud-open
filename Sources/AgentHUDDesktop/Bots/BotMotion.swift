@@ -768,8 +768,8 @@ struct BotMotion: Sendable {
         case .compacting:
             (limbs.left, limbs.right, limbs.lifted) = (1, 1, 3)
         case _ where turnsToCard:
-            // A hand up on the card's side, held.
-            if state.facing == .left { limbs.left = 2 } else { limbs.right = 2 }
+            // A hand up on the card's side, held. A card above or below gets none, which would point past it.
+            if state.facing == .left { limbs.left = 2 } else if state.facing == .right { limbs.right = 2 }
         case .permission, .question, .plan:
             let move = BotMoves.move(at: age), into = move.start.map { age - $0 }
             if age < BotMoves.firstMove || moving(at: age) {

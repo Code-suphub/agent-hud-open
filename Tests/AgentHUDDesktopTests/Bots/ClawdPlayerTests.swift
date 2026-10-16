@@ -369,6 +369,26 @@ final class ClawdPlayerTests: XCTestCase {
         XCTAssertEqual(player.picture?.frame, ClawdFrame(.pointing, 6))
     }
 
+    func testAMarkByACardAboveOrBelowItStandsStillWithItsWaitsSign() {
+        let waits: [(ClawdLook, ClawdSign?)] = [(.permission, .permission), (.question, .question), (.plan, nil)]
+        for (look, sign) in waits {
+            var player = ClawdPlayer()
+            player.show(look, at: 0)
+            player.standAtCard(for: look, at: 1)
+            XCTAssertEqual(player.picture, ClawdPicture(frame: .standing, sign: sign), "\(look)")
+            XCTAssertNil(player.due, "\(look): held, with no clock")
+            // The card goes: the wait asked for again plays its clip from the start.
+            player.show(look, at: 2)
+            XCTAssertEqual(player.picture?.frame, ClawdClips.standard.clip(for: look).intro.first, "\(look)")
+        }
+        var badged = ClawdPlayer()
+        badged.standAtCard(for: .permission, at: 0)
+        badged.set(badge: .failed, at: 1)
+        XCTAssertEqual(badged.picture?.sign, .permission, "the request's sign comes before a badge")
+        badged.show(nil, at: 2)
+        XCTAssertNil(badged.picture)
+    }
+
     // MARK: What a picture carries
 
     func testSubAgentsAddTheMiniToWorkingLooksOnly() {

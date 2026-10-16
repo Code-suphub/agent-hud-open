@@ -121,6 +121,7 @@ final class CompactionHookTests: XCTestCase, @unchecked Sendable {
         try CompactionHooks.record(source: .claude, data: start, now: now, directory: compactions)
         XCTAssertEqual(CompactionHooks.read(source: .claude, now: now, directory: compactions).keys.sorted(), ["s"],
                        "a session starting is no compaction")
-        XCTAssertNil(HookEntry.handle(arguments: ["/hud", "--compaction-hook", "claude"]), "no flag of its own")
+        XCTAssertEqual(HookEntry.handle(arguments: ["/hud", "--compaction-hook", "claude"]), 0,
+                       "no flag of its own: it ends quietly, as any hook's flag this build does not know")
     }
 }
