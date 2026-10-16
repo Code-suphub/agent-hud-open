@@ -22,10 +22,10 @@ struct CompactWings: Equatable {
     var width: CGFloat { leading + gap + trailing + 2 * padding }
 
     /// A size of a reminder's words or of the symbol beside them, in points before a dock's scale, from the size it has
-    /// beside the notch, where the name is the cards' 13 and the status 12. On a dock it is a size smaller, so words
-    /// and symbol sit in the pill, which keeps a mark's height, with room above and below them. The agent's mark keeps
-    /// its size.
-    static func size(_ beside: CGFloat, onDock: Bool) -> CGFloat { onDock ? beside - 1 : beside }
+    /// beside the notch, where the name is the cards' 13 and the status 12. On a dock it is two sizes smaller, the name
+    /// 11 and the status 10, so words and symbol sit in the pill, which keeps a mark's height, a step under the agent's
+    /// mark beside them, with room above and below. The agent's mark keeps its size.
+    static func size(_ beside: CGFloat, onDock: Bool) -> CGFloat { onDock ? beside - 2 : beside }
 
     /// The halves of `alert`'s reminder on a dock set to `scale`, each measured from its text and no wider than a
     /// wing, so the pill is placed before anything is drawn. The lengths are the ones the reminders' views use.
