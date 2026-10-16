@@ -157,7 +157,8 @@ final class BotQueueTests: XCTestCase {
         // Work starting meanwhile is shown from the next frame, however long the mark meant to wait.
         view.apply(config: queue([("Claude", true), ("Cursor", false)]), light: false, scale: 2, animates: true)
         let working = try XCTUnwrap(view.stepBots(to: start + 6))
-        XCTAssertLessThanOrEqual(working, BotPace.lively + 0.0001, "no later than the next frame")
+        // A step within a slack of a frame's time counts as that frame's, so the next one can be a slack further away.
+        XCTAssertLessThanOrEqual(working, BotPace.lively + BotPace.slack + 0.0001, "no later than the next frame")
     }
 
     func testAWorkingBotThatOnlyBreathesIsSteppedAFewTimesASecond() throws {
