@@ -232,7 +232,7 @@ public struct PanelTools {
         let style = StyleProposal(hud: arguments["hud"]?.objectValue ?? [:], scope: scope, among: attached, tools: self)
         reasons += proposal.issues(against: existing, holding: held).map { "\($0.path): \($0.message)" }
         reasons += proposal.filterIssues(sessionAgents: view.panelSessionAgents, tokenAgents: view.panelTokenAgents,
-                                         holding: held).map { "\($0.path): \($0.message)" }
+                                         tokenModels: view.panelTokenModels, holding: held).map { "\($0.path): \($0.message)" }
         reasons += style.reasons
         reasons += proposal.hudIssues(against: agents(for: scope, among: attached, in: style.mode),
                                       whose: whose(scope, among: attached), holding: held).map { "\($0.path): \($0.message)" }

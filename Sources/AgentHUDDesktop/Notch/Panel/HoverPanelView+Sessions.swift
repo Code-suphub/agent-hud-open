@@ -5,10 +5,11 @@ import AgentHUDCore
 /// questions and its usage.
 extension HoverPanelView {
     /// What is waiting, running and recently ended: the sessions with work in flight first — those waiting for the
-    /// user ahead of those still running — then those last active in the past day, up to the layout's limit, five by
-    /// default, of the agents and states it lists. The remaining count includes every other session the filter keeps in
-    /// that summary, and a filter that keeps none says so in one line under the header. The statistics window's range
-    /// never applies here — that range belongs to the session card, which answers a different question. The header
+    /// user ahead of those still running — then those last active in the layout's period, the past day by default, up
+    /// to the layout's limit, five by default, of the agents and states it lists. The remaining count includes every
+    /// other session the filter keeps in that summary, and a filter that keeps none says so in one line under the
+    /// header. The statistics window's range never applies here — that range belongs to the session card, which
+    /// answers a different question. The header
     /// opens the session list; each row's title returns to its agent, or opens its session page where the client names
     /// no destination, and its token count opens usage. Its gaps follow the layout's spacing, and its divider the
     /// layout's separators. On the panel's picture for an agent a row is named by its place in the list, with no title
@@ -219,10 +220,11 @@ extension HoverPanelView {
         onOpenStats()
     }
 
-    /// The island's summary: local work in flight and sessions last active in the past day, with waiting before
-    /// running, newest created first, then the most recently ended, of the agents and states `filter` keeps and as
-    /// many as it allows (`ReportView.panelSessions(_:vendor:)`). The full session list holds any hidden rows.
-    /// `vendor` keeps only the sessions of the agents drawn with that vendor's mark, and the filter applies among them.
+    /// The island's summary: local work in flight and sessions last active in the filter's period, the past day by
+    /// default, with waiting before running, newest created first, then the most recently ended, of the agents and
+    /// states `filter` keeps and as many as it allows (`ReportView.panelSessions(_:vendor:)`). The full session list
+    /// holds any hidden rows. `vendor` keeps only the sessions of the agents drawn with that vendor's mark, and the
+    /// filter applies among them.
     static func sessionRows(_ store: UsageStore, vendor: String? = nil,
                             filter: PanelSessionFilter = PanelSessionFilter()) -> PanelSessionRows {
         store.view.panelSessions(filter, vendor: vendor)

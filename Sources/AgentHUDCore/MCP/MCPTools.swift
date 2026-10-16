@@ -24,15 +24,15 @@ public enum MCPTools {
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
         with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
-        widgets and measures each block accepts; how many sessions it lists and its token chart's period and total; \
-        the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show and \
-        agentPanelWidth, the width of one agent's own panel on a dock that separates its agents; and app, the whole \
-        app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style \
-        draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into \
-        bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are written \
-        in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it \
-        before changing the layout; block, row and screen keys come from here. Names are written as the panel shows \
-        them, in the application's language.
+        widgets and measures each block accepts; how many sessions it lists and over what period, and its token \
+        chart's period, the agents and models it can draw and its total; the attached screens, each with its resting \
+        HUD's style, the look it draws now, the agents it can show and agentPanelWidth, the width of one agent's own \
+        panel on a dock that separates its agents; and app, the whole app's settings, read only and changed in \
+        Settings alone: appearance; matchScreen, with which a screen's style draft also restyles the app's windows and \
+        the menu-bar menu on that screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and \
+        reminders; language, and writtenIn, the language names are written in; and hover: pressOptionToOpen, \
+        openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the layout; block, \
+        row and screen keys come from here. Names are written as the panel shows them, in the application's language.
         """
 
     /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in, the
@@ -96,6 +96,9 @@ public enum MCPTools {
             "ringSize": text("Ring size for the ring widget; medium if left out.", oneOf: ["small", "medium", "large"]),
             "span": text("The whole line, the default, or half of it beside the next block if that is half too. Not for bar "
                          + "rows.", oneOf: PanelSpan.allCases.map(\.rawValue)),
+            "period": text("For the chart widget, the last 24 hours, 7 days or 30 days its bars cover, day if left out; for an "
+                           + "API balance, what its estimated cost covers, the token chart's period if left out. For no other "
+                           + "block.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
         ])
         let blocks: [String: JSONValue] = [
             "type": .string("object"),
@@ -112,6 +115,9 @@ public enum MCPTools {
         let sessions = object([
             "limit": described("integer", "Rows at most, \(limits.lowerBound) to \(limits.upperBound); "
                                + "\(PanelLayout.Sessions.defaultLimit) if left out."),
+            "period": text("How long after its last activity an ended session is still listed, 1 hour to 7 days; 24h if "
+                           + "left out. Sessions at work are listed whatever the period.",
+                           oneOf: PanelSessionPeriod.allCases.map(\.rawValue)),
             "agents": list("Only these agents' sessions, names from get_panel's sessions.offeredAgents; none for every "
                            + "agent.", of: key),
             "states": list("Only sessions in these states; none for all.",
@@ -122,7 +128,9 @@ public enum MCPTools {
                            + "left out.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
             "agents": list("Only these agents' tokens, names from get_panel's tokens.offeredAgents; none for every "
                            + "agent.", of: key),
-        ], description: "The token chart's period and agents.")
+            "models": list("Only these models' tokens, ids from get_panel's tokens.offeredModels, of the agents named if "
+                           + "any are; none for every model.", of: key),
+        ], description: "The token chart's period, agents and models.")
         let hud = object([
             "agents": list("Agents it shows, in order, by name from get_panel's screens; none shows every agent.", of: key),
             "mode": text("For one screen only, as is every field but agents. notch needs a screen with a notch.",

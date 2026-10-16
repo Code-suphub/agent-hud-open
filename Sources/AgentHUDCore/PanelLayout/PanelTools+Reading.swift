@@ -35,7 +35,8 @@ extension PanelTools {
         let sections = plan.sections + PanelSection.allCases.filter { !plan.sections.contains($0) }
         let shown = Set(plan.blocks.map(\.key))
         let drawn = plan.blocks + existing.filter { !shown.contains($0.key) }
-            .map { PanelBlockPlan($0, changed: effective.blocks[$0.key] ?? PanelLayout.Block()) }
+            .map { PanelBlockPlan($0, changed: effective.blocks[$0.key] ?? PanelLayout.Block(),
+                                  tokenPeriod: effective.tokens.chartPeriod) }
         let style: [String: JSONValue] = ["spacing": .string(plan.style.spacing.rawValue), "separators": .bool(plan.style.separators),
                                           "width": .integer(Int64(plan.style.panelWidth))]
         var result: [String: JSONValue] = [
@@ -52,7 +53,7 @@ extension PanelTools {
             }),
             "blocks": .array(drawn.map { block(of: $0, shown: shown.contains($0.key)) }),
             "sessions": sessions(plan.sessions, listing: effective.sessions.normalized().agents),
-            "tokens": tokens(plan.tokens, listing: effective.tokens.normalized().agents),
+            "tokens": tokens(plan.tokens, listing: effective.tokens.normalized()),
             "screens": .array(attached.map(listing)),
             "app": app(),
         ]
@@ -124,9 +125,9 @@ extension PanelTools {
         ])
     }
 
-    /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns
-    /// and the ring size are told only where the block has them to set, and the columns and the span as the panel sets
-    /// the block in its line.
+    /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns,
+    /// the ring size and the period are told only where the block has them to set, and the columns and the span as the
+    /// panel sets the block in its line.
     private func block(of plan: PanelBlockPlan, shown: Bool) -> JSONValue {
         var block: [String: JSONValue] = [
             "key": .string(plan.key), "kind": .string(plan.kind.rawValue), "shown": .bool(shown),
@@ -140,6 +141,7 @@ extension PanelTools {
         }
         if plan.kind.takesColumns(under: plan.widget) { block["columns"] = .integer(Int64(plan.columns)) }
         if plan.kind.takesRingSize(under: plan.widget) { block["ringSize"] = .string(plan.ringSize.rawValue) }
+        if plan.kind.takesPeriod(under: plan.widget) { block["period"] = .string(plan.period.rawValue) }
         block["span"] = .string(plan.span.rawValue)
         switch plan.kind {
         case .quota:
@@ -162,14 +164,16 @@ extension PanelTools {
         return .object(block)
     }
 
-    /// The session rows as an agent reads them: the limit, the agents and the states in effect, the agents that have
-    /// sessions now, how many rows are shown and how many more the filter lists, and how many sessions of the last day
-    /// each state has before the filter. Counts and names of agents only: no title, prompt, project, path or session id.
+    /// The session rows as an agent reads them: the limit, the period, the agents and the states in effect, the agents
+    /// that have sessions now, how many rows are shown and how many more the filter lists, and how many sessions of the
+    /// period each state has before the agents and states. Counts and names of agents only: no title, prompt, project,
+    /// path or session id.
     private func sessions(_ filter: PanelSessionFilter, listing agents: [String]) -> JSONValue {
         let view = store.view, rows = view.panelSessions(filter)
         let states = filter.states.isEmpty ? PanelSessionState.allCases : PanelSessionState.allCases.filter(filter.states.contains)
         return .object([
             "limit": .integer(Int64(filter.limit)),
+            "period": .string(filter.period.rawValue),
             "agents": .array(agents.map(JSONValue.string)),
             "states": .array(states.map { .string($0.rawValue) }),
             "offeredAgents": .array(view.panelSessionAgents.map(JSONValue.string)),
@@ -181,14 +185,20 @@ extension PanelTools {
         ])
     }
 
-    /// The token chart as an agent reads it: the period it opens with, the agents in effect, the agents whose models it
-    /// can draw now, and the tokens it counts over that period.
-    private func tokens(_ filter: PanelTokenFilter, listing agents: [String]) -> JSONValue {
+    /// The token chart as an agent reads it: the period it opens with, the agents and the models in effect, the agents
+    /// and the models it can draw now, each model by its id with its name and its agent, and the tokens it counts over
+    /// that period. A model is told from the report the store holds; nothing is read for it.
+    private func tokens(_ filter: PanelTokenFilter, listing listed: PanelLayout.Tokens) -> JSONValue {
         let columns = store.hudTokenColumns(consumerIDs: store.panelTokenConsumers(filter), period: filter.period)
+        let view = store.view
         return .object([
             "period": .string(filter.period.rawValue),
-            "agents": .array(agents.map(JSONValue.string)),
-            "offeredAgents": .array(store.view.panelTokenAgents.map(JSONValue.string)),
+            "agents": .array(listed.agents.map(JSONValue.string)),
+            "models": .array(listed.models.map(JSONValue.string)),
+            "offeredAgents": .array(view.panelTokenAgents.map(JSONValue.string)),
+            "offeredModels": .array(view.panelTokenModels.map { model in
+                .object(["id": .string(model.id), "name": .string(model.name), "agent": .string(model.displayVendor)])
+            }),
             "total": .integer(Int64(columns.reduce(0) { $0 + $1.total })),
         ])
     }
