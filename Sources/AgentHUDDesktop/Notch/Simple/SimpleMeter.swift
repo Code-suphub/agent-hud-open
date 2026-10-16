@@ -89,6 +89,8 @@ struct SimpleMeterConfig: Equatable {
     var ringWidth: CGFloat
     var showsRings: Bool
     var showsNumbers: Bool
+    /// Between two agents, as a share of a ring (`ScreenPlacement.simpleGapScale`).
+    var gapScale: CGFloat
     /// Marks turn into bots while their agents work, as a logo queue's do: Settings' `botLogos` on screen. A picture
     /// leaves it off, since a still has no motion to show.
     var bots: Bool
@@ -100,6 +102,7 @@ struct SimpleMeterConfig: Equatable {
         ringWidth = placement.ringWidth
         showsRings = placement.showsRings
         showsNumbers = placement.showsNumbers
+        gapScale = placement.simpleGapScale
         self.bots = bots
     }
 
@@ -113,7 +116,7 @@ struct SimpleMeterConfig: Equatable {
     /// Between a mark and its number.
     var labelSpacing: CGFloat { (size * 0.23).rounded() }
     /// Between two agents along the panel.
-    var itemGap: CGFloat { (size * (showsNumbers || !edge.isHorizontal ? 0.45 : 0.32)).rounded() }
+    var itemGap: CGFloat { (size * gapScale * (showsNumbers || !edge.isHorizontal ? 1 : 0.7)).rounded() }
 
     private var font: NSFont { .monospacedDigitSystemFont(ofSize: fontSize, weight: .regular) }
 

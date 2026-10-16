@@ -255,9 +255,9 @@ final class PanelToolsStyleTests: PanelToolsCase {
         XCTAssertEqual(notch, "Nothing was changed. hud.mode: \"Display 2\" has no notch, so its HUD cannot be \"notch\". "
                        + "It can be \"dynamic\" or \"simple\".")
         let ranges = try refused(["screen": .string("SECOND-UUID"), "hud": .object([
-            "logoSize": .integer(40), "position": .number(1.5), "glow": .object(["brightness": .integer(2), "speed": .integer(30)]),
+            "logoSize": .integer(70), "position": .number(1.5), "glow": .object(["brightness": .integer(2), "speed": .integer(30)]),
         ])])
-        for part in ["hud.logoSize is a number from 12 to 36.", "hud.position is a number from 0 to 1.",
+        for part in ["hud.logoSize is a number from 20 to 60.", "hud.position is a number from 0 to 1.",
                      "hud.glow.brightness is a number from 0.2 to 1.", "hud.glow.speed is a number from 1 to 12."] {
             XCTAssertTrue(ranges.contains(part), "\(part) — \(ranges)")
         }

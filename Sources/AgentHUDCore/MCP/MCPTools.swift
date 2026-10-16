@@ -127,6 +127,7 @@ public enum MCPTools {
             "edgeDistance": number("Dynamic: logos' distance from the edge in points,", .edgeDistance),
             "showLogos": described("boolean", "Dynamic: false leaves the backdrop alone."),
             "simpleSize": number("Simple: ring diameter in points,", .simpleSize),
+            "simpleGap": number("Simple: gap between agents, as a share of a ring,", .simpleGap),
             "ringWidth": number("Simple: ring stroke in points,", .ringWidth),
             "showRings": described("boolean", "Simple: a ring round each mark."),
             "showNumbers": described("boolean", "Simple: the percentage beside each mark."),

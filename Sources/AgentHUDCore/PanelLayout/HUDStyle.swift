@@ -7,7 +7,8 @@ import Foundation
 /// own edit of that screen drops it first. Its values are within the ranges Settings keep them in.
 ///
 /// It is written in an agent's words, as `set_panel_layout`'s `hud` takes it beside `agents`: `mode` is `notch`,
-/// `dynamic` or `simple`; `position` is the placement's `offset`, `logoGap` its `gapScale`, `edgeDistance` its
+/// `dynamic` or `simple`; `position` is the placement's `offset`, `logoGap` its `gapScale`, `simpleGap` its
+/// `simpleGapScale`, `edgeDistance` its
 /// `logoEdgeDistance`, `showLogos`, `showRings` and `showNumbers` its `showsLogos`, `showsRings` and `showsNumbers`,
 /// `separateAgents` its `separatesAgents` and `transparency` the material's own, while `appearance` and `material`
 /// keep their names; under `glow`, `speed` is the glow's working period, `breathSeconds`, and `amplitude` its
@@ -24,6 +25,8 @@ public struct HUDStyle: Hashable, Sendable {
     public var edgeDistance: Double?
     public var showLogos: Bool?
     public var simpleSize: Double?
+    /// The gap between two agents in Simple mode, as a share of a ring.
+    public var simpleGap: Double?
     public var ringWidth: Double?
     public var showRings: Bool?
     public var showNumbers: Bool?
@@ -65,7 +68,7 @@ public struct HUDStyle: Hashable, Sendable {
 
     public init(mode: HUDMode? = nil, edge: HUDEdge? = nil, position: Double? = nil, logoSize: Double? = nil,
                 logoGap: Double? = nil, edgeDistance: Double? = nil, showLogos: Bool? = nil, simpleSize: Double? = nil,
-                ringWidth: Double? = nil, showRings: Bool? = nil, showNumbers: Bool? = nil,
+                simpleGap: Double? = nil, ringWidth: Double? = nil, showRings: Bool? = nil, showNumbers: Bool? = nil,
                 separateAgents: Bool? = nil, appearance: HUDAppearance? = nil, material: HUDMaterial? = nil,
                 transparency: Double? = nil, glow: Glow = Glow()) {
         self.mode = mode
@@ -76,6 +79,7 @@ public struct HUDStyle: Hashable, Sendable {
         self.edgeDistance = edgeDistance
         self.showLogos = showLogos
         self.simpleSize = simpleSize
+        self.simpleGap = simpleGap
         self.ringWidth = ringWidth
         self.showRings = showRings
         self.showNumbers = showNumbers
@@ -100,6 +104,7 @@ public struct HUDStyle: Hashable, Sendable {
         if let edgeDistance { next.logoEdgeDistance = edgeDistance }
         if let showLogos { next.showsLogos = showLogos }
         if let simpleSize { next.simpleSize = simpleSize }
+        if let simpleGap { next.simpleGapScale = simpleGap }
         if let ringWidth { next.ringWidth = ringWidth }
         if let showRings { next.showsRings = showRings }
         if let showNumbers { next.showsNumbers = showNumbers }
@@ -129,7 +134,8 @@ public struct HUDStyle: Hashable, Sendable {
     init(every placement: ScreenPlacement, glow: GlowSettings) {
         self.init(mode: placement.mode, edge: placement.edge, position: placement.offset, logoSize: placement.logoSize,
                   logoGap: placement.gapScale, edgeDistance: placement.logoEdgeDistance, showLogos: placement.showsLogos,
-                  simpleSize: placement.simpleSize, ringWidth: placement.ringWidth, showRings: placement.showsRings,
+                  simpleSize: placement.simpleSize, simpleGap: placement.simpleGapScale, ringWidth: placement.ringWidth,
+                  showRings: placement.showsRings,
                   showNumbers: placement.showsNumbers, separateAgents: placement.separatesAgents,
                   appearance: placement.appearance, material: placement.material,
                   transparency: placement.transparency,
@@ -205,15 +211,15 @@ extension HUDMode {
 extension HUDStyle {
     /// A field of a screen's placement an agent can set, by the name it uses for it.
     enum Field: String, CaseIterable, Sendable {
-        case mode, edge, position, logoSize, logoGap, edgeDistance, showLogos, simpleSize, ringWidth, showRings,
-             showNumbers, separateAgents, appearance, material, transparency
+        case mode, edge, position, logoSize, logoGap, edgeDistance, showLogos, simpleSize, simpleGap, ringWidth,
+             showRings, showNumbers, separateAgents, appearance, material, transparency
 
         /// The range a number keeps within, Settings' own; nil for a field that is no number.
         var range: ClosedRange<Double>? {
             switch self {
             case .position: 0...1
             case .logoSize: ScreenPlacement.logoSizeRange
-            case .logoGap: ScreenPlacement.gapScaleRange
+            case .logoGap, .simpleGap: ScreenPlacement.gapScaleRange
             case .edgeDistance: ScreenPlacement.logoEdgeDistanceRange
             case .simpleSize: ScreenPlacement.simpleSizeRange
             case .ringWidth: ScreenPlacement.ringWidthRange
@@ -228,7 +234,7 @@ extension HUDStyle {
             case .mode, .appearance, .material, .transparency: HUDMode.allCases
             case .edge, .position, .separateAgents: [.logos, .simple]
             case .logoSize, .logoGap, .edgeDistance, .showLogos: [.logos]
-            case .simpleSize, .ringWidth, .showRings, .showNumbers: [.simple]
+            case .simpleSize, .simpleGap, .ringWidth, .showRings, .showNumbers: [.simple]
             }
         }
     }
@@ -260,6 +266,7 @@ extension HUDStyle {
         case .edgeDistance: edgeDistance.map(JSONValue.number)
         case .showLogos: showLogos.map(JSONValue.bool)
         case .simpleSize: simpleSize.map(JSONValue.number)
+        case .simpleGap: simpleGap.map(JSONValue.number)
         case .ringWidth: ringWidth.map(JSONValue.number)
         case .showRings: showRings.map(JSONValue.bool)
         case .showNumbers: showNumbers.map(JSONValue.bool)
@@ -282,6 +289,7 @@ extension HUDStyle {
         case .edgeDistance: edgeDistance = number
         case .showLogos: showLogos = json.boolValue
         case .simpleSize: simpleSize = number
+        case .simpleGap: simpleGap = number
         case .ringWidth: ringWidth = number
         case .showRings: showRings = json.boolValue
         case .showNumbers: showNumbers = json.boolValue

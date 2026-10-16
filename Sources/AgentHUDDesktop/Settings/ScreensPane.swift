@@ -184,6 +184,11 @@ struct ScreensPane: View {
                           range: ScreenPlacement.simpleSizeRange, step: 1,
                           format: { String(format: "%.0f pt", $0) }, theme: theme)
                 SettingsDivider(theme: theme)
+                let ring = placement.simpleSize
+                SliderRow(label: L10n.text("Logo 间距", "Logo spacing"), value: binding(\.simpleGapScale),
+                          range: ScreenPlacement.gapScaleRange, step: 0.05,
+                          format: { String(format: "%.0f pt", $0 * ring) }, theme: theme)
+                SettingsDivider(theme: theme)
                 SettingsToggleRow(
                     label: L10n.text("显示圆环", "Show rings"),
                     subtitle: L10n.text("每个 agent 用得最多的额度窗口，画成套在标志外的圆环。",

@@ -58,7 +58,7 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertEqual(HUDMode(agentName: "dynamic"), .logos)
         XCTAssertNil(HUDMode(agentName: "logos"), "the settings' own name is not an agent's")
         XCTAssertEqual(HUDStyle.names, ["mode", "edge", "position", "logoSize", "logoGap", "edgeDistance", "showLogos", "simpleSize",
-                                        "ringWidth", "showRings", "showNumbers", "separateAgents", "appearance",
+                                        "simpleGap", "ringWidth", "showRings", "showNumbers", "separateAgents", "appearance",
                                         "material", "transparency", "glow"])
         XCTAssertEqual(style.json["appearance"], .string("light"), "the look keeps the settings' own names")
         XCTAssertEqual(style.json["material"], .string("glass"))
@@ -137,7 +137,7 @@ final class HUDStyleTests: XCTestCase {
         let ranges: [(String, ClosedRange<Double>)] = [
             ("position", 0...1), ("logoSize", ScreenPlacement.logoSizeRange), ("logoGap", ScreenPlacement.gapScaleRange),
             ("edgeDistance", ScreenPlacement.logoEdgeDistanceRange), ("simpleSize", ScreenPlacement.simpleSizeRange),
-            ("ringWidth", ScreenPlacement.ringWidthRange), ("transparency", ScreenPlacement.glassTransparencyRange),
+            ("simpleGap", ScreenPlacement.gapScaleRange), ("ringWidth", ScreenPlacement.ringWidthRange), ("transparency", ScreenPlacement.glassTransparencyRange),
         ]
         for (name, range) in ranges {
             XCTAssertEqual(HUDStyle.misreadings(ofField: name, .number(range.lowerBound)), [], name)
@@ -148,7 +148,7 @@ final class HUDStyleTests: XCTestCase {
             XCTAssertEqual(HUDStyle.misreadings(ofField: name, .string("12")), [sentence], "a number written as text")
             XCTAssertEqual(HUDStyle(json: [name: .number(range.upperBound + 1)]), HUDStyle(), "nothing out of range is read")
         }
-        XCTAssertEqual(HUDStyle.misreadings(ofField: "logoSize", .number(37)), ["hud.logoSize is a number from 12 to 36."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "logoSize", .number(61)), ["hud.logoSize is a number from 20 to 60."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "logoGap", .number(0.05)), ["hud.logoGap is a number from 0.1 to 0.6."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .number(1)), ["hud.transparency is a number from 0 to 0.9."],
                        "bare glass is out of range")
@@ -213,7 +213,7 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertNil(HUDStyle.misreadings(ofField: "background", .string("blue")), "a key that names no field is the caller's")
         XCTAssertEqual(PanelLayout.misreadings(of: .object(["hud": .object(["background": .string("blue")])])),
                        ["hud has no property \"background\"; the hud takes agents, mode, edge, position, logoSize, logoGap, "
-                        + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, separateAgents, "
+                        + "edgeDistance, showLogos, simpleSize, simpleGap, ringWidth, showRings, showNumbers, separateAgents, "
                         + "appearance, material, transparency, glow and reset."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .string("yes")), ["hud.reset is true or false."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .bool(false)), [])

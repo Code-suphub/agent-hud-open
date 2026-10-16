@@ -139,8 +139,8 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(hud["additionalProperties"], .bool(false))
         XCTAssertEqual(hud["properties"].objectValue?.keys.sorted(),
                        ["agents", "appearance", "edge", "edgeDistance", "glow", "logoGap", "logoSize", "material", "mode",
-                        "position", "reset", "ringWidth", "separateAgents", "showLogos", "showNumbers", "showRings", "simpleSize",
-                        "transparency"])
+                        "position", "reset", "ringWidth", "separateAgents", "showLogos", "showNumbers", "showRings", "simpleGap",
+                        "simpleSize", "transparency"])
         XCTAssertEqual(hud["properties"]["reset"]["type"], .string("boolean"))
         XCTAssertEqual(hud["properties"]["reset"]["description"].stringValue,
                        "True proposes the screen's default style, the placement its hardware is given, dark and solid, and the default glow, with no other style field.")
@@ -161,13 +161,15 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(hud["properties"]["agents"]["items"], .object(["type": .string("string")]))
         XCTAssertEqual(choices(hud["properties"]["mode"]), ["notch", "dynamic", "simple"])
         XCTAssertEqual(choices(hud["properties"]["edge"]), ["top", "right", "bottom", "left"])
-        for name in ["position", "logoSize", "logoGap", "edgeDistance", "simpleSize", "ringWidth", "transparency"] {
+        for name in ["position", "logoSize", "logoGap", "edgeDistance", "simpleSize", "simpleGap", "ringWidth", "transparency"] {
             XCTAssertEqual(hud["properties"][name]["type"], .string("number"), name)
         }
         for name in ["showLogos", "showRings", "showNumbers", "separateAgents"] {
             XCTAssertEqual(hud["properties"][name]["type"], .string("boolean"), name)
         }
-        XCTAssertEqual(hud["properties"]["logoSize"]["description"].stringValue, "Dynamic: logo size in points, 12 to 36.")
+        XCTAssertEqual(hud["properties"]["logoSize"]["description"].stringValue, "Dynamic: logo size in points, 20 to 60.")
+        XCTAssertEqual(hud["properties"]["simpleGap"]["description"].stringValue,
+                       "Simple: gap between agents, as a share of a ring, 0.1 to 0.6.")
         XCTAssertEqual(hud["properties"]["logoGap"]["description"].stringValue,
                        "Dynamic: gap between logos, as a share of a logo, 0.1 to 0.6.")
         let glow = hud["properties"]["glow"]

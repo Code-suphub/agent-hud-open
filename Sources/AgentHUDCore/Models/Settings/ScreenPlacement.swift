@@ -54,14 +54,14 @@ public enum HUDMaterial: String, Codable, Sendable, CaseIterable {
 /// `Settings.screenGlow` under the same display key, with `Settings.glow` for a display that has none.
 public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// Side of one mark in points, independent of the display's menu bar height.
-    public static let logoSizeRange: ClosedRange<Double> = 12...36
+    public static let logoSizeRange: ClosedRange<Double> = 20...60
     /// Distance from the visible logo, including its outline, to its parked screen edge, in points.
     public static let logoEdgeDistanceRange: ClosedRange<Double> = 0...20
-    /// Gap between logos, as a share of the logo's height. A gap wider than about half a mark reads as
-    /// separate marks rather than one queue.
+    /// Gap between logos, as a share of the logo's height, and in Simple mode between rings, as a share of a ring. A
+    /// gap wider than about half a mark reads as separate marks rather than one queue.
     public static let gapScaleRange: ClosedRange<Double> = 0.1...0.6
     /// Diameter of one ring in Simple mode, in points. The marks and numbers are sized from it.
-    public static let simpleSizeRange: ClosedRange<Double> = 20...50
+    public static let simpleSizeRange: ClosedRange<Double> = 20...60
     /// Stroke of that ring, in points.
     public static let ringWidthRange: ClosedRange<Double> = 1...4
     /// How much of the desktop the HUD lets through, glass or solid. At 0 the HUD's own surface is drawn whole; the top
@@ -84,6 +84,9 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// have occupied, so the field keeps its place and its width; only the logos stop being drawn.
     public var showsLogos: Bool
     public var simpleSize: Double
+    /// Gap between two agents in Simple mode, as a share of a ring (`gapScaleRange`). Marks alone in a row, with no
+    /// numbers between them, sit at 70 % of it.
+    public var simpleGapScale: Double
     public var ringWidth: Double
     /// Simple mode draws each agent's tightest window as a ring round its mark.
     public var showsRings: Bool
@@ -112,6 +115,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         gapScale: Double = 0.4,
         showsLogos: Bool = true,
         simpleSize: Double = 22,
+        simpleGapScale: Double = 0.45,
         ringWidth: Double = 1.5,
         showsRings: Bool = true,
         showsNumbers: Bool = true,
@@ -129,6 +133,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         self.gapScale = Self.clamp(gapScale, to: Self.gapScaleRange)
         self.showsLogos = showsLogos
         self.simpleSize = Self.clamp(simpleSize, to: Self.simpleSizeRange)
+        self.simpleGapScale = Self.clamp(simpleGapScale, to: Self.gapScaleRange)
         self.ringWidth = Self.clamp(ringWidth, to: Self.ringWidthRange)
         self.showsRings = showsRings
         self.showsNumbers = showsNumbers
@@ -150,7 +155,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case mode, edge, offset, logoSize, logoEdgeDistance, gapScale, showsLogos
-        case simpleSize, ringWidth, showsRings, showsNumbers, separatesAgents
+        case simpleSize, simpleGapScale, ringWidth, showsRings, showsNumbers, separatesAgents
         case appearance, material, glassTransparency, solidTransparency
     }
 
@@ -166,6 +171,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
             gapScale: try c.decodeIfPresent(Double.self, forKey: .gapScale) ?? d.gapScale,
             showsLogos: try c.decodeIfPresent(Bool.self, forKey: .showsLogos) ?? d.showsLogos,
             simpleSize: try c.decodeIfPresent(Double.self, forKey: .simpleSize) ?? d.simpleSize,
+            simpleGapScale: try c.decodeIfPresent(Double.self, forKey: .simpleGapScale) ?? d.simpleGapScale,
             ringWidth: try c.decodeIfPresent(Double.self, forKey: .ringWidth) ?? d.ringWidth,
             showsRings: try c.decodeIfPresent(Bool.self, forKey: .showsRings) ?? d.showsRings,
             showsNumbers: try c.decodeIfPresent(Bool.self, forKey: .showsNumbers) ?? d.showsNumbers,
