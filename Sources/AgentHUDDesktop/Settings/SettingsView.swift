@@ -132,7 +132,7 @@ struct SettingsView: View {
         }
         .frame(minWidth: SettingsWindowLayout.minimum.width, idealWidth: SettingsWindowLayout.size.width,
                minHeight: SettingsWindowLayout.minimum.height, idealHeight: SettingsWindowLayout.size.height)
-        .background(theme.windowBackground)
+        .background(WindowGround(color: theme.windowBackground))
         .foregroundStyle(theme.text)
         .font(.ui(13))
         .tint(Color.accentColor)
@@ -308,16 +308,18 @@ public struct SettingsDivider: View {
 public struct SettingsToggleRow: View {
     let label: String
     var subtitle: String? = nil
+    var tag: String? = nil
     @Binding var isOn: Bool
 
-    public init(label: String, subtitle: String? = nil, isOn: Binding<Bool>) {
+    public init(label: String, subtitle: String? = nil, tag: String? = nil, isOn: Binding<Bool>) {
         self.label = label
         self.subtitle = subtitle
+        self.tag = tag
         self._isOn = isOn
     }
 
     public var body: some View {
-        SettingRow(label: label, subtitle: subtitle) {
+        SettingRow(label: label, subtitle: subtitle, tag: tag) {
             Toggle(label, isOn: $isOn).labelsHidden().toggleStyle(.switch).controlSize(.small)
         }
     }

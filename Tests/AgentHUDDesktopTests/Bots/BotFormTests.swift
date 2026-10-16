@@ -30,17 +30,29 @@ final class BotFormTests: XCTestCase {
         }
     }
 
-    func testClaudeHasTwelveEvenHeads() throws {
-        let reach = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark)).bodyReach
-        let mean = reach.reduce(0, +) / CGFloat(reach.count)
-        var peaks = 0
-        for index in reach.indices {
-            let before = reach[(index + reach.count - 1) % reach.count], after = reach[(index + 1) % reach.count]
-            if reach[index] > mean, reach[index] >= before, reach[index] > after { peaks += 1 }
-        }
-        XCTAssertEqual(peaks, 12)
-        // Even: every head repeats thirty degrees on.
-        for index in 0..<30 { XCTAssertEqual(reach[index], reach[index + 30], accuracy: 0.0001) }
+    func testClaudeIsClawd() throws {
+        let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))
+        // A block half again as wide as it is tall, which does not turn under its face.
+        XCTAssertEqual(form.bodyReach[0], 0.33, accuracy: 0.01, "to its side")
+        XCTAssertEqual(form.bodyReach[90], 0.22, accuracy: 0.01, "to its bottom")
+        XCTAssertEqual(form.spec.spin, 0)
+        let limbs = try XCTUnwrap(form.spec.limbs)
+        XCTAssertEqual(limbs.arms.count, 2)
+        XCTAssertEqual(limbs.legs.count, 4)
+
+        // An arm stands out of each side once it is the bot, at the height of the body's lower half.
+        var motion = BotMotion(seed: 3)
+        motion.fit(form.spec)
+        motion.set(.working, at: 0)
+        var now: TimeInterval = 0
+        // At a moment the left hand is down between taps.
+        repeat { motion.step(to: now); now += 1.0 / 30 } while now < 10 && (motion.morph < 1 || motion.limbs.left != 0)
+        XCTAssertEqual(motion.limbs.left, 0)
+        let bot = try XCTUnwrap(BotRenderer.image(form, motion: motion, side: 100))
+        // The left arm's middle, in the picture's pixels: the mark's side is 100 and 30 more on every edge.
+        let arm = CGPoint(x: (0.5 - 1.75 * 0.22 + 0.3) * 100, y: (0.445 + 0.25 * 0.22 + 0.3) * 100)
+        XCTAssertGreaterThan(Self.alpha(of: bot, at: arm), 200)
+        XCTAssertLessThan(Self.alpha(of: bot, at: CGPoint(x: arm.x, y: arm.y + 0.12 * 100)), 40, "nothing under the arm")
     }
 
     func testEveryBotDrawsAtQueueSizeInEveryPhase() throws {
@@ -48,7 +60,7 @@ final class BotFormTests: XCTestCase {
             let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
             for phase in [BotPhase.working, .asking, .done] {
                 var motion = BotMotion(seed: 3)
-                motion.spin = form.spec.spin
+                motion.fit(form.spec)
                 motion.set(phase, at: 0)
                 var now: TimeInterval = 0
                 while now < 1 { motion.step(to: now); now += 1.0 / 30 }
@@ -112,6 +124,14 @@ final class BotFormTests: XCTestCase {
         let settled = BotRenderer.look(of: motion)
         motion.step(to: now + 1.0 / 30)
         XCTAssertEqual(BotRenderer.look(of: motion), settled)
+    }
+
+    /// The opacity of one pixel, counted from the picture's top left.
+    private static func alpha(of image: CGImage, at point: CGPoint) -> UInt8 {
+        guard let context = BotForm.bitmap(image.width), let data = context.data else { return 0 }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.width))
+        let bytes = data.assumingMemoryBound(to: UInt8.self)
+        return bytes[(Int(point.y) * image.width + Int(point.x)) * 4 + 3]
     }
 
     /// Share of pixels that are not transparent.

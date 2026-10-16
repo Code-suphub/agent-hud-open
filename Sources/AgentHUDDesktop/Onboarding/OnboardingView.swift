@@ -58,7 +58,7 @@ struct OnboardingView: View {
         }
         .padding(EdgeInsets(top: 20, leading: 26, bottom: 22, trailing: 26))
         .frame(width: 440)
-        .background(theme.windowBackground)
+        .background(WindowGround(color: theme.windowBackground))
         .foregroundStyle(theme.text)
         .font(.ui(13))
         .id(settings.settings.language)

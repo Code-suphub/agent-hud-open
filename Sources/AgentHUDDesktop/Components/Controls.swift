@@ -114,18 +114,25 @@ struct SelectionMenu<Value: Hashable>: NSViewRepresentable {
 public struct SettingRow<Control: View>: View {
     let label: String
     var subtitle: String? = nil
+    /// A word set beside the label, such as 实验 / Experimental for a setting still being tried.
+    var tag: String? = nil
     @ViewBuilder let control: () -> Control
 
-    public init(label: String, subtitle: String? = nil, @ViewBuilder control: @escaping () -> Control) {
+    public init(label: String, subtitle: String? = nil, tag: String? = nil,
+                @ViewBuilder control: @escaping () -> Control) {
         self.label = label
         self.subtitle = subtitle
+        self.tag = tag
         self.control = control
     }
 
     public var body: some View {
         HStack(spacing: 24) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(label)
+                HStack(spacing: 6) {
+                    Text(label)
+                    if let tag { SettingTag(text: tag) }
+                }
                 if let subtitle {
                     Text(subtitle).font(.ui(11)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -137,6 +144,21 @@ public struct SettingRow<Control: View>: View {
         .frame(minHeight: 30)
         .padding(.horizontal, 16)
         .padding(.vertical, 11)
+    }
+}
+
+/// The word beside a setting's label (`SettingRow.tag`): small and grey in a capsule, read with the label.
+struct SettingTag: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.ui(10, .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1.5)
+            .background(.quaternary, in: Capsule())
+            .fixedSize()
     }
 }
 

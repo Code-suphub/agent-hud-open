@@ -365,7 +365,7 @@ struct IslandRootView: View {
             let surface = ZStack(alignment: surfaceAlignment) {
                 // Keep one shape alive through collapse so it can shrink before becoming transparent. A silhouette that
                 // grows out of the screen edge stands on it; a floating one stands on nothing.
-                HUDSurface(shape, look: look, fill: theme.islandFill.opacity(floats && !visible ? theme.restingFillOpacity : 1),
+                HUDSurface(shape, look: look, fill: theme.islandFill,
                            contact: floats ? nil : shape.edge)
                     .overlay {
                         if inksNotch {
@@ -413,7 +413,7 @@ struct IslandRootView: View {
                                                     radius: detachedRadius(height: presentationFrame.height),
                                                     outline: grows ? 0 : 1, hairline: outline(theme.islandOutline),
                                                     look: look,
-                                                    fill: theme.islandFill.opacity(grows ? theme.restingFillOpacity : 1)))
+                                                    fill: theme.islandFill))
                         // Keyed to the card's place on screen. Its place in the window also changes whenever the
                         // window around it is resized, and that must never move the card.
                         .animation(motion, value: cardScreenFrame)

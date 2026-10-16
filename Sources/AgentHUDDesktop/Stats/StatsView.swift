@@ -52,7 +52,7 @@ struct StatsView: View {
                 content(theme)
             }
         }
-        .background(theme.windowBackground)
+        .background(WindowGround(color: theme.windowBackground))
         .foregroundStyle(theme.text)
         .font(.ui(13))
         .id(store.settings.settings.language)
@@ -117,7 +117,7 @@ struct StatsView: View {
             }
         }
         .padding(EdgeInsets(top: 4, leading: 22, bottom: 10, trailing: 22))
-        .background(theme.windowBackground)
+        .background(WindowGround(color: theme.windowBackground))
         .overlay(alignment: .bottom) { Rectangle().fill(theme.divider).frame(height: 1) }
     }
 

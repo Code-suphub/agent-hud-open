@@ -57,7 +57,7 @@ extension HUDLook {
 struct HUDSurface<S: Shape>: View {
     let shape: S
     let look: HUDLook
-    /// The solid fill: the island's, at the opacity the surface stands at, or a raised box's.
+    /// The solid fill, the island's or a raised box's, opaque: the screen's transparency alone thins it.
     let fill: Color
     /// The screen edge the surface stands on, which Liquid Glass runs on past (`HUDGlass.bleed`); nil for a surface that
     /// floats free of it.

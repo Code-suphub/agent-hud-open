@@ -41,7 +41,7 @@ final class BotActor {
         motion.staysBot = staysBot
         motion.arrivesAfter = arrivesAfter
         motion.period = max(0.5, period)
-        motion.spin = form.spec.spin
+        motion.fit(form.spec)
         layer.contentsGravity = .resize
         layer.isHidden = true
         // Every change here is already one frame of an animation; an implicit one on top would smear it.

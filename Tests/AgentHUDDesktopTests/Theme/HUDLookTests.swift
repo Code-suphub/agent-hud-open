@@ -52,7 +52,6 @@ final class HUDLookTests: XCTestCase {
     func testTheIslandsTokensAreTheColoursTheHUDDrewWith() {
         let island = Theme.island
         XCTAssertEqual(island.islandFill, Color.black)
-        XCTAssertEqual(island.restingFillOpacity, 0.82)
         XCTAssertEqual(island.islandOutline, Color.white.opacity(0.14))
         XCTAssertEqual(island.desktopOutline, Color.white.opacity(0.18))
         XCTAssertEqual(island.meterTrack, Color.white.opacity(0.14))

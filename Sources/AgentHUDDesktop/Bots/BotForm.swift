@@ -195,13 +195,6 @@ final class BotForm {
         case .outline(let keep, let smooth):
             let soft = smoothed(logo, over: smooth), mean = soft.reduce(0, +) / CGFloat(soft.count)
             return soft.map { max(radius * 0.55, radius * (1 + keep * ($0 / mean - 1))) }
-        case .star(let points, let depth, let puff):
-            return (0..<samples).map { index in
-                let turn = CGFloat(points) * CGFloat(index) * 2 * .pi / CGFloat(samples)
-                // A smooth wave is a thin star. Broad round heads with a crease between them read as plump.
-                let wave = puff < 1 ? 2 * pow(abs(cos(turn / 2)), puff) - 1 : cos(turn)
-                return radius * (1 + depth * wave)
-            }
         case .polygon(let sides, let rotation, let round):
             let corners = (0..<sides).map { index -> CGPoint in
                 let angle = (rotation + CGFloat(index) * 360 / CGFloat(sides)) * .pi / 180
