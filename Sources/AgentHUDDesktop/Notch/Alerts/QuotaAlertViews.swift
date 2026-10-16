@@ -16,6 +16,8 @@ struct QuotaAlertCompactView: View {
 
     /// A length at the scale of the dock this reminder grows from.
     private func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
+    /// The size of its words or of the symbol beside them, from their size beside the notch: a size smaller on a dock.
+    private func t(_ value: CGFloat) -> CGFloat { s(CompactWings.size(value, onDock: wings != nil)) }
 
     var body: some View {
         let copy = QuotaAlertCopy(alert: alert)
@@ -24,14 +26,14 @@ struct QuotaAlertCompactView: View {
                 HStack(spacing: s(8)) {
                     AgentLogo(vendor: alert.agent.vendor, size: s(17))
                     Text(alert.agent.vendorName)
-                        .font(.ui(s(13), .semibold)).foregroundStyle(theme.alertText).lineLimit(1)
+                        .font(.ui(t(13), .semibold)).foregroundStyle(theme.alertText).lineLimit(1)
                 }
                 .frame(width: wings?.leading ?? s(IslandController.alertWingWidth), alignment: .leading)
                 Color.clear.frame(width: wings?.gap ?? cameraWidth)
                 HStack(spacing: s(7)) {
-                    QuotaEventSymbol(alert: alert, size: s(12))
+                    QuotaEventSymbol(alert: alert, size: t(12))
                     Text(copy.compactTitle)
-                        .font(.tabular(s(12), .medium)).foregroundStyle(theme.alertInk(0.92)).lineLimit(1)
+                        .font(.tabular(t(12), .medium)).foregroundStyle(theme.alertInk(0.92)).lineLimit(1)
                 }
                 .frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
             }

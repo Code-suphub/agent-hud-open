@@ -40,13 +40,13 @@ final class ScreenPlacementTests: XCTestCase {
             #"{"mode":"simple","edge":"left","simpleSize":100,"ringWidth":0.2,"showsRings":false}"#.utf8))
         XCTAssertEqual(saved.mode, .simple)
         XCTAssertEqual(saved.edge, .left)
-        XCTAssertEqual(saved.simpleSize, 40)
+        XCTAssertEqual(saved.simpleSize, 50)
         XCTAssertEqual(saved.ringWidth, 1)
         XCTAssertFalse(saved.showsRings)
         XCTAssertTrue(saved.showsNumbers)
-        XCTAssertFalse(saved.simpleBots)
+        // The Simple panel once had a bot switch of its own; a placement saved with it still reads, without it.
         let lively = try JSONDecoder().decode(ScreenPlacement.self, from: Data(#"{"mode":"simple","simpleBots":true}"#.utf8))
-        XCTAssertTrue(lively.simpleBots)
+        XCTAssertEqual(lively, ScreenPlacement(mode: .simple))
 
         let older = try JSONDecoder().decode(ScreenPlacement.self, from: Data(#"{"mode":"logos","logoSize":24}"#.utf8))
         XCTAssertEqual(older.simpleSize, 22)

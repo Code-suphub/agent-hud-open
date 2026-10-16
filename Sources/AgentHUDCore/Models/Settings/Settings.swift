@@ -92,8 +92,9 @@ public struct Settings: Hashable, Codable, Sendable {
     public var showIslandQuota: Bool = true
     public var showIslandTokens: Bool = true
     public var showIslandSessions: Bool = true
-    /// A mark turns into its bot while its agent works, asks for approval or has just replied. Off, marks stay
-    /// logos and a working one keeps still.
+    /// A mark turns into its bot while its agent works, asks for approval or has just replied, and while its own card
+    /// is open on a dock that separates its agents. It covers the Dynamic dock, the Simple panel and reminders. Off,
+    /// marks stay logos and a working one keeps still.
     public var botLogos: Bool = true
     /// Accounts hidden from quota, balance and glow presentation. Their recorded usage stays intact.
     public private(set) var hiddenAccountIDs: Set<String> = []

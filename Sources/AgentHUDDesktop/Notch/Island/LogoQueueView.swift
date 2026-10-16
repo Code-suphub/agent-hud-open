@@ -5,15 +5,13 @@ import AgentHUDCore
 enum MarkAttention: Equatable, Sendable {
     /// Nobody is looking at this agent's card: the mark follows its agent.
     case none
-    /// Its card is a glance: the mark holds still as its logo, whatever its agent is doing.
-    case glanced
-    /// A click opened its whole panel: the mark is its bot, watching the pointer, until the panel closes.
+    /// Its card is open, a hover's peek or a click's whole panel: the mark is its bot, watching the pointer, until
+    /// the card closes.
     case opened
 
     func phase(working: Bool) -> BotPhase {
         switch self {
         case .none: working ? .working : .idle
-        case .glanced: .glanced
         case .opened: .opened
         }
     }

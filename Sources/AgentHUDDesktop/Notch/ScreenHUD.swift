@@ -909,7 +909,7 @@ final class ScreenHUD {
 
     private var simpleMeter: SimpleMeterConfig? {
         guard geometry.mode == .simple else { return nil }
-        return SimpleMeterConfig(items: meterItems, placement: placement)
+        return SimpleMeterConfig(items: meterItems, placement: placement, bots: settings.settings.botLogos)
     }
 
     private var logoQueue: LogoQueueConfig? {
@@ -979,15 +979,14 @@ final class ScreenHUD {
         root.separatesAgents = placement.separatesAgents && geometry.mode.isDocked
         root.stripScale = stripScale
         let focus = focus
-        // The agent whose own card is up has its mark looked at: glanced at while the card is a peek, opened once
-        // a click asked for the whole panel. An event's card leaves its sender's mark to its agent.
+        // The agent whose own card is up has its mark woken, from the hover's peek on and through the click that opens
+        // the whole panel. An event's card leaves its sender's mark to its agent.
         if open, activeAlert == nil, previewPlacement == nil, let focus {
-            let kind: MarkAttention = pinned ? .opened : .glanced
             if let index = root.logoQueue?.items.firstIndex(where: { AgentArtwork.markKey($0.vendor) == focus.key }) {
-                root.logoQueue?.items[index].attention = kind
+                root.logoQueue?.items[index].attention = .opened
             }
             if let index = root.simpleMeter?.items.firstIndex(where: { AgentArtwork.markKey($0.vendor) == focus.key }) {
-                root.simpleMeter?.items[index].attention = kind
+                root.simpleMeter?.items[index].attention = .opened
             }
         }
         root.focusVendor = focus?.vendor

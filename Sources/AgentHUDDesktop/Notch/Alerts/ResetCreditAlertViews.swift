@@ -16,6 +16,8 @@ struct ResetCreditAlertCompactView: View {
 
     /// A length at the scale of the dock this reminder grows from.
     private func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
+    /// The size of its words or of the symbol beside them, from their size beside the notch: a size smaller on a dock.
+    private func t(_ value: CGFloat) -> CGFloat { s(CompactWings.size(value, onDock: wings != nil)) }
 
     var body: some View {
         let copy = ResetCreditAlertCopy(grant: grant)
@@ -24,14 +26,14 @@ struct ResetCreditAlertCompactView: View {
                 HStack(spacing: s(8)) {
                     AgentLogo(vendor: grant.account.account.provider, size: s(17))
                     Text(grant.account.account.provider)
-                        .font(.ui(s(13), .semibold)).foregroundStyle(theme.alertText).lineLimit(1)
+                        .font(.ui(t(13), .semibold)).foregroundStyle(theme.alertText).lineLimit(1)
                 }
                 .frame(width: wings?.leading ?? s(IslandController.alertWingWidth), alignment: .leading)
                 Color.clear.frame(width: wings?.gap ?? cameraWidth)
                 HStack(spacing: s(7)) {
-                    ResetCreditSymbol(grant: grant, size: s(12))
+                    ResetCreditSymbol(grant: grant, size: t(12))
                     Text(copy.compactTitle)
-                        .font(.tabular(s(12), .medium)).foregroundStyle(theme.alertInk(0.92)).lineLimit(1)
+                        .font(.tabular(t(12), .medium)).foregroundStyle(theme.alertInk(0.92)).lineLimit(1)
                 }
                 .frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
             }

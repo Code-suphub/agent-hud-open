@@ -87,9 +87,10 @@ struct ScreensPane: View {
         let listed = current.map { settings.panelLayout.effective(for: $0.key).hud.agents } ?? []
         var items = store.map { ScreenAgents(store: $0, listed: listed, mode: .simple).meterItems } ?? []
         if items.isEmpty { items = SimpleMeterItem.samples }
-        // The preview shows what the bot switch does even while nothing is running.
-        if sample.simpleBots, !items.contains(where: \.isWorking) { items[0].isWorking = true }
-        return SimpleMeterConfig(items: items, placement: sample)
+        // The preview shows what bot logos do even while nothing is running.
+        let bots = settings.settings.botLogos
+        if bots, !items.contains(where: \.isWorking) { items[0].isWorking = true }
+        return SimpleMeterConfig(items: items, placement: sample, bots: bots)
     }
 
     var body: some View {
@@ -200,13 +201,6 @@ struct ScreensPane: View {
                     label: L10n.text("显示数字", "Show numbers"),
                     subtitle: L10n.text("在标志旁写出已用百分比。", "The percentage used, beside the mark."),
                     isOn: binding(\.showsNumbers)
-                )
-                SettingsDivider(theme: theme)
-                SettingsToggleRow(
-                    label: L10n.text("Bot 动画", "Bot animation"),
-                    subtitle: L10n.text("工作中的 agent，标志变成它的 Bot；空闲时偶尔变成 Bot 活动几秒。",
-                                        "A working agent's mark becomes its bot. Idle marks become bots for a few seconds now and then."),
-                    isOn: binding(\.simpleBots)
                 )
             }
         }

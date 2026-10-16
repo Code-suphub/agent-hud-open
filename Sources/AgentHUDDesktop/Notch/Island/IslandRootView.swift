@@ -21,6 +21,12 @@ struct CompactWings: Equatable {
     var padding: CGFloat
     var width: CGFloat { leading + gap + trailing + 2 * padding }
 
+    /// A size of a reminder's words or of the symbol beside them, in points before a dock's scale, from the size it has
+    /// beside the notch, where the name is the cards' 13 and the status 12. On a dock it is a size smaller, so words
+    /// and symbol sit in the pill, which keeps a mark's height, with room above and below them. The agent's mark keeps
+    /// its size.
+    static func size(_ beside: CGFloat, onDock: Bool) -> CGFloat { onDock ? beside - 1 : beside }
+
     /// The halves of `alert`'s reminder on a dock set to `scale`, each measured from its text and no wider than a
     /// wing, so the pill is placed before anything is drawn. The lengths are the ones the reminders' views use.
     @MainActor
@@ -34,27 +40,28 @@ struct CompactWings: Equatable {
                 .withSymbolConfiguration(.init(pointSize: size, weight: .semibold))?.size.width
             return ceil(drawn ?? size * 1.4)
         }
-        let name = NSFont.systemFont(ofSize: s(13), weight: .semibold)
+        func t(_ value: CGFloat) -> CGFloat { s(Self.size(value, onDock: true)) }
+        let name = NSFont.systemFont(ofSize: t(13), weight: .semibold)
         let who: String, what: String, mark: CGFloat, status: NSFont
         var count: CGFloat = 0
         switch alert {
         case .completion(let event):
-            who = event.agentVendor; what = IslandAlertCompactView.replyStatus; mark = symbol("text.bubble", s(16))
-            status = .systemFont(ofSize: s(12), weight: .medium)
+            who = event.agentVendor; what = IslandAlertCompactView.replyStatus; mark = symbol("text.bubble", t(16))
+            status = .systemFont(ofSize: t(12), weight: .medium)
         case .permission(let request):
             who = request.project ?? request.vendor; what = PermissionAlertCompactView.status(of: request)
-            mark = symbol("hand.raised.fill", s(14))
-            status = .systemFont(ofSize: s(12), weight: .medium)
+            mark = symbol("hand.raised.fill", t(14))
+            status = .systemFont(ofSize: t(12), weight: .medium)
             if waiting > 1 {
                 count = s(7) + width("×\(waiting)", .monospacedDigitSystemFont(ofSize: s(10), weight: .semibold)) + 2 * s(5)
             }
         case .quota(let event):
             // These two symbols sit in a frame of their own, two points over their size.
-            who = event.agent.vendorName; what = QuotaAlertCompactView.status(of: event); mark = s(12) + 2
-            status = .monospacedDigitSystemFont(ofSize: s(12), weight: .medium)
+            who = event.agent.vendorName; what = QuotaAlertCompactView.status(of: event); mark = t(12) + 2
+            status = .monospacedDigitSystemFont(ofSize: t(12), weight: .medium)
         case .resetCredits(let grant):
-            who = grant.account.account.provider; what = ResetCreditAlertCompactView.status(of: grant); mark = s(12) + 2
-            status = .monospacedDigitSystemFont(ofSize: s(12), weight: .medium)
+            who = grant.account.account.provider; what = ResetCreditAlertCompactView.status(of: grant); mark = t(12) + 2
+            status = .monospacedDigitSystemFont(ofSize: t(12), weight: .medium)
         }
         let wing = s(IslandController.alertWingWidth)
         // A point to spare each: a width measured here and one laid out by SwiftUI can differ by a fraction.

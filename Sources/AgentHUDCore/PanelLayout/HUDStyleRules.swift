@@ -25,7 +25,7 @@ extension HUDStyle {
         case .material:
             return HUDMaterial(rawValue: value.stringValue ?? "") == nil
                 ? ["\(path) is one of \(PanelLayout.quoted(HUDMaterial.allCases.map(\.rawValue)))."] : []
-        case .showLogos, .showRings, .showNumbers, .bots, .separateAgents:
+        case .showLogos, .showRings, .showNumbers, .separateAgents:
             return value.boolValue == nil ? ["\(path) is true or false."] : []
         case .position, .logoSize, .logoGap, .edgeDistance, .simpleSize, .ringWidth, .transparency:
             return number(value, at: path, within: field.range)
