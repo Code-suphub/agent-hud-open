@@ -158,9 +158,11 @@ public enum SnapshotRunner {
                      scheme: ground == .dark ? .dark : .light)
             }
         }
-        // Clawd's sprites through every clip, only where this Mac has the Claude app they are read from. The pictures are
-        // for checking the clips here and are never published; a Mac without the app, as a build machine is, skips them.
-        if let sheet = await ClawdSheetSource.shared.sheet(fitting: .standard) {
+        // Clawd's sprites through every clip, only when asked for with AGENT_HUD_REAL_CLAUDE_APP=1 on a Mac with the Claude
+        // app they are read from. The pictures are the app's art, for checking the clips here, and never published; any
+        // other run, as one for README or store media is, never reads the app.
+        if ProcessInfo.processInfo.environment["AGENT_HUD_REAL_CLAUDE_APP"] == "1",
+           let sheet = await ClawdSheetSource.shared.sheet(fitting: .standard) {
             for side in [20.0, 36.0] {
                 for ground in [HUDLook.Appearance.dark, .light] {
                     save("clawd-sprites-local-\(Int(side))-\(ground)", ClawdSpritesScene(sheet: sheet, side: side, ground: ground),
@@ -168,7 +170,7 @@ public enum SnapshotRunner {
                 }
             }
         } else {
-            print("snapshot skipped clawd-sprites-local: no Claude app whose sprites fit the clips")
+            print("snapshot skipped clawd-sprites-local: not asked for, or no Claude app whose sprites fit the clips")
         }
         // The Display pane with this machine's screen put in logo mode, to check the preview against the HUD.
         if let main = NSScreen.main {

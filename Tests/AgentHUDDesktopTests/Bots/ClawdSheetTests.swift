@@ -172,4 +172,17 @@ final class ClawdSheetTests: XCTestCase {
         XCTAssertNil(ClawdSheetSource.version(of: app))
         XCTAssertNil(ClawdSheetSource.sheet(app: app), "an app with no version")
     }
+
+    /// Stills may be published, so the debug code that draws them reads the Claude app only when asked to on this Mac.
+    func testDebugStillsReadTheClaudeAppOnlyWhenAskedTo() throws {
+        let debug = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../Sources/AgentHUDDesktop/Debug").standardized
+        let files = try FileManager.default.contentsOfDirectory(at: debug, includingPropertiesForKeys: nil)
+        XCTAssertFalse(files.isEmpty)
+        for file in files where file.pathExtension == "swift" {
+            let source = try String(contentsOf: file, encoding: .utf8)
+            guard source.contains("ClawdSheetSource") else { continue }
+            XCTAssertTrue(source.contains("environment[\"AGENT_HUD_REAL_CLAUDE_APP\"] == \"1\""), file.lastPathComponent)
+        }
+    }
 }
