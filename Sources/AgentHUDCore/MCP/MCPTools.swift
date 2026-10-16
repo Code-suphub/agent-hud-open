@@ -176,9 +176,9 @@ public enum MCPTools {
                                       + "material is: glass lays less of the appearance's colour beneath it, solid "
                                       + "draws less of its fill, all of it at 0; Solid, Clear and Regular draw three "
                                       + "fifths of it, 0.6 at 1, and Material all of it; "
-                                      + "\(bounds(HUDStyle.Field.transparency.range)) It sets the material the HUD "
-                                      + "would have; get_panel lists what each keeps as solidTransparency and "
-                                      + "glassTransparency."),
+                                      + "\(bounds(HUDStyle.Field.transparency.range)) It sets the transparency of "
+                                      + "the material the HUD would have; get_panel lists what each keeps as "
+                                      + "solidTransparency and glassTransparency."),
             "solidTransparency": kept("solid's"),
             "glassTransparency": kept("glass's"),
             "glow": object([

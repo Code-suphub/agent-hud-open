@@ -345,6 +345,39 @@ final class PanelToolsLookTests: PanelToolsCase {
         XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false).glassTransparency, 0.7, "glass's as saved")
     }
 
+    /// A proposal that changes the material sets the transparency of the material it puts in effect, even where it is
+    /// the value the other material keeps: glass at 0 on a screen whose solid HUD is opaque is glass at 0, not glass at
+    /// what it kept, and the glass's transparency that proposal leaves, given as get_panel would list it, is taken with
+    /// it. One that repeats what the new material keeps changes only the material.
+    func testAChangeOfMaterialKeepsATransparencyThatRepeatsTheOtherMaterials() throws {
+        let key = "SECOND-UUID"
+        let glassAtNone: [String: JSONValue] = ["material": .string("glass"), "transparency": .number(0)]
+        var panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(glassAtNone)])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, transparency: 0))
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false).glassTransparency, 0, "glass at 0, as asked")
+        XCTAssertEqual(try listing(key, in: panel)["look"], look("dark", "glass", transparency: 0))
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["glassTransparency"], .number(0))
+
+        panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(glassAtNone.merging([
+            "glassTransparency": .number(0), "solidTransparency": .number(0),
+        ]) { $1 })])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, transparency: 0),
+                       "what the proposal leaves each, given as get_panel would list it")
+
+        layout.discardStyle(key)
+        settings.update { $0.screens[key] = ScreenPlacement(mode: .logos, edge: .right, solidTransparency: 0.2) }
+        panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object([
+            "material": .string("glass"), "transparency": .number(0.2),
+        ])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, transparency: 0.2))
+        XCTAssertEqual(try listing(key, in: panel)["look"], look("dark", "glass", transparency: drawn(0.2)))
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object([
+            "material": .string("glass"), "transparency": .number(ScreenPlacement.standardGlassTransparency),
+        ])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass), "glass's own, repeated, changes nothing")
+        XCTAssertEqual(changes, 1, "the settings written by the test alone")
+    }
+
     // MARK: What is read
 
     /// get_panel says what each screen draws now: a notch at a notch in its look as any HUD, `system` as macOS is set,

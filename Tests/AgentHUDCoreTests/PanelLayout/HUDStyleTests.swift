@@ -118,6 +118,28 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertEqual(HUDStyle(json: ["transparency": .string("0.5")]), HUDStyle())
     }
 
+    /// A transparency is reduced against what the screen keeps for the material the style puts in effect, not the
+    /// saved material's: a change of material keeps a transparency that only repeats the other material's, which the
+    /// new material would otherwise draw at what it kept, and leaves out one that repeats its own.
+    func testATransparencyIsReducedAgainstTheMaterialTheStylePutsInEffect() {
+        let solid = ScreenPlacement(mode: .simple, glassTransparency: 0.5, solidTransparency: 0)
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: 0).reduced(placement: solid, glow: GlowSettings()),
+                       HUDStyle(material: .glass, transparency: 0), "solid's 0 is not glass's")
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: 0).applied(to: solid).glassTransparency, 0)
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: 0.5).reduced(placement: solid, glow: GlowSettings()),
+                       HUDStyle(material: .glass), "glass's own, repeated, changes nothing")
+        XCTAssertEqual(HUDStyle(transparency: 0).reduced(placement: solid, glow: GlowSettings()), HUDStyle(),
+                       "without a material, the saved one's")
+        let thin = ScreenPlacement(mode: .simple, glassTransparency: 0.5, solidTransparency: 0.2)
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: 0.2).reduced(placement: thin, glow: GlowSettings()),
+                       HUDStyle(material: .glass, transparency: 0.2))
+        let glass = ScreenPlacement(mode: .simple, material: .glass, glassTransparency: 0.3, solidTransparency: 0)
+        XCTAssertEqual(HUDStyle(material: .solid, transparency: 0.3).reduced(placement: glass, glow: GlowSettings()),
+                       HUDStyle(material: .solid, transparency: 0.3), "glass's 0.3 is not solid's")
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: 0.3).reduced(placement: glass, glow: GlowSettings()),
+                       HUDStyle(), "the saved material and its own transparency, repeated, change nothing")
+    }
+
     /// What glass is made of, clear or regular Liquid Glass or a material, is a style field like the look's others: set
     /// over the settings' own `glassStyle`, read back from them and reduced to what it changes. It is kept whatever the
     /// material, as Settings keeps it while Solid is chosen, and a style that leaves it keeps the screen's own, so the

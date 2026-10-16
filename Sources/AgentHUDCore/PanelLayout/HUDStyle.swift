@@ -170,9 +170,14 @@ public struct HUDStyle: Hashable, Sendable {
     }
 
     /// The style reduced to what it changes about a screen saved with `placement` and `glow`: a field set to the value
-    /// the screen has saved is left out, so a style that spells out what is saved is empty.
+    /// the screen has saved is left out, so a style that spells out what is saved is empty. The transparency is the one
+    /// of the material the style puts in effect, its own or the saved one, so a change of material keeps a transparency
+    /// that only repeats the other material's.
     func reduced(placement: ScreenPlacement, glow: GlowSettings) -> HUDStyle {
-        let saved = HUDStyle(every: placement, glow: glow)
+        var saved = HUDStyle(every: placement, glow: glow)
+        var inEffect = placement
+        if let material { inEffect.material = material }
+        saved.transparency = inEffect.transparency
         var kept = self
         for field in Field.allCases where kept.value(field) == saved.value(field) { kept.set(field, .null) }
         for field in GlowField.allCases where kept.glow.value(field) == saved.glow.value(field) { kept.glow.set(field, .null) }
