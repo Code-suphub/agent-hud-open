@@ -417,19 +417,7 @@ final class ClawdPlayerTests: XCTestCase {
 
     // MARK: The clock
 
-    private func sheet(sameAs: [(ClawdFrame, ClawdFrame)]) -> ClawdSheet {
-        var sprites: [String: ClawdSprite] = [:]
-        for (name, count) in ClawdClipsTests.realFrameCounts {
-            // A colour of its own, so no frame of one sprite looks like a frame of another.
-            let color = ClawdSprite.Color(red: UInt8(ClawdSpriteName.allCases.firstIndex(of: name)!), green: 0, blue: 0, alpha: 255)
-            // Every frame its own picture: one pixel, a row lower each frame.
-            var frames = (0..<count).map { index in (0..<count).map { $0 == index ? UInt8(0) : ClawdSprite.clear } }
-            for (frame, original) in sameAs where frame.sprite == name { frames[frame.index] = frames[original.index] }
-            sprites[name.rawValue] = ClawdSprite(name: name.rawValue, category: "", width: 1, height: count, fps: 12,
-                                                 palette: [color], frames: frames, anchor: (0, count), standMatch: true)
-        }
-        return ClawdSheet(version: "", sprites: sprites)
-    }
+    private func sheet(sameAs: [(ClawdFrame, ClawdFrame)]) -> ClawdSheet { ClawdFixture.everySprite(sameAs: sameAs) }
 
     func testFramesThatLookTheSameAreHeldAsOne() {
         let sheet = sheet(sameAs: [(ClawdFrame(.thinking, 7), ClawdFrame(.thinking, 6)), (ClawdFrame(.thinking, 9), ClawdFrame(.thinking, 6))])

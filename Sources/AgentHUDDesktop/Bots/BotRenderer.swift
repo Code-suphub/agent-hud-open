@@ -55,17 +55,28 @@ enum BotRenderer {
         return context.makeImage()
     }
 
+    /// The plain logo, in a frame like `image`'s, wearing `sign` if it has one: the frame `image` draws for a motion that
+    /// rests as its logo, for a bot drawn some other way while it does, such as Clawd from its sprites.
+    static func logo(_ form: BotForm, sign: BotSign?, side: CGFloat, outline: Int = 0, space: CGColorSpace? = nil) -> CGImage? {
+        let inner = Int((side * (1 + 2 * margin)).rounded(.up))
+        guard inner > 0, let context = BotCanvas.clear(inner + outline * 2, space: space) else { return nil }
+        context.saveGState()
+        enterMark(on: context, inner: inner, outline: outline)
+        context.interpolationQuality = .high
+        draw(form.artwork, in: box, on: context)
+        context.restoreGState()
+        if let sign { paint(sign, lit: 0, alpha: 1, form: form, side: side, outline: outline, on: context) }
+        if outline > 0 { BotHairline.lay(on: context, reach: outline, ground: form.ground) }
+        return context.makeImage()
+    }
+
     /// The frame without its hairline, with `outline` pixels of room left for one on every edge, in the kept
     /// bitmap the next frame is drawn in.
     static func bare(_ form: BotForm, motion: BotMotion, side: CGFloat, outline: Int, space: CGColorSpace?) -> CGContext? {
         let inner = Int((side * (1 + 2 * margin)).rounded(.up)), extent = inner + outline * 2
         guard inner > 0, let context = BotCanvas.clear(extent, space: space) else { return nil }
         context.saveGState()
-        // From here one unit is the mark's side, measured from its top left with y running down.
-        let unit = CGFloat(inner) / (1 + 2 * margin)
-        context.translateBy(x: CGFloat(outline), y: CGFloat(extent - outline))
-        context.scaleBy(x: unit, y: -unit)
-        context.translateBy(x: margin, y: margin)
+        enterMark(on: context, inner: inner, outline: outline)
         context.interpolationQuality = .high
 
         if let eyes = form.spec.ownEyes {
@@ -87,16 +98,31 @@ enum BotRenderer {
         }
         context.restoreGState()
         if let sign = motion.sign {
-            // In the frame's own pixels, which run up from its bottom left, so every cell is whole.
-            let place = BotSigns.box(for: form, side: side, outline: outline)
-            let rect = CGRect(x: place.minX, y: CGFloat(extent) - place.maxY, width: place.width, height: place.height)
-            context.saveGState()
             // A sign of the bot's own comes with it; a request's or a badge's stands on the logo too.
-            if sign == .ellipsis || sign == .z { context.setAlpha(Morph(motion.morph).dressed) }
-            BotSigns.paint(sign, lit: motion.lit, in: rect, on: context, ground: form.ground)
-            context.restoreGState()
+            let alpha = sign == .ellipsis || sign == .z ? Morph(motion.morph).dressed : 1
+            paint(sign, lit: motion.lit, alpha: alpha, form: form, side: side, outline: outline, on: context)
         }
         return context
+    }
+
+    /// From here one unit is the mark's side, measured from its top left with y running down, in a frame `inner` pixels
+    /// wide with `outline` pixels round it.
+    private static func enterMark(on context: CGContext, inner: Int, outline: Int) {
+        let unit = CGFloat(inner) / (1 + 2 * margin)
+        context.translateBy(x: CGFloat(outline), y: CGFloat(inner + outline))
+        context.scaleBy(x: unit, y: -unit)
+        context.translateBy(x: margin, y: margin)
+    }
+
+    /// Paints `sign` over the bot in the frame's own pixels, which run up from its bottom left, so every cell is whole.
+    private static func paint(_ sign: BotSign, lit: Int, alpha: CGFloat, form: BotForm, side: CGFloat, outline: Int,
+                              on context: CGContext) {
+        let place = BotSigns.box(for: form, side: side, outline: outline)
+        let rect = CGRect(x: place.minX, y: CGFloat(context.height) - place.maxY, width: place.width, height: place.height)
+        context.saveGState()
+        context.setAlpha(alpha)
+        BotSigns.paint(sign, lit: lit, in: rect, on: context, ground: form.ground)
+        context.restoreGState()
     }
 
     // MARK: The morph

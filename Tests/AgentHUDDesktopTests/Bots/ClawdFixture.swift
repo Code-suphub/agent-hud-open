@@ -36,6 +36,20 @@ enum ClawdFixture {
         ClawdSheet(version: version, sprites: ClawdSpriteTable.sprites(in: Array(script.utf8)))
     }
 
+    /// Every sprite of the game, as many frames long as the real ones, so the clips fit it, and every frame a picture of
+    /// its own: one pixel, a row lower each frame, in a colour of the sprite's own. A frame in `sameAs` repeats another.
+    static func everySprite(sameAs: [(ClawdFrame, ClawdFrame)] = []) -> ClawdSheet {
+        var sprites: [String: ClawdSprite] = [:]
+        for (name, count) in ClawdClipsTests.realFrameCounts {
+            let color = ClawdSprite.Color(red: UInt8(ClawdSpriteName.allCases.firstIndex(of: name)!), green: 0, blue: 0, alpha: 255)
+            var frames = (0..<count).map { index in (0..<count).map { $0 == index ? UInt8(0) : ClawdSprite.clear } }
+            for (frame, original) in sameAs where frame.sprite == name { frames[frame.index] = frames[original.index] }
+            sprites[name.rawValue] = ClawdSprite(name: name.rawValue, category: "", width: 1, height: count, fps: 12,
+                                                 palette: [color], frames: frames, anchor: (0, count), standMatch: true)
+        }
+        return ClawdSheet(version: "", sprites: sprites)
+    }
+
     /// An Electron archive holding `files`, by their paths from its root.
     static func archive(_ files: [String: Data], unpacked: Set<String> = []) -> Data {
         var tree: [String: Any] = [:], bytes = Data()

@@ -11,11 +11,21 @@ extension EnvironmentValues {
 ///
 /// The two are kept apart on purpose. A breathing body changes its pose every frame and its picture almost
 /// never, so the picture is only drawn again when the eyes or the outline have visibly moved.
+///
+/// Claude's mark plays Clawd's own sprites instead (`ClawdActor`), once they are read and while the mark is big enough
+/// for them; until then, and on a Mac without the Claude app, its Clawd is drawn like every other bot.
 @MainActor
 final class BotActor {
     let layer = CALayer()
     let form: BotForm
     private var motion: BotMotion
+    /// Clawd's sprites, for Claude's mark; nil for every other.
+    private let sprites: ClawdSprites?
+    /// Claude's mark played from Clawd's sprites; nil while it is drawn.
+    private(set) var clawd: ClawdActor?
+    private let staysBot: Bool, arrivesAfter: TimeInterval, seed: UInt64
+    /// When the bot was first given a state: a staying Clawd that takes over later arrives when the drawn one did.
+    private var firstSet: TimeInterval?
     private var shown: BotRenderer.Look?
     private var placed: CGAffineTransform?
     private var faded: CGFloat = 1
@@ -33,9 +43,15 @@ final class BotActor {
 
     /// - arrivesAfter: seconds a staying bot keeps its logo before it turns into the bot.
     /// - seed: the bot's random acts, fixed only to replay them in a test.
+    /// - sprites: where Claude's mark finds Clawd's sprites.
     init(form: BotForm, staysBot: Bool, period: TimeInterval, arrivesAfter: TimeInterval = 0,
-         seed: UInt64 = UInt64.random(in: 0...UInt64.max)) {
+         seed: UInt64 = UInt64.random(in: 0...UInt64.max), sprites: ClawdSprites = .shared) {
         self.form = form
+        self.staysBot = staysBot
+        self.arrivesAfter = arrivesAfter
+        self.seed = seed
+        self.sprites = form.isClawd ? sprites : nil
+        self.sprites?.want()
         motion = BotMotion(seed: seed)
         motion.staysBot = staysBot
         motion.arrivesAfter = arrivesAfter
@@ -65,6 +81,7 @@ final class BotActor {
         layer.bounds = CGRect(x: 0, y: 0, width: extent, height: extent)
         layer.contentsScale = scale
         shown = nil
+        clawd?.redraw()
         due = 0
     }
 
@@ -75,6 +92,7 @@ final class BotActor {
         if space == nil, self.space == nil { return }
         self.space = space
         shown = nil
+        clawd?.redraw()
         due = 0
     }
 
@@ -83,13 +101,16 @@ final class BotActor {
 
     /// A state is acted out from the next frame, however long the bot meant to wait.
     func set(_ state: BotState, at now: TimeInterval) {
+        if firstSet == nil { firstSet = now }
         motion.set(state, at: now)
+        clawd?.set(state, at: now)
         due = 0
     }
 
     /// Plays an event over the look once the bot is up (`BotMotion.play`).
     func play(_ event: BotEvent, at now: TimeInterval) {
         motion.play(event, at: now)
+        clawd?.play(event, at: now)
         due = 0
     }
 
@@ -100,8 +121,15 @@ final class BotActor {
     /// - yRunsDown: whether y grows downwards in the space this layer is laid out in.
     /// - aim: where to look, from `BotMotion.aim(from:to:)`. It is asked only while there are eyes to turn.
     func step(to now: TimeInterval, yRunsDown: Bool, aim: () -> CGPoint) -> TimeInterval? {
+        takeUpSprites(at: now)
         guard let due else { return nil }
         if now < due - BotPace.slack { return due - now }
+        if let clawd {
+            let wait = clawd.step(to: now, side: side, scale: scale, outline: outline, space: space, restsHidden: restsHidden,
+                                  aim: aim)
+            self.due = wait.map { now + $0 }
+            return wait
+        }
         motion.step(to: now, aim: motion.morph > 0 || motion.staysBot ? aim() : .zero)
         let wait = motion.wait
         self.due = wait.map { now + $0 }
@@ -126,6 +154,34 @@ final class BotActor {
             layer.setAffineTransform(transform)
         }
         return wait
+    }
+
+    /// Clawd's sprites take over Claude's mark once they are read and while the mark is big enough for them
+    /// (`ClawdBaker.drawsSprites`), and give it back to the drawn Clawd otherwise. A bot on screen fades from one into
+    /// the other; the motion keeps being told everything, so the drawn Clawd picks up where the sprites leave off.
+    private func takeUpSprites(at now: TimeInterval) {
+        guard let sprites else { return }
+        let sheet = side > 0 && ClawdBaker.drawsSprites(side: side, scale: scale) ? sprites.sheet : nil
+        guard sheet !== clawd?.sheet else { return }
+        let showing = !layer.isHidden && (layer.contents != nil || clawd != nil)
+        if showing { IslandAnimation.fadeLook(of: layer, duration: ClawdActor.fade) }
+        clawd?.remove()
+        clawd = sheet.map { sheet in
+            let clawd = ClawdActor(sheet: sheet, form: form, staysBot: staysBot, arrivesAfter: arrivesAfter, seed: seed,
+                                   in: layer, showing: showing)
+            // A staying Clawd arrives when the drawn one did; one that follows its agent takes up its look from now.
+            if let firstSet { clawd.set(motion.state, at: staysBot ? firstSet : now) }
+            return clawd
+        }
+        if clawd != nil {
+            layer.contents = nil
+            layer.setAffineTransform(.identity)
+        }
+        // Whichever is drawn next starts from what the layer holds now.
+        shown = nil
+        placed = clawd == nil ? nil : .identity
+        faded = CGFloat(layer.opacity)
+        due = 0
     }
 
     /// A pose is written with y running down and turns clockwise; the layer may be laid out either way up.
@@ -248,6 +304,11 @@ final class BotClock {
         guard !screensAsleep, !sessionAway else { return false }
         guard let window = (owner as? NSView)?.window else { return true }
         return window.isVisible && window.occlusionState.contains(.visible)
+    }
+
+    /// Steps every follower within a frame, however long each meant to wait: something they draw from has changed.
+    func hurry() {
+        if !followers.isEmpty { fire() }
     }
 
     /// Brings the next tick forward to now.
