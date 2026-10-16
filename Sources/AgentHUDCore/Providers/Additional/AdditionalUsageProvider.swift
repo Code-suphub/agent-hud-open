@@ -162,7 +162,12 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
         // behind API-reached models expose no quota endpoint, so a logged reset is the only reading these rows have.
         let limitHits = source == .workbuddy ? local.limitHits.filter { $0.reset > now } : []
         var windows = quota.scopedWindows(source)
-        var quotaWindowIDs = quota.quotaWindowIDs
+        // The transcripts hold every ceiling a WorkBuddy account has, so this pass can declare the account's windows
+        // complete even when none of them is ahead: the quota's own windows and the ceilings still ahead, never an
+        // expired one — its absence from the inventory is what retires its row, instead of the row lingering as a
+        // pending reset for the whole retention period. Another source's quota reading stays incremental until that
+        // source declares its own inventory.
+        var quotaWindowIDs = quota.quotaWindowIDs ?? (source == .workbuddy ? Set(quota.windows.map(\.id)) : nil)
         if !limitHits.isEmpty {
             let account = quota.resolvedAccount(source)
             let latest = Dictionary(limitHits.map { ($0.model, $0) }, uniquingKeysWith: { max($0.observedAt, $1.observedAt) == $0.observedAt ? $0 : $1 })
@@ -177,9 +182,6 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
                                      shortLabel: "\(model) · \(Self.limitShort(hit.window))", observedAt: hit.observedAt))
                 quotaWindowIDs?.insert(raw)
             }
-            // The quota itself is complete as read; these rows list every ceiling the transcripts hold, so together
-            // they are the full inventory and an expired reset retires its row rather than lingering as a stale reading.
-            if quotaWindowIDs == nil { quotaWindowIDs = Set(quota.windows.map(\.id)).union(limitHits.map { "limit:\($0.model):\($0.window)" }) }
         }
         // Account-wide imports are the same on every machine signed into the account, so their totals are kept per account.
         let usageAccount = local.sessions.contains(where: \.accountWide)
@@ -230,9 +232,9 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
         let consumerIDs = Set(consumers.map(\.id))
         let quotaIDs = Set(windows.map(\.id) + agents.filter { $0.vendor == source.vendor }.map(\.id))
         let accounts: [String: [AccountObservation]]?
-        // The ceilings make a reading of their own even while the app's quota answer stays empty, so they carry the
-        // account their inventory belongs to.
-        if quota.isSignedIn || !limitHits.isEmpty {
+        // A declared inventory carries the account it belongs to even while the app's quota answer stays empty: the
+        // ceilings make a reading of their own, and an inventory nobody reports cannot retire the rows it leaves out.
+        if quota.isSignedIn || quotaWindowIDs != nil {
             accounts = [source.vendor: [AccountObservation(account: account, client: quota.client, label: quota.label,
                 plan: quota.plan, observedAt: observedAt, aliases: quota.accountAliases,
                 quotaWindowIDs: quotaWindowIDs.map { Set($0.map(account.windowID)) },
@@ -255,7 +257,8 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
 
     /// How the 429 ceiling rows name their windows, in the vendor's own words where the transcripts quote them
     /// (`5 小时的使用上限`), else in the words the other plans' clients read; and each window's length, which the
-    /// message itself does not carry.
+    /// message itself does not carry. The month's length is a guess at a calendar month, not a vendor's number: a
+    /// monthly ceiling's row simply retires at its reset time, and only the pace of a forecast reads the length.
     private static let limitDurations: [String: TimeInterval] = ["5h": 5 * 3600, "day": 86400, "week": 7 * 86400, "month": 30 * 86400]
     private static func limitLabel(_ window: String) -> String {
         switch window {

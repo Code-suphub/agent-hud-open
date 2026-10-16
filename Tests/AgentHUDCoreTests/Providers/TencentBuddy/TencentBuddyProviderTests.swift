@@ -229,6 +229,32 @@ final class TencentBuddyProviderTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(later.discoveredAgents.filter { $0.id.contains("limit:") }.isEmpty)
     }
 
+    func testAnExpiredCeilingRetiresItsRowRatherThanPendingForTheRetentionPeriod() async throws {
+        let home = try directory()
+        try write([
+            line("message", message: "m1", usage: #"{"inputTokens":100,"outputTokens":4,"totalTokens":104}"#)
+                .replacingOccurrences(of: #""model":"glm-5.3""#, with: #""model":"Intern-S2","requestModelId":"custom-local:intern-s2""#),
+            limitLine(error: "429 已达到 5 小时的使用上限。您的限额将在 \(wallClock(now.addingTimeInterval(7200))) 重置。")
+        ], to: home.appendingPathComponent(".workbuddy/projects/repo/s1.jsonl"))
+        // The same provider read twice through the retainer: the second pass is after the reset, so the ceiling the
+        // transcripts still hold is no longer ahead.
+        final class Clock: @unchecked Sendable { var now: Date; init(_ now: Date) { self.now = now } }
+        let clock = Clock(now)
+        let retained = RetainedUsageProvider(provider: AdditionalUsageProvider(source: .workbuddy, readQuota: { ProviderQuota() },
+            readSessions: { [home] since in
+                await AdditionalLocalStore(source: .workbuddy, roots: [home.appendingPathComponent(".workbuddy/projects")]).index(since: since)
+            },
+            history: QuotaHistoryStore(ledger: .inMemory()), clock: { clock.now }))
+        let ahead = try await retained.fetchUsage(agents: [], historyHours: 24)
+        XCTAssertFalse(ahead.discoveredAgents.filter { $0.id.contains("limit:") }.isEmpty, "the ceiling is ahead of now")
+        clock.now = now.addingTimeInterval(4 * 3600)
+        let passed = try await retained.fetchUsage(agents: [], historyHours: 24)
+        XCTAssertTrue(passed.discoveredAgents.filter { $0.id.contains("limit:") }.isEmpty,
+                      "an expired ceiling leaves the account's complete inventory, so its row retires at once")
+        let inventory = try XCTUnwrap(passed.accounts?["WorkBuddy"]?.first?.quotaWindowIDs)
+        XCTAssertFalse(inventory.contains { $0.contains("limit:") }, "the retired row is absent from the inventory, which is what retires it")
+    }
+
     func testACreditEntryNamesTheOneModelItsSessionCalled() {
         XCTAssertEqual(WorkBuddySessions.entryModels(entries: ["workbuddy:s1": ["h1": 1.5]],
                                                        models: ["workbuddy:s1": ["glm"]]),
@@ -286,9 +312,12 @@ final class TencentBuddyProviderTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(sqlite3_exec(handle, statements.joined(), nil, nil, nil), SQLITE_OK, "the metering fixture is written")
     }
 
-    /// The wall-clock reset time the fixture writes, one the test's `now` also reads in the Mac's own zone.
+    /// The wall-clock reset time the fixture writes: the vendor's own zone, the same one the reader parses in, so the
+    /// expectation holds whatever zone this Mac runs in.
     private func wallClock(_ date: Date) -> String {
-        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
         return String(format: "%04d-%02d-%02d %02d:%02d:%02d", components.year!, components.month!, components.day!, components.hour!, components.minute!, components.second!)
     }
 }

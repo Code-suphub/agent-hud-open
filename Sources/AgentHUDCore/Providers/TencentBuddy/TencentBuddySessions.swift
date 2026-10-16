@@ -90,10 +90,10 @@ enum TencentBuddySessions {
             ?? error["status"].stringValue.flatMap(Int.init)
     }
 
-    /// The reset time in the vendor's message, a wall-clock time in the client's own zone (`2026-10-14 01:06:03 重置`).
+    /// The reset time in the vendor's message, a wall-clock time in the vendor's own zone (`2026-10-14 01:06:03 重置`).
     private static func resetDate(_ message: String) -> Date? {
         guard let range = message.range(of: #"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) 重置"#, options: .regularExpression) else { return nil }
-        return DateParsing.localWallClock(String(message[range].dropLast(3)))
+        return DateParsing.serverWallClock(String(message[range].dropLast(3)))
     }
 
     /// Title lines the engine appends to a session's transcript, in the order it prefers them: the name the user gave,
@@ -176,10 +176,11 @@ enum TencentBuddySessions {
 
 enum CodeBuddySessions: LocalSessionLayout {
     static let installPaths = [".codebuddy/projects"]
-    /// CodeBuddy Code's configuration and data folder: `CODEBUDDY_CONFIG_DIR`, else `~/.codebuddy`. The variable points
-    /// both clients at one folder when they share an installation, so a value that names WorkBuddy's own folder (where
-    /// `workbuddy.db` and `models.json` live) is WorkBuddy's data; the WorkBuddy source reads it, and this one reads
-    /// nowhere rather than counting the same transcripts twice under two vendors.
+    /// CodeBuddy Code's configuration and data folder: `CODEBUDDY_CONFIG_DIR` when it names a folder of its own, else
+    /// `~/.codebuddy`. The variable points both clients at one folder when they share an installation, so a value that
+    /// names WorkBuddy's own folder (where `workbuddy.db` and `models.json` live) is WorkBuddy's data: the WorkBuddy
+    /// source reads it and this one reads no folder of its own, rather than counting the same transcripts twice under
+    /// two vendors. Without the variable this one keeps its own `~/.codebuddy`.
     static func home(_ home: URL, environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
         let workBuddy = home.appendingPathComponent(".workbuddy")
         if let value = ClientHome.variable("CODEBUDDY_CONFIG_DIR", in: environment) {
@@ -209,7 +210,10 @@ enum WorkBuddySessions: LocalSessionLayout {
     /// fact in the transcript, so a model reads the same even after its entry was deleted from the app's model list.
     static func displayName(_ model: String, apiReached: Set<String>) -> String {
         if apiReached.contains(model) { return model }
-        return model.count + 11 > 32 ? "\(model)（WB）" : "\(model)（WorkBuddy）"
+        // The mark says the app served this model itself; the short one where the whole would not fit. Both are the
+        // interface language's own brackets, so an English UI does not read full-width ones.
+        let mark = model.count + 11 > 32 ? L10n.text("（WB）", "(WB)") : L10n.text("（WorkBuddy）", "(WorkBuddy)")
+        return model + mark
     }
 
     /// The app keeps a session's name in `workbuddy.db` beside `projects`, where a rename from its sidebar goes: the
@@ -231,8 +235,8 @@ enum WorkBuddySessions: LocalSessionLayout {
         return sessions.map { var item = $0; if let title = titles[item.id] { item.title = title }; return item }
     }
 
-    /// What the app's own metering (`session_usage`) charged each session: the credits its per-model entries add up to,
-    /// attributed to the one model whose sessions an entry appears in when every such session called it, with the rest
+    /// What the app's own metering (`session_usage`) charged each session this pass lists: the credits its per-model
+    /// entries add up to, attributed to the one model every listed session carrying an entry called, with the rest
     /// reported as unattributed rather than guessed. Its `used`/`size` are the context size and limit it metered, in
     /// tokens. `models` is each session's models as its transcript logged them.
     static func credits(sessions: [ProviderSession], models: [String: Set<String>], home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [String: SessionCredits] {
@@ -242,10 +246,16 @@ enum WorkBuddySessions: LocalSessionLayout {
               }).first(where: { $0.lastPathComponent == "projects" }),
               let database = try? ReadOnlySQLite(projects.deletingLastPathComponent().appendingPathComponent("workbuddy.db")) else { return [:] }
         let prefix = "\(AdditionalSource.workbuddy.rawValue):"
+        // Only the sessions this pass lists are read: the metering table holds every session the app ever recorded,
+        // and a pass pays for the rows it reports rather than for the whole table.
+        let ids = sessions.map { String($0.id.dropFirst(prefix.count)) }
+        guard !ids.isEmpty, let list = try? JSONSerialization.data(withJSONObject: ids),
+              let idList = String(data: list, encoding: .utf8) else { return [:] }
         // The metering's entries, keyed as the transcripts key their sessions.
         var entries: [String: (used: Int, size: Int, credits: [String: Double])] = [:]
         do {
-            try database.rows("SELECT session_id, used, size, credit_json FROM session_usage WHERE credit_json IS NOT NULL AND credit_json != ''") { row in
+            try database.rows("SELECT session_id, used, size, credit_json FROM session_usage WHERE credit_json IS NOT NULL AND credit_json != '' AND session_id IN (SELECT value FROM json_each(?))",
+                              strings: [idList]) { row in
                 guard let raw = ReadOnlySQLite.text(row, 0), let used = ReadOnlySQLite.text(row, 1).flatMap(Int.init),
                       let size = ReadOnlySQLite.text(row, 2).flatMap(Int.init), let json = ReadOnlySQLite.text(row, 3),
                       let credits = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Double] else { return }
