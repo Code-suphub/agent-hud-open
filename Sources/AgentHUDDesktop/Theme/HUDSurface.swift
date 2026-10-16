@@ -7,6 +7,9 @@ extension EnvironmentValues {
     /// a Settings preview and a recording of the HUD, which are drawn where no glass or blur can be, off screen, in this
     /// process, or over a desktop painted inside a window. Off on the HUD itself.
     @Entry var drawsGlassStandIn = false
+    /// Whether a material stands in too, where Liquid Glass would not: in a Settings preview, whose wallpaper is painted
+    /// inside the window, which a material, a blur of what is behind the window, does not take in.
+    @Entry var drawsMaterialStandIn = false
 }
 
 /// Where glass is Liquid Glass and where it is frosted.
@@ -27,9 +30,9 @@ enum HUDGlass {
 
 extension HUDLook {
     /// The hairline round a surface in this look: `color`, or none where Liquid Glass lights a rim of its own. Glass drawn
-    /// as its stand-in keeps the hairline, as solid does.
+    /// as its stand-in keeps the hairline, as solid does, and so does a material, which has no rim of its own.
     func outline(_ color: Color, standIn: Bool) -> Color {
-        material == .glass && !standIn && HUDGlass.isLiquid ? .clear : color
+        material == .glass && glassStyle != .material && !standIn && HUDGlass.isLiquid ? .clear : color
     }
 }
 
@@ -37,15 +40,18 @@ extension HUDLook {
 /// Simple panel and the line that grows out of it, the body of a row's hover details. Every fill the HUD stands on is
 /// drawn here, so solid and glass part in one place.
 ///
-/// - Solid is `fill` in the shape, as the HUD has always been filled, thinned as glass's cover is by the screen's
-///   transparency, which is 0 for a solid surface until chosen otherwise.
+/// - Solid is `fill` in the shape, as the HUD has always been filled, thinned by the screen's transparency
+///   (`HUDLook.coverOpacity`), which is 0 for a solid surface until chosen otherwise.
 /// - Glass is Liquid Glass on macOS 26 in a build made with Xcode 26 or later, and a frosted blur of what is behind the
-///   window everywhere else (`FrostedGlass`). The screen's transparency thins both the frost (`HUDLook.glassFrost`), so
-///   the desktop comes through sharper, and the look's own surface laid over it (`HUDLook.glassCover`), under the
-///   HUD's ink. The cover is what holds the glass to the look:
-///   Liquid Glass turns light over a light desktop and dark over a dark one whatever it is tinted, and the HUD's text and
-///   status colours are fixed, so dark glass over a white window would otherwise carry white text on pale grey.
-/// - Where nothing is behind to blur (`drawsGlassStandIn`), glass is its cover alone.
+///   window everywhere else (`FrostedGlass`): the system's own glass, always whole, with nothing of the HUD's laid over
+///   it. Beneath it lies a dimming layer in the look's own colour (`HUDLook.glassDimming`), as Apple asks of clear
+///   glass, which the glass blurs with the desktop: the screen's transparency thins it, from whole at 0 to none at 1,
+///   where the HUD is the system's bare glass, as a macOS menu's is. So the HUD stays frosted glass at any transparency.
+///   Glass turns light over a light desktop and dark over a dark one, and the HUD's text and status colours are fixed,
+///   so with little dimming they read less well over a desktop of the other shade. The frosted blur hides what lies
+///   beneath it in the window, so there the dimming lies over it.
+/// - Where nothing is behind to blur (`drawsGlassStandIn`), glass is the look's own surface standing in for it
+///   (`HUDLook.glassStandIn`).
 ///
 /// The surface is drawn behind what the HUD holds, never round it: glass that holds the HUD's content would turn that
 /// content's colour scheme with the desktop behind it, and glass drawn in a `GlassEffectContainer` with the content
@@ -63,6 +69,7 @@ struct HUDSurface<S: Shape>: View {
     /// floats free of it.
     let contact: HUDEdge?
     @Environment(\.drawsGlassStandIn) private var standIn
+    @Environment(\.drawsMaterialStandIn) private var materialStandIn
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ shape: S, look: HUDLook, fill: Color, contact: HUDEdge?) {
@@ -77,12 +84,14 @@ struct HUDSurface<S: Shape>: View {
         case solid
         case liquid
         case frosted
+        case material
         case standIn
     }
 
     private var drawing: Drawing {
         guard look.material == .glass else { return .solid }
         if standIn { return .standIn }
+        if look.glassStyle == .material { return materialStandIn ? .standIn : .material }
         return HUDGlass.isLiquid ? .liquid : .frosted
     }
 
@@ -94,35 +103,46 @@ struct HUDSurface<S: Shape>: View {
                     .opacity(look.coverOpacity)
                     .transition(.opacity)
             case .standIn:
-                shape.fill(look.glassCover)
+                shape.fill(look.glassStandIn)
                     .transition(.opacity)
             case .frosted:
+                // A blur of what is behind the window hides what the window holds beneath it, so the dimming lies over
+                // the frost here.
                 FrostedGlass(appearance: look.appearanceName)
                     .clipShape(shape)
-                    .opacity(look.glassFrost)
-                    .overlay { shape.fill(look.glassCover) }
+                    .overlay { shape.fill(look.glassDimming) }
                     .transition(.opacity)
             case .liquid:
-                liquid
-                    .opacity(look.glassFrost)
-                    .overlay { shape.fill(look.glassCover) }
+                // The dimming beneath the glass, which Liquid Glass blurs with the desktop behind it.
+                ZStack {
+                    shape.fill(look.glassDimming)
+                    liquid
+                }
+                .transition(.opacity)
+            case .material:
+                // A material is a blur of what is behind the window, which hides what lies beneath it, so the dimming
+                // lies over it.
+                shape.fill(.regularMaterial)
+                    .environment(\.colorScheme, look.colorScheme)
+                    .overlay { shape.fill(look.glassDimming) }
                     .transition(.opacity)
             }
         }
         .animation(reduceMotion ? nil : IslandAnimation.curve, value: look)
     }
 
-    /// Liquid Glass in the shape, run past the screen edge the surface stands on, in the look's colour scheme. Its
-    /// colours are the cover's (`HUDLook.glassCover`), drawn over it: a tint of its own is taken as a hint the glass
-    /// lets the desktop overrule. It is the clear glass: the regular one turns light or dark with the size of the piece
-    /// it is drawn in, a narrow panel light and a wide card dark over the same window, so pieces of one HUD side by side
-    /// would part in colour; the clear one is the same at any size, and lets more of the desktop through.
+    /// Liquid Glass in the shape, run past the screen edge the surface stands on, in the look's colour scheme, with no
+    /// tint of its own: a tint is taken as a hint the glass lets the desktop overrule. It is the screen's choice of
+    /// variant: the clear one, the same at any size, which lets more of the desktop through, or the regular one, which
+    /// turns light or dark with the size of the piece it is drawn in, a narrow panel light and a wide card dark over the
+    /// same window.
     @ViewBuilder
     private var liquid: some View {
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
             Color.clear
-                .glassEffect(.clear, in: ContactBleed(base: shape, edge: contact, depth: HUDGlass.bleed))
+                .glassEffect(look.glassStyle == .regular ? .regular : .clear,
+                             in: ContactBleed(base: shape, edge: contact, depth: HUDGlass.bleed))
                 .environment(\.colorScheme, look.colorScheme)
         }
         #endif

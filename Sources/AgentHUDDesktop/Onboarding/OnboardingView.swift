@@ -9,6 +9,7 @@ struct OnboardingView: View {
     let sources: [SourceStatus]
     let onFinish: () -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
 
     /// Clients found on this Mac. Once the first poll has answered, the Claude Code row shows the real plan ("已就绪 · Max").
     private var resolvedSources: [SourceStatus] {
@@ -16,7 +17,7 @@ struct OnboardingView: View {
     }
 
     var body: some View {
-        let theme = Theme.forScheme(scheme)
+        let theme = Theme.forScheme(scheme).under(surface?.look)
         VStack(alignment: .leading, spacing: 16) {
             // Native traffic lights occupy this strip.
             Color.clear.frame(height: 12)
@@ -58,6 +59,8 @@ struct OnboardingView: View {
         }
         .padding(EdgeInsets(top: 20, leading: 26, bottom: 22, trailing: 26))
         .frame(width: 440)
+        // The ground fills the window, taller than the content may be: under glass the window is cleared.
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(WindowGround(color: theme.windowBackground))
         .foregroundStyle(theme.text)
         .font(.ui(13))

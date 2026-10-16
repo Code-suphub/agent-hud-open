@@ -22,9 +22,12 @@ struct HUDLook: Equatable, Sendable {
 
     var appearance: Appearance
     var material: Material = .solid
-    /// How much of the desktop the HUD lets through, from 0, the look's own surface drawn whole, to 1, bare: what the
-    /// screen's Transparency chooses for its material (`ScreenPlacement.transparency`). Opaque unless chosen otherwise.
+    /// How much of the desktop the HUD lets through, what the screen's Transparency chooses for its material
+    /// (`ScreenPlacement.transparency`), 0 to 0.95: for glass how little of the look's own colour lies beneath the glass,
+    /// for a solid surface how little of its fill is drawn. None unless chosen otherwise.
     var transparency: Double = 0
+    /// What glass is made of (`HUDGlassStyle`): clear or regular Liquid Glass, or a frosted material.
+    var glassStyle: HUDGlassStyle = .clear
 
     /// The HUD as it has always been drawn: dark and solid. A screen has it until its settings choose another, and the
     /// island at rest in a hardware notch looks it whatever they choose.
@@ -32,21 +35,41 @@ struct HUDLook: Equatable, Sendable {
 
     /// The look of the island in the row of a hardware notch, at rest or showing a reminder's wings: dark whatever the
     /// appearance, in the look's own material, so that the row stays one with the camera housing. At rest the island is
-    /// the housing's own shape, inked black (`NotchInk`); a reminder's wings are black, or black glass under Glass. What
-    /// opens out of the row, the panel and the cards, takes the look itself (`ScreenHUD`).
+    /// the housing's own shape, inked black (`NotchInk`); a reminder's wings are black, or black glass under Glass: glass
+    /// over a fixed black (`notchRowTransparency`), whatever the screen's Transparency, which the bare glass would leave
+    /// light over a light menu bar. What opens out of the row, the panel and the cards, takes the look itself
+    /// (`ScreenHUD`).
     var inNotchRow: HUDLook {
-        HUDLook(appearance: .dark, material: material, transparency: transparency)
-    }
-
-    /// The tokens the HUD draws with: the island's own for a dark HUD, solid or glass; the light window's, set for the
-    /// HUD, for a light one; and for light glass, those with ink a grade darker.
-    var theme: Theme {
-        switch (appearance, material) {
-        case (.dark, _): .island
-        case (.light, .solid): .lightIsland
-        case (.light, .glass): .lightGlass
+        switch material {
+        case .glass: HUDLook(appearance: .dark, material: .glass, transparency: Self.notchRowTransparency,
+                             glassStyle: glassStyle)
+        case .solid: HUDLook(appearance: .dark, material: .solid)
         }
     }
+
+    /// The notch row's glass: four fifths black beneath it.
+    static let notchRowTransparency = 0.2
+
+    /// The tokens the HUD draws with: the island's own for a dark HUD, solid or glass; the light window's, set for the
+    /// HUD, for a light one; and for light glass, those with ink a grade darker. Their painted boxes thin with the look
+    /// (`Theme.under(_:)`), as a window's do.
+    var theme: Theme {
+        switch (appearance, material) {
+        case (.dark, _): Theme.island.under(self)
+        case (.light, .solid): Theme.lightIsland.under(self)
+        case (.light, .glass): Theme.lightGlass.under(self)
+        }
+    }
+
+    /// How much of a painted box on the look's ground is drawn, a card, a row or an input (`Theme.under(_:)`): all of it
+    /// on an opaque ground; on one the desktop shows through, thinned as the ground is, to a fifth at the most, so that
+    /// boxes on a light ground follow the look as the dark ground's tints of white do.
+    var innerOpacity: Double {
+        seeThrough ? Self.innerFloor + (1 - Self.innerFloor) * (1 - transparency) : 1
+    }
+
+    /// The share of a painted box left at the most transparency.
+    static let innerFloor = 0.2
 
     /// The scheme SwiftUI draws in whatever the HUD leaves to it: system colours, controls, and the marks that come in a
     /// version for each background.
@@ -57,43 +80,44 @@ struct HUDLook: Equatable, Sendable {
         }
     }
 
-    /// What glass is covered with under the HUD's ink (`HUDSurface`): the theme's `glassTint`, the look's own surface,
-    /// at the opacity the transparency leaves it (`coverOpacity`). It darkens dark glass and lightens light glass,
-    /// and holds the glass to the look's appearance over any desktop: Liquid Glass follows what is behind it, light over
-    /// a light desktop, and the HUD's text and status colours are fixed. Where nothing is behind to blur, it is glass's
-    /// stand-in on its own.
-    var glassCover: Color {
-        theme.glassTint.opacity(coverOpacity)
+    /// The dimming layer beneath Liquid Glass (`HUDSurface`), as Apple asks of clear glass to keep what is on it legible: the
+    /// look's own colour, black beneath dark glass and near-white beneath light glass, at the opacity the screen's
+    /// transparency leaves it (`dimmingOpacity`). The glass blurs it with the desktop behind, so the HUD stays glass,
+    /// frosted and lit at its rim, at any transparency: whole at 0, where the glass shows the look's colour alone, and
+    /// none at 1, where it is the system's bare glass, as a macOS menu's is, its colours following the desktop, so that
+    /// the HUD's fixed ink reads less well over a desktop of the other shade. Laid over the glass or faded into it, as
+    /// before, it either hid the glass or lost its blur.
+    var glassDimming: Color {
+        theme.glassTint.opacity(dimmingOpacity)
     }
 
-    /// How much of the look's own surface is drawn, glass's cover or a solid surface's fill: all of it with no
-    /// transparency, and at the most transparency the screen can choose still half. Under half, a dark surface over a
-    /// white window turns the mid-grey that neither the HUD's light ink nor its accents read on, and a light one over a
-    /// black desktop the same grey from the other side; the desktop's colours and shapes show through either way.
-    var coverOpacity: Double {
-        1 - transparency * Self.coverGivenUp
+    /// How much of the dimming layer beneath glass is drawn: all of it with no transparency, none at 1.
+    var dimmingOpacity: Double {
+        material == .glass ? 1 - transparency : 0
     }
+
+    /// How much of a solid surface's fill is drawn: what the transparency leaves of it, all of it at 0 and a twentieth at
+    /// the top, as glass's colour beneath it is (`dimmingOpacity`). How much is the user's choice; over a desktop of the
+    /// other shade the HUD's ink reads less well the thinner the fill.
+    var coverOpacity: Double {
+        material == .solid ? 1 - transparency : 0
+    }
+
+    /// Glass where nothing is behind to blur (`drawsGlassStandIn`), the HUD's pictures, recordings and some previews: the
+    /// look's own colour as the dimming layer has it, and never thinner than about a third, which glass over a mid-grey
+    /// backdrop reads as, so that a picture of bare glass still holds the HUD's ink.
+    var glassStandIn: Color {
+        theme.glassTint.opacity(Self.standInFloor + (1 - Self.standInFloor) * dimmingOpacity)
+    }
+
+    /// What glass stands in as at its most transparent.
+    static let standInFloor = 0.35
 
     /// Whether the desktop shows through the HUD: glass, or a solid surface with a transparency. What lies under the
     /// HUD's surfaces, the glow and the shadows, is then kept out from under them (`GlowCutout`, `castsShellShadows`).
     var seeThrough: Bool {
         material == .glass || transparency > 0
     }
-
-    /// The share of the cover the transparency takes away at its most: 0.9 of 0.55, leaving half.
-    static let coverGivenUp = 0.55
-
-    /// How much of the glass's frost is drawn: all of it with no transparency, less as the transparency rises, so the
-    /// desktop's own shapes come through the glass, and still most of it at the most, so that they come through soft and
-    /// the glass reads as glass. The frost alone, however thin the cover over it, blurs a window behind the HUD into an
-    /// even tone, light glass over a white window into plain white, and a transparency that only thinned the cover
-    /// would show nothing there; with the frost thinned as far as the cover, the window behind came through sharp.
-    var glassFrost: Double {
-        1 - transparency * Self.frostGivenUp
-    }
-
-    /// The share of the frost the transparency takes away at its most: 0.9 of 0.4, leaving about two thirds.
-    static let frostGivenUp = 0.4
 
     /// The same for AppKit: the appearance of a hosting view or a window that draws the HUD, a hover popover's or a
     /// picture's, which a scroller, a text field's caret and a template image follow.
@@ -120,7 +144,9 @@ extension HUDLook {
     init(drawing placement: ScreenPlacement, systemIsLight: Bool, reducesTransparency: Bool) {
         self.init(appearance: placement.drawsLight(systemIsLight: systemIsLight) ? .light : .dark,
                   material: placement.drawsGlass(reducesTransparency: reducesTransparency) ? .glass : .solid,
-                  transparency: placement.drawsTransparency(reducesTransparency: reducesTransparency))
+                  transparency: placement.drawsTransparency(reducesTransparency: reducesTransparency),
+                  // A look drawn solid has no glass to be made of, so that it equals any other solid look of its colours.
+                  glassStyle: placement.drawsGlass(reducesTransparency: reducesTransparency) ? placement.glassStyle : .clear)
     }
 }
 

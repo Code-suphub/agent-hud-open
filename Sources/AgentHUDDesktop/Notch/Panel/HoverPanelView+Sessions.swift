@@ -132,12 +132,17 @@ extension HoverPanelView {
         return AnyView(
             ZStack(alignment: .bottomTrailing) {
                 AgentLogo(vendor: vendor, size: 14)
+                // The ring round the dot is cut out of the mark, so that whatever ground the row stands on shows in it.
+                Circle()
+                    .frame(width: 9, height: 9)
+                    .offset(x: 3.5, y: 3.5)
+                    .blendMode(.destinationOut)
                 Circle().fill(color)
                     .frame(width: 6, height: 6)
-                    .overlay(Circle().stroke(theme.windowBackground, lineWidth: 1.5))
                     .offset(x: 2, y: 2)
             }
             .frame(width: 14, height: 14)
+            .compositingGroup()
             .opacity(dot == .ended ? 0.7 : 1)
         )
     }

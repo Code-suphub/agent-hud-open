@@ -8,9 +8,10 @@ import AgentHUDCore
 /// menu take the app's Appearance, as they always have.
 ///
 /// A window takes the look through its appearance, which moves its tokens (`Theme.forScheme`), its controls, its sheets
-/// and its popovers together, and its material through its grounds (`WindowGround`): under a look of glass the window's
-/// ground and its sidebar are a blur of what is behind the window, covered with their own colour as the HUD's glass is,
-/// while the cards on them keep their fill. A window changes its appearance at once, as macOS changes it.
+/// and its popovers together, and its material through its grounds (`WindowGround`): under a look of glass the window
+/// is cleared (`HostedWindowController.refreshLook()`) and the ground of its page and of its sidebar is the system's
+/// regular glass (`WindowGlass`) over their colour, while the cards on them keep their fill. A window changes its
+/// appearance at once, as macOS changes it.
 @MainActor
 enum WindowLook {
     /// The look of the HUD on a screen for a window or the menu, or nil where they take the app's Appearance. Set by
@@ -47,34 +48,71 @@ final class WindowSurface {
     var look: HUDLook?
 }
 
-/// A window's ground, its page or its sidebar: `color`, or under a look of glass a blur of what is behind the window,
-/// covered with `color` as much as the screen's transparency leaves it, as the HUD's glass is (`HUDLook.coverOpacity`).
-/// A solid look keeps the window opaque whatever its transparency: a window read through unblurred is no window.
+/// A window's ground, its page or its sidebar: `color`, or under a look of glass the screen's glass, the HUD's own
+/// choice (`HUDLook.glassStyle`), with `color` as its dimming layer (`HUDLook.glassDimming`): all of it at 0, where the
+/// glass shows the window's own colour, and none at 1, where the ground is the bare glass. Liquid Glass blurs the colour
+/// beneath it with the desktop; a material, and the frosted blur that stands in for Liquid Glass, hide what lies
+/// beneath them, so there the colour lies over them. Clear Liquid Glass is all but unblurred in the active window, as
+/// macOS draws it, and frosted once another window is active. A solid look thins the colour as the HUD's solid fill is
+/// thinned (`HUDLook.coverOpacity`), the desktop showing through unblurred. One ground is drawn wherever the window shows
+/// through, never one over another, since glass laid over glass does not see the desktop.
 struct WindowGround: View {
     let color: Color
     @Environment(WindowSurface.self) private var surface: WindowSurface?
 
     var body: some View {
         if let look = surface?.look, look.material == .glass {
-            WindowBlur()
-                .overlay { color.opacity(look.coverOpacity) }
+            if look.glassStyle == .material {
+                Rectangle().fill(.regularMaterial)
+                    .overlay { color.opacity(look.dimmingOpacity) }
+            } else if HUDGlass.isLiquid {
+                ZStack {
+                    color.opacity(look.dimmingOpacity)
+                    WindowGlass(appearance: look.appearanceName, style: look.glassStyle)
+                }
+            } else {
+                WindowGlass(appearance: look.appearanceName, style: look.glassStyle)
+                    .overlay { color.opacity(look.dimmingOpacity) }
+            }
         } else {
-            color
+            color.opacity(surface?.look?.coverOpacity ?? 1)
         }
     }
 }
 
-/// A blur of what is behind the window, in the window's own appearance: the HUD's frosted glass (`FrostedGlass`), whose
-/// material lets the desktop through where a window's or a sidebar's own tints it nearly away, and drawn the same
-/// whether the window is the active one or not, as the HUD's is.
-private struct WindowBlur: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.blendingMode = .behindWindow
-        view.material = .hudWindow
-        view.state = .active
-        return view
+/// Liquid Glass across a window's ground, of what is behind the window, in the screen's variant, clear or regular
+/// (`NSGlassEffectView`), on macOS 26 in a build made with Xcode 26 or later, and before that the HUD's frosted blur,
+/// drawn the same whether the window is the active one or not. Liquid Glass sees the desktop only through a window that
+/// is not opaque, which the window under a look of glass is not (`HostedWindowController.refreshLook()`).
+private struct WindowGlass: NSViewRepresentable {
+    let appearance: NSAppearance.Name
+    let style: HUDGlassStyle
+
+    func makeNSView(context: Context) -> NSView {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            let glass = NSGlassEffectView()
+            glass.style = style == .regular ? .regular : .clear
+            glass.cornerRadius = 0
+            glass.appearance = NSAppearance(named: appearance)
+            return glass
+        }
+        #endif
+        let blur = NSVisualEffectView()
+        blur.blendingMode = .behindWindow
+        blur.material = .hudWindow
+        blur.state = .active
+        blur.appearance = NSAppearance(named: appearance)
+        return blur
     }
 
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+    func updateNSView(_ view: NSView, context: Context) {
+        if view.appearance?.name != appearance { view.appearance = NSAppearance(named: appearance) }
+        #if compiler(>=6.2)
+        if #available(macOS 26, *), let glass = view as? NSGlassEffectView {
+            let variant: NSGlassEffectView.Style = style == .regular ? .regular : .clear
+            if glass.style != variant { glass.style = variant }
+        }
+        #endif
+    }
 }

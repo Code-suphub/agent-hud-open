@@ -125,20 +125,37 @@ final class HUDPictureRendererTests: XCTestCase {
         XCTAssertEqual(light.picture.height, standard.picture.height)
     }
 
-    /// Nothing is behind a picture to show through glass: a panel of glass is drawn as its stand-in, its look's cover at
-    /// the standard transparency over the backdrop, darker than the backdrop for dark glass and lighter for light glass,
-    /// short of the solid fill.
+    /// Nothing is behind a picture to show through glass: a panel of glass is drawn as its stand-in over the backdrop,
+    /// 0.675 of its look's own surface at the standard transparency, 0.5, darker than the backdrop for dark glass and
+    /// lighter for light glass, short of the solid fill. The stand-in thins as the dimming beneath the glass does: the
+    /// surface whole at 0, and at a Transparency of 1 the third of it a picture always keeps, dark glass still darker
+    /// than the backdrop and light glass still lighter.
     func testAGlassPanelIsDrawnAsItsStandIn() throws {
         layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
-        let dark = try simplePanel(in: HUDLook(appearance: .dark, material: .glass, transparency: ScreenPlacement.standardGlassTransparency))
-        let light = try simplePanel(in: HUDLook(appearance: .light, material: .glass, transparency: ScreenPlacement.standardGlassTransparency))
+        func glass(_ appearance: HUDLook.Appearance, _ transparency: Double) throws
+            -> (picture: HUDPicture, fill: CGFloat) {
+            try simplePanel(in: HUDLook(appearance: appearance, material: .glass, transparency: transparency))
+        }
+        let standard = ScreenPlacement.standardGlassTransparency
+        let dark = try glass(.dark, standard), light = try glass(.light, standard)
         let solid = try simplePanel(in: HUDLook(appearance: .light))
+        // The backdrop as the picture has it, in its margin.
+        let margin = try bitmap(dark.picture).colorAt(x: 4, y: 4)?.usingColorSpace(.deviceRGB)
+        let backdrop = margin?.brightnessComponent ?? 0
         XCTAssertGreaterThan(dark.fill, 0.04, "the backdrop shows through dark glass")
-        XCTAssertLessThan(dark.fill, 0.2, "darker than the backdrop")
+        XCTAssertLessThan(dark.fill, backdrop - 0.1, "darker than the backdrop")
         XCTAssertGreaterThan(light.fill, 0.5, "lighter than the backdrop")
         XCTAssertLessThan(light.fill, solid.fill - 0.1, "short of the light surface itself")
         XCTAssertEqual(light.picture.width, solid.picture.width)
         XCTAssertEqual(light.picture.height, solid.picture.height)
+
+        XCTAssertEqual(try glass(.light, 0).fill, solid.fill, accuracy: 0.02, "the light surface whole at 0")
+        XCTAssertLessThan(try glass(.dark, 0).fill, 0.02, "black whole at 0")
+        let darkBare = try glass(.dark, 1).fill, lightBare = try glass(.light, 1).fill
+        XCTAssertGreaterThan(darkBare, dark.fill + 0.03, "less of dark glass")
+        XCTAssertLessThan(darkBare, backdrop - 0.03, "still darker than the backdrop")
+        XCTAssertLessThan(lightBare, light.fill - 0.15, "less of light glass")
+        XCTAssertGreaterThan(lightBare, backdrop + 0.15, "still lighter than the backdrop")
     }
 
     /// The Simple panel's picture in `look`, and the brightness most of its strip has: its fill, which the rings and

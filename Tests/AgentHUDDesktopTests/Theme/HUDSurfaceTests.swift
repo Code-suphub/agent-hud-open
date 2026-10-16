@@ -4,9 +4,10 @@ import SwiftUI
 import XCTest
 @testable import AgentHUDDesktop
 
-/// The surface every piece of the HUD stands on (`HUDSurface`): solid as it has always been, glass that runs past the
-/// screen edge it stands on and is covered with its look's own surface at the screen's transparency, a stand-in where
-/// nothing is behind to blur, and the island's first look, which replaces the placeholder's without fading.
+/// The surface every piece of the HUD stands on (`HUDSurface`): solid as it has always been, the system's own glass,
+/// whole at any transparency over a dimming layer in the look's colour, that runs past the screen edge it stands on, a
+/// stand-in where nothing is behind to blur, and the island's first look, which replaces the placeholder's without
+/// fading.
 @MainActor
 final class HUDSurfaceTests: XCTestCase {
     private let rect = CGRect(x: 0, y: 0, width: 200, height: 60)
@@ -84,101 +85,126 @@ final class HUDSurfaceTests: XCTestCase {
         #endif
     }
 
-    /// A surface keeps its hairline unless it is Liquid Glass, which lights a rim of its own; glass drawn as its stand-in
-    /// keeps it, as solid does.
+    /// A surface keeps its hairline unless it is Liquid Glass, clear or regular, which lights a rim of its own; glass
+    /// drawn as its stand-in keeps it, as solid does.
     func testOnlyLiquidGlassLightsItsOwnRim() {
         let hairline = Theme.island.islandOutline
         XCTAssertEqual(HUDLook.standard.outline(hairline, standIn: false), hairline)
         XCTAssertEqual(HUDLook(appearance: .light).outline(hairline, standIn: false), hairline)
         for appearance in [HUDLook.Appearance.dark, .light] {
-            let glass = HUDLook(appearance: appearance, material: .glass)
-            XCTAssertEqual(glass.outline(hairline, standIn: true), hairline, "\(appearance)")
-            XCTAssertEqual(glass.outline(hairline, standIn: false), HUDGlass.isLiquid ? .clear : hairline, "\(appearance)")
+            for style in [HUDGlassStyle.clear, .regular] {
+                let glass = HUDLook(appearance: appearance, material: .glass, glassStyle: style)
+                XCTAssertEqual(glass.outline(hairline, standIn: true), hairline, "\(appearance) \(style)")
+                XCTAssertEqual(glass.outline(hairline, standIn: false), HUDGlass.isLiquid ? .clear : hairline,
+                               "\(appearance) \(style)")
+            }
         }
     }
 
-    /// Glass is covered with its look's own surface, which the theme gives opaque, at the opacity the transparency
-    /// leaves it: whole at 0, under three quarters at the standard transparency, and still half at the range's top,
-    /// where the desktop shows through most: thinner, either look's glass turns the mid-grey of the other over a
-    /// desktop of the other shade. A dark cover darkens and a light one lightens what is behind, whatever it is.
-    func testGlassIsCoveredWithItsSurfaceAtTheTransparency() throws {
+    /// Beneath glass lies a dimming layer, as Apple asks of clear glass to keep what is on it legible: the look's own
+    /// colour, which the theme gives opaque, black beneath dark glass and near-white beneath light glass, at what the
+    /// screen's Transparency leaves of it: all of it at 0, half at the standard 0.5 and none at 1, where the HUD is the
+    /// system's bare glass. It is the same whatever the glass is made of. The glass itself is never faded, and no solid
+    /// cover is drawn with it; a solid look has no dimming layer.
+    func testTheDimmingBeneathGlassIsTheLooksColourAtWhatTheTransparencyLeaves() throws {
         for (appearance, theme) in [(HUDLook.Appearance.dark, Theme.dark), (.light, Theme.light)] {
             let tint = try sRGB(theme.glassTint), surface = try sRGB(theme.islandFill)
             XCTAssertEqual(tint.red, surface.red, accuracy: 0.002, "\(appearance)")
             XCTAssertEqual(tint.green, surface.green, accuracy: 0.002, "\(appearance)")
             XCTAssertEqual(tint.blue, surface.blue, accuracy: 0.002, "\(appearance)")
-            XCTAssertEqual(tint.alpha, 1, accuracy: 0.002, "the transparency alone thins it")
-            for (transparency, alpha) in [(0.0, 1.0), (ScreenPlacement.standardGlassTransparency, 0.725), (0.9, 0.505)] {
-                let cover = try sRGB(HUDLook(appearance: appearance, material: .glass, transparency: transparency).glassCover)
-                XCTAssertEqual(cover.red, surface.red, accuracy: 0.002, "\(appearance) \(transparency)")
-                XCTAssertEqual(cover.blue, surface.blue, accuracy: 0.002, "\(appearance) \(transparency)")
-                XCTAssertEqual(cover.alpha, alpha, accuracy: 0.002, "\(appearance) \(transparency)")
+            XCTAssertEqual(tint.alpha, 1, accuracy: 0.002, "\(appearance): opaque, thinned by the transparency alone")
+            for style in HUDGlassStyle.allCases {
+                for transparency in stride(from: 0.0, through: 1, by: 0.1) {
+                    let glass = HUDLook(appearance: appearance, material: .glass, transparency: transparency,
+                                        glassStyle: style)
+                    let what = "\(appearance) \(style) \(transparency)"
+                    XCTAssertEqual(glass.dimmingOpacity, 1 - transparency, accuracy: 0.0001, what)
+                    let dimming = try sRGB(glass.glassDimming)
+                    XCTAssertEqual(dimming.alpha, 1 - transparency, accuracy: 0.002, what)
+                    if dimming.alpha > 0.01 {
+                        XCTAssertEqual(dimming.red, surface.red, accuracy: 0.002, what)
+                        XCTAssertEqual(dimming.blue, surface.blue, accuracy: 0.002, what)
+                    }
+                    XCTAssertEqual(glass.coverOpacity, 0, "\(what): no solid cover")
+                }
             }
+            XCTAssertEqual(HUDLook(appearance: appearance, transparency: 0.4).dimmingOpacity, 0, "\(appearance): solid")
         }
-        let backdrop = try sRGB(HUDPictureRenderer.backdrop).red
-        let dark = try over(sRGB(Self.darkGlass.glassCover), backdrop)
-        let light = try over(sRGB(Self.lightGlass.glassCover), backdrop)
-        XCTAssertLessThan(dark, backdrop, "dark glass is darker than what is behind it")
-        XCTAssertGreaterThan(light, backdrop, "light glass is lighter than what is behind it")
+        XCTAssertEqual(HUDLook.standard.dimmingOpacity, 0)
+        XCTAssertEqual(Self.darkGlass.dimmingOpacity, 0.5, "half of it at the standard transparency")
     }
 
-    /// The transparency thins the glass's frost as well as its cover, so that the desktop comes through: all of the
-    /// frost with no transparency, four fifths at the standard one, and still about two thirds at the most, so that it
-    /// comes through soft. Thinning the cover alone left a window behind the HUD blurred into an even tone, light glass
-    /// over a white window plain white at any setting; thinning the frost as far showed the window sharp.
-    func testTheTransparencyThinsTheFrost() {
+    /// Glass's Transparency runs from 0, the look's colour whole beneath the glass, to 1, the bare glass, and a screen
+    /// that chooses Glass starts at 0.5, glass that is plainly dark or light and plainly glass. A solid surface has no
+    /// blur under it to hold what shows through together: its Transparency stops at 0.9 and takes away 0.55 of its fill
+    /// at the most, so that 0.505 of it is left there, never under half; a solid screen asked for more, as a style may
+    /// ask, draws its own top.
+    func testGlassRunsToTheBareGlassWhileSolidKeepsHalf() {
+        XCTAssertEqual(ScreenPlacement.glassTransparencyRange, 0...1)
+        XCTAssertEqual(ScreenPlacement.standardGlassTransparency, 0.5)
+        XCTAssertEqual(ScreenPlacement.solidTransparencyRange, 0...0.9)
+        XCTAssertEqual(ScreenPlacement.standardSolidTransparency, 0)
+        XCTAssertEqual(HUDLook.solidFillGivenUp, 0.55)
         for appearance in [HUDLook.Appearance.dark, .light] {
-            for (transparency, frost) in [(0.0, 1.0), (ScreenPlacement.standardGlassTransparency, 0.8), (0.9, 0.64)] {
-                let look = HUDLook(appearance: appearance, material: .glass, transparency: transparency)
-                XCTAssertEqual(look.glassFrost, frost, accuracy: 0.0001, "\(appearance) \(transparency)")
+            for transparency in stride(from: 0.0, through: 0.9, by: 0.1) {
+                XCTAssertEqual(HUDLook(appearance: appearance, transparency: transparency).coverOpacity,
+                               1 - transparency * 0.55, accuracy: 0.0001, "\(appearance) \(transparency)")
+            }
+            XCTAssertEqual(HUDLook(appearance: appearance).coverOpacity, 1, "\(appearance): opaque at first")
+            let top = HUDLook(appearance: appearance, transparency: ScreenPlacement.solidTransparencyRange.upperBound)
+            XCTAssertEqual(top.coverOpacity, 0.505, accuracy: 0.0001, "\(appearance)")
+            XCTAssertGreaterThanOrEqual(top.coverOpacity, 0.5, "\(appearance): a solid surface keeps half")
+        }
+        var placement = ScreenPlacement(material: .solid)
+        placement.transparency = 1
+        let drawn = HUDLook(drawing: placement, systemIsLight: false, reducesTransparency: false)
+        XCTAssertEqual(drawn.transparency, ScreenPlacement.solidTransparencyRange.upperBound)
+        XCTAssertEqual(drawn.coverOpacity, 0.505, accuracy: 0.0001)
+    }
+
+    /// Where nothing is behind to blur, glass stands in as the look's own surface, as much of it as the dimming layer
+    /// has and never less than 0.35, which glass over a mid-grey backdrop reads as, so that a picture of bare glass
+    /// still holds the HUD's ink: opaque at 0, 0.675 at the standard 0.5, and 0.35 at 1, whatever the glass is made of.
+    /// The notch's row stands in at 0.87 of black, its glass dimmed four fifths, whatever the screen's Transparency.
+    func testGlassStandsInAsItsDimmingNeverUnderAThird() throws {
+        XCTAssertEqual(HUDLook.standInFloor, 0.35)
+        for (appearance, theme) in [(HUDLook.Appearance.dark, Theme.dark), (.light, Theme.light)] {
+            let surface = try sRGB(theme.islandFill)
+            for (transparency, share) in [(0.0, 1.0), (ScreenPlacement.standardGlassTransparency, 0.675), (1.0, 0.35)] {
+                for style in HUDGlassStyle.allCases {
+                    let look = HUDLook(appearance: appearance, material: .glass, transparency: transparency,
+                                       glassStyle: style)
+                    let what = "\(appearance) \(style) \(transparency)"
+                    let standIn = try sRGB(look.glassStandIn)
+                    XCTAssertEqual(standIn.alpha, share, accuracy: 0.002, what)
+                    XCTAssertEqual(standIn.red, surface.red, accuracy: 0.002, what)
+                    XCTAssertEqual(standIn.blue, surface.blue, accuracy: 0.002, what)
+                    let row = try sRGB(look.inNotchRow.glassStandIn)
+                    XCTAssertEqual(row.red, 0, accuracy: 0.002, "\(what): the notch's row, black")
+                    XCTAssertEqual(row.alpha, 0.87, accuracy: 0.002, what)
+                }
             }
         }
     }
 
-    /// At the standard transparency the look's text reads on its glass over the backdrop the HUD's pictures have as on
-    /// a page, about 17:1 on dark glass and 9:1 on light glass, and over a desktop of the other shade, which a recording
-    /// shows unblurred, about 8.6:1 for dark glass over white and 7.9:1 for light glass over black. At the most
-    /// transparency the look's text still holds 3:1 there.
-    func testGlassHoldsItsTextAtTheStandardTransparency() throws {
-        let backdrop = try sRGB(HUDPictureRenderer.backdrop).red
-        let dark = try sRGB(Self.darkGlass.glassCover), light = try sRGB(Self.lightGlass.glassCover)
-        let darkText = try sRGB(Self.darkGlass.theme.text).red, lightText = try sRGB(Self.lightGlass.theme.text).red
-        XCTAssertGreaterThan(contrast(darkText, over(dark, backdrop)), 4.5)
-        XCTAssertGreaterThan(contrast(lightText, over(light, backdrop)), 4.5)
-        XCTAssertGreaterThan(contrast(darkText, over(dark, 1)), 7, "dark glass over a white desktop")
-        XCTAssertGreaterThan(contrast(lightText, over(light, 0)), 7, "light glass over a black desktop")
-        let top = ScreenPlacement.glassTransparencyRange.upperBound
-        let thinDark = try sRGB(HUDLook(appearance: .dark, material: .glass, transparency: top).glassCover)
-        let thinLight = try sRGB(HUDLook(appearance: .light, material: .glass, transparency: top).glassCover)
-        XCTAssertGreaterThan(contrast(darkText, over(thinDark, 1)), 3, "dark glass at its most transparent over white")
-        XCTAssertGreaterThan(contrast(lightText, over(thinLight, 0)), 3, "light glass at its most transparent over black")
-        XCTAssertGreaterThan(try contrast(sRGB(Self.darkGlass.theme.secondary).red, over(dark, backdrop)), 4.5,
-                             "dark glass's secondary text over the backdrop")
-    }
-
-    /// The less transparent the glass, the more its own surface holds the ink to the look over a desktop of the other
-    /// shade, and at 0 the glass reads as the solid surface does: its secondary text too, labels, captions and reset
-    /// times, which bare glass would leave unread.
-    func testLessTransparentGlassHoldsMoreContrast() throws {
-        for appearance in [HUDLook.Appearance.dark, .light] {
-            let desktop: CGFloat = appearance == .dark ? 1 : 0
-            func text(at transparency: Double, _ ink: KeyPath<Theme, Color> = \.text) throws -> CGFloat {
-                let look = HUDLook(appearance: appearance, material: .glass, transparency: transparency)
-                return try contrast(sRGB(look.theme[keyPath: ink]).red, over(sRGB(look.glassCover), desktop))
-            }
-            let range = ScreenPlacement.glassTransparencyRange
-            let steps = stride(from: range.lowerBound, through: range.upperBound, by: 0.1).map { $0 }
-            let contrasts = try steps.map { try text(at: $0) }
-            XCTAssertEqual(contrasts, contrasts.sorted(by: >), "\(appearance)")
-            XCTAssertGreaterThan(try text(at: 0, \.secondary), 3, "\(appearance) secondary at 0")
-            XCTAssertGreaterThan(try text(at: 0), 7, "\(appearance) at 0")
-        }
-        // Light glass's ink is a grade darker than the solid light HUD's, whose window greys fall short over a black
-        // desktop through the same cover. Its request card lets the glass show through, as dark glass's does; the solid
-        // light card is white.
-        let cover = try over(sRGB(Self.lightGlass.glassCover), 0)
-        XCTAssertGreaterThan(try contrast(sRGB(Theme.lightGlass.secondary).red, cover),
-                             try contrast(sRGB(Theme.lightIsland.secondary).red, cover))
+    /// At the standard transparency, 0.5, the stand-in holds the look's text over the backdrop the HUD's pictures have
+    /// as on a page, measured on the picture as drawn: about 17.8:1 on dark glass and 9.0:1 on light glass, and the
+    /// secondary text, labels, captions and reset times, about 6.7:1 and 4.0:1. The floors leave room for a drawing
+    /// that blends as sRGB does, where light glass's secondary text holds 3.7:1. Light glass's secondary ink is a grade
+    /// darker than the solid light HUD's, whose grey holds about 2.7:1 there. What the glass holds on screen is the
+    /// system's to say: it turns light over a light desktop and dark over a dark one, less so the more of the dimming
+    /// layer the Transparency leaves, and the HUD's fixed ink reads less well over a desktop of the other shade, which
+    /// nothing here asks it to hold.
+    func testTheStandInHoldsItsTextOverThePicturesBackdrop() throws {
+        let dark = try drawn(Self.darkGlass), light = try drawn(Self.lightGlass)
+        func ink(_ color: Color) throws -> CGFloat { try sRGB(color).red }
+        XCTAssertGreaterThan(contrast(try ink(Self.darkGlass.theme.text), dark), 17, "dark glass")
+        XCTAssertGreaterThan(contrast(try ink(Self.lightGlass.theme.text), light), 8, "light glass")
+        XCTAssertGreaterThan(contrast(try ink(Self.darkGlass.theme.secondary), dark), 6.3, "dark glass's secondary")
+        XCTAssertGreaterThan(contrast(try ink(Self.lightGlass.theme.secondary), light), 3.5, "light glass's secondary")
+        XCTAssertGreaterThan(contrast(try ink(Theme.lightGlass.secondary), light),
+                             contrast(try ink(Theme.lightIsland.secondary), light) + 1, "a grade darker than solid's")
+        // Light glass's request card lets the glass show through, as dark glass's does; the solid light card is white.
         XCTAssertLessThan(try sRGB(Theme.lightGlass.card).alpha, 1)
         XCTAssertGreaterThan(try sRGB(Theme.lightGlass.card).alpha, 0.3)
         XCTAssertEqual(try sRGB(Theme.lightIsland.card).alpha, 1)
@@ -186,26 +212,84 @@ final class HUDSurfaceTests: XCTestCase {
 
     // MARK: Drawn
 
-    /// A solid surface is its fill, as it has always been. Glass where nothing is behind to blur is its stand-in, the
-    /// look's cover alone over what the picture has behind it, as thin as the transparency leaves it. Neither draws
-    /// outside its shape. The cover is compared with itself drawn the same way over the backdrop, since the drawing
-    /// blends in a colour space of its own, a few hundredths off a blend in sRGB at half cover.
+    /// A solid surface is its fill, as it has always been. Glass where nothing is behind to blur is its stand-in over
+    /// what the picture has behind it: the look's own surface whole at 0, 0.675 of it at the standard 0.5, darker than
+    /// the backdrop for dark glass and lighter for light glass, thinner as the Transparency rises, and a third of it at
+    /// 1, still dark or light; the notch's row 0.87 black at any transparency. Neither draws outside its shape. The
+    /// stand-in is compared with itself drawn the same way over the backdrop, since the drawing blends in a colour
+    /// space of its own, a few hundredths off a blend in sRGB.
     func testAPictureDrawsGlassAsItsStandIn() throws {
         let backdrop = try sRGB(HUDPictureRenderer.backdrop).red
+        let lightSurface = try sRGB(Theme.light.islandFill).red
         XCTAssertEqual(try drawn(.standard), 0, accuracy: 0.02, "black as ever")
-        XCTAssertEqual(try drawn(HUDLook(appearance: .light)), try sRGB(Theme.light.islandFill).red, accuracy: 0.02)
+        XCTAssertEqual(try drawn(HUDLook(appearance: .light)), lightSurface, accuracy: 0.02)
 
         let dark = Self.darkGlass, light = Self.lightGlass
-        XCTAssertEqual(try drawn(dark), try drawn(cover: dark.glassCover), accuracy: 0.01)
-        XCTAssertEqual(try drawn(light), try drawn(cover: light.glassCover), accuracy: 0.01)
-        XCTAssertEqual(try drawn(dark), try over(sRGB(dark.glassCover), backdrop), accuracy: 0.05)
-        XCTAssertEqual(try drawn(light), try over(sRGB(light.glassCover), backdrop), accuracy: 0.05)
+        XCTAssertEqual(try drawn(dark), try drawn(standIn: dark.glassStandIn), accuracy: 0.01)
+        XCTAssertEqual(try drawn(light), try drawn(standIn: light.glassStandIn), accuracy: 0.01)
+        XCTAssertEqual(try drawn(dark), try over(sRGB(dark.glassStandIn), backdrop), accuracy: 0.05)
+        XCTAssertEqual(try drawn(light), try over(sRGB(light.glassStandIn), backdrop), accuracy: 0.05)
+        XCTAssertLessThan(try drawn(dark), backdrop - 0.1, "dark glass is darker than what is behind it")
+        XCTAssertGreaterThan(try drawn(light), backdrop + 0.4, "light glass is lighter than what is behind it")
+        XCTAssertLessThan(try drawn(light), lightSurface - 0.1, "short of the light surface itself")
         XCTAssertEqual(try drawn(light, at: CGPoint(x: 0, y: 0)), backdrop, accuracy: 0.02, "nothing past the card's corner")
-        let thin = HUDLook(appearance: .light, material: .glass, transparency: 0.8)
-        XCTAssertEqual(try drawn(thin), try drawn(cover: thin.glassCover), accuracy: 0.01)
-        XCTAssertLessThan(try drawn(thin), try drawn(light) - 0.1, "more of the backdrop shows through")
         let whole = HUDLook(appearance: .light, material: .glass, transparency: 0)
-        XCTAssertEqual(try drawn(whole), try sRGB(Theme.light.islandFill).red, accuracy: 0.02, "the surface itself")
+        XCTAssertEqual(try drawn(whole), lightSurface, accuracy: 0.02, "the surface itself")
+        let thin = HUDLook(appearance: .light, material: .glass, transparency: 0.8)
+        XCTAssertEqual(try drawn(thin), try drawn(standIn: thin.glassStandIn), accuracy: 0.01)
+        XCTAssertLessThan(try drawn(thin), try drawn(light) - 0.1, "more of the backdrop shows through")
+        let bare = HUDLook(appearance: .light, material: .glass, transparency: 1)
+        XCTAssertEqual(try drawn(bare), try drawn(standIn: bare.glassStandIn), accuracy: 0.01)
+        XCTAssertGreaterThan(try drawn(bare), backdrop + 0.2, "a third of the light surface is left")
+        XCTAssertLessThan(try drawn(HUDLook(appearance: .dark, material: .glass, transparency: 1)), backdrop - 0.05,
+                          "and of the dark one")
+        let row = bare.inNotchRow
+        XCTAssertEqual(try drawn(row), try drawn(standIn: row.glassStandIn), accuracy: 0.01)
+        XCTAssertEqual(try drawn(row), try drawn(whole.inNotchRow), accuracy: 0.01,
+                       "the notch's row, whatever the screen's")
+        XCTAssertLessThan(try drawn(row), try drawn(dark), "darker than dark glass at the standard transparency")
+    }
+
+    /// On screen the HUD's glass is drawn as its screen makes it. Clear or regular, it is Liquid Glass on macOS 26 in a
+    /// build made with Xcode 26 or later, which SwiftUI draws itself as a shape of its own over a blur of what is
+    /// behind, with no view of AppKit's, and everywhere else the frosted blur (`FrostedGlass`), the one blur view of
+    /// AppKit's the HUD holds, in the look's appearance. A material is SwiftUI's regular material on any Mac, drawn by
+    /// SwiftUI too, a blur of what is behind with no shape of Liquid Glass's. Solid and the stand-in blur nothing.
+    func testEachGlassIsDrawnAsTheScreenMakesIt() {
+        for style in HUDGlassStyle.allCases {
+            for appearance in [HUDLook.Appearance.dark, .light] {
+                let look = HUDLook(appearance: appearance, material: .glass, transparency: 0.5, glassStyle: style)
+                let what = "\(appearance) \(style)"
+                let drawn = surface(look)
+                let frosted = drawn.views.compactMap { $0 as? NSVisualEffectView }.filter { $0.material == .hudWindow }
+                XCTAssertEqual(frosted.count, style != .material && !HUDGlass.isLiquid ? 1 : 0, what)
+                for blur in frosted {
+                    XCTAssertEqual(blur.blendingMode, .behindWindow, what)
+                    XCTAssertEqual(blur.state, .active, what)
+                    XCTAssertEqual(blur.appearance?.name, look.appearanceName, what)
+                }
+                #if compiler(>=6.2)
+                if #available(macOS 26, *) {
+                    XCTAssertEqual(drawn.views.count, 1, "\(what): nothing of AppKit's")
+                    XCTAssertTrue(drawn.layers.contains { $0.contains("Backdrop") },
+                                  "\(what): a blur of what is behind")
+                    XCTAssertEqual(drawn.layers.contains { $0.contains("SDF") }, style != .material,
+                                   "\(what): Liquid Glass's shape")
+                }
+                #endif
+            }
+        }
+        let blurless: [(String, HUDLook, Bool)] = [
+            ("standard", .standard, false),
+            ("light solid with a transparency", HUDLook(appearance: .light, transparency: 0.4), false),
+            ("the stand-in", HUDLook(appearance: .dark, material: .glass), true),
+            ("the stand-in of a material", HUDLook(appearance: .light, material: .glass, glassStyle: .material), true),
+        ]
+        for (name, look, standIn) in blurless {
+            let drawn = surface(look, standIn: standIn)
+            XCTAssertTrue(drawn.views.allSatisfy { !($0 is NSVisualEffectView) }, name)
+            XCTAssertFalse(drawn.layers.contains { $0.contains("Backdrop") }, name)
+        }
     }
 
     /// A Settings preview draws glass as Liquid Glass where the HUD has it, which takes in the wallpaper painted behind
@@ -241,9 +325,12 @@ final class HUDSurfaceTests: XCTestCase {
 
     // MARK: Helpers
 
-    /// Glass of each appearance at the standard transparency, as a screen that chooses Glass first has it.
-    private static let darkGlass = HUDLook(appearance: .dark, material: .glass)
-    private static let lightGlass = HUDLook(appearance: .light, material: .glass)
+    /// Glass of each appearance at the standard transparency, 0.5, half the look's colour beneath it, as a screen that
+    /// chooses Glass first has it.
+    private static let darkGlass = HUDLook(appearance: .dark, material: .glass,
+                                           transparency: ScreenPlacement.standardGlassTransparency)
+    private static let lightGlass = HUDLook(appearance: .light, material: .glass,
+                                            transparency: ScreenPlacement.standardGlassTransparency)
 
     private struct Components {
         let red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat
@@ -289,10 +376,31 @@ final class HUDSurfaceTests: XCTestCase {
         return color.redComponent
     }
 
-    /// The level of grey in the middle of `cover` laid over the HUD pictures' backdrop, drawn as `drawn(_:)` draws.
-    private func drawn(cover: Color, file: StaticString = #filePath, line: UInt = #line) throws -> CGFloat {
+    /// A card's surface in `look`, as the HUD draws it on screen or, with `standIn`, as its stand-in, in a window that
+    /// is never shown: its AppKit views, its hosting view first, and the kinds of its layers, by name.
+    private func surface(_ look: HUDLook, standIn: Bool = false) -> (views: [NSView], layers: [String]) {
+        _ = NSApplication.shared
         let size = CGSize(width: 80, height: 40)
-        let hosting = NSHostingView(rootView: cover.frame(width: size.width, height: size.height)
+        let card = HUDSurface(RoundedRectangle(cornerRadius: 14, style: .continuous), look: look,
+                              fill: look.theme.islandFill, contact: nil)
+        let hosting = NSHostingView(rootView: card.frame(width: size.width, height: size.height)
+            .environment(\.drawsGlassStandIn, standIn))
+        let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered,
+                              defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        hosting.layoutSubtreeIfNeeded()
+        func views(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(views) }
+        func layers(_ layer: CALayer) -> [String] {
+            [String(describing: type(of: layer))] + (layer.sublayers ?? []).flatMap(layers)
+        }
+        return (views(hosting), hosting.layer.map(layers) ?? [])
+    }
+
+    /// The level of grey in the middle of `standIn` laid over the HUD pictures' backdrop, drawn as `drawn(_:)` draws.
+    private func drawn(standIn: Color, file: StaticString = #filePath, line: UInt = #line) throws -> CGFloat {
+        let size = CGSize(width: 80, height: 40)
+        let hosting = NSHostingView(rootView: standIn.frame(width: size.width, height: size.height)
             .background(HUDPictureRenderer.backdrop))
         hosting.frame = CGRect(origin: .zero, size: size)
         hosting.layoutSubtreeIfNeeded()

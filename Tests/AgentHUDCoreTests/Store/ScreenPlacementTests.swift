@@ -135,21 +135,22 @@ final class ScreenPlacementTests: XCTestCase {
         XCTAssertFalse(ScreenPlacement().drawsLight(systemIsLight: true), "dark unless chosen")
     }
 
-    // MARK: The glass's transparency
+    // MARK: The transparency
 
-    /// Glass lets half the desktop through unless chosen otherwise, on every display's starting point too, and a
-    /// transparency is held to 0 through 0.9, the top short of bare glass, whether it is given or read back.
+    /// Glass lays half the look's colour beneath it unless chosen otherwise, on every display's starting point too, and
+    /// a transparency is held to 0 through 1, the system's bare glass, whether it is given or read back.
     func testGlassTransparencyStartsAtHalfAndIsHeldToItsRange() throws {
         XCTAssertEqual(ScreenPlacement.standardGlassTransparency, 0.5)
-        XCTAssertEqual(ScreenPlacement.glassTransparencyRange, 0...0.9)
+        XCTAssertEqual(ScreenPlacement.glassTransparencyRange, 0...1)
+        XCTAssertEqual(ScreenPlacement.transparencyRange(for: .glass), ScreenPlacement.glassTransparencyRange)
         XCTAssertEqual(ScreenPlacement().glassTransparency, ScreenPlacement.standardGlassTransparency)
         for hasNotch in [true, false] {
             XCTAssertEqual(ScreenPlacement.default(hasNotch: hasNotch).glassTransparency, 0.5)
         }
-        for (given, kept) in [(0.0, 0.0), (0.3, 0.3), (0.9, 0.9), (1.0, 0.9), (-0.2, 0.0), (Double.nan, 0.0)] {
+        for (given, kept) in [(0.0, 0.0), (0.3, 0.3), (0.9, 0.9), (1.0, 1.0), (1.2, 1.0), (-0.2, 0.0), (Double.nan, 0.0)] {
             XCTAssertEqual(ScreenPlacement(material: .glass, glassTransparency: given).glassTransparency, kept, "\(given)")
         }
-        for (saved, kept) in [(0.25, 0.25), (2, 0.9), (-1, 0)] {
+        for (saved, kept) in [(0.25, 0.25), (1, 1), (2, 1), (-1, 0)] {
             let placement = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
                 #"{"material":"glass","glassTransparency":\#(saved)}"#.utf8))
             XCTAssertEqual(placement.glassTransparency, kept, "\(saved)")
@@ -157,12 +158,54 @@ final class ScreenPlacementTests: XCTestCase {
         }
     }
 
-    /// A placement saved before glass had a transparency reads as the standard one and costs no other field; a
-    /// transparency is written under its own key and read back as it was, kept while the material is solid.
+    /// A solid surface is opaque unless chosen otherwise, and its transparency is held to 0 through 0.9, the top short
+    /// of no surface at all, whether it is given or read back: glass's top of 1 is solid's 0.9.
+    func testSolidTransparencyStartsOpaqueAndIsHeldToItsOwnRange() throws {
+        XCTAssertEqual(ScreenPlacement.standardSolidTransparency, 0)
+        XCTAssertEqual(ScreenPlacement.solidTransparencyRange, 0...0.9)
+        XCTAssertEqual(ScreenPlacement.transparencyRange(for: .solid), ScreenPlacement.solidTransparencyRange)
+        for hasNotch in [true, false] {
+            XCTAssertEqual(ScreenPlacement.default(hasNotch: hasNotch).solidTransparency, 0)
+        }
+        for (given, kept) in [(0.0, 0.0), (0.3, 0.3), (0.9, 0.9), (1.0, 0.9), (-0.2, 0.0), (Double.nan, 0.0)] {
+            XCTAssertEqual(ScreenPlacement(solidTransparency: given).solidTransparency, kept, "\(given)")
+        }
+        for (saved, kept) in [(0.25, 0.25), (1, 0.9), (-1, 0)] {
+            let placement = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
+                #"{"material":"solid","glassTransparency":1,"solidTransparency":\#(saved)}"#.utf8))
+            XCTAssertEqual(placement.solidTransparency, kept, "\(saved)")
+            XCTAssertEqual(placement.glassTransparency, 1, "glass's read to its own top")
+        }
+    }
+
+    /// The transparency of the material chosen is held to that material's range, glass's to 1, the bare glass, and
+    /// solid's to 0.9, and leaves the other material's as it was.
+    func testTheTransparencyIsHeldToTheRangeOfTheMaterialChosen() {
+        var glass = ScreenPlacement(material: .glass, solidTransparency: 0.4)
+        for (given, kept) in [(1.0, 1.0), (1.2, 1.0), (0.6, 0.6), (-0.1, 0.0)] {
+            glass.transparency = given
+            XCTAssertEqual(glass.glassTransparency, kept, "\(given)")
+            XCTAssertEqual(glass.transparency, kept, "\(given)")
+        }
+        XCTAssertEqual(glass.solidTransparency, 0.4, "solid's kept")
+
+        var solid = ScreenPlacement(material: .solid, glassTransparency: 0.3)
+        for (given, kept) in [(1.0, 0.9), (1.2, 0.9), (0.6, 0.6), (-0.1, 0.0)] {
+            solid.transparency = given
+            XCTAssertEqual(solid.solidTransparency, kept, "\(given)")
+            XCTAssertEqual(solid.transparency, kept, "\(given)")
+        }
+        XCTAssertEqual(solid.glassTransparency, 0.3, "glass's kept")
+    }
+
+    /// A placement saved before glass had a transparency reads as the standard one, half the look's colour beneath the
+    /// glass, and costs no other field; a transparency is written under its own key and read back as it was, glass's top
+    /// of 1 too, kept while the material is solid.
     func testGlassTransparencyDecodesFromOlderSettingsAndRoundTrips() throws {
         let older = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
             #"{"mode":"simple","appearance":"light","material":"glass"}"#.utf8))
         XCTAssertEqual(older.glassTransparency, ScreenPlacement.standardGlassTransparency)
+        XCTAssertEqual(older.glassTransparency, 0.5)
         XCTAssertEqual(older, ScreenPlacement(mode: .simple, appearance: .light, material: .glass))
 
         let chosen = ScreenPlacement(mode: .logos, material: .glass, glassTransparency: 0.2)
@@ -170,10 +213,94 @@ final class ScreenPlacementTests: XCTestCase {
         let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: written) as? [String: Any])
         XCTAssertEqual(fields["glassTransparency"] as? Double, 0.2)
         XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: written), chosen)
+        let bare = ScreenPlacement(material: .glass, glassTransparency: 1)
+        XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: JSONEncoder().encode(bare)).glassTransparency, 1,
+                       "the bare glass, read back as it was")
 
         let solid = ScreenPlacement(material: .solid, glassTransparency: 0.7)
         XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: JSONEncoder().encode(solid)).glassTransparency, 0.7,
                        "kept for when glass is chosen again")
         XCTAssertNotEqual(solid, ScreenPlacement(), "a placement is its fields, the transparency among them")
+    }
+
+    // MARK: What glass is made of
+
+    /// Glass is clear Liquid Glass unless chosen otherwise, on every display's starting point too; the three styles are
+    /// saved by their own names.
+    func testTheGlassStyleIsClearUnlessChosen() {
+        XCTAssertEqual(HUDGlassStyle.allCases, [.clear, .regular, .material])
+        XCTAssertEqual(HUDGlassStyle.allCases.map(\.rawValue), ["clear", "regular", "material"])
+        XCTAssertEqual(ScreenPlacement().glassStyle, .clear)
+        XCTAssertEqual(ScreenPlacement(material: .glass).glassStyle, .clear)
+        for hasNotch in [true, false] {
+            XCTAssertEqual(ScreenPlacement.default(hasNotch: hasNotch).glassStyle, .clear, "\(hasNotch)")
+        }
+    }
+
+    /// Each style is written under its own key and read back as it was, on glass, and on solid, which keeps it for when
+    /// glass is chosen again; the style is a field of the placement like any other.
+    func testEachGlassStyleRoundTrips() throws {
+        for style in HUDGlassStyle.allCases {
+            for material in HUDMaterial.allCases {
+                let chosen = ScreenPlacement(mode: .simple, appearance: .light, material: material, glassStyle: style,
+                                             glassTransparency: 0.3)
+                let written = try JSONEncoder().encode(chosen)
+                let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: written) as? [String: Any])
+                XCTAssertEqual(fields["glassStyle"] as? String, style.rawValue, "\(style) on \(material)")
+                XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: written), chosen, "\(style) on \(material)")
+            }
+        }
+        XCTAssertNotEqual(ScreenPlacement(glassStyle: .regular), ScreenPlacement(), "a placement is its fields, the style among them")
+    }
+
+    /// A placement saved before glass had a style reads as clear glass, and a style a newer build saved, or a value of the
+    /// wrong type, reads as clear too, costing the placement none of its other fields.
+    func testTheGlassStyleDecodesFromOlderAndNewerSettings() throws {
+        let older = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
+            #"{"mode":"logos","appearance":"light","material":"glass","glassTransparency":0.2}"#.utf8))
+        XCTAssertEqual(older.glassStyle, .clear)
+        XCTAssertEqual(older, ScreenPlacement(mode: .logos, appearance: .light, material: .glass, glassTransparency: 0.2))
+
+        let newer = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
+            #"{"mode":"simple","edge":"left","material":"glass","glassStyle":"frosted-xyz","glassTransparency":0.7}"#.utf8))
+        XCTAssertEqual(newer.glassStyle, .clear, "a name this build does not know is clear")
+        XCTAssertEqual(newer, ScreenPlacement(mode: .simple, edge: .left, material: .glass, glassTransparency: 0.7))
+        let mistyped = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
+            #"{"mode":"simple","material":"glass","glassStyle":2}"#.utf8))
+        XCTAssertEqual(mistyped, ScreenPlacement(mode: .simple, material: .glass))
+    }
+
+    /// One screen's glass style this build cannot read leaves that screen's other fields and every other screen as saved.
+    func testAnUnreadableGlassStyleCostsNoOtherScreen() throws {
+        let json = #"{"screens":{"A":{"mode":"simple","material":"glass","glassStyle":"frosted-xyz"},"#
+            + #""B":{"mode":"logos","material":"glass","glassStyle":"material"}}}"#
+        let settings = try JSONDecoder().decode(Settings.self, from: Data(json.utf8))
+        XCTAssertEqual(settings.screens["A"], ScreenPlacement(mode: .simple, material: .glass))
+        XCTAssertEqual(settings.screens["B"], ScreenPlacement(mode: .logos, material: .glass, glassStyle: .material))
+    }
+
+    /// The style is kept while the material is solid, through a change of material and a reload of the settings, and is
+    /// what glass is made of once glass is chosen again.
+    @MainActor
+    func testTheGlassStyleIsKeptWhileTheMaterialIsSolid() throws {
+        var placement = ScreenPlacement(mode: .simple, material: .glass, glassStyle: .regular)
+        placement.material = .solid
+        XCTAssertEqual(placement.glassStyle, .regular, "kept while solid")
+        placement.transparency = 0.4
+        XCTAssertEqual(placement.glassStyle, .regular, "solid's transparency leaves it alone")
+
+        let suite = "AgentHUDTests.ScreenPlacement.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SettingsStore(defaults: defaults)
+        store.update { $0.screens = ["one": placement, "two": ScreenPlacement(material: .glass, glassStyle: .material)] }
+        let reloaded = SettingsStore(defaults: defaults).settings.screens
+        XCTAssertEqual(reloaded["one"]?.glassStyle, .regular, "kept through a reload")
+        XCTAssertEqual(reloaded["one"]?.material, .solid)
+        XCTAssertEqual(reloaded["two"]?.glassStyle, .material)
+
+        placement.material = .glass
+        XCTAssertEqual(placement.glassStyle, .regular, "glass made of it again")
+        XCTAssertEqual(placement.transparency, ScreenPlacement.standardGlassTransparency, "and glass's own transparency")
     }
 }

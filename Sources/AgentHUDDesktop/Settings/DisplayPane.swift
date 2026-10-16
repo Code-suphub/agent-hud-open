@@ -62,9 +62,10 @@ struct DisplayPane: View {
     }
 }
 
-/// Decorative wallpaper for the glow preview. A HUD of glass is previewed in Liquid Glass, which takes in what is drawn
-/// behind it in its own window, the wallpaper painted here; the frosted blur takes in only the desktop behind the
-/// window, so where glass is frosted it is previewed with its stand-in, its cover over the wallpaper.
+/// Decorative wallpaper for the glow preview. A HUD of Liquid Glass is previewed in Liquid Glass, which takes in what is
+/// drawn behind it in its own window, the wallpaper painted here; the frosted blur and a material take in only the
+/// desktop behind the window, so where glass is frosted, and for the material style, it is previewed with its
+/// stand-in, the look's own colour over the wallpaper (`HUDLook.glassStandIn`).
 struct SettingsPreview<Content: View>: View {
     @ViewBuilder let content: () -> Content
     /// A snapshot draws every glass as its stand-in, and its preview with it.
@@ -73,6 +74,7 @@ struct SettingsPreview<Content: View>: View {
     var body: some View {
         content()
             .environment(\.drawsGlassStandIn, drawsStandIn || !HUDGlass.isLiquid)
+            .environment(\.drawsMaterialStandIn, true)
             .frame(maxWidth: .infinity)
             .background {
                 GeometryReader { geometry in
