@@ -12,51 +12,12 @@ final class ClawdSheetTests: XCTestCase {
         try? FileManager.default.removeItem(at: folder)
     }
 
-    // MARK: The archive
-
-    func testAnArchiveReadsItsTableAndOnlyTheFileAskedFor() throws {
-        let url = folder.appendingPathComponent("app.asar")
-        try ClawdFixture.archive([
-            "package.json": Data("{\"name\":\"claude\"}".utf8),
-            "a/b/c.js": Data("let c = 3".utf8),
-            "a/b/empty.txt": Data(),
-            "a/native.node": Data("binary".utf8),
-        ], unpacked: ["a/native.node"]).write(to: url)
-        let archive = try XCTUnwrap(AsarArchive(url: url))
-        XCTAssertEqual(archive.names(in: ""), ["a", "package.json"])
-        XCTAssertEqual(archive.names(in: "a/b"), ["c.js", "empty.txt"])
-        XCTAssertEqual(archive.names(in: "a/b/c.js"), [], "a file has nothing in it")
-        let entry = try XCTUnwrap(archive.entry(at: "a/b/c.js"))
-        XCTAssertEqual(entry.size, 9)
-        XCTAssertEqual(archive.contents(of: entry), Data("let c = 3".utf8))
-        XCTAssertEqual(archive.contents(of: try XCTUnwrap(archive.entry(at: "package.json"))), Data("{\"name\":\"claude\"}".utf8))
-        XCTAssertEqual(archive.contents(of: try XCTUnwrap(archive.entry(at: "a/b/empty.txt"))), Data())
-        // A file the app keeps beside its archive has no bytes in it.
-        let native = try XCTUnwrap(archive.entry(at: "a/native.node"))
-        XCTAssertTrue(native.unpacked)
-        XCTAssertNil(archive.contents(of: native))
-        XCTAssertNil(archive.entry(at: "a/b"), "a folder is not a file")
-        XCTAssertNil(archive.entry(at: "a/b/missing.js"))
-    }
-
-    func testWhatIsNotAnArchiveReadsAsNothing() throws {
-        let url = folder.appendingPathComponent("not.asar")
-        let real = ClawdFixture.archive(["x.js": Data("x".utf8)])
-        for bytes in [Data(), Data("hello".utf8), Data(repeating: 0xFF, count: 64), real.prefix(20)] {
-            try bytes.write(to: url)
-            XCTAssertNil(AsarArchive(url: url), "\(bytes.count) bytes")
-        }
-        XCTAssertNil(AsarArchive(url: folder.appendingPathComponent("missing.asar")))
-        // A table pointing past the end of the archive gives no bytes.
-        try real.dropLast().write(to: url)
-        let archive = try XCTUnwrap(AsarArchive(url: url))
-        XCTAssertNil(archive.contents(of: try XCTUnwrap(archive.entry(at: "x.js"))))
-    }
-
     // MARK: The table
 
     func testEveryWayTheGameWritesASpriteReads() throws {
-        let sprites = ClawdSpriteTable.sprites(in: Array(ClawdFixture.script.utf8))
+        let sheet = try XCTUnwrap(ClawdSpriteTable.sheet(in: Array(ClawdFixture.file.utf8)))
+        XCTAssertEqual(sheet.version, "9.9.9")
+        let sprites = sheet.sprites
         XCTAssertEqual(Set(sprites.keys), ["Walking", "Thinking", "Waving"], "a sprite with a bad pixel is left out")
 
         let walking = try XCTUnwrap(sprites["Walking"])
@@ -116,10 +77,14 @@ final class ClawdSheetTests: XCTestCase {
         XCTAssertNil(ClawdSpriteTable.color(from: "#gg0000"))
     }
 
-    func testAScriptWithNoTableHasNoSprites() {
-        for script in ["", "const a={b:{c:1}}", "x:{w:", "Walking:{cat:\"Core\",w:4,h:3,palette:[\"#000\"],base:\"0", "::{{"] {
-            XCTAssertTrue(ClawdSpriteTable.sprites(in: Array(script.utf8)).isEmpty, script)
+    func testWhatIsNotASheetHasNoSprites() {
+        let files = ["", "[]", "{}", "::{{", #"{"sprites":{}}"#, #"{"claude":"1","sprites":[]}"#,
+                     ##"{"claude":"1","sprites":{"Walking":{"cat":"Core","w":4,"h":3,"palette":["#000"],"base":"0"##]
+        for file in files {
+            XCTAssertNil(ClawdSpriteTable.sheet(in: Array(file.utf8)), file)
         }
+        let empty = ClawdSpriteTable.sheet(in: Array(#"{"claude":"1","sprites":{"Walking":{"w":4},"x":1}}"#.utf8))
+        XCTAssertEqual(empty?.sprites.isEmpty, true, "sprites that do not read are passed over")
     }
 
     // MARK: The sheet
@@ -147,42 +112,21 @@ final class ClawdSheetTests: XCTestCase {
         XCTAssertEqual(both.canonical(ClawdFrame(.excited, 1)), ClawdFrame(.excited, 1), "a pixel to the left")
     }
 
-    // MARK: The app
+    // MARK: The source
 
-    func testTheGameIsReadOutOfAnInstalledApp() async throws {
-        let app = try ClawdFixture.app(in: folder, version: "2.5.0")
-        XCTAssertEqual(ClawdSheetSource.version(of: app), "2.5.0 (1)")
-        let sheet = try XCTUnwrap(ClawdSheetSource.sheet(app: app))
-        XCTAssertEqual(sheet.version, "2.5.0 (1)")
+    func testTheSheetIsDecodedFromItsFile() async throws {
+        let file = folder.appendingPathComponent("clawd-sprites.json")
+        try Data(ClawdFixture.file.utf8).write(to: file)
+        let sheet = try XCTUnwrap(ClawdSheetSource.sheet(at: file))
         XCTAssertEqual(Set(sheet.sprites.keys), ["Walking", "Thinking", "Waving"])
         XCTAssertEqual(sheet[.walking]?.frames, ClawdFixture.walking)
 
-        // A made-up table has none of the frames the clips play, so the app's Clawd is not used and nothing fails.
-        let source = ClawdSheetSource(apps: [folder.appendingPathComponent("Missing.app"), app])
-        let fitting = await source.sheet()
+        // A made-up sheet has none of the frames the clips play, so it is not used and nothing fails.
+        let fitting = await ClawdSheetSource(file: file).sheet()
         XCTAssertNil(fitting)
-        let none = await ClawdSheetSource(apps: [folder.appendingPathComponent("Missing.app")]).sheet()
+        let missing = await ClawdSheetSource(file: folder.appendingPathComponent("missing.json")).sheet()
+        XCTAssertNil(missing)
+        let none = await ClawdSheetSource(file: nil).sheet()
         XCTAssertNil(none)
-    }
-
-    func testAnAppWithoutTheGameGivesNoSprites() throws {
-        let app = try ClawdFixture.app(in: folder, script: "console.log('no game here')")
-        XCTAssertNil(ClawdSheetSource.sheet(app: app))
-        try FileManager.default.removeItem(at: app.appendingPathComponent("Contents/Info.plist"))
-        XCTAssertNil(ClawdSheetSource.version(of: app))
-        XCTAssertNil(ClawdSheetSource.sheet(app: app), "an app with no version")
-    }
-
-    /// Stills may be published, so the debug code that draws them reads the Claude app only when asked to on this Mac.
-    func testDebugStillsReadTheClaudeAppOnlyWhenAskedTo() throws {
-        let debug = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .appendingPathComponent("../../../Sources/AgentHUDDesktop/Debug").standardized
-        let files = try FileManager.default.contentsOfDirectory(at: debug, includingPropertiesForKeys: nil)
-        XCTAssertFalse(files.isEmpty)
-        for file in files where file.pathExtension == "swift" {
-            let source = try String(contentsOf: file, encoding: .utf8)
-            guard source.contains("ClawdSheetSource") else { continue }
-            XCTAssertTrue(source.contains("environment[\"AGENT_HUD_REAL_CLAUDE_APP\"] == \"1\""), file.lastPathComponent)
-        }
     }
 }

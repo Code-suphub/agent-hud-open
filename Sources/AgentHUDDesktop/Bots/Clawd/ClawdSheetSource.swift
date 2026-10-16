@@ -1,77 +1,44 @@
 import Foundation
 
-/// Where Clawd's sprites come from: the Claude app installed on this Mac. Its archive holds the game's script, and the
-/// script holds the sprite table; only that one file is read out of the archive, and nothing of it is written anywhere.
+/// Where Clawd's sprites come from: `clawd-sprites.json` in Agent HUD's resources, the Claude app's own sprites of
+/// the ones the clips play, which `scripts/clawd-sprites.py` copies out of the app's game by hand.
 ///
-/// The table is decoded once a launch, away from the main thread, for each version of the app. Anything that does
-/// not read the way it should gives no sheet at all, and Clawd is drawn the way Agent HUD draws it.
+/// The file is decoded once a launch, away from the main thread. If it does not read the way it should, or its
+/// sprites do not fit the clips, there is no sheet at all, and Clawd is drawn the way Agent HUD draws it.
 final class ClawdSheetSource: Sendable {
     static let shared = ClawdSheetSource()
 
-    /// The places the Claude app is installed in, in the order they are looked at.
-    static let installed = [URL(fileURLWithPath: "/Applications/Claude.app"),
-                            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Claude.app")]
-    /// The folder of the app's archive the game's script is in, and how its hashed name starts and ends.
-    static let scriptFolder = ".vite/renderer/main_window/assets"
-    static let scriptPrefix = "clawdQuestEngine-", scriptSuffix = ".js"
-    /// A script bigger than this is not the game.
-    private static let largestScript = 32 << 20
+    /// The sheet Agent HUD bundles.
+    static let bundled = AppResources.bundle.url(forResource: "clawd-sprites", withExtension: "json")
 
-    private let apps: [URL]
+    private let file: URL?
     private let store = Store()
 
-    init(apps: [URL] = ClawdSheetSource.installed) {
-        self.apps = apps
+    init(file: URL? = ClawdSheetSource.bundled) {
+        self.file = file
     }
 
-    /// The sprites of the first Claude app installed, decoded once for each version of it; nil when there is no
-    /// app, or its sprites do not read or do not fit `clips`.
+    /// The sprites, decoded the first time anyone asks; nil when the file does not read or does not fit `clips`.
     func sheet(fitting clips: ClawdClips = .standard) async -> ClawdSheet? {
-        guard let app = apps.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
-              let version = Self.version(of: app)
-        else { return nil }
-        let sheet = await store.sheet(for: "\(app.path)#\(version)") { Self.sheet(app: app, version: version) }
+        guard let file else { return nil }
+        let sheet = await store.sheet { Self.sheet(at: file) }
         return sheet.flatMap { clips.fit($0) ? $0 : nil }
     }
 
-    /// The decoded sprites of the app at `app`, read here and now.
-    static func sheet(app: URL, version: String? = nil) -> ClawdSheet? {
-        guard let version = version ?? Self.version(of: app),
-              let archive = AsarArchive(url: app.appendingPathComponent("Contents/Resources/app.asar"))
-        else { return nil }
-        let names = archive.names(in: scriptFolder).filter { $0.hasPrefix(scriptPrefix) && $0.hasSuffix(scriptSuffix) }
-        for name in names {
-            guard let entry = archive.entry(at: "\(scriptFolder)/\(name)"), entry.size <= largestScript,
-                  let script = archive.contents(of: entry)
-            else { continue }
-            let sprites = ClawdSpriteTable.sprites(in: [UInt8](script))
-            if !sprites.isEmpty { return ClawdSheet(version: version, sprites: sprites) }
-        }
-        return nil
+    /// The sprites of the sheet at `file`, read here and now.
+    static func sheet(at file: URL) -> ClawdSheet? {
+        guard let data = try? Data(contentsOf: file) else { return nil }
+        return ClawdSpriteTable.sheet(in: [UInt8](data))
     }
 
-    /// The app's version and build, which change whenever its archive does.
-    static func version(of app: URL) -> String? {
-        guard let data = try? Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
-              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        else { return nil }
-        let short = info["CFBundleShortVersionString"] as? String, build = info["CFBundleVersion"] as? String
-        switch (short, build) {
-        case let (short?, build?): return short == build ? short : "\(short) (\(build))"
-        case let (version?, nil), let (nil, version?): return version
-        case (nil, nil): return nil
-        }
-    }
-
-    /// One decoding per version, shared by everyone who asks while it runs.
+    /// One decoding, shared by everyone who asks while it runs and after.
     private actor Store {
-        private var decoded: [String: Task<ClawdSheet?, Never>] = [:]
+        private var decoding: Task<ClawdSheet?, Never>?
 
-        func sheet(for key: String, decode: @escaping @Sendable () -> ClawdSheet?) async -> ClawdSheet? {
-            if let task = decoded[key] { return await task.value }
+        func sheet(decode: @escaping @Sendable () -> ClawdSheet?) async -> ClawdSheet? {
+            if let decoding { return await decoding.value }
             let task = Task.detached(priority: .utility) { decode() }
-            // Only the version that is installed now is worth keeping.
-            decoded = [key: task]
+            decoding = task
             return await task.value
         }
     }

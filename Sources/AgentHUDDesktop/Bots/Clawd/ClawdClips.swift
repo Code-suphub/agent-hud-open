@@ -17,8 +17,8 @@ struct ClawdClips: Sendable {
     var pointsAtCard: ClawdFrame
     /// Where a sprite's sign sits, in sprite pixels from where every sign sits, for a sprite whose art is in the way.
     var signShifts: [ClawdSpriteName: ClawdOffset]
-    /// How many frames each sprite the clips use had when they were written. A Claude app whose sprites differ has
-    /// redrawn them, and its frames may no longer be the ones these clips mean.
+    /// How many frames each sprite the clips use had when they were written. A sheet copied from a Claude app whose
+    /// sprites differ has them redrawn, and its frames may no longer be the ones these clips mean.
     var frameCounts: [ClawdSpriteName: Int]
 
     func clip(for look: ClawdLook) -> ClawdClip {

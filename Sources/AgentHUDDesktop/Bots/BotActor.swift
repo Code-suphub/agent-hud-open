@@ -12,8 +12,8 @@ extension EnvironmentValues {
 /// The two are kept apart on purpose. A breathing body changes its pose every frame and its picture almost
 /// never, so the picture is only drawn again when the eyes or the outline have visibly moved.
 ///
-/// Claude's mark plays Clawd's own sprites instead (`ClawdActor`), once they are read and while the mark is big enough
-/// for them; until then, and on a Mac without the Claude app, its Clawd is drawn like every other bot.
+/// Claude's mark plays Clawd's own sprites instead (`ClawdActor`), once they are decoded and while the mark is big
+/// enough for them; until then, and in the demo and a recording, its Clawd is drawn like every other bot.
 @MainActor
 final class BotActor {
     let layer = CALayer()

@@ -1,10 +1,9 @@
 #if DEBUG
 import SwiftUI
 
-/// Clawd's own sprites, read from the Claude app on this Mac, through every clip Agent HUD plays: one row a clip, frames
+/// Clawd's own sprites, from the sheet Agent HUD bundles, through every clip Agent HUD plays: one row a clip, frames
 /// sampled across its first seconds on the 1/12 s grid, baked as a mark of `side` points shows them on a Retina display.
-/// It is drawn only when a snapshot run asks for it (AGENT_HUD_REAL_CLAUDE_APP=1) where the app is installed, for
-/// checking the clips by eye on this Mac; the sprites are the Claude app's, and a picture of them is never published.
+/// It is for checking the clips by eye; published media keeps the Clawd Agent HUD draws itself, as the demo does.
 struct ClawdSpritesScene: View {
     let sheet: ClawdSheet
     let side: CGFloat

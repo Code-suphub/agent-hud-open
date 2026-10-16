@@ -1,54 +1,30 @@
 import Foundation
 
-/// Reads the sprite table out of the game's script, a minified JavaScript bundle with the table written as literals:
+/// Reads Clawd's sprites the way Clawd Quest, the Claude app's game, writes its sprite table, one literal a sprite:
 ///
 ///     Walking:{cat:"Core",w:24,h:18,fps:12,palette:["#141413",…],base:"…",deltas:"…".split("("),a0:[0,2,24,16],standMatch:1}
 ///
-/// The script is not run and not parsed as a whole. Each object that starts with one of a sprite's keys is read as
-/// a literal on its own, in any key order, and kept if it holds a sprite; anything else, or anything that does not
-/// read, is passed over. A new build of the game that moves the table or renames its variables still reads.
+/// Agent HUD bundles the sprites its clips play as JSON, which `scripts/clawd-sprites.py` copies out of the game's
+/// script with every field unchanged and the deltas always a list. JSON is a literal of the same kind, and the
+/// reader takes the game's own literals too, in any key order; a sprite that does not read is passed over.
 ///
 /// A sprite's frames are kept as the game keeps them: `base` is the first frame, one base-36 palette index per pixel
 /// row by row, `.` where nothing is drawn; each of `deltas` makes the next frame from the one before, as
 /// comma-separated changes `PPPV`, a base-36 pixel number and its new value.
 enum ClawdSpriteTable {
-    /// Every sprite in `script`, by name; empty when there are none.
-    static func sprites(in script: [UInt8]) -> [String: ClawdSprite] {
-        var sprites: [String: ClawdSprite] = [:], at = 0
-        while let start = nextObject(in: script, from: at) {
-            var reader = Reader(bytes: script, at: start.brace)
-            if case .object(let fields)? = reader.value(), let sprite = sprite(named: start.name, fields) {
-                if sprites[start.name] == nil { sprites[start.name] = sprite }
-                at = reader.at
-            } else {
-                at = start.brace + 1
-            }
+    /// The sheet in `file`, as Agent HUD bundles it: `{"claude": version, "sprites": {name: sprite, …}}`, the version
+    /// of the Claude app the sprites come from and the sprites by name. Nil when the file is not one.
+    static func sheet(in file: [UInt8]) -> ClawdSheet? {
+        var reader = Reader(bytes: file, at: 0)
+        guard case .object(let fields)? = reader.value(), let version = fields["claude"]?.text,
+              case .object(let table)? = fields["sprites"]
+        else { return nil }
+        var sprites: [String: ClawdSprite] = [:]
+        for (name, value) in table {
+            guard case .object(let fields) = value, let sprite = sprite(named: name, fields) else { continue }
+            sprites[name] = sprite
         }
-        return sprites
-    }
-
-    /// The keys a sprite's object may open with.
-    private static let keys: Set<[UInt8]> = Set(["cat", "w", "h", "fps", "palette", "base", "deltas", "a0", "standMatch"].map { Array($0.utf8) })
-
-    /// The next `Name:{key:` from `from` on that could open a sprite: the name and where its brace is.
-    private static func nextObject(in bytes: [UInt8], from: Int) -> (name: String, brace: Int)? {
-        var at = from
-        while at + 1 < bytes.count {
-            defer { at += 1 }
-            guard at > 0, bytes[at] == UInt8(ascii: ":"), bytes[at + 1] == UInt8(ascii: "{") else { continue }
-            var key = at + 2
-            while key < bytes.count, Reader.isName(bytes[key]) { key += 1 }
-            guard key < bytes.count, bytes[key] == UInt8(ascii: ":"), keys.contains(Array(bytes[(at + 2)..<key])) else { continue }
-            // The name is a bare word, or a quoted one.
-            var end = at
-            let quote = bytes[at - 1] == UInt8(ascii: "\"") || bytes[at - 1] == UInt8(ascii: "'") ? bytes[at - 1] : nil
-            if quote != nil { end -= 1 }
-            var name = end
-            while name > 0, Reader.isName(bytes[name - 1]) { name -= 1 }
-            guard name < end, quote == nil || (name > 0 && bytes[name - 1] == quote) else { continue }
-            return (String(decoding: bytes[name..<end], as: UTF8.self), at + 1)
-        }
-        return nil
+        return ClawdSheet(version: version, sprites: sprites)
     }
 
     /// A sprite out of its object's fields, decoded into frames; nil when anything it needs is missing or wrong.

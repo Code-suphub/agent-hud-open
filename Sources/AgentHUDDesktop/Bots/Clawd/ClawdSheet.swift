@@ -59,12 +59,12 @@ struct ClawdSprite: Sendable {
     var frameCount: Int { frames.count }
 }
 
-/// Every sprite of the game, decoded once from the Claude app installed on this Mac (`ClawdSheetSource`).
+/// The sprites of the game Clawd plays, decoded once from the sheet Agent HUD bundles (`ClawdSheetSource`).
 ///
-/// Nothing in it ever comes from this repository: the art is Anthropic's and is read where the Claude app keeps
-/// it, so a Mac without the app shows the Clawd Agent HUD draws itself.
+/// The art is Anthropic's, the Claude app's own, copied unchanged (THIRD_PARTY_NOTICES.txt); Agent HUD only picks
+/// frames from it and places them.
 final class ClawdSheet: Sendable {
-    /// The version of the Claude app the sprites were read from.
+    /// The version of the Claude app the sprites were copied from.
     let version: String
     let sprites: [String: ClawdSprite]
     /// For each frame that shows exactly what an earlier one shows, once both are placed by their anchors, that

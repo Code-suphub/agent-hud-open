@@ -1,22 +1,20 @@
 import Foundation
 @testable import AgentHUDDesktop
 
-/// A made-up sprite table in the game's own format, and a made-up Claude app around it. No art of the real game is
-/// ever in the tests.
+/// A made-up sheet, in the shape of the one Agent HUD bundles. No art of the real game is ever in the tests.
 enum ClawdFixture {
-    /// Three sprites, written the three ways the game writes them, among code that is not a sprite.
+    /// Three sprites, written the three ways the game writes them, the first as JSON as the bundled sheet is.
     ///
     /// - Walking, 4×3: deltas as an array of strings; its box stands it on its bottom row.
     /// - Thinking, 3×2: deltas as one string split by `(`.
-    /// - Waving, 2×1: a quoted name, keys out of order, deltas split by `.`, and an empty box.
-    static let script = """
-    var a=1,b={w:3,h:"x"};function c(e){return e+1}const te={Walking:{cat:"Core",w:4,h:3,fps:12,\
-    palette:["#d97757","#141413"],base:"0110100100..",deltas:["","0.,51","b0"],a0:[0,1,4,2],standMatch:1},\
+    /// - Waving, 2×1: a quoted name, keys out of order, deltas split by `.`, an empty box and a value that is code.
+    static let file = """
+    {"claude":"9.9.9","sprites":{"Walking":{"cat":"Core","w":4,"h":3,"fps":12,\
+    "palette":["#d97757","#141413"],"base":"0110100100..","deltas":["","0.,51","b0"],"a0":[0,1,4,2],"standMatch":1},\
     Thinking:{cat:"Reactive",w:3,h:2,fps:12,palette:["#d97757","#141413","#699acb"],base:"0122.1",\
     deltas:"(12,2.(".split("("),a0:[0,0,3,2],standMatch:!0},\
     "Waving":{h:1,w:2,base:"0.",palette:["#fff"],deltas:"10..00".split("."),cat:"Core",a0:[0,0,0,0],fps:6,extra:f(1,[2]),standMatch:!1},\
-    Broken:{cat:"Core",w:2,h:1,fps:12,palette:["#000"],base:"05",deltas:[],a0:[0,0,2,1],standMatch:1}};\
-    function ne(e){let t=te[e];if(!t)throw Error(`no sprite data for "${e}"`)}
+    Broken:{cat:"Core",w:2,h:1,fps:12,palette:["#000"],base:"05",deltas:[],a0:[0,0,2,1],standMatch:1}}}
     """
 
     /// Walking's four frames, row by row, `clear` where nothing is drawn: an empty delta repeats a frame.
@@ -31,9 +29,9 @@ enum ClawdFixture {
         return [first, first, second, third]
     }()
 
-    /// The sprites of `script`, decoded.
-    static func sheet(version: String = "test") -> ClawdSheet {
-        ClawdSheet(version: version, sprites: ClawdSpriteTable.sprites(in: Array(script.utf8)))
+    /// The sprites of `file`, decoded.
+    static func sheet() -> ClawdSheet {
+        ClawdSpriteTable.sheet(in: Array(file.utf8)) ?? ClawdSheet(version: "", sprites: [:])
     }
 
     /// Every sprite of the game, as many frames long as the real ones, so the clips fit it, and every frame a picture of
@@ -48,60 +46,6 @@ enum ClawdFixture {
                                                  palette: [color], frames: frames, anchor: (0, count), standMatch: true)
         }
         return ClawdSheet(version: "", sprites: sprites)
-    }
-
-    /// An Electron archive holding `files`, by their paths from its root.
-    static func archive(_ files: [String: Data], unpacked: Set<String> = []) -> Data {
-        var tree: [String: Any] = [:], bytes = Data()
-        for (path, data) in files.sorted(by: { $0.key < $1.key }) {
-            var entry: [String: Any] = ["size": data.count]
-            if unpacked.contains(path) {
-                entry["unpacked"] = true
-            } else {
-                entry["offset"] = String(bytes.count)
-                bytes += data
-            }
-            insert(entry, at: path.split(separator: "/").map(String.init), into: &tree)
-        }
-        let json = try! JSONSerialization.data(withJSONObject: ["files": tree], options: [.sortedKeys])
-        let padded = (json.count + 3) / 4 * 4
-        func word(_ value: Int) -> Data { withUnsafeBytes(of: UInt32(value).littleEndian) { Data($0) } }
-        // The size pickle, then the header pickle: its payload's size, the string's length, the string padded to four.
-        var archive = word(4) + word(padded + 8) + word(padded + 4) + word(json.count) + json
-        archive += Data(count: padded - json.count)
-        return archive + bytes
-    }
-
-    private static func insert(_ entry: [String: Any], at path: [String], into tree: inout [String: Any]) {
-        guard let name = path.first else { return }
-        if path.count == 1 {
-            tree[name] = entry
-            return
-        }
-        var folder = tree[name] as? [String: Any] ?? ["files": [String: Any]()]
-        var files = folder["files"] as? [String: Any] ?? [:]
-        insert(entry, at: Array(path.dropFirst()), into: &files)
-        folder["files"] = files
-        tree[name] = folder
-    }
-
-    /// A Claude app in `folder` whose archive holds the game's script among other files.
-    @discardableResult
-    static func app(in folder: URL, version: String = "9.9.9", script: String = script) throws -> URL {
-        let app = folder.appendingPathComponent("Claude.app")
-        let resources = app.appendingPathComponent("Contents/Resources")
-        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
-        let info: [String: Any] = ["CFBundleShortVersionString": version, "CFBundleVersion": "1"]
-        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
-            .write(to: app.appendingPathComponent("Contents/Info.plist"))
-        let assets = ClawdSheetSource.scriptFolder
-        try archive([
-            "package.json": Data("{}".utf8),
-            "\(assets)/clawdQuestEngine-C2Z1.css": Data(".a{}".utf8),
-            "\(assets)/clawdQuestEngine-D01k.js": Data(script.utf8),
-            "\(assets)/index-AAAA.js": Data("console.log(1)".utf8),
-        ]).write(to: resources.appendingPathComponent("app.asar"))
-        return app
     }
 
     static func folder() throws -> URL {
