@@ -118,6 +118,19 @@ public final class SettingsStore {
         updateAgents { $0.movingGroup(id: id, to: targetID) }
     }
 
+    /// Swaps two provider groups of the settings page by their recorded order, covering groups without
+    /// quota windows. Quota rows themselves keep their order inside `agents`, and a drag that moves a group
+    /// still moves the HUD's and the glow's order with it.
+    public func moveProviderGroup(id: String, to targetID: String, known: [String]) {
+        guard id != targetID else { return }
+        let next = settings.with { $0.moveProvider(id: id, to: targetID, known: known) }
+        guard next != settings else { return }
+        settings = next
+        moveAgentGroup(id: id, to: targetID)
+        persist(next, key: Keys.settings)
+        onChange?(.settings)
+    }
+
     /// Adds rows a provider discovered (in the order given) and refreshes the names and flags of known rows.
     /// New rows for a vendor go right after that vendor's last existing row; vendors new to the list go to the top in
     /// the order the providers gave them, switched off when the vendor catalog starts them hidden. The user's manual

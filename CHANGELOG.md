@@ -4,6 +4,9 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- Settings → Agents can drag a provider group — a group without quota windows included — and the order it records covers every group: the first drag no longer reshuffles the list, since the order is taken in the order the page shows rather than from a set. The same drag orders the HUD's rows and the glow with it, and the Tokens page follows the recorded order instead of showing a third one of its own.
+- Host API: `Settings.providerOrder` and `Settings.moveProvider(id:to:known:)`; `SettingsStore.moveProviderGroup(id:to:known:)`, which moves the agent rows as well; `AgentSettingsGroup.make(sources:agents:report:providerOrder:)`.
+
 - A plan Claude Code asks to have approved is answered on the island, and in the usage panel, on a card that shows the whole plan in a box that scrolls: Approve, after which Claude Code still asks about each edit; Approve, accept edits; or Keep planning, with a note on what should change if you write one. The card used to point to Claude Code and only put itself away. Claude Code's own dialog is still there, and whichever answer comes first counts. Plans from other clients stay in their own dialogs.
 - Host API: `PermissionDecision.approvePlan(acceptEdits:)` and `.keepPlanning(_:)`; `PermissionRequest.plan` (the whole plan) and `answersPlan`. A plan is approved with its own input as `updatedInput`, since Claude Code ignores a bare allow on one, and accepting edits as `updatedPermissions` `setMode` `acceptEdits` for the session; sending it back denies it with a message that names the user's feedback as theirs.
 

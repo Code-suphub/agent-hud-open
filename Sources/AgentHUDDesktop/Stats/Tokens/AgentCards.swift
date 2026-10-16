@@ -82,7 +82,8 @@ struct AgentCards: View {
         let used = Set(store.consumers.map(\.vendor))
         let configured = Set((store.report?.services ?? []).map(\.client))
         let groups = AgentSettingsGroup.make(sources: SourceDetector.resolve(sources, report: store.report),
-                                             agents: store.settings.agents, report: store.report)
+                                             agents: store.settings.agents, report: store.report,
+                                             providerOrder: store.settings.settings.providerOrder)
         let found = groups.flatMap { group -> [String] in
             let installed = group.source.map { source in
                 switch source.state {
