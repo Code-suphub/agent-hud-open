@@ -3,7 +3,13 @@ import AgentHUDCore
 
 struct ResetCreditsDetails: View {
     let resets: CodexResetCredits
-    private let theme = Theme.island
+    /// The look of the HUD the row is in, which the popover hands on to its own window (`IslandHoverPopover`). The
+    /// details stand on a surface of that look in their window, glass included, with its hairline, which Liquid Glass
+    /// leaves out for the rim it lights of its own (`HUDLook.outline(_:standIn:)`).
+    @Environment(\.hudLook) private var look
+    @Environment(\.drawsGlassStandIn) private var glassStandIn
+
+    private var theme: Theme { look.theme }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -11,7 +17,7 @@ struct ResetCreditsDetails: View {
                 Text(L10n.text("额度重置", "Usage resets")).font(.ui(12, .semibold))
                 Spacer()
                 Text(L10n.text("\(resets.availableCount) 次可用", "\(resets.availableCount) available"))
-                    .font(.tabular(11, .semibold)).foregroundStyle(theme.status(.ok))
+                    .font(.tabular(11, .semibold)).foregroundStyle(theme.statusText(.ok))
             }
             Text(L10n.text("到期时间 · 本地时区", "Expires at · local time"))
                 .font(.ui(10)).foregroundStyle(theme.secondary)
@@ -35,8 +41,8 @@ struct ResetCreditsDetails: View {
         .foregroundStyle(theme.text)
         .padding(12)
         .frame(width: 310)
-        .background(RoundedRectangle(cornerRadius: 10).fill(theme.windowBackground))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.cardBorder))
+        .background(HUDSurface(RoundedRectangle(cornerRadius: 10), look: look, fill: theme.raisedSurface, contact: nil))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(look.outline(theme.cardBorder, standIn: glassStandIn)))
         .fixedSize(horizontal: false, vertical: true)
     }
 

@@ -99,3 +99,37 @@ struct BottomRoundedRectangle: Shape, Animatable {
         return path
     }
 }
+
+/// The collapsed island at a hardware notch, drawn black over a light or glass look's surface (`IslandRootView.inksNotch`):
+/// the camera housing and the flares that join it to the screen's edge. Collapsed, it is the whole island, which is then
+/// what the standard island has always been, one with the housing. Open, it stays where the housing is while the look's
+/// surface grows round it, and its black fades out over `feather` points round the housing, so the housing melts into
+/// the surface instead of meeting it at a line.
+struct NotchInk: View {
+    /// The collapsed island's size, its flares included, and its radii.
+    let size: CGSize
+    let topRadius: CGFloat
+    let bottomRadius: CGFloat
+    /// How far the black fades out past the housing's edge.
+    var feather: CGFloat = NotchInk.feather
+
+    /// Enough to soften the housing's edge on a light surface without reading as a shadow under it.
+    static let feather: CGFloat = 14
+
+    var body: some View {
+        let shape = IslandShape(topRadius: topRadius, bottomRadius: bottomRadius)
+        // The fade is the shape grown by half the feather and blurred by as much, so it starts at the housing's edge at
+        // nearly full black and is gone a feather past it; a blur of the shape alone would halve the black at the edge
+        // and leave a step there.
+        ZStack {
+            shape.fill(Color.black)
+            shape.stroke(Color.black, lineWidth: feather)
+        }
+        .frame(width: size.width, height: size.height)
+        .blur(radius: feather / 2)
+        .overlay { shape.fill(Color.black) }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}

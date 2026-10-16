@@ -22,7 +22,8 @@ extension SnapshotRunner {
         let layout = settings.panelLayout
         let notch = ScreenMetrics(menuBar: 37, notch: CGSize(width: 185, height: 32))
         func hud(_ name: String, _ screen: String, hasNotch: Bool) {
-            let renderer = HUDPictureRenderer(store: store, screen: screen, hasNotch: hasNotch, metrics: hasNotch ? notch : .fallback)
+            let renderer = HUDPictureRenderer(store: store, screen: screen, hasNotch: hasNotch, look: .standard,
+                                              metrics: hasNotch ? notch : .fallback)
             save("panel-layout-\(name)", renderer.view(), folder: folder, scheme: .dark)
         }
 
@@ -30,7 +31,7 @@ extension SnapshotRunner {
         layout.proposeStyle(HUDStyle(mode: .simple, position: 0, simpleSize: 28), for: "snapshot-notch", hasNotch: true)
         hud("style-simple", "snapshot-notch", hasNotch: true)
         // Its panel says the style waits, and that it is this display's.
-        save("panel-layout-style-bar", IslandScene(store: store, settings: settings, open: true, light: false,
+        save("panel-layout-style-bar", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard,
                                                    screen: "snapshot-notch"),
              folder: folder, scheme: .dark)
         layout.discard(.screen("snapshot-notch"))
@@ -51,7 +52,7 @@ extension SnapshotRunner {
         for width in [PanelStyle.widthRange.lowerBound, PanelStyle.widthRange.upperBound] {
             layout.propose(PanelLayout(style: PanelStyle(width: width)))
             layout.save()
-            save("panel-layout-width-\(width)", IslandScene(store: store, settings: settings, open: true, light: false),
+            save("panel-layout-width-\(width)", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard),
                  folder: folder, scheme: .dark)
         }
         // The narrowest layout beside the widest Simple panel on a left edge, whose strip the panel keeps clear: the panel
@@ -63,7 +64,7 @@ extension SnapshotRunner {
                                                                  simpleSize: ScreenPlacement.simpleSizeRange.upperBound))
         let side = PanelPictureRenderer(store: store, display: .init(
             insets: IslandRootView.dockInsets(edge: .left, collapsedSize: CGSize(width: strip.stripSize.width, height: 200)),
-            maximumHeight: 2_000))
+            maximumHeight: 2_000, look: .standard))
         save("panel-layout-width-\(PanelStyle.widthRange.lowerBound)-side-dock",
              side.card(masked: false, height: CGFloat(side.fit().height)).frame(width: side.width)
                 .padding(20).background(Color(white: 0.10)),

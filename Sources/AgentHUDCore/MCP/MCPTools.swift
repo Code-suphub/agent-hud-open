@@ -23,31 +23,36 @@ public enum MCPTools {
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
         with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
         widgets and measures each block accepts; how many sessions it lists and its token chart's period and total; \
-        and the attached screens, each with its resting HUD's style and the agents it can show. Call it before \
-        changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in \
-        the application's language.
+        and the attached screens, each with its resting HUD's style, the look it draws now and the agents it can \
+        show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the \
+        panel shows them, in the application's language.
         """
 
+    /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in.
     private static let getPanelImageDescription = """
-        Show a picture of the Agent HUD hover panel as the layout in effect draws it, an unsaved draft included, with \
-        account names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now. \
-        Use it to check how a change looks; get_panel reads the same as data.
+        Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, with account \
+        names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now; glass is a \
+        stand-in. Use it to check how a change looks; get_panel reads the same as data.
         """
 
     private static let setPanelLayoutDescription = """
         Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its \
-        width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes \
-        and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out \
-        stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_panel \
-        holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved \
-        draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from \
-        'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the \
-        resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset \
-        proposes a screen's default HUD style.
+        width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, \
+        appearance, material and glow. Send the whole layout you want; anything left out uses the default, and a HUD \
+        style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the \
+        layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows \
+        at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD \
+        restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a \
+        screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; \
+        hud.reset proposes a screen's default HUD style.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
         + "layout and, for a screen, its resting HUD to its saved style."
+
+    /// What the look's fields leave as it is: the row of a hardware notch, which the island is one with.
+    private static let housingStaysBlack = "At a hardware notch a notch HUD stays dark in the notch's row, black or black "
+        + "glass; the panel and the cards it opens into take the look."
 
     /// What every tool takes to name the layout it acts on.
     private static let screenDescription = "A screen key from get_panel for that screen's own layout; 'all', the default, "
@@ -126,6 +131,13 @@ public enum MCPTools {
             "showRings": described("boolean", "Simple: a ring round each mark."),
             "showNumbers": described("boolean", "Simple: the percentage beside each mark."),
             "separateAgents": described("boolean", "Dynamic or simple: hovering a mark opens that agent's own panel."),
+            "appearance": text("Its colours, its panel's and its cards' too: dark, light, or system to follow macOS's light "
+                               + "or dark setting. \(housingStaysBlack)", oneOf: HUDAppearance.allCases.map(\.rawValue)),
+            "material": text("Solid, or glass that shows the desktop through it blurred, in the appearance's colours; "
+                             + "solid while Reduce Transparency is on. \(housingStaysBlack)",
+                             oneOf: HUDMaterial.allCases.map(\.rawValue)),
+            "transparency": number("How much of the desktop shows through, glass's or solid's as the material is: glass "
+                                   + "thins its frost and its cover, solid its fill,", .transparency),
             "glow": object([
                 "style": text("Glow style.", oneOf: GlowStyle.allCases.map(\.rawValue)),
                 "effect": text("What it plays.", oneOf: GlowEffect.allCases.map(\.rawValue)),
@@ -137,9 +149,10 @@ public enum MCPTools {
                 "outwardOnly": described("boolean", "Blur style: fade outward from the rim only."),
             ], description: "Notch or dynamic: the glow."),
             HUDStyle.resetName: described("boolean", "True proposes the screen's default style, the placement its "
-                                          + "hardware is given and the default glow, with no other style field."),
-        ], description: "The resting HUD: the marks of a Dynamic dock, the items of a Simple panel, the glow; a style "
-            + "field left out stays as saved.")
+                                          + "hardware is given, dark and solid, and the default glow, with no other style "
+                                          + "field."),
+        ], description: "The resting HUD: the marks of a Dynamic dock, the items of a Simple panel, the glow, its colours "
+            + "and its material; a style field left out stays as saved.")
         return object([
             "screen": described("string", screenDescription),
             "blocks": .object(blocks),

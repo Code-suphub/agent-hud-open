@@ -23,7 +23,7 @@ extension SnapshotRunner {
         func shoot(_ name: String, _ proposal: PanelLayout) {
             settings.panelLayout.propose(proposal)
             settings.panelLayout.save()
-            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false),
+            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard),
                  folder: folder, scheme: .dark)
         }
         shoot("sessions-3", PanelLayout(sessions: PanelLayout.Sessions(limit: 3)))
@@ -36,16 +36,18 @@ extension SnapshotRunner {
         settings.panelLayout.reset()
 
         let width = CGFloat(PanelStyle.defaultWidth) - HoverPanelView.notchInsets.leading - HoverPanelView.notchInsets.trailing
+        let look = HUDLook.standard
         save("panel-layout-tokens-picker",
              VStack(alignment: .leading, spacing: 18) {
                  ForEach(PanelTokenPeriod.allCases) { period in
-                     TokenConsumptionChart(store: store, theme: .island, context: .island, period: period, compact: true)
+                     TokenConsumptionChart(store: store, theme: look.theme, context: .island, period: period, compact: true)
                  }
              }
              .frame(width: width)
-             .foregroundStyle(Theme.island.text)
+             .foregroundStyle(look.theme.text)
              .padding(18)
-             .background(Color.black), folder: folder, scheme: .dark)
+             .background(look.theme.islandFill)
+             .hudLook(look), folder: folder, scheme: .dark)
     }
 }
 #endif

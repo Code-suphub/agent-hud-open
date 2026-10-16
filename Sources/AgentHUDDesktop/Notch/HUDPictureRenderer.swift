@@ -9,8 +9,9 @@ import SwiftUI
 /// screen's own notch, or the bar that stands in for one.
 ///
 /// Like the panel's picture it is views in a hosting view that is never put in a window: nothing opens, nothing shows
-/// on screen and no read starts. The glow is drawn as a still frame, the one the snapshots draw, which every build
-/// draws the same way. It shows marks and figures, and no account or session.
+/// on screen and no read starts. Nothing is behind it to show through glass, which is drawn as its stand-in, the look's
+/// tint over the backdrop. The glow is drawn as a still frame, the one the snapshots draw, which every build draws the
+/// same way. It shows marks and figures, and no account or session.
 @MainActor
 struct HUDPictureRenderer {
     let store: UsageStore
@@ -18,12 +19,15 @@ struct HUDPictureRenderer {
     let screen: String
     /// Whether that screen has a notch, which decides the placement it draws without one of its own.
     let hasNotch: Bool
+    /// The look of that screen's HUD, which the picture draws it in.
+    let look: HUDLook
     /// The screen's measurements, for the island's size beside the notch.
     var metrics = ScreenMetrics.fallback
 
     /// Room around the HUD on the backdrop, in points.
     static let margin: CGFloat = 16
-    /// The backdrop: dark enough for a glow to read, light enough for the black island to stand off it.
+    /// The backdrop: dark enough for a glow to read, light enough for the black island to stand off it. Glass's stand-in
+    /// is drawn over it, here and on the panel's picture (`PanelPictureRenderer.card(masked:height:)`).
     static let backdrop = Color(white: 0.2)
     /// The moment of a moving glow or bot the still is drawn at, the snapshots' own.
     static let frozenTime = 0.9
@@ -51,7 +55,7 @@ struct HUDPictureRenderer {
     /// The resting HUD as a PNG at `PanelPicture.pointScale` pixels a point; nil when no bitmap can be made of it.
     func picture() -> HUDPicture? {
         let hosting = NSHostingView(rootView: view())
-        hosting.appearance = NSAppearance(named: .darkAqua)
+        hosting.appearance = NSAppearance(named: look.appearanceName)
         let size = hosting.fittingSize
         guard size.width > 0, size.height > 0 else { return nil }
         let scale = CGFloat(PanelPicture.pointScale)
@@ -82,7 +86,8 @@ struct HUDPictureRenderer {
             .background(Self.backdrop)
             .environment(\.glowFrozenTime, Self.frozenTime)
             .environment(\.masksIdentity, true)
-            .environment(\.colorScheme, .dark)
+            .environment(\.drawsGlassStandIn, true)
+            .hudLook(look)
     }
 
     @ViewBuilder
@@ -100,7 +105,7 @@ struct HUDPictureRenderer {
         let island = metrics.islandSize, radius = metrics.islandRadius
         let reach = glow.geometry(islandWidth: island.width, islandHeight: island.height, islandRadius: radius)
         return GlowPreview(appearance: agents.glowAppearance(light: false, on: screen), settings: glow,
-                           islandSize: island, islandRadius: radius)
+                           islandSize: island, islandRadius: radius, look: look)
             .frame(width: max(island.width, reach.width), height: max(island.height, reach.height + reach.topOffset),
                    alignment: .top)
             .clipped()
@@ -112,7 +117,8 @@ struct HUDPictureRenderer {
         let margin = GlowWindowController.logoEdgeMargin(stripThickness: config.stripThickness)
         let glow = settings.effectiveGlow(on: screen)
         let reach = glow.geometry(islandWidth: 2, islandHeight: 2, islandRadius: 0)
-        return LogoQueuePreview(settings: settings, store: store, placement: placement, metrics: metrics, screen: screen)
+        return LogoQueuePreview(settings: settings, store: store, placement: placement, metrics: metrics, screen: screen,
+                                look: look)
             .frame(width: max(120, config.size.width + margin * 2),
                    height: max(config.stripThickness, reach.height + reach.topOffset))
     }

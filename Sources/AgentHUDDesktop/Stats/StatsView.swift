@@ -350,7 +350,8 @@ final class StatsWindowController: HostedWindowController {
         fitHeightToContent()
     }
 
-    func windowDidChangeScreen(_ notification: Notification) {
+    override func windowDidChangeScreen(_ notification: Notification) {
+        super.windowDidChangeScreen(notification)
         fitHeightToContent()
     }
 

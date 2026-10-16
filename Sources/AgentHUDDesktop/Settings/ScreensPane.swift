@@ -2,17 +2,23 @@ import AppKit
 import SwiftUI
 import AgentHUDCore
 
-/// Per-screen HUD placement: pick a display, then pick how it presents the HUD. Every display keeps its
-/// own setting, so a laptop can hold its island while the monitor beside it runs Dynamic mode — and a
+/// Per-screen HUD placement: pick a display, then pick how it presents the HUD and how the HUD looks. Every display
+/// keeps its own setting, so a laptop can hold its island while the monitor beside it runs Dynamic mode — and a
 /// display with no notch stops pretending to have one.
 struct ScreensPane: View {
     let settings: SettingsStore
     /// Where the Simple preview's figures come from; without it the preview shows sample ones.
     var store: UsageStore? = nil
     let theme: Theme
+    /// The look of the selected screen's HUD, which its Simple preview is drawn in: resolved by the Display pane, which
+    /// resolves it again as the Mac's settings it depends on are switched.
+    let look: HUDLook
 
     @Binding var selected: String
     @State private var screens: [Screen] = ScreensPane.attached()
+    /// Reduce Transparency, which draws a HUD of glass solid. Read here so that the look row's note follows it as it is
+    /// switched.
+    @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
 
     struct Screen: Identifiable, Hashable {
         let key: String
@@ -29,6 +35,13 @@ struct ScreensPane: View {
     private var placement: ScreenPlacement {
         guard let current else { return .default(hasNotch: false) }
         return settings.effectivePlacement(on: current.key, hasNotch: current.hasNotch)
+    }
+
+    /// Whether the selected screen's HUD is the island at a hardware notch, which stays dark in the notch's row while the
+    /// panel and the cards that open out of it take the look (`HUDLook.inNotchRow`).
+    private var atHardwareNotch: Bool {
+        guard let current else { return false }
+        return placement.mode == .notch && current.hasNotch
     }
 
     /// A person's edit of the selected screen's placement: an agent's unsaved style for the screen is dropped first,
@@ -105,6 +118,14 @@ struct ScreensPane: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16).padding(.bottom, 12)
             SettingsDivider(theme: theme)
+            lookRow
+            SettingsDivider(theme: theme)
+            // Glass and solid keep a transparency each; the slider shows the one of the material chosen.
+            SliderRow(label: L10n.text("透明度", "Transparency"), value: binding(\.transparency),
+                      range: ScreenPlacement.glassTransparencyRange, step: 0.05,
+                      format: { "\(Int(($0 * 100).rounded()))%" }, theme: theme)
+                .id(placement.material)
+            SettingsDivider(theme: theme)
             SettingRow(label: L10n.text("位置", "Position"),
                        subtitle: L10n.text("回到这块屏幕的顶部安全位置。", "Return to a reachable position at the top of this display.")) {
                 Button(L10n.text("重置位置", "Reset Position"), action: resetPosition)
@@ -156,6 +177,7 @@ struct ScreensPane: View {
                         .overlay {
                             SimpleMeterView(config: preview)
                                 .frame(width: preview.stripSize.width, height: preview.stripSize.height)
+                                .hudLook(look)
                         }
                 }
                 SliderRow(label: L10n.text("大小", "Size"), value: binding(\.simpleSize),
@@ -196,10 +218,48 @@ struct ScreensPane: View {
         if placement.mode == .logos {
             return L10n.text("贴着屏幕边缘停靠，向屏幕内展开。", "Dock on a screen edge and open inward.")
         }
+        // A light or glass look draws the stand-in in its own colours, so it is no black bar.
         return current.hasNotch
             ? L10n.text("围绕这块屏幕的刘海显示。", "Use this display's physical notch.")
-            : L10n.text("这块屏没有刘海，刘海形态会画一条替代的黑条。",
+            : L10n.text("这块屏没有刘海，刘海形态会画一条替代的横条。",
                         "No notch here — the notch shape draws a stand-in bar instead.")
+    }
+
+    /// The selected screen's look, in one row: its appearance, Dark, Light or Match system, and its material, Solid or
+    /// Glass, for the HUD, its panel and its cards. At a hardware notch the row says that the notch's row stays dark;
+    /// with Reduce Transparency on it says that glass shows solid. Glass brings a Transparency slider below the row. The HUD style's Reset to Default gives Dark and Solid back (`ScreenStyleRow`).
+    private var lookRow: some View {
+        SettingRow(label: L10n.text("HUD 外观", "HUD appearance"), subtitle: lookNote) {
+            HStack(spacing: 8) {
+                SegmentedPills(options: [
+                    SegmentOption(value: HUDAppearance.dark, label: L10n.text("深色", "Dark")),
+                    SegmentOption(value: HUDAppearance.light, label: L10n.text("浅色", "Light")),
+                    SegmentOption(value: HUDAppearance.system, label: L10n.text("跟随系统", "Match system")),
+                ], selection: binding(\.appearance), theme: theme)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(L10n.text("HUD 外观", "HUD appearance"))
+                .accessibilityIdentifier("settings-screen-appearance")
+                SegmentedPills(options: [
+                    SegmentOption(value: HUDMaterial.solid, label: L10n.text("实色", "Solid")),
+                    SegmentOption(value: HUDMaterial.glass, label: L10n.text("玻璃", "Glass")),
+                ], selection: binding(\.material), theme: theme)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(L10n.text("材质", "Material"))
+                .accessibilityIdentifier("settings-screen-material")
+            }
+            .disabled(current == nil)
+        }
+    }
+
+    /// The look row's one line, where it has one: what Reduce Transparency does to glass, or what stays black at a notch.
+    private var lookNote: String? {
+        if reducesTransparency, placement.material == .glass {
+            return L10n.text("「降低透明度」已打开，玻璃显示为实色。", "Reduce Transparency is on, so Glass shows as solid.")
+        }
+        guard atHardwareNotch else { return nil }
+        return L10n.text("刘海那一行始终是深色：收起时纯黑，提醒两翼在玻璃下是黑玻璃；展开的面板和卡片使用这里的外观。",
+                         "The notch's row stays dark: black at rest, and a reminder's wings black glass under Glass; the "
+                            + "panel and cards that open from it take this look.")
     }
 
     private func resetPosition() {

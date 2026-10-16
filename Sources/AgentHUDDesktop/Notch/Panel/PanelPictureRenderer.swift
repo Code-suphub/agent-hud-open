@@ -26,8 +26,8 @@ private struct PictureRedaction: ViewModifier {
 
 /// The hover panel drawn off screen for an agent that checks how a layout looks, and measured the same way for
 /// `get_panel`: one screen's whole panel as the layout in effect there draws it, a draft included, at the width the
-/// island gives it and with that display's insets, on the island's black card with its rounded corners. The shared
-/// layout is drawn with the main display's insets.
+/// island gives it and with that display's insets and look, on the island's card with its rounded corners. The shared
+/// layout is drawn with the main display's insets and look.
 ///
 /// It is the panel's own view in a hosting view that is never put in a window, measured the way the island measures
 /// it before opening: nothing opens, nothing shows on screen and no read starts. It draws the panel's content alone,
@@ -36,14 +36,16 @@ private struct PictureRedaction: ViewModifier {
 @MainActor
 struct PanelPictureRenderer {
     /// How a display draws the whole panel: the room its content keeps from the card's edges, which the notch or a
-    /// dock sets, and the tallest the panel opens there, the screen's height less 80 points.
+    /// dock sets, the tallest the panel opens there, the screen's height less 80 points, and the look of its HUD.
     struct Display: Equatable {
         var insets: EdgeInsets
         var maximumHeight: CGFloat
+        var look: HUDLook
 
-        /// Beside the notch of the main screen, for when no island is up to ask.
+        /// Beside the notch of the main screen, in the standard look, for when no island is up to ask.
         @MainActor static var main: Display {
-            Display(insets: HoverPanelView.notchInsets, maximumHeight: (NSScreen.main?.frame.height ?? 900) - 80)
+            Display(insets: HoverPanelView.notchInsets, maximumHeight: (NSScreen.main?.frame.height ?? 900) - 80,
+                    look: .standard)
         }
     }
 
@@ -86,7 +88,7 @@ struct PanelPictureRenderer {
                                             bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
         bitmap.size = size
         let hosting = NSHostingView(rootView: card(masked: masked, height: size.height))
-        hosting.appearance = NSAppearance(named: .darkAqua)
+        hosting.appearance = NSAppearance(named: display.look.appearanceName)
         hosting.frame = CGRect(origin: .zero, size: size)
         hosting.layoutSubtreeIfNeeded()
         // The software renderer draws a capsule's continuous outline with a line past each tip; see `HUDRecorder`.
@@ -99,17 +101,27 @@ struct PanelPictureRenderer {
         return PanelPicture(png: png, width: Double(size.width), fit: fit, scale: scale)
     }
 
-    /// The panel's own view as the island draws the whole of it, without an alert or a refresh error.
+    /// The panel's own view as the island draws the whole of it, in the display's look, without an alert or a refresh
+    /// error.
     func panel(masked: Bool) -> some View {
         HoverPanelView(store: store, onOpenStats: {}, insets: display.insets, showsRefreshError: false, screen: screen)
             .frame(width: width, alignment: .top)
             .environment(\.masksIdentity, masked)
+            .hudLook(display.look)
     }
 
-    /// The panel on the island's card: black, rounded on every corner as the open island is at its foot.
+    /// The panel on the island's card: the look's surface, rounded on every corner as the open island is at its foot.
+    /// Nothing is behind a picture to show through glass, so glass is drawn as its stand-in, the look's tint, over the
+    /// backdrop the HUD's own pictures have (`HUDPictureRenderer.backdrop`).
     func card(masked: Bool, height: CGFloat) -> some View {
-        panel(masked: masked)
+        let shape = RoundedRectangle(cornerRadius: IslandController.expandedRadius, style: .continuous)
+        let look = display.look
+        return panel(masked: masked)
             .frame(height: height, alignment: .top)
-            .background(Color.black, in: RoundedRectangle(cornerRadius: IslandController.expandedRadius, style: .continuous))
+            .background {
+                HUDSurface(shape, look: look, fill: look.theme.islandFill, contact: nil)
+                    .background { if look.seeThrough { shape.fill(HUDPictureRenderer.backdrop) } }
+                    .environment(\.drawsGlassStandIn, true)
+            }
     }
 }

@@ -22,7 +22,8 @@ final class PanelPictureRendererTests: XCTestCase {
         return store
     }()
 
-    private let display = PanelPictureRenderer.Display(insets: HoverPanelView.notchInsets, maximumHeight: 2_000)
+    private let display = PanelPictureRenderer.Display(insets: HoverPanelView.notchInsets, maximumHeight: 2_000,
+                                                       look: .standard)
     private var renderer: PanelPictureRenderer { PanelPictureRenderer(store: store, display: display) }
 
     override func setUp() {
@@ -55,8 +56,13 @@ final class PanelPictureRendererTests: XCTestCase {
 
     /// The panel as the island hosts it, with nothing set in its environment, drawn at twice its size.
     private func islandPanelText() throws -> String {
-        let hosting = NSHostingView(rootView: HoverPanelView(store: store, onOpenStats: {})
-            .frame(width: IslandController.expandedWidth).background(Color.black))
+        try text(drawing: HoverPanelView(store: store, onOpenStats: {}).frame(width: IslandController.expandedWidth)
+            .background(Color.black))
+    }
+
+    /// The text read in `view`, hosted alone at the size it takes and drawn at twice it.
+    private func text(drawing view: some View) throws -> String {
+        let hosting = NSHostingView(rootView: view)
         hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
         hosting.layoutSubtreeIfNeeded()
         let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(hosting.frame.width * 2),
@@ -79,7 +85,7 @@ final class PanelPictureRendererTests: XCTestCase {
         let fit = renderer.fit()
         // The island's own measure of its open panel at the notch, which it takes before opening.
         let root = IslandRootView(store: store, isOpen: true, collapsedSize: CGSize(width: 216, height: 32), collapsedTopRadius: 16,
-                                  collapsedBottomRadius: 12, lightBorder: false, onOpenStats: {})
+                                  collapsedBottomRadius: 12, look: .standard, lightBorder: false, onOpenStats: {})
         let island = IslandWindowController(frame: CGRect(x: -20_000, y: -20_000, width: 600, height: 400), rootView: root)
         XCTAssertEqual(fit.height, Double(max(80, island.contentHeight(for: root).rounded())),
                        "measured as the island measures the panel before it opens")
@@ -258,7 +264,7 @@ final class PanelPictureRendererTests: XCTestCase {
     func testASideDockAtTheNarrowestWidthCutsNothing() throws {
         store.settings.panelLayout.propose(PanelLayout(style: PanelStyle(width: PanelStyle.widthRange.lowerBound)))
         let insets = EdgeInsets(top: 14, leading: 155, bottom: 14, trailing: 18)
-        let side = PanelPictureRenderer(store: store, display: .init(insets: insets, maximumHeight: 2_000))
+        let side = PanelPictureRenderer(store: store, display: .init(insets: insets, maximumHeight: 2_000, look: .standard))
         XCTAssertEqual(side.width, HoverPanelView.narrowestContentWidth + 155 + 18)
         let read = try text(of: try XCTUnwrap(side.picture()))
         let expiry = CodexResetCreditsView(resets: DemoData.codexResetCredits(now: DemoClock.now), showExpiry: true).nextExpiryLabel
@@ -269,7 +275,8 @@ final class PanelPictureRendererTests: XCTestCase {
     }
 
     func testAPanelTallerThanTheDisplayIsDrawnWholeAndSaidToScroll() throws {
-        let short = PanelPictureRenderer(store: store, display: .init(insets: HoverPanelView.notchInsets, maximumHeight: 400))
+        let short = PanelPictureRenderer(store: store, display: .init(insets: HoverPanelView.notchInsets, maximumHeight: 400,
+                                                                      look: .standard))
         let picture = try XCTUnwrap(short.picture())
         XCTAssertTrue(picture.fit.scrolls)
         XCTAssertEqual(picture.fit.maximumHeight, 400)
@@ -290,6 +297,52 @@ final class PanelPictureRendererTests: XCTestCase {
         XCTAssertEqual(rep.pixelsWide, Int((540 * 1_000 / height).rounded()))
         XCTAssertEqual(rep.size.height, CGFloat(height), accuracy: 0.5, "still the panel's size in points")
     }
+
+    // MARK: In a look
+
+    /// The picture is drawn in the display's look. In the light one the card is the light surface where the standard
+    /// one's is black, and the panel on it takes the light tokens from its environment: its text is dark ink that reads
+    /// on that card. A look changes colours only, so the panel is measured as in the standard one.
+    func testThePictureIsDrawnInTheDisplaysLook() throws {
+        let light = PanelPictureRenderer(store: store, display: .init(insets: HoverPanelView.notchInsets, maximumHeight: 2_000,
+                                                                      look: HUDLook(appearance: .light)))
+        XCTAssertEqual(light.fit(), renderer.fit(), "the look moves nothing")
+        let picture = try XCTUnwrap(light.draw(masked: false))
+        let rep = try bitmap(picture)
+        XCTAssertEqual(rep.pixelsHigh, Int(picture.fit.height * 2))
+        let inside = try XCTUnwrap(rep.colorAt(x: rep.pixelsWide / 2, y: 8)?.usingColorSpace(.deviceRGB))
+        XCTAssertEqual(inside.alphaComponent, 1, accuracy: 0.01, "the card is opaque")
+        XCTAssertGreaterThan(inside.redComponent + inside.greenComponent + inside.blueComponent, 2.7, "and light, not black")
+        let read = try text(of: picture)
+        for kept in ["Claude", "Codex", "Sessions", "Current session", "tok"] {
+            XCTAssertTrue(read.contains(kept), "the panel's text reads on the light card: \(kept)\n\(read)")
+        }
+    }
+
+    /// The island measures what it holds before it opens, in a hosting view of its own, and that content carries the
+    /// screen's look wherever it is hosted. In the light look it is measured as tall as in the standard one, and drawn
+    /// on the light surface its text is the light look's dark ink, where the standard look's light ink does not read.
+    func testTheIslandMeasuresWhatItHoldsInItsLook() throws {
+        func root(_ look: HUDLook) -> IslandRootView {
+            IslandRootView(store: store, isOpen: true, collapsedSize: CGSize(width: 216, height: 32), collapsedTopRadius: 16,
+                           collapsedBottomRadius: 12, look: look, lightBorder: false, onOpenStats: {})
+        }
+        let light = HUDLook(appearance: .light)
+        let island = IslandWindowController(frame: CGRect(x: -20_000, y: -20_000, width: 600, height: 400), rootView: root(light))
+        let measured = island.contentHeight(for: root(light))
+        XCTAssertEqual(measured, island.contentHeight(for: root(.standard)))
+        XCTAssertGreaterThan(measured, 300)
+
+        let read = try text(drawing: root(light).content.background(light.theme.islandFill))
+        for kept in ["Claude", "Codex", "Sessions"] {
+            XCTAssertTrue(read.contains(kept), "the content is drawn in the light look: \(kept)\n\(read)")
+        }
+        let standard = try text(drawing: root(.standard).content.background(light.theme.islandFill))
+        for name in ["Claude", "Codex"] {
+            XCTAssertFalse(standard.contains(name), "the standard look's ink is light: \(name)\n\(standard)")
+        }
+    }
+
     // MARK: To a client
 
     /// The picture travels as a client sees it: a tool call from the `--mcp` process reaches the application's tools

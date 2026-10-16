@@ -4,27 +4,42 @@ import SwiftUI
 /// Every colour a request card is allowed to use, in one place.
 ///
 /// Three roles, and nothing outside them: the island's own event colour marks that something is waiting, the product's
-/// status palette says what an answer means, and the island's theme supplies every surface and shade of text that is
-/// neither. A request is not a quota reading, so it never borrows a level colour to say how it feels.
-enum PermissionColor {
-    private static let theme = Theme.island
+/// status palette says what an answer means, and the theme of the HUD the card is in supplies every surface and shade
+/// of text that is neither. A request is not a quota reading, so it never borrows a level colour to say how it feels.
+struct PermissionColor {
+    private let theme: Theme
+
+    /// A request card's colours on a HUD drawn with `theme`.
+    init(_ theme: Theme) { self.theme = theme }
 
     /// Waiting for the user — the same warm the island already uses for an event that needs them.
-    static let signal = Color(IslandAlert.warningAccent)
+    var signal: Color { Color(IslandAlert.warningAccent) }
     /// Letting the call run.
-    static let allow = Color(StatusPalette.ok)
+    var allow: Color { Color(StatusPalette.ok) }
     /// Refusing it.
-    static let deny = Color(StatusPalette.critical)
+    var deny: Color { Color(StatusPalette.critical) }
+    /// Ink on a fill of `allow`, which stays bright whatever the theme.
+    var onAllow: Color { theme.onAccent }
+    /// The three as text and thin glyphs: themselves on a dark HUD, darker on a light one, where the bright fills would
+    /// not be read.
+    var signalText: Color { theme.alertWarningText }
+    var allowText: Color { theme.statusText(.ok) }
+    var denyText: Color { theme.statusText(.critical) }
 
-    static let text = theme.text
-    static let secondary = theme.secondary
-    static let tertiary = theme.tertiary
+    var text: Color { theme.text }
+    var secondary: Color { theme.secondary }
+    var tertiary: Color { theme.tertiary }
     /// The card being decided, and the boxes inside it.
-    static let surface = theme.card
-    static let inset = theme.rowBackground
-    static let border = theme.cardBorder
+    var surface: Color { theme.card }
+    var inset: Color { theme.insetSurface }
+    var border: Color { theme.cardBorder }
     /// A row the pointer is over.
-    static let highlight = theme.segmentBackground
+    var highlight: Color { theme.segmentBackground }
+}
+
+extension EnvironmentValues {
+    /// The colours of a request card in the HUD it is drawn in.
+    var permissionColor: PermissionColor { PermissionColor(hudTheme) }
 }
 
 /// A tool call waiting for its user, in the island's three sizes.
@@ -41,6 +56,7 @@ struct PermissionAlertCompactView: View {
     var waiting = 1
     @Environment(\.stripScale) private var scale
     @Environment(\.compactWings) private var wings
+    @Environment(\.permissionColor) private var color
 
     /// What a request's reminder says beside its project: a question, a plan, or a call waiting to be allowed.
     static func status(of request: PermissionRequest) -> String {
@@ -68,7 +84,7 @@ struct PermissionAlertCompactView: View {
                 WaitingCount(waiting: waiting, scale: scale)
             }.frame(width: wings?.trailing ?? s(IslandController.alertWingWidth), alignment: .trailing)
         }
-        .foregroundStyle(PermissionColor.text)
+        .foregroundStyle(color.text)
         .padding(.horizontal, wings?.padding ?? s(IslandController.alertSidePadding)).frame(height: height)
         .accessibilityIdentifier("island-alert-permissionRequest")
         .accessibilityLabel("\(request.vendor) · \(request.isQuestion ? L10n.text("在问你问题", "Asks a question") : request.isPlan ? L10n.text("有计划待审", "Has a plan to review") : L10n.text("等待批准", "Needs approval")) · \(request.summary)"
@@ -83,6 +99,7 @@ struct PermissionAlertDetailView: View {
     let onDecide: (PermissionDecision) -> Void
     var all: [PermissionRequest] = []
     var onSelect: (String) -> Void = { _ in }
+    @Environment(\.permissionColor) private var color
 
     private var queue: [PermissionRequest] { all.isEmpty ? [request] : all }
 
@@ -98,17 +115,17 @@ struct PermissionAlertDetailView: View {
                     }
                 }
             }
-        }.foregroundStyle(PermissionColor.text)
+        }.foregroundStyle(color.text)
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(L10n.text("待审批", "Waiting")).font(.ui(11, .semibold)).foregroundStyle(PermissionColor.secondary)
+            Text(L10n.text("待审批", "Waiting")).font(.ui(11, .semibold)).foregroundStyle(color.secondary)
             Spacer()
             Text("\(queue.count)")
-                .font(.tabular(10, .semibold)).foregroundStyle(PermissionColor.signal)
+                .font(.tabular(10, .semibold)).foregroundStyle(color.signalText)
                 .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(PermissionColor.signal.opacity(0.16), in: Capsule())
+                .background(color.signal.opacity(0.16), in: Capsule())
         }.padding(.horizontal, 4).padding(.bottom, 8)
     }
 }
@@ -117,13 +134,14 @@ struct PermissionAlertDetailView: View {
 private struct PermissionOpenRow: View {
     let request: PermissionRequest
     let onDecide: (PermissionDecision) -> Void
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 PermissionRowHead(request: request, open: true)
                 if let context = request.context {
-                    Text(context).font(.tabular(11)).foregroundStyle(PermissionColor.tertiary)
+                    Text(context).font(.tabular(11)).foregroundStyle(color.tertiary)
                         .lineLimit(1).truncationMode(.middle)
                 }
             }
@@ -142,7 +160,7 @@ private struct PermissionOpenRow: View {
             }
         }
         .padding(10)
-        .background(PermissionColor.surface, in: RoundedRectangle(cornerRadius: 10))
+        .background(color.surface, in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -151,13 +169,14 @@ struct PermissionClosedRow: View {
     let request: PermissionRequest
     let onSelect: () -> Void
     @State private var hovering = false
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         Button(action: onSelect) {
             PermissionRowHead(request: request, open: false)
                 .padding(.horizontal, 10).padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(hovering ? PermissionColor.highlight : .clear, in: RoundedRectangle(cornerRadius: 8))
+                .background(hovering ? color.highlight : .clear, in: RoundedRectangle(cornerRadius: 8))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -171,6 +190,7 @@ struct PermissionClosedRow: View {
 private struct PermissionRowHead: View {
     let request: PermissionRequest
     let open: Bool
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         HStack(spacing: 8) {
@@ -183,20 +203,20 @@ private struct PermissionRowHead: View {
                 Image(systemName: request.symbol).font(.system(size: 8, weight: .bold))
                 Text(request.badge).font(.tabular(10, .bold))
             }
-                .foregroundStyle(PermissionColor.signal)
+                .foregroundStyle(color.signalText)
                 .padding(.horizontal, 4).padding(.vertical, 1)
-                .background(PermissionColor.signal.opacity(0.14), in: RoundedRectangle(cornerRadius: 3))
+                .background(color.signal.opacity(0.14), in: RoundedRectangle(cornerRadius: 3))
             // An open question shows itself in full below, one question at a time, and so does a command that came
             // without a description of its own.
             if !(open && (request.isQuestion || request.showsDetail && request.detail == request.summary)) {
                 Text(request.summary)
-                    .font(.ui(11)).foregroundStyle(open ? PermissionColor.text.opacity(0.85) : PermissionColor.secondary)
+                    .font(.ui(11)).foregroundStyle(open ? color.text.opacity(0.85) : color.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 6)
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(PermissionRowHead.waited(request.at, now: context.date))
-                    .font(.tabular(11)).foregroundStyle(PermissionColor.tertiary)
+                    .font(.tabular(11)).foregroundStyle(color.tertiary)
             }
         }
     }
@@ -214,28 +234,30 @@ private extension PermissionRequest {
 private struct PermissionDetail: View {
     let text: String
     let lines: Int
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         Text(text)
-            .font(.tabular(11)).foregroundStyle(PermissionColor.text.opacity(0.8))
+            .font(.tabular(11)).foregroundStyle(color.text.opacity(0.8))
             .lineLimit(lines).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             .padding(.horizontal, 9).padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(PermissionColor.inset, in: RoundedRectangle(cornerRadius: 7))
+            .background(color.inset, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
 /// What Always allow adds, there to read before it is given: the client's own rule, as its settings will hold it.
 private struct PermissionRuleNote: View {
     let rule: String
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: "checkmark.seal").font(.system(size: 9, weight: .bold))
-                .foregroundStyle(PermissionColor.allow.opacity(0.8))
-            Text(L10n.text("总是允许会添加", "Always allow adds")).font(.ui(11)).foregroundStyle(PermissionColor.secondary)
+                .foregroundStyle(color.allowText.opacity(0.8))
+            Text(L10n.text("总是允许会添加", "Always allow adds")).font(.ui(11)).foregroundStyle(color.secondary)
                 .fixedSize()
-            Text(rule).font(.tabular(11)).foregroundStyle(PermissionColor.text.opacity(0.85))
+            Text(rule).font(.tabular(11)).foregroundStyle(color.text.opacity(0.85))
                 .lineLimit(2).truncationMode(.middle).textSelection(.enabled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -246,14 +268,15 @@ private struct PermissionRuleNote: View {
 private struct PermissionDiff: View {
     let removed: String?
     let added: String?
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            side(removed, sign: "−", tint: PermissionColor.deny)
-            side(added, sign: "+", tint: PermissionColor.allow)
+            side(removed, sign: "−", tint: color.denyText)
+            side(added, sign: "+", tint: color.allowText)
         }
         .padding(9).frame(maxWidth: .infinity, alignment: .leading)
-        .background(PermissionColor.inset, in: RoundedRectangle(cornerRadius: 7))
+        .background(color.inset, in: RoundedRectangle(cornerRadius: 7))
     }
 
     @ViewBuilder
@@ -276,6 +299,7 @@ struct PermissionAlertInlineView: View {
     let request: PermissionRequest
     let onDecide: (PermissionDecision) -> Void
     var waiting = 1
+    @Environment(\.permissionColor) private var color
 
     /// A plan is answered in its client, so there is nothing here to read before allowing it.
     private var subject: String? { request.isPlan ? nil : request.detail }
@@ -290,7 +314,7 @@ struct PermissionAlertInlineView: View {
                     WaitingCount(waiting: waiting)
                 }
                 PermissionQuestionCard(request: request, onDecide: onDecide)
-            }.foregroundStyle(PermissionColor.text).padding(.vertical, 8)
+            }.foregroundStyle(color.text).padding(.vertical, 8)
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
@@ -304,19 +328,19 @@ struct PermissionAlertInlineView: View {
                         }
                         // A command without a description of its own is its own summary, and it is shown in full below.
                         if request.summary != subject {
-                            Text(request.summary).font(.ui(11)).foregroundStyle(PermissionColor.secondary).lineLimit(1)
+                            Text(request.summary).font(.ui(11)).foregroundStyle(color.secondary).lineLimit(1)
                         }
                     }
                     Spacer(minLength: 10)
                     if request.isPlan {
-                        PlanNotice.dismiss(onDecide)
+                        PlanNotice.dismiss(onDecide, color: color)
                     } else {
                         PermissionButtons(request: request, onDecide: onDecide, compact: true)
                     }
                 }
                 if let subject { PermissionDetail(text: subject, lines: 3) }
                 if !request.isPlan, let rule = request.alwaysAllowRule { PermissionRuleNote(rule: rule) }
-            }.foregroundStyle(PermissionColor.text).padding(.vertical, 8)
+            }.foregroundStyle(color.text).padding(.vertical, 8)
         }
     }
 }
@@ -327,22 +351,24 @@ struct PermissionAlertInlineView: View {
 private struct PlanNotice: View {
     let request: PermissionRequest
     let onDecide: (PermissionDecision) -> Void
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         HStack(spacing: 8) {
             Text(L10n.text("请到 \(request.vendor) 里审批这份计划", "Review this plan in \(request.vendor)"))
-                .font(.ui(11)).foregroundStyle(PermissionColor.secondary).lineLimit(1)
+                .font(.ui(11)).foregroundStyle(color.secondary).lineLimit(1)
             Spacer(minLength: 8)
-            Self.dismiss(onDecide)
+            Self.dismiss(onDecide, color: color)
         }
     }
 
-    static func dismiss(_ onDecide: @escaping (PermissionDecision) -> Void) -> some View {
+    /// The button that puts the card away, in the colours of the card it is on.
+    static func dismiss(_ onDecide: @escaping (PermissionDecision) -> Void, color: PermissionColor) -> some View {
         Button { onDecide(.leave) } label: {
             Text(L10n.text("知道了", "Dismiss")).font(.ui(11, .medium)).lineLimit(1)
-                .foregroundStyle(PermissionColor.secondary)
+                .foregroundStyle(color.secondary)
                 .padding(.horizontal, 9).frame(height: 22)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(PermissionColor.border, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(color.border, lineWidth: 1))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -354,13 +380,14 @@ private struct PlanNotice: View {
 private struct WaitingCount: View {
     let waiting: Int
     var scale: CGFloat = 1
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         if waiting > 1 {
             Text("×\(waiting)")
-                .font(.tabular((10 * scale).rounded(), .semibold)).foregroundStyle(PermissionColor.secondary)
+                .font(.tabular((10 * scale).rounded(), .semibold)).foregroundStyle(color.secondary)
                 .padding(.horizontal, (5 * scale).rounded()).padding(.vertical, (2 * scale).rounded())
-                .background(PermissionColor.highlight, in: RoundedRectangle(cornerRadius: 4))
+                .background(color.highlight, in: RoundedRectangle(cornerRadius: 4))
                 .accessibilityLabel(L10n.text("共 \(waiting) 个待批准", "\(waiting) requests waiting"))
         }
     }
@@ -375,22 +402,23 @@ private struct PermissionButtons: View {
     let request: PermissionRequest
     let onDecide: (PermissionDecision) -> Void
     var compact = false
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         HStack(spacing: 6) {
             button(L10n.text("拒绝", "Deny"), symbol: "xmark", identifier: "island-permission-deny",
-                   fill: PermissionColor.deny.opacity(0.14), stroke: PermissionColor.deny.opacity(0.3),
-                   foreground: PermissionColor.deny) { onDecide(.deny) }
+                   fill: color.deny.opacity(0.14), stroke: color.deny.opacity(0.3),
+                   foreground: color.denyText) { onDecide(.deny) }
             Spacer(minLength: 8)
             if let always = request.alwaysAllow {
                 // A seal, not a tick: this answer outlives the call it was given for.
                 button(L10n.text("总是允许", "Always allow"), symbol: "checkmark.seal",
                        identifier: "island-permission-always",
-                       fill: .clear, stroke: PermissionColor.allow.opacity(0.4),
-                       foreground: PermissionColor.allow) { onDecide(.allowAlways(always)) }
+                       fill: .clear, stroke: color.allow.opacity(0.4),
+                       foreground: color.allowText) { onDecide(.allowAlways(always)) }
             }
             button(request.allowLabel, symbol: "checkmark", identifier: "island-permission-approve",
-                   fill: PermissionColor.allow, stroke: .clear, foreground: .black) { onDecide(.allow) }
+                   fill: color.allow, stroke: .clear, foreground: color.onAllow) { onDecide(.allow) }
         }
     }
 
@@ -418,10 +446,11 @@ private struct PermissionSymbol: View {
     let requestID: String
     var size: CGFloat = 14
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.permissionColor) private var color
 
     var body: some View {
         Image(systemName: "hand.raised.fill")
-            .font(.system(size: size, weight: .semibold)).foregroundStyle(PermissionColor.signal)
+            .font(.system(size: size, weight: .semibold)).foregroundStyle(color.signalText)
             .symbolEffect(.pulse, options: .repeating, value: requestID)
             .symbolEffectsRemoved(reduceMotion)
     }

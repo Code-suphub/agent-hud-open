@@ -42,7 +42,8 @@ extension PanelMeasure {
 struct IslandQuotaMetricPicker: View {
     @Binding var selection: PanelMeasure
     var measures = PanelBlockKind.quota.measures(under: .bar)
-    var theme: Theme = .island
+    /// The tokens of what it heads: its block's in the panel, or the sample's in Settings.
+    let theme: Theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -87,7 +88,7 @@ struct ProviderQuotaBlock: View {
     @State private var metric: PanelMeasure
     @Environment(\.panelSpacing) private var spacing
     @Environment(\.panelHalf) private var half
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
 
     init(store: UsageStore, rows: [AgentRow], plan: PanelBlockPlan, onOpenAgent: (() -> Void)? = nil) {
         self.store = store
@@ -191,8 +192,9 @@ struct ProviderQuotaBlock: View {
             }
             if plan.widget == .chart {
                 TokenBarsChart(columns: chartColumns, interval: store.hudTokenInterval,
-                               colors: chartConsumers.map { AgentPalette.swiftUIColor(index: store.consumerPaletteIndex($0.id)) },
-                               consumers: chartConsumers, theme: theme, isLoading: store.report == nil, compact: true)
+                               colors: chartConsumers.map { theme.agent(store.consumerPaletteIndex($0.id)) },
+                               consumers: chartConsumers, theme: theme, context: .island, isLoading: store.report == nil,
+                               compact: true)
                     .frame(height: 40)
                     .padding(.horizontal, IslandRowLayout.inset)
                     .padding(.top, spacing.chartTop)
@@ -260,7 +262,7 @@ struct AccountSectionHeader: View {
     let label: String
     var notice: String?
     var warning: String?
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
     @Environment(\.masksIdentity) private var masksIdentity
     @Environment(\.panelHalf) private var half
 
@@ -336,7 +338,7 @@ struct AccountSectionHeader: View {
 struct CodexResetCreditsView: View {
     let resets: CodexResetCredits
     let showExpiry: Bool
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
     @State private var isHovered = false
     @Environment(\.panelHalf) private var half
 
@@ -351,7 +353,7 @@ struct CodexResetCreditsView: View {
                 .layoutPriority(half ? 1 : 0)
             Text(availabilityLabel)
                 .font(.tabular(12, .semibold))
-                .foregroundStyle(resets.availableCount > 0 ? theme.status(.ok) : theme.secondary)
+                .foregroundStyle(resets.availableCount > 0 ? theme.statusText(.ok) : theme.secondary)
                 .fixedSize()
             Spacer(minLength: 8)
             if resets.availableCount > 0 {

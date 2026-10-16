@@ -10,7 +10,8 @@ final class HUDStyleTests: XCTestCase {
         "mode": .string("dynamic"), "edge": .string("left"), "position": .number(0.25), "logoSize": .integer(30),
         "logoGap": .number(0.5), "edgeDistance": .integer(6), "showLogos": .bool(false), "simpleSize": .integer(32),
         "ringWidth": .number(2.5), "showRings": .bool(false), "showNumbers": .bool(false),
-        "separateAgents": .bool(true),
+        "separateAgents": .bool(true), "appearance": .string("light"), "material": .string("glass"),
+        "transparency": .number(0.3),
         "glow": .object(["style": .string("dots"), "effect": .string("ripple"), "brightness": .number(0.5),
                          "range": .integer(20), "blur": .integer(4), "speed": .integer(6), "amplitude": .number(0.3),
                          "outwardOnly": .bool(false)]),
@@ -24,7 +25,8 @@ final class HUDStyleTests: XCTestCase {
         let placement = style.applied(to: .default(hasNotch: true))
         XCTAssertEqual(placement, ScreenPlacement(mode: .logos, edge: .left, offset: 0.25, logoSize: 30, logoEdgeDistance: 6,
                                                   gapScale: 0.5, showsLogos: false, simpleSize: 32, ringWidth: 2.5,
-                                                  showsRings: false, showsNumbers: false, separatesAgents: true))
+                                                  showsRings: false, showsNumbers: false, separatesAgents: true,
+                                                  appearance: .light, material: .glass, glassTransparency: 0.3))
         var glow = GlowSettings()
         glow.style = .dots
         glow.effect = .ripple
@@ -56,7 +58,51 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertEqual(HUDMode(agentName: "dynamic"), .logos)
         XCTAssertNil(HUDMode(agentName: "logos"), "the settings' own name is not an agent's")
         XCTAssertEqual(HUDStyle.names, ["mode", "edge", "position", "logoSize", "logoGap", "edgeDistance", "showLogos", "simpleSize",
-                                        "ringWidth", "showRings", "showNumbers", "separateAgents", "glow"])
+                                        "ringWidth", "showRings", "showNumbers", "separateAgents", "appearance",
+                                        "material", "transparency", "glow"])
+        XCTAssertEqual(style.json["appearance"], .string("light"), "the look keeps the settings' own names")
+        XCTAssertEqual(style.json["material"], .string("glass"))
+        XCTAssertEqual(HUDStyle(appearance: .system).json, ["appearance": .string("system")])
+        XCTAssertEqual(style.json["transparency"], .number(0.3), "the glass's transparency is transparency to an agent")
+    }
+
+    /// The look's two fields take part in a style as every other field does: set over the settings, read back from
+    /// them, and reduced to what they change; the default placement is dark and solid, as Reset to Default gives it.
+    func testTheLookIsAStyleFieldLikeAnyOther() {
+        let saved = ScreenPlacement(mode: .simple, appearance: .light)
+        XCTAssertEqual(HUDStyle(material: .glass).applied(to: saved),
+                       ScreenPlacement(mode: .simple, appearance: .light, material: .glass), "the appearance stays as saved")
+        XCTAssertEqual(HUDStyle(appearance: .system).applied(to: saved).appearance, .system)
+        let whole = HUDStyle(every: saved, glow: GlowSettings())
+        XCTAssertEqual(whole.appearance, .light)
+        XCTAssertEqual(whole.material, .solid)
+        XCTAssertEqual(HUDStyle(appearance: .light, material: .glass).reduced(placement: saved, glow: GlowSettings()),
+                       HUDStyle(material: .glass), "an appearance that repeats what is saved changes nothing")
+        XCTAssertEqual(HUDStyle(every: .default(hasNotch: true), glow: GlowSettings()).json["appearance"], .string("dark"))
+        XCTAssertEqual(HUDStyle(every: .default(hasNotch: false), glow: GlowSettings()).json["material"], .string("solid"))
+        XCTAssertEqual(HUDStyle(json: ["appearance": .string("sepia"), "material": .integer(1)]), HUDStyle(),
+                       "nothing this build does not know is read")
+    }
+
+    /// The glass's transparency takes part in a style as the look's other fields do: set over the settings' own
+    /// `glassTransparency`, read back from them, listed beside the material whatever it is, and reduced to what it
+    /// changes.
+    func testTheTransparencyIsAStyleFieldLikeAnyOther() {
+        let saved = ScreenPlacement(mode: .simple, material: .glass, glassTransparency: 0.4)
+        XCTAssertEqual(HUDStyle(transparency: 0.1).applied(to: saved),
+                       ScreenPlacement(mode: .simple, material: .glass, glassTransparency: 0.1))
+        XCTAssertEqual(HUDStyle(material: .solid).applied(to: saved).glassTransparency, 0.4, "the transparency stays as saved")
+        XCTAssertEqual(HUDStyle(every: saved, glow: GlowSettings()).transparency, 0.4)
+        XCTAssertEqual(HUDStyle(every: .default(hasNotch: true), glow: GlowSettings()).json["transparency"],
+                       .number(0), "a solid HUD lists its own, opaque at first")
+        XCTAssertEqual(HUDStyle(transparency: 0.3).applied(to: ScreenPlacement()).solidTransparency, 0.3,
+                       "on a solid HUD it is solid's")
+        XCTAssertEqual(HUDStyle(transparency: 0.4, glow: HUDStyle.Glow()).reduced(placement: saved, glow: GlowSettings()),
+                       HUDStyle(), "a transparency that repeats what is saved changes nothing")
+        XCTAssertEqual(HUDStyle(json: ["transparency": .integer(0)]), HUDStyle(transparency: 0), "a whole number is a number")
+        XCTAssertEqual(HUDStyle(json: ["transparency": .number(0.9)]).json, ["transparency": .number(0.9)])
+        XCTAssertEqual(HUDStyle(json: ["transparency": .number(0.95)]), HUDStyle(), "nothing out of range is read")
+        XCTAssertEqual(HUDStyle(json: ["transparency": .string("0.5")]), HUDStyle())
     }
 
     /// Reduced against what a screen has saved, a style keeps only what it changes: the style a screen has in effect,
@@ -91,7 +137,7 @@ final class HUDStyleTests: XCTestCase {
         let ranges: [(String, ClosedRange<Double>)] = [
             ("position", 0...1), ("logoSize", ScreenPlacement.logoSizeRange), ("logoGap", ScreenPlacement.gapScaleRange),
             ("edgeDistance", ScreenPlacement.logoEdgeDistanceRange), ("simpleSize", ScreenPlacement.simpleSizeRange),
-            ("ringWidth", ScreenPlacement.ringWidthRange),
+            ("ringWidth", ScreenPlacement.ringWidthRange), ("transparency", ScreenPlacement.glassTransparencyRange),
         ]
         for (name, range) in ranges {
             XCTAssertEqual(HUDStyle.misreadings(ofField: name, .number(range.lowerBound)), [], name)
@@ -104,6 +150,10 @@ final class HUDStyleTests: XCTestCase {
         }
         XCTAssertEqual(HUDStyle.misreadings(ofField: "logoSize", .number(37)), ["hud.logoSize is a number from 12 to 36."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "logoGap", .number(0.05)), ["hud.logoGap is a number from 0.1 to 0.6."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .number(1)), ["hud.transparency is a number from 0 to 0.9."],
+                       "bare glass is out of range")
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .bool(true)), ["hud.transparency is a number from 0 to 0.9."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .integer(0)), [])
 
         let glow: [(String, ClosedRange<Double>)] = [
             ("brightness", GlowSettings.brightnessRange), ("range", GlowSettings.sizeRange), ("blur", GlowSettings.sizeRange),
@@ -127,6 +177,25 @@ final class HUDStyleTests: XCTestCase {
                        ["hud.mode is one of \"notch\", \"dynamic\", \"simple\"."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "edge", .string("centre")),
                        ["hud.edge is one of \"top\", \"right\", \"bottom\", \"left\"."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "appearance", .string("auto")),
+                       ["hud.appearance is one of \"dark\", \"light\", \"system\"."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "appearance", .bool(true)),
+                       ["hud.appearance is one of \"dark\", \"light\", \"system\"."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "material", .string("frosted")),
+                       ["hud.material is one of \"solid\", \"glass\"."])
+        for name in HUDAppearance.allCases.map(\.rawValue) {
+            XCTAssertEqual(HUDStyle.misreadings(ofField: "appearance", .string(name)), [], name)
+        }
+        for name in HUDMaterial.allCases.map(\.rawValue) {
+            XCTAssertEqual(HUDStyle.misreadings(ofField: "material", .string(name)), [], name)
+        }
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "material", .null), [])
+        XCTAssertEqual(PanelLayout.misreadings(of: .object(["style": .object(["appearance": .string("light")])])),
+                       ["style has no property \"appearance\"; the style takes spacing, separators and width. The HUD's "
+                        + "appearance is hud.appearance, for one screen."], "the panel's style points to the hud's")
+        XCTAssertEqual(PanelLayout.misreadings(of: .object(["style": .object(["transparency": .number(0.3)])])),
+                       ["style has no property \"transparency\"; the style takes spacing, separators and width. The HUD's "
+                        + "transparency is hud.transparency, for one screen."])
         for name in ["showLogos", "showRings", "showNumbers", "separateAgents"] {
             XCTAssertEqual(HUDStyle.misreadings(ofField: name, .string("yes")), ["hud.\(name) is true or false."])
             XCTAssertEqual(HUDStyle.misreadings(ofField: name, .bool(true)), [])
@@ -144,8 +213,8 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertNil(HUDStyle.misreadings(ofField: "background", .string("blue")), "a key that names no field is the caller's")
         XCTAssertEqual(PanelLayout.misreadings(of: .object(["hud": .object(["background": .string("blue")])])),
                        ["hud has no property \"background\"; the hud takes agents, mode, edge, position, logoSize, logoGap, "
-                        + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, separateAgents, glow and "
-                        + "reset."])
+                        + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, separateAgents, "
+                        + "appearance, material, transparency, glow and reset."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .string("yes")), ["hud.reset is true or false."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .bool(false)), [])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .null), [])
@@ -176,6 +245,53 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertEqual(issues(HUDStyle(glow: HUDStyle.Glow(effect: .scan, amplitude: 0.2)), notch),
                        ["hud.glow.amplitude: amplitude sets the \"breathe\" effect, and the glow of \"Display 2\" would play \"scan\"."])
         XCTAssertEqual(issues(HUDStyle(glow: HUDStyle.Glow(style: .dots, effect: .ripple, brightness: 0.4, speed: 5)), notch), [])
+    }
+
+    /// The look is drawn in every mode, the notch's on a display that has one too, whose row stays dark while its panel
+    /// and its cards take the look: there the appearance and the material are taken as on any other screen.
+    func testANotchAtANotchTakesTheLook() {
+        let notch = ScreenPlacement.default(hasNotch: true), glow = GlowSettings()
+        func issues(_ style: HUDStyle, _ placement: ScreenPlacement, hasNotch: Bool) -> [String] {
+            style.issues(placement: placement, glow: glow, hasNotch: hasNotch, screen: "\"Built-in display\"")
+                .map { "\($0.path): \($0.message)" }
+        }
+        XCTAssertEqual(issues(HUDStyle(appearance: .light, material: .glass), notch, hasNotch: true), [])
+        XCTAssertEqual(issues(HUDStyle(appearance: .light, material: .glass, transparency: 0.2), notch, hasNotch: true), [],
+                       "with the glass's transparency too")
+        XCTAssertEqual(issues(HUDStyle(mode: .simple, appearance: .light, material: .glass), notch, hasNotch: true), [],
+                       "a dock on a notched display draws its look")
+        XCTAssertEqual(issues(HUDStyle(appearance: .system), ScreenPlacement(mode: .notch), hasNotch: false), [],
+                       "the bar that stands in for a notch draws it")
+        XCTAssertEqual(issues(HUDStyle(mode: .notch, material: .glass), ScreenPlacement(mode: .simple), hasNotch: true), [],
+                       "back to the notch, the glass is kept")
+        for mode in HUDMode.allCases {
+            for hasNotch in [true, false] where mode != .notch || hasNotch {
+                XCTAssertEqual(issues(HUDStyle(appearance: .light, material: .glass), ScreenPlacement(mode: mode),
+                                      hasNotch: hasNotch), [], "\(mode) \(hasNotch)")
+            }
+        }
+    }
+
+    /// A transparency is taken on any screen and in any mode, for the material in effect, the style's own or the one
+    /// saved: no HUD refuses one, as Settings offers it beside Solid and Glass alike.
+    func testATransparencyIsTakenForEitherMaterial() {
+        let glow = GlowSettings()
+        func issues(_ style: HUDStyle, _ placement: ScreenPlacement, hasNotch: Bool = false) -> [String] {
+            style.issues(placement: placement, glow: glow, hasNotch: hasNotch, screen: "\"Display 2\"")
+                .map { "\($0.path): \($0.message)" }
+        }
+        for mode in HUDMode.allCases {
+            XCTAssertEqual(issues(HUDStyle(transparency: 0.2), ScreenPlacement(mode: mode), hasNotch: true), [], "\(mode)")
+        }
+        let solid = ScreenPlacement(mode: .logos), glass = ScreenPlacement(mode: .logos, material: .glass)
+        XCTAssertEqual(HUDStyle(transparency: 0.2).applied(to: solid).solidTransparency, 0.2)
+        XCTAssertEqual(HUDStyle(transparency: 0.2).applied(to: glass).glassTransparency, 0.2)
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: 0.2).applied(to: solid).glassTransparency, 0.2,
+                       "with the glass it sets")
+        XCTAssertEqual(HUDStyle(material: .solid, transparency: 0.2).applied(to: glass).solidTransparency, 0.2,
+                       "with the solid it sets")
+        XCTAssertEqual(HUDStyle(material: .solid, transparency: 0.2).applied(to: glass).glassTransparency,
+                       ScreenPlacement.standardGlassTransparency, "glass's kept as saved")
     }
 
     // MARK: The panel's width

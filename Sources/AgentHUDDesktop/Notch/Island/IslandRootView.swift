@@ -78,7 +78,24 @@ struct IslandRootView: View {
     let collapsedSize: CGSize
     let collapsedTopRadius: CGFloat
     let collapsedBottomRadius: CGFloat
+    /// What this screen's HUD looks like. Everything on the island draws with it: the silhouette, what the card holds,
+    /// the marks on a dock, and what SwiftUI chooses itself, such as a mark's artwork, in its colour scheme.
+    let look: HUDLook
+    /// The desktop behind the island is light, which a hairline round the silhouette keeps it apart from. It follows the
+    /// Mac's appearance, not the look.
     let lightBorder: Bool
+    /// Glass drawn as its stand-in, its tint alone, while the HUD is being recorded (`HUDRecorder`): a recording draws
+    /// the windows' layers in this process, where no glass and no blur is drawn. A picture of the island says the same
+    /// in the environment it is drawn in (`drawsGlassStandIn`).
+    var drawsGlassStandIn = false
+    /// Set on the island at a hardware notch. In any look but the standard one the place the collapsed island takes, the
+    /// camera housing and the flares that join it to the screen's edge, stays black (`NotchInk`), and the look's surface
+    /// grows round it as the island opens, so the housing is one with the island in any look. The ink fades in and out
+    /// with the look, and is drawn under the island's hairline.
+    var inksNotch = false
+    /// Whether a change of look cross-fades. Off for the first view the island is given, whose look replaces the
+    /// placeholder's at once (`IslandWindowController.setRootView(_:)`).
+    var animatesLook = true
     let onOpenStats: () -> Void
     var onOpenSettings: () -> Void = {}
     var additionalHUDControls: @MainActor () -> AnyView = { AnyView(EmptyView()) }
@@ -122,7 +139,7 @@ struct IslandRootView: View {
     var botLogos = true
     /// Set on a screen whose HUD is a logo queue. Collapsed, such a HUD has no silhouette: it is the marks
     /// over whatever is behind them. Kept apart from `logoQueue`, which only says whether marks are drawn —
-    /// hiding them leaves the backdrop alone and must not bring the black shape back.
+    /// hiding them leaves the backdrop alone and must not bring the silhouette back.
     var hidesSilhouette = false
     /// Set on a dock that separates its agents. The marks then stay where they are whatever the card does:
     /// the Simple panel draws its own capsule instead of lending it to the card, and nothing replaces them.
@@ -146,6 +163,10 @@ struct IslandRootView: View {
 
     private var detached: Bool { focusVendor != nil }
 
+    /// The tokens the silhouette and the detached card are filled and outlined with: the look's. Taken from the look
+    /// itself, because the environment this view sets reaches what it holds and not the view.
+    private var theme: Theme { look.theme }
+
     /// A card comes out of the dock and goes back into it: scaled from the side that faces the dock. The Simple
     /// line on a side edge only lengthens, as the panel growing an arm would.
     private func cardTransition(_ frame: CGRect, in bounds: CGSize, line: Bool) -> AnyTransition {
@@ -167,7 +188,13 @@ struct IslandRootView: View {
     private struct CardPlacement: ViewModifier, @preconcurrency Animatable {
         var frame: CGRect
         var radius: CGFloat
+        /// How much of `hairline` is drawn round the card: all of it, or none round the Simple line.
         var outline: Double
+        let hairline: Color
+        /// The card's surface, drawn in the card's own shape as it moves and widens: the look's, filled with `fill`
+        /// where it is solid.
+        let look: HUDLook
+        let fill: Color
 
         var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>,
                                            AnimatablePair<CGFloat, Double>> {
@@ -185,7 +212,8 @@ struct IslandRootView: View {
             content
                 .frame(width: max(0, frame.width), height: max(0, frame.height))
                 .clipShape(card)
-                .overlay { card.strokeBorder(.white.opacity(outline), lineWidth: 1) }
+                .background { HUDSurface(card, look: look, fill: fill, contact: nil) }
+                .overlay { card.strokeBorder(hairline.opacity(outline), lineWidth: 1) }
                 .position(x: frame.midX, y: frame.midY)
         }
     }
@@ -216,10 +244,27 @@ struct IslandRootView: View {
     }
     static let detachedInsets = EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 18)
 
-    /// A full card keeps a card's corner; a peek or a compact reminder is as round as its height allows.
+    /// How far below the camera housing what the island holds starts on a light look at a hardware notch: past the black
+    /// that fades out round the housing (`NotchInk`), whose darkest band would sit under the first line's dark ink.
+    /// Light ink reads on the fade, so a dark look needs none.
+    static func inkClearance(inksNotch: Bool, look: HUDLook) -> CGFloat {
+        inksNotch && look.appearance == .light ? NotchInk.feather : 0
+    }
+
+    private var inkClearance: CGFloat { Self.inkClearance(inksNotch: inksNotch, look: look) }
+
+    /// The hover panel's insets beside the notch, `clearance` further down from it.
+    static func notchInsets(clearing clearance: CGFloat) -> EdgeInsets {
+        var insets = HoverPanelView.notchInsets
+        insets.top += clearance
+        return insets
+    }
+
+    /// A full card keeps a card's corner; a peek or a compact reminder is as round as its height allows. The shadow a
+    /// light or glass card casts takes the same corner (`ScreenHUD.detachedRadius(height:full:bubble:)`).
     private func detachedRadius(height: CGFloat) -> CGFloat {
-        let wanted: CGFloat = isOpen && (pinned || showsAlertDetails) ? 22 : peek?.style == .bubble && alert == nil ? 14 : height
-        return min(wanted, height / 2)
+        ScreenHUD.detachedRadius(height: height, full: isOpen && (pinned || showsAlertDetails),
+                                 bubble: peek?.style == .bubble && alert == nil)
     }
     /// Where the queue's strip sits inside the window, in points down from its top edge, and how tall it is.
     /// The window's own top edge moves between the collapsed and the expanded frame; the marks must not.
@@ -264,12 +309,36 @@ struct IslandRootView: View {
     static var placeholder: IslandRootView {
         IslandRootView(store: nil, isOpen: false, collapsedSize: CGSize(width: 216, height: 32),
                        collapsedTopRadius: NotchGeometry.collapsedTopRadius, collapsedBottomRadius: 12,
-                       lightBorder: false, onOpenStats: {})
+                       look: .standard, lightBorder: false, onOpenStats: {})
     }
 
+    /// The island draws in its look (`islandLook(_:)`). A light or glass look draws in its own colour scheme whatever
+    /// the app is set to, so a mark's artwork is the one for the island's surface; the standard look leaves the scheme to
+    /// the app, as it always has. What AppKit chooses, such as the scroller and a text field's caret, follows the
+    /// hosting view's appearance, which `IslandWindowController` sets from the same look.
+    ///
+    /// A change of look cross-fades: the surface's layers (`HUDSurface`) and what the island holds move to the new
+    /// look's colours on the island's curve, or at once under Reduce Motion.
     var body: some View {
-        surfaces.environment(\.botLogos, botLogos)
+        let animatesLook = animatesLook
+        return surfaces
+            .environment(\.botLogos, botLogos)
+            .environment(\.drawsGlassStandIn, standsInForGlass)
+            .islandLook(look)
+            .transaction(value: look) { transaction in
+                if !animatesLook { transaction.disablesAnimations = true }
+            }
     }
+
+    /// A picture of the island, or the island while it is recorded, draws glass as its stand-in.
+    @Environment(\.drawsGlassStandIn) private var drawnAsPicture
+    private var standsInForGlass: Bool { drawsGlassStandIn || drawnAsPicture }
+
+    /// The hairline `color` round the silhouette or a card, unless Liquid Glass lights a rim of its own there.
+    private func outline(_ color: Color) -> Color { look.outline(color, standIn: standsInForGlass) }
+
+    /// How what the island holds moves to a new look's colours.
+    private var lookAnimation: Animation? { reduceMotion ? nil : IslandAnimation.curve }
 
     private var surfaces: some View {
         GeometryReader { proxy in
@@ -294,16 +363,35 @@ struct IslandRootView: View {
             // opens or an event needs somewhere to be shown — but never because the marks were hidden.
             let bare = hidesSilhouette && !visible && (!floats || separatesAgents)
             let surface = ZStack(alignment: surfaceAlignment) {
-                // Keep one shape alive through collapse so it can shrink before becoming transparent.
-                shape.fill(.black.opacity(floats && !visible ? 0.82 : 1))
+                // Keep one shape alive through collapse so it can shrink before becoming transparent. A silhouette that
+                // grows out of the screen edge stands on it; a floating one stands on nothing.
+                HUDSurface(shape, look: look, fill: theme.islandFill.opacity(floats && !visible ? theme.restingFillOpacity : 1),
+                           contact: floats ? nil : shape.edge)
                     .overlay {
-                        if floats { shape.stroke(.white.opacity(0.14), lineWidth: 1) }
-                        else if lightBorder && alert == nil { shape.stroke(.white.opacity(0.18), lineWidth: 1) }
+                        if inksNotch {
+                            NotchInk(size: collapsedSize, topRadius: collapsedTopRadius, bottomRadius: collapsedBottomRadius)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                .clipShape(shape)
+                                .opacity(look == .standard ? 0 : 1)
+                        }
                     }
+                    .overlay {
+                        // A light shell keeps its edge while an alert is up as well: nothing else parts a light card
+                        // from a light desktop. At rest in a notch the island is black whatever the look, and keeps
+                        // the hairline the standard island draws, which Liquid Glass would otherwise leave to its rim.
+                        let resting = inksNotch && !visible
+                        if floats { shape.stroke(outline(theme.islandOutline), lineWidth: 1) }
+                        else if lightBorder && (alert == nil || look.appearance == .light) {
+                            shape.stroke(look.outline(theme.desktopOutline, standIn: standsInForGlass || resting),
+                                         lineWidth: 1)
+                        }
+                    }
+                    .animation(lookAnimation, value: look)
                     .frame(width: size.width, height: size.height)
                     .opacity(bare ? 0 : 1)
                 content
                     .environment(\.islandTyping, onTyping)
+                    .animation(lookAnimation, value: look)
                     .mask(alignment: surfaceAlignment) { shape.frame(width: size.width, height: size.height) }
                 }
             ZStack(alignment: .topLeading) {
@@ -318,13 +406,14 @@ struct IslandRootView: View {
                         // nothing drawn where the panel already is, so the two never darken each other.
                         let grows = growsFromPanel
                         let motion: Animation? = reduceMotion ? nil : IslandAnimation.curve
-                        ZStack {
-                            Color.black.opacity(grows ? SimpleMeterView.fillOpacity : 1)
-                            content.environment(\.islandTyping, onTyping)
-                        }
-                        .modifier(CardPlacement(frame: presentationFrame,
-                                                radius: detachedRadius(height: presentationFrame.height),
-                                                outline: grows ? 0 : 0.14))
+                        content
+                            .environment(\.islandTyping, onTyping)
+                            .animation(lookAnimation, value: look)
+                            .modifier(CardPlacement(frame: presentationFrame,
+                                                    radius: detachedRadius(height: presentationFrame.height),
+                                                    outline: grows ? 0 : 1, hairline: outline(theme.islandOutline),
+                                                    look: look,
+                                                    fill: theme.islandFill.opacity(grows ? theme.restingFillOpacity : 1)))
                         // Keyed to the card's place on screen. Its place in the window also changes whenever the
                         // window around it is resized, and that must never move the card.
                         .animation(motion, value: cardScreenFrame)
@@ -366,14 +455,19 @@ struct IslandRootView: View {
                         .frame(width: bounds.width, height: bounds.height, alignment: surfaceAlignment)
                 }
                 if let logoQueue, alert == nil || focusVendor != nil {
+                    // Marks with no surface behind them, bare or beside a card of their own, stand on the
+                    // wallpaper whatever the look, and are drawn for it as they always were; only marks on a light
+                    // surface take its dark ink.
+                    let onSurface = !bare && !(separatesAgents && (detached || !visible))
+                    let light = look.appearance == .light && onSurface
                     if let logoQueueFrame {
-                        LogoQueueView(config: logoQueue, light: lightBorder)
+                        LogoQueueView(config: logoQueue, light: light)
                             .frame(width: logoQueueFrame.width, height: logoQueueFrame.height)
                             .position(x: logoQueueFrame.midX, y: logoQueueFrame.midY)
                             .frame(width: bounds.width, height: bounds.height)
                             .transaction { $0.animation = nil }
                     } else {
-                        LogoQueueView(config: logoQueue, light: lightBorder)
+                        LogoQueueView(config: logoQueue, light: light)
                             .frame(width: size.width, height: logoQueueHeight)
                             .padding(.top, logoQueueInset)
                             .frame(width: bounds.width, height: bounds.height, alignment: surfaceAlignment)
@@ -382,7 +476,10 @@ struct IslandRootView: View {
                 }
                 if let simpleMeter, alert == nil || focusVendor != nil {
                     let strip = logoQueueFrame ?? CGRect(x: 0, y: logoQueueInset, width: size.width, height: logoQueueHeight)
+                    // The figures stay put as the island moves, and move to a new look's colours with the panel
+                    // behind them.
                     SimpleMeterView(config: simpleMeter, onIsland: !separatesAgents)
+                        .animation(lookAnimation, value: look)
                         .frame(width: strip.width, height: strip.height)
                         .position(x: strip.midX, y: strip.midY)
                         .frame(width: bounds.width, height: bounds.height)
@@ -395,8 +492,15 @@ struct IslandRootView: View {
         .id(store?.settings.settings.language ?? .system)
     }
 
-    @ViewBuilder
+    /// What the island holds, drawn with this screen's look as `body` draws it. The island is also measured from this
+    /// alone, in a hosting view of its own (`IslandWindowController.contentHeight(for:)`), so the look is set here and
+    /// not only round `body`.
     var content: some View {
+        cardContent.islandLook(look)
+    }
+
+    @ViewBuilder
+    private var cardContent: some View {
         if isOpen, showsAlertDetails, let alert {
             Group {
                 if alert.isSessionEvent {
@@ -421,6 +525,7 @@ struct IslandRootView: View {
                     EdgeInsets(top: max($0.top, collapsedSize.height), leading: $0.leading,
                                bottom: $0.bottom, trailing: $0.trailing)
                 } ?? EdgeInsets(top: collapsedSize.height + alert.detailTopInset, leading: 24, bottom: 22, trailing: 24))
+                .padding(.top, inkClearance)
                 .frame(width: alert.detailWidth)
                 .fixedSize(horizontal: false, vertical: true)
                 .background(GeometryReader { proxy in Color.clear.preference(key: PanelHeightKey.self, value: proxy.size.height) })
@@ -440,7 +545,7 @@ struct IslandRootView: View {
                            onOpenListedSession: onOpenListedSession, failedListedSessionID: failedListedSessionID,
                            onDecideAlert: onDecideAlert,
                            waitingRequests: waitingRequests,
-                           insets: hidesSilhouette ? dockInsets : HoverPanelView.notchInsets,
+                           insets: hidesSilhouette ? dockInsets : Self.notchInsets(clearing: inkClearance),
                            answeringSessionID: answeringSessionID, onAnswerSession: onAnswerSession,
                            focusVendor: focusVendor, screen: panelScreen)
                 .frame(width: detached ? agentPanelWidth : panelWidth, alignment: .top)

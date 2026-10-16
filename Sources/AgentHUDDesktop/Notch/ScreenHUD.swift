@@ -32,6 +32,8 @@ final class ScreenHUD {
     private(set) var geometry: NotchGeometry
     /// Set by the coordinator, which watches the system appearance once for every screen.
     var systemIsLight = SystemAppearance.isLight
+    /// Set by the coordinator while the HUD is recorded: glass is then drawn as its stand-in (`IslandRootView`).
+    var drawsGlassStandIn = false
     let glow: GlowWindowController
     let island: IslandWindowController
     private var machine = HoverMachine() {
@@ -218,6 +220,8 @@ final class ScreenHUD {
         let requests: [PermissionRequest]
         let geometry: NotchGeometry
         let light: Bool
+        /// The look the island draws with: a change of it makes the panel and its images again.
+        let look: HUDLook
         let appearance: GlowAppearance
         let alertID: String?
         let focus: AgentMark?
@@ -255,7 +259,7 @@ final class ScreenHUD {
                       now: store.now, dataDate: store.dataDate,
                       error: store.lastError, loading: store.isLoading, range: store.statsRange,
                       bucketSize: store.tokenBucketSize, dimensions: store.tokenDimensions,
-                      requests: PermissionRequests.shared.pending, geometry: geometry, light: systemIsLight,
+                      requests: PermissionRequests.shared.pending, geometry: geometry, light: systemIsLight, look: look,
                       appearance: agents.glowAppearance(light: systemIsLight, on: key),
                       alertID: activeAlert?.id, focus: focus, pinned: pinned, alertDetails: alerts.current?.inUsagePanel == false,
                       pendingIDs: alerts.pendingIDs,
@@ -697,10 +701,16 @@ final class ScreenHUD {
     }
 
     /// How this display draws the whole panel, for a picture or a measurement made off screen: the insets its notch or
-    /// its dock gives the content, as `IslandRootView` sets them, and the tallest the panel opens here. It is worked out
-    /// from the placement in effect now, a style draft just proposed included, before the HUD has re-applied it.
+    /// its dock gives the content, as `IslandRootView` sets them, the tallest the panel opens here, and the HUD's look.
+    /// It is worked out from the placement in effect now, a style draft just proposed included, before the HUD has
+    /// re-applied it.
     var panelDisplay: PanelPictureRenderer.Display {
-        PanelPictureRenderer.Display(insets: Self.panelInsets(on: resolveGeometry()), maximumHeight: maximumContentHeight)
+        let geometry = resolveGeometry(), look = look
+        var insets = Self.panelInsets(on: geometry)
+        if !geometry.mode.isDocked {
+            insets.top += IslandRootView.inkClearance(inksNotch: geometry.hasNotch, look: look)
+        }
+        return PanelPictureRenderer.Display(insets: insets, maximumHeight: maximumContentHeight, look: look)
     }
 
     /// The room the open panel's content keeps from the card's edges on `geometry`, as `IslandRootView` sets it: the
@@ -755,6 +765,23 @@ final class ScreenHUD {
             ?? settings.effectivePlacement(on: key, hasNotch: false)
     }
 
+    /// What this HUD looks like, which its island, its panel, the cards on it and the pictures made of them draw with:
+    /// the look its screen's settings give it, a style draft included, as Settings previews it
+    /// (`SettingsStore.effectiveLook(on:)`). It is read afresh on every apply, which `IslandController` asks for with the
+    /// HUD's motion when the settings, a style draft, macOS's light or dark setting or Reduce Transparency change it.
+    var look: HUDLook { settings.effectiveLook(on: key) }
+
+    /// The island in Notch mode at a hardware notch, whose row keeps the camera housing's dark.
+    private var atHardwareNotch: Bool { geometry.mode == .notch && geometry.hasNotch }
+
+    /// The look the island draws with: at a hardware notch the notch row's while it rests there or shows a reminder's
+    /// wings, dark in the look's material (`HUDLook.inNotchRow`), and the screen's look once it opens into the panel or
+    /// a card; everywhere else the screen's look. Opening and closing cross-fade between the two on the island's curve.
+    /// The glow keeps the screen's look, whose material, which alone decides what it cuts out, is the row's too.
+    private func islandLook(open: Bool) -> HUDLook {
+        atHardwareNotch && !open ? look.inNotchRow : look
+    }
+
     /// The panel's style in this screen's layout, whose width the open panel takes: the whole panel's, or on a dock
     /// that separates its agents one agent's own, 100 points narrower.
     private var panelStyle: PanelStyle { settings.panelLayout.effective(for: key).style }
@@ -777,14 +804,7 @@ final class ScreenHUD {
 
     /// The Simple panel's own shape, a little larger: its strip without the edge margin, with the panel's corner.
     static func dragOutline(for geometry: NotchGeometry, panelRadius: CGFloat) -> (rect: CGRect, radius: CGFloat) {
-        var panel = geometry.rect
-        let margin = SimpleMeterConfig.edgeMargin
-        switch geometry.edge {
-        case .top: panel.size.height -= margin
-        case .bottom: panel.origin.y += margin; panel.size.height -= margin
-        case .left: panel.origin.x += margin; panel.size.width -= margin
-        case .right: panel.size.width -= margin
-        }
+        let panel = lifted(geometry.rect, on: geometry.edge)
         return (panel.insetBy(dx: -outlineGap, dy: -outlineGap), panelRadius + outlineGap)
     }
 
@@ -922,7 +942,10 @@ final class ScreenHUD {
             collapsedSize: geometry.mode.isDocked ? geometry.rect.size : geometry.islandFrame.size,
             collapsedTopRadius: geometry.mode.isDocked ? NotchGeometry.expandedTopRadius : NotchGeometry.collapsedTopRadius,
             collapsedBottomRadius: geometry.cornerRadius,
+            look: islandLook(open: open),
             lightBorder: systemIsLight,
+            drawsGlassStandIn: drawsGlassStandIn,
+            inksNotch: atHardwareNotch,
             onOpenStats: { [weak self] in self?.handOff { self?.onOpenStats?() } },
             onOpenSettings: { [weak self] in self?.handOff { self?.onOpenSettings?() } },
             additionalHUDControls: { [weak self] in
@@ -992,9 +1015,9 @@ final class ScreenHUD {
     @discardableResult
     private func captureMaterials(inputs: PanelInputs, surface: Surface) -> GlowWindowController.PreparationInputs {
         glow.capturePreparation(geometry: geometry, island: surface.glowIsland,
-            islandRadius: surface.glowRadius, glow: surface.glowGeometry,
-            outwardOnly: surface.glowSettings.outwardOnly, appearance: inputs.appearance,
-            pattern: surface.glowSettings.pattern(), drawsGlow: surface.drawsGlow)
+            islandRadius: surface.glowRadius, islandFlare: surface.glowFlare, glow: surface.glowGeometry,
+            outwardOnly: surface.glowSettings.outwardOnly, appearance: inputs.appearance, look: inputs.look,
+            shells: surface.shells, pattern: surface.glowSettings.pattern(), drawsGlow: surface.drawsGlow)
     }
 
     @discardableResult
@@ -1140,10 +1163,14 @@ final class ScreenHUD {
             geometry: geometry,
             island: surface.glowIsland,
             islandRadius: surface.glowRadius,
+            islandFlare: surface.glowFlare,
             glow: surface.glowGeometry,
             outwardOnly: surface.glowSettings.outwardOnly,
             appearance: appearance,
+            look: inputs.look,
+            shells: surface.shells,
             animated: animated,
+            animatesShells: animated || cardMoves,
             alert: activeAlert,
             quotaVendors: agents.pulseVendors,
             pattern: surface.glowSettings.pattern(),
@@ -1206,11 +1233,23 @@ final class ScreenHUD {
                                            gap: showsPeek && peek.style == .line ? -peek.tuck : 6,
                                            screen: geometry.screenFrame)
         let windowFrame = cardFrame.union(geometry.islandFrame).intersection(geometry.screenFrame).integral
-        // The marks have not moved, so whatever glows behind them goes on doing so.
+        // The marks have not moved, so whatever glows behind them goes on doing so, and the Simple panel keeps its
+        // shadow beside the card's.
         let marks = surface(open: false, height: height, parked: true)
+        let full = open && (pinned || alerts.current?.inUsagePanel == false)
+        let card = HUDShell(frame: cardFrame, radius: Self.detachedRadius(height: cardFrame.height, full: full,
+                                                                          bubble: peek.style == .bubble && activeAlert == nil),
+                            flare: 0, floats: true, bare: false)
         return Surface(windowFrame: windowFrame, cardFrame: cardFrame, expanded: true, glowIsland: marks.glowIsland,
-                       glowRadius: marks.glowRadius, glowGeometry: marks.glowGeometry, glowSettings: marks.glowSettings,
-                       backdrop: marks.backdrop, drawsGlow: marks.drawsGlow)
+                       glowRadius: marks.glowRadius, glowFlare: marks.glowFlare, glowGeometry: marks.glowGeometry,
+                       glowSettings: marks.glowSettings, backdrop: marks.backdrop, drawsGlow: marks.drawsGlow,
+                       shells: HUDShells(surface: card, dock: marks.shells.dock))
+    }
+
+    /// How round a detached card is, as `IslandRootView` draws it: a full card keeps a card's corner, a peek bubble a
+    /// smaller one, and a line or a compact reminder is as round as its height allows.
+    static func detachedRadius(height: CGFloat, full: Bool, bubble: Bool) -> CGFloat {
+        min(full ? 22 : bubble ? 14 : height, height / 2)
     }
 
     /// Both preparation and presentation use the same parked edge, clamping and glow dimensions.
@@ -1220,10 +1259,55 @@ final class ScreenHUD {
         let expanded: Bool
         let glowIsland: CGRect
         let glowRadius: CGFloat
+        /// The flares of the island the glow surrounds, which a glass island has cut out of it with the island.
+        let glowFlare: CGFloat
         let glowGeometry: GlowGeometry
         let glowSettings: GlowSettings
         let backdrop: Bool
         let drawsGlow: Bool
+        /// What a light or glass look gives shadows.
+        let shells: HUDShells
+    }
+
+    /// What a light or glass look gives shadows on this screen, in the shapes `IslandRootView` fills: the island, or the
+    /// panel or reminder it has grown into, kept bare on a collapsed logo queue and at a hardware notch so the panel grows
+    /// out of it with its shadow; and on a dock that separates its agents the Simple panel, which stays put while a card comes and goes.
+    private func shells(expanded: Bool, open: Bool, islandFrame: CGRect, radius: CGFloat, flare: CGFloat) -> HUDShells {
+        let separates = placement.separatesAgents && geometry.mode.isDocked
+        let panel = simpleMeter.map { meter in
+            HUDShell(frame: Self.lifted(geometry.rect, on: geometry.edge), radius: meter.cornerRadius, flare: 0,
+                     floats: true, bare: false)
+        }
+        switch geometry.mode {
+        case .notch:
+            // At a hardware notch the collapsed island is the camera housing, black in any look (`NotchInk`), and casts
+            // no shadow; it is kept bare so that the panel grows out of it with its shadow.
+            let bare = geometry.hasNotch && !expanded
+            return HUDShells(surface: HUDShell(frame: islandFrame, radius: radius, flare: flare, floats: false, bare: bare),
+                             dock: nil)
+        case .logos:
+            let silhouette = HUDShell(frame: islandFrame, radius: radius, flare: flare, floats: false, bare: !expanded)
+            return HUDShells(surface: separates && !expanded ? nil : silhouette, dock: nil)
+        case .simple:
+            // The panel at rest is the island; it grows into the panel or a reminder, as round as the island makes them.
+            let grown = HUDShell(frame: Self.lifted(islandFrame, on: geometry.edge),
+                                 radius: open ? IslandController.expandedRadius : 16, flare: 0, floats: true, bare: false)
+            return HUDShells(surface: expanded ? grown : separates ? nil : panel, dock: separates ? panel : nil)
+        }
+    }
+
+    /// `rect` less the margin that lifts the Simple panel off its edge, as `IslandShape` lifts it: the panel's own
+    /// shape, at rest in its strip or grown open.
+    private static func lifted(_ rect: CGRect, on edge: HUDEdge) -> CGRect {
+        var panel = rect
+        let margin = SimpleMeterConfig.edgeMargin
+        switch edge {
+        case .top: panel.size.height -= margin
+        case .bottom: panel.origin.y += margin; panel.size.height -= margin
+        case .left: panel.origin.x += margin; panel.size.width -= margin
+        case .right: panel.size.width -= margin
+        }
+        return panel
     }
 
     /// `parked` asks for the collapsed surface whatever is showing: the marks' own, which a detached card keeps.
@@ -1303,7 +1387,8 @@ final class ScreenHUD {
                       islandRadius: glowRadius)
             .fitted(within: geometry.edge.isHorizontal ? geometry.screenFrame.height : geometry.screenFrame.width)
         return Surface(windowFrame: windowFrame, cardFrame: cardFrame, expanded: expanded, glowIsland: glowIsland,
-                       glowRadius: glowRadius, glowGeometry: glowGeometry, glowSettings: glowSettings,
-                       backdrop: backdrop, drawsGlow: drawsGlow)
+                       glowRadius: glowRadius, glowFlare: parked ? 0 : flare, glowGeometry: glowGeometry,
+                       glowSettings: glowSettings, backdrop: backdrop, drawsGlow: drawsGlow,
+                       shells: shells(expanded: expanded, open: open, islandFrame: islandFrame, radius: radius, flare: flare))
     }
 }

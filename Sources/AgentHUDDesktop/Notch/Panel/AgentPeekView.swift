@@ -88,7 +88,7 @@ struct AgentPeek: Equatable {
 
 struct AgentPeekView: View {
     let peek: AgentPeek
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         switch peek.style {
@@ -98,7 +98,7 @@ struct AgentPeekView: View {
     }
 
     private func tint(_ line: AgentPeek.Line) -> Color {
-        line.level.map { Color(StatusPalette.color(for: $0)) } ?? theme.secondary
+        line.level.map { theme.statusText($0) } ?? theme.secondary
     }
 
     private var bubble: some View {

@@ -153,7 +153,7 @@ final class PanelFiltersViewTests: XCTestCase {
             let row = HStack(alignment: .firstTextBaseline) {
                 Text("Tokens").font(.ui(13, .semibold))
                 Spacer()
-                if picker { TokenPeriodPicker(selection: .constant(.week)) }
+                if picker { TokenPeriodPicker(selection: .constant(.week), theme: .island) }
                 Text("7d · 1.2M tok").font(.tabular(12))
             }
             return NSHostingView(rootView: row.frame(width: 500)).fittingSize.height

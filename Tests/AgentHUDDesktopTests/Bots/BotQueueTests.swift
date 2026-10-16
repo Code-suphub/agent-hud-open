@@ -163,7 +163,7 @@ final class BotQueueTests: XCTestCase {
 
     /// Not a benchmark: a guard against a frame becoming expensive enough to show up in the HUD's own cost.
     func testDrawingAQueueBotIsCheap() throws {
-        let form = try XCTUnwrap(BotForm.form(for: "Claude"))
+        let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))
         var motion = BotMotion(seed: 2)
         motion.spin = form.spec.spin
         motion.set(.working, at: 0)
@@ -191,7 +191,7 @@ final class BotFormTimingTests: XCTestCase {
         var slowest: (String, TimeInterval) = ("", 0), total: TimeInterval = 0
         for vendor in AgentArtwork.allVendors {
             let began = CACurrentMediaTime()
-            XCTAssertNotNil(BotForm.read(vendor))
+            XCTAssertNotNil(BotForm.read(vendor, ground: .dark))
             let took = CACurrentMediaTime() - began
             total += took
             if took > slowest.1 { slowest = (vendor, took) }

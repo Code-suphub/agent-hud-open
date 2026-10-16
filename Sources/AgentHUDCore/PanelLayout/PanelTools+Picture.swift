@@ -6,7 +6,8 @@ extension PanelTools {
     // MARK: The panel
 
     /// The picture with what it shows: which screen and layout and its revision, the panel's size in points, whether it
-    /// scrolls on its display, and the pixels a point it is drawn at, with a note that says the same in words.
+    /// scrolls on its display, and the pixels a point it is drawn at, with a note that says the same in words, and that
+    /// glass is a stand-in where the panel is drawn in it.
     func image(_ scope: PanelLayoutScope, among attached: [PanelScreen]) -> MCPToolReply {
         guard let picture else {
             return .failure("This copy of Agent HUD cannot draw the panel, so there is no picture of it here. "
@@ -41,6 +42,11 @@ extension PanelTools {
             note += " It is drawn at \(Self.hundredths(drawn.scale)) pixels a point instead of \(Self.points(PanelPicture.pointScale)) "
                 + "to stay within \(PanelPicture.pixelLimit) pixels tall."
         }
+        // The shared layout is drawn in the main display's look, the first attached.
+        let looked = scope.screenKey.flatMap { key in attached.first { $0.key == key } } ?? attached.first
+        if let looked, looked.drawsGlass(store.settings.effectivePlacement(on: looked.key, hasNotch: looked.hasNotch)) {
+            note += " " + Self.glassStandIn
+        }
         let result: [String: JSONValue] = [
             "screen": .string(Self.name(of: scope)), "revision": .integer(revision), "unsaved": .bool(unsaved(scope)),
             "width": .integer(Int64(drawn.width.rounded())), "height": .integer(Int64(fit.height.rounded())),
@@ -60,11 +66,16 @@ extension PanelTools {
         return layout.hasDraft ? "the shared layout's unsaved draft" : "the saved shared layout"
     }
 
+    /// What a picture says of glass: it is drawn off screen, where no desktop is behind it to show through.
+    static let glassStandIn = "Its glass is drawn as a stand-in: a picture is drawn off screen, with no desktop behind it "
+        + "to show through."
+
     // MARK: The resting HUD
 
     /// A picture of one attached screen's resting HUD as it looks now, its style draft included, drawn off screen without
-    /// opening anything: which screen, its mode and edge, whether a style draft waits, whether the glow is in the
-    /// picture, its size in points and the pixels a point it is drawn at, with a note that says the same in words.
+    /// opening anything: which screen, its mode and edge, the appearance and material it is drawn in, whether a style
+    /// draft waits, whether the glow is in the picture, its size in points and the pixels a point it is drawn at, with a
+    /// note that says the same in words, and that glass is a stand-in.
     func hudImage(_ scope: PanelLayoutScope, among attached: [PanelScreen]) -> MCPToolReply {
         guard case .screen(let key) = scope else {
             return .failure("show \"hud\" draws one screen's resting HUD, so it needs that screen's key. "
@@ -83,6 +94,12 @@ extension PanelTools {
         }
         let placement = store.settings.effectivePlacement(on: key, hasNotch: screen.hasNotch)
         let draft = layout.hasStyleDraft(key)
+        // At a hardware notch the island at rest is black whatever the look; the look shows on what it opens into.
+        let atNotch = placement.mode == .notch && screen.hasNotch
+        let lookAppearance: HUDAppearance = screen.drawsLight(placement) ? .light : .dark
+        let lookMaterial: HUDMaterial = screen.drawsGlass(placement) ? .glass : .solid
+        let appearance: HUDAppearance = atNotch ? .dark : lookAppearance
+        let material: HUDMaterial = atNotch ? .solid : lookMaterial
         var note = "The resting HUD of \"\(screen.name)\" as it looks now, " + (draft ? "with its unsaved style draft" : "as saved")
         switch placement.mode {
         case .notch:
@@ -91,16 +108,24 @@ extension PanelTools {
             note += ": a \"\(placement.mode.agentName)\" HUD on its \(placement.edge.rawValue) edge"
             if placement.edge != .top { note += ", drawn here along a top edge as Settings previews it" }
         }
+        if atNotch {
+            note += ", black at rest, as the notch is; a reminder's wings are dark and \(lookMaterial.rawValue), and the "
+                + "panel and the cards it opens into \(lookAppearance.rawValue) and \(lookMaterial.rawValue)"
+        } else {
+            note += ", \(appearance.rawValue) and \(material.rawValue)"
+        }
         note += ", on a dark backdrop, \(Self.points(drawn.width)) by \(Self.points(drawn.height)) points"
         if placement.mode == .simple {
             note += "; a simple HUD draws no glow."
         } else {
             note += drawn.drawsGlow ? ", with its glow." : ", without its glow, which only its window on the display draws."
         }
+        if material == .glass { note += " " + Self.glassStandIn }
         note += " It shows marks and figures, and no account or session."
         let result: [String: JSONValue] = [
             "screen": .string(key), "show": .string("hud"), "revision": .integer(revision), "unsaved": .bool(draft),
             "mode": .string(placement.mode.agentName), "edge": .string(placement.mode.isDocked ? placement.edge.rawValue : "top"),
+            "appearance": .string(appearance.rawValue), "material": .string(material.rawValue),
             "glow": .bool(drawn.drawsGlow), "width": .integer(Int64(drawn.width.rounded())),
             "height": .integer(Int64(drawn.height.rounded())), "pixelsPerPoint": .number(Self.hundredths(drawn.scale)),
             "note": .string(note),

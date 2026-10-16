@@ -34,7 +34,7 @@ extension SnapshotRunner {
         func shoot(_ name: String, _ proposal: PanelLayout) {
             layout.propose(proposal)
             layout.save()
-            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false),
+            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard),
                  folder: folder, scheme: .dark)
         }
         for widget in PanelBlockKind.quota.widgets {
@@ -71,7 +71,7 @@ extension SnapshotRunner {
             blocks[last.key] = PanelLayout.Block(widget: .number, measures: [.burnRate, .quota, .tokens, .cost])
         }
         layout.propose(PanelLayout(blocks: blocks, order: quota.last.map { [$0.key] } ?? [], hiddenSections: [.tokens]))
-        save("panel-layout-draft", IslandScene(store: store, settings: settings, open: true, light: false), folder: folder, scheme: .dark)
+        save("panel-layout-draft", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         save("panel-layout-settings-dark", SettingsView(settings: settings, store: store, initialTab: .display)
             .frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark,
              scrollToBottom: true)
@@ -110,7 +110,7 @@ extension SnapshotRunner {
                 accounts: sample.accounts, sessionUsage: sample.sessionUsage, periods: sample.periods, recached: sample.recached))
             settings.panelLayout.propose(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring, columns: columns)]))
             settings.panelLayout.save()
-            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false),
+            save("panel-layout-\(name)", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard),
                  folder: folder, scheme: .dark)
         }
         let three: [String: Double] = ["opus": 35, "sonnet": 22, "haiku": 8]

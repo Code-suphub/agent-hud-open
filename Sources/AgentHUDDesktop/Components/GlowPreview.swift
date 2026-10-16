@@ -22,6 +22,8 @@ struct GlowPreview: View {
     let settings: GlowSettings
     let islandSize: CGSize
     let islandRadius: CGFloat
+    /// The look of the HUD whose island is drawn, which fills it and outlines it.
+    let look: HUDLook
     /// Scale applied to range/blur so small previews keep the proportions of the real notch.
     var scale: CGFloat = 1
     var lightBorder = false
@@ -35,9 +37,11 @@ struct GlowPreview: View {
         let glow = settings.geometry(islandWidth: islandSize.width, islandHeight: islandSize.height,
                                      islandRadius: islandRadius, scale: scale)
         let pattern = settings.pattern(scale: scale)
+        // A glass island shows what is under it, as the HUD's does, so the glow is cut out where it is. It has no flares.
+        let cutout = drawsIsland ? GlowCutout(look: look, flare: 0) : nil
         let key = GlowFrameRenderer.Key(glow: glow, islandRadius: islandRadius, stops: appearance.stops,
                                         scale: displayScale, pattern: pattern,
-                                        islandSize: islandSize, outwardOnly: settings.outwardOnly)
+                                        islandSize: islandSize, outwardOnly: settings.outwardOnly, cutout: cutout)
         // Grid styles and every soft effect but breathing draw frame by frame; soft breathing pulses the bitmap.
         let framed = pattern.usesGrid || pattern.effect != .breathe
         let animates = framed && !appearance.hidden && !reduceMotion && frozenTime == nil
@@ -53,8 +57,8 @@ struct GlowPreview: View {
                                                             breathAmplitude: settings.breathAmplitude)
             }
             return imageCache.render(glow: glow, islandSize: islandSize, islandRadius: islandRadius,
-                                     outwardOnly: settings.outwardOnly, stops: appearance.stops, scale: displayScale,
-                                     pattern: pattern)
+                                     outwardOnly: settings.outwardOnly, cutout: cutout, stops: appearance.stops,
+                                     scale: displayScale, pattern: pattern)
         }()
         // A soft pulse changes only layer opacity. Keeping its clock out of SwiftUI avoids rebuilding and
         // laying out the preview on every display refresh.
@@ -74,11 +78,12 @@ struct GlowPreview: View {
                     .offset(y: glow.topOffset)
             }
             if drawsIsland {
-                BottomRoundedRectangle(radius: islandRadius)
-                    .fill(Color.black)
+                // Glass is drawn as its preview draws it (`SettingsPreview`), or as its stand-in in a snapshot.
+                HUDSurface(BottomRoundedRectangle(radius: islandRadius), look: look, fill: look.theme.islandFill,
+                           contact: nil)
                     .overlay {
                         if lightBorder {
-                            BottomRoundedRectangle(radius: islandRadius).stroke(Color.white.opacity(0.18), lineWidth: 1)
+                            BottomRoundedRectangle(radius: islandRadius).stroke(look.theme.desktopOutline, lineWidth: 1)
                         }
                     }
                     .frame(width: islandSize.width, height: islandSize.height)

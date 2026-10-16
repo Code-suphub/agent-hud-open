@@ -3,9 +3,9 @@ import Foundation
 
 extension HUDStyle {
     /// What is wrong with one style field of a hud as an agent sent it, or its `reset`, as sentences: a value of the
-    /// wrong type or out of its range, a mode, edge, glow style or effect this build does not know, or a property the
-    /// glow does not have. Nil for a key that names no style field, which the caller words. A value given as null is not
-    /// given.
+    /// wrong type or out of its range, a mode, edge, appearance, material, glow style or effect this build does not know,
+    /// or a property the glow does not have. Nil for a key that names no style field, which the caller words. A value
+    /// given as null is not given.
     static func misreadings(ofField name: String, _ value: JSONValue) -> [String]? {
         if name == "glow" { return glowMisreadings(value) }
         if name == resetName { return value == .null || value.boolValue != nil ? [] : ["hud.\(name) is true or false."] }
@@ -19,9 +19,15 @@ extension HUDStyle {
         case .edge:
             return HUDEdge(rawValue: value.stringValue ?? "") == nil
                 ? ["\(path) is one of \(PanelLayout.quoted(HUDEdge.allCases.map(\.rawValue)))."] : []
+        case .appearance:
+            return HUDAppearance(rawValue: value.stringValue ?? "") == nil
+                ? ["\(path) is one of \(PanelLayout.quoted(HUDAppearance.allCases.map(\.rawValue)))."] : []
+        case .material:
+            return HUDMaterial(rawValue: value.stringValue ?? "") == nil
+                ? ["\(path) is one of \(PanelLayout.quoted(HUDMaterial.allCases.map(\.rawValue)))."] : []
         case .showLogos, .showRings, .showNumbers, .separateAgents:
             return value.boolValue == nil ? ["\(path) is true or false."] : []
-        case .position, .logoSize, .logoGap, .edgeDistance, .simpleSize, .ringWidth:
+        case .position, .logoSize, .logoGap, .edgeDistance, .simpleSize, .ringWidth, .transparency:
             return number(value, at: path, within: field.range)
         }
     }
@@ -77,21 +83,22 @@ extension HUDStyle {
     // MARK: What a screen can draw
 
     /// Every field the style sets that the screen's resting HUD would not draw as asked, by path, worded for the agent:
-    /// mode `notch` on a screen without a notch, and a field that the mode the HUD would have does not draw, as Settings
+    /// mode `notch` on a screen without a notch, a field that the mode the HUD would have does not draw, as Settings
     /// shows each only for the modes it changes: an edge or a position beside the notch, a logo's size on a Simple panel,
     /// a glow on a Simple panel, which draws none, a range, feather or outward fade on a grid glow, and a breath's depth
-    /// under another effect. It is asked of a style reduced to what it changes (`reduced(placement:glow:)`), so a field
-    /// that only repeats what is saved is never one.
+    /// under another effect. It is asked of a style reduced to what it changes (`reduced(placement:glow:)`),
+    /// so a field that only repeats what is saved is never one.
     ///
     /// - placement, glow: what the screen has saved, which the style is drawn over.
     /// - screen: the screen as a sentence names it, such as "\"Display 2\"".
     func issues(placement: ScreenPlacement, glow saved: GlowSettings, hasNotch: Bool, screen: String) -> [PanelLayoutIssue] {
-        let mode = applied(to: placement).mode, drawn = applied(to: saved)
+        let placed = applied(to: placement), drawn = applied(to: saved)
+        let mode = placed.mode
         var issues: [PanelLayoutIssue] = []
+        let docks = HUDMode.allCases.filter(\.isDocked).map { "\"\($0.agentName)\"" }.joined(separator: " or ")
         if self.mode == .notch, !hasNotch {
-            let others = HUDMode.allCases.filter { $0 != .notch }.map { "\"\($0.agentName)\"" }.joined(separator: " or ")
             issues.append(PanelLayoutIssue(path: "hud.mode", message: "\(screen) has no notch, so its HUD cannot be "
-                                           + "\"notch\". It can be \(others)."))
+                                           + "\"notch\". It can be \(docks)."))
         }
         let modeNamed = "the HUD of \(screen) would be \"\(mode.agentName)\""
         for field in Field.allCases where field != .mode && value(field) != nil && !field.modes.contains(mode) {

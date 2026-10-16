@@ -10,7 +10,7 @@ struct PanelDraftBar: View {
     let layout: PanelLayoutStore
     /// The key of the screen whose panel this is; nil for the shared layout's.
     let screen: String?
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// What waits: a layout, with or without a style, or a style alone.
@@ -23,7 +23,7 @@ struct PanelDraftBar: View {
         HStack(spacing: 6) {
             Image(systemName: "square.dashed")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(theme.status(.warning))
+                .foregroundStyle(theme.statusText(.warning))
             Text(title)
                 .font(.ui(12, .medium))
                 .foregroundStyle(theme.text)
@@ -47,7 +47,7 @@ struct PanelDraftBar: View {
             Button { change { layout.savePanel(on: screen) } } label: {
                 Text(L10n.text("保存", "Save"))
                     .font(.ui(11, .medium)).lineLimit(1)
-                    .foregroundStyle(.black)
+                    .foregroundStyle(theme.inverseText)
                     .padding(.horizontal, 9).frame(height: 22)
                     .background(theme.text, in: RoundedRectangle(cornerRadius: 6))
                     .contentShape(Rectangle())

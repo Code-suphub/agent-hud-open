@@ -25,7 +25,7 @@ extension SnapshotRunner {
         func shoot(_ name: String, _ proposal: PanelLayout) {
             settings.panelLayout.propose(proposal)
             settings.panelLayout.save()
-            save("panel-layout-half-\(name)", IslandScene(store: store, settings: settings, open: true, light: false),
+            save("panel-layout-half-\(name)", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard),
                  folder: folder, scheme: .dark)
         }
         let ringsAndNumbers: [String: PanelLayout.Block] = [
@@ -47,7 +47,7 @@ extension SnapshotRunner {
         settings.panelLayout.propose(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring, span: .half),
                                                           "Codex": PanelLayout.Block(widget: .ring, span: .half)]))
         settings.panelLayout.save()
-        save("panel-layout-triangle-half", IslandScene(store: store, settings: settings, open: true, light: false),
+        save("panel-layout-triangle-half", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard),
              folder: folder, scheme: .dark)
         settings.panelLayout.reset()
     }

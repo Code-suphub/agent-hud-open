@@ -134,7 +134,7 @@ struct QuotaCell: View {
     var forecastHint: String?
     var isLoading = false
     var ringSize = PanelRingSize.medium
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
 
     var body: some View {
         Group {
@@ -156,18 +156,21 @@ struct QuotaCell: View {
         return [share, metrics.value(metric), caption].compactMap { $0 }.joined(separator: ", ")
     }
 
+    /// The window's level as the ring's fill, and as the figure's ink.
     private var levelColor: Color { theme.status(row.level ?? .ok) }
+    private var levelText: Color { theme.statusText(row.level ?? .ok) }
 
+    /// The selected measure's figure, which is text.
     private var metricColor: Color {
         guard row.level != nil else { return theme.secondary }
         switch metric {
-        case .quota: return levelColor
-        case .burnRate: return metrics.runsOut ? theme.status(.warning) : theme.status(.ok)
-        case .tokens, .cost: return theme.status(.ok)
+        case .quota: return levelText
+        case .burnRate: return metrics.runsOut ? theme.statusText(.warning) : theme.statusText(.ok)
+        case .tokens, .cost: return theme.statusText(.ok)
         }
     }
 
-    private var captionColor: Color { metric == .burnRate && metrics.runsOut ? theme.status(.warning) : theme.secondary }
+    private var captionColor: Color { metric == .burnRate && metrics.runsOut ? theme.statusText(.warning) : theme.secondary }
 
     /// The line beside the value: the reset for the share used, where the countdown is shown; else the measure's detail.
     private var caption: String? {
@@ -201,7 +204,7 @@ struct QuotaCell: View {
                           track: theme.track, lineWidth: ringSize.lineWidth, isLoading: isLoading)
                 Text(row.usedPct.map(TokenFormat.percent) ?? row.missingQuotaLabel)
                     .font(.tabular(ringSize.figureSize, .semibold))
-                    .foregroundStyle(row.level == nil ? theme.secondary : levelColor)
+                    .foregroundStyle(row.level == nil ? theme.secondary : levelText)
                     .lineLimit(1)
                     .contentTransition(.numericText())
             }

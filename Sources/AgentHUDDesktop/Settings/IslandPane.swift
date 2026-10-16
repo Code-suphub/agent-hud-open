@@ -4,6 +4,11 @@ import AgentHUDCore
 struct IslandPane: View {
     let settings: SettingsStore
     let theme: Theme
+    /// The look of the HUD whose panel the samples show, which they are drawn with.
+    let look: HUDLook
+
+    /// The tokens the samples are drawn with: the look's, as the island's are.
+    private var island: Theme { look.theme }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -13,18 +18,18 @@ struct IslandPane: View {
                     theme: theme
                 ) {
                     SettingsToggleRow(label: L10n.text("会话列表", "Session list"), isOn: settings.binding(\.showIslandSessions))
-                    IslandPartSample(height: 56, enabled: settings.settings.showIslandSessions) {
+                    IslandPartSample(height: 56, look: look, enabled: settings.settings.showIslandSessions) {
                         sessionSample
                     }
                     SettingsDivider(theme: theme)
                     SettingsToggleRow(label: L10n.text("额度明细", "Quota details"), isOn: settings.binding(\.showIslandQuota))
-                    IslandPartSample(height: 64, enabled: settings.settings.showIslandQuota) {
+                    IslandPartSample(height: 64, look: look, enabled: settings.settings.showIslandQuota) {
                         quotaSample
                     }
                     SettingsToggleRow(label: L10n.text("重置倒计时", "Reset countdown"), isOn: settings.binding(\.showResetCountdown))
                     SettingsDivider(theme: theme)
                     SettingsToggleRow(label: L10n.text("Token 消耗", "Token usage"), isOn: settings.binding(\.showIslandTokens))
-                    IslandPartSample(height: 64, enabled: settings.settings.showIslandTokens) {
+                    IslandPartSample(height: 64, look: look, enabled: settings.settings.showIslandTokens) {
                         tokenSample
                     }
                     SettingsDivider(theme: theme)
@@ -67,18 +72,18 @@ struct IslandPane: View {
                 AgentLogo(vendor: "Claude", size: 12)
                 Text("Claude").fontWeight(.semibold)
                 Spacer()
-                IslandQuotaMetricPicker(selection: .constant(.quota), theme: .island)
+                IslandQuotaMetricPicker(selection: .constant(.quota), theme: island)
             }
-            .font(.ui(11)).foregroundStyle(Theme.island.secondary)
+            .font(.ui(11)).foregroundStyle(island.secondary)
             HStack(spacing: 10) {
-                Circle().fill(Theme.island.status(.ok)).frame(width: 7, height: 7)
+                Circle().fill(island.status(.ok)).frame(width: 7, height: 7)
                 Text(IslandSampleData.session.name).font(.ui(12, .semibold)).fixedSize()
-                ProgressTrack(fraction: 0.28, fill: Theme.island.status(.ok), track: Theme.island.track)
+                ProgressTrack(fraction: 0.28, fill: island.status(.ok), track: island.track)
                     .frame(height: 4)
-                Text("28%").font(.tabular(12, .semibold)).foregroundStyle(Theme.island.status(.ok))
+                Text("28%").font(.tabular(12, .semibold)).foregroundStyle(island.status(.ok))
                 if settings.settings.showResetCountdown {
                     Text(L10n.text("2 小时 14 分", "2h 14m"))
-                        .font(.tabular(11)).foregroundStyle(Theme.island.secondary)
+                        .font(.tabular(11)).foregroundStyle(island.secondary)
                         .frame(width: 78, alignment: .trailing)
                 }
             }
@@ -91,11 +96,11 @@ struct IslandPane: View {
                 Text(L10n.text("Token 消耗", "Tokens")).fontWeight(.semibold)
                 Spacer()
                 Text(L10n.text("1 小时 · 46M tok", "1hr · 46M tok"))
-                    .font(.tabular(11)).foregroundStyle(Theme.island.secondary)
+                    .font(.tabular(11)).foregroundStyle(island.secondary)
             }
             TokenBarsChart(columns: IslandSampleData.columns, interval: IslandSampleData.interval,
-                           colors: IslandSampleData.colors, consumers: IslandSampleData.consumers, theme: .island,
-                           compact: true)
+                           colors: IslandSampleData.colors, consumers: IslandSampleData.consumers, theme: island,
+                           context: .island, compact: true)
                 .frame(height: 42)
         }
         .font(.ui(11))
@@ -111,8 +116,8 @@ struct IslandPane: View {
             HStack(spacing: 6) {
                 ZStack(alignment: .bottomTrailing) {
                     AgentLogo(vendor: "Claude", size: 14)
-                    Circle().fill(Theme.island.status(.ok)).frame(width: 6, height: 6)
-                        .overlay(Circle().stroke(.black, lineWidth: 1.5)).offset(x: 2, y: 2)
+                    Circle().fill(island.status(.ok)).frame(width: 6, height: 6)
+                        .overlay(Circle().stroke(island.islandFill, lineWidth: 1.5)).offset(x: 2, y: 2)
                 }
                 .frame(width: 14, height: 14)
                 Text(L10n.text("修复登录问题", "Fix sign-in issue"))
@@ -122,30 +127,36 @@ struct IslandPane: View {
                     Text("1").font(.tabular(9, .semibold))
                 }
                 .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(Capsule().fill(Theme.island.status(.warning).opacity(0.16)))
-                .foregroundStyle(Theme.island.status(.warning))
+                .background(Capsule().fill(island.status(.warning).opacity(0.16)))
+                .foregroundStyle(island.status(.warning))
                 Text("60k tok")
             }
-            .foregroundStyle(Theme.island.secondary)
+            .foregroundStyle(island.secondary)
         }
         .font(.ui(11))
     }
 }
 
-/// A fixed-size sample stays in place when its corresponding panel content is switched off.
+/// A fixed-size sample stays in place when its corresponding panel content is switched off. It is drawn on the island's
+/// card, in the look of the HUD it stands for, which it takes as the island does (`islandLook(_:)`): the standard look
+/// leaves its colour scheme to the window, as the island leaves it to the app. A card of glass is its stand-in, its tint
+/// over the pane: the window has no desktop of the HUD's to show through it.
 private struct IslandPartSample<Content: View>: View {
     let height: CGFloat
+    let look: HUDLook
     let enabled: Bool
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         content()
-            .foregroundStyle(Theme.island.text)
+            .foregroundStyle(look.theme.text)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: height)
             .padding(.horizontal, 14)
             .opacity(enabled ? 1 : 0.25)
-            .background(.black, in: RoundedRectangle(cornerRadius: 9))
+            .background(HUDSurface(RoundedRectangle(cornerRadius: 9), look: look, fill: look.theme.islandFill, contact: nil))
+            .islandLook(look)
+            .environment(\.drawsGlassStandIn, true)
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
             .allowsHitTesting(false)

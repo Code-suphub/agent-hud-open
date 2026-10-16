@@ -6,7 +6,7 @@ import XCTest
 final class BotLevelTests: XCTestCase {
     /// Where a finished body's top and bottom fall down the mark, 0 at its top edge and 1 at its bottom.
     private func span(of vendor: String) throws -> (top: CGFloat, bottom: CGFloat) {
-        let form = try XCTUnwrap(BotForm.form(for: vendor))
+        let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
         var top = CGFloat.infinity, bottom = -CGFloat.infinity
         for (index, reach) in form.bodyReach.enumerated() {
             let y = form.spec.center.y + sin(CGFloat(index) * 2 * .pi / CGFloat(BotForm.samples)) * reach + form.spec.settle

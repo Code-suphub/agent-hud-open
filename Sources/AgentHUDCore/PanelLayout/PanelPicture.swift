@@ -22,8 +22,8 @@ public struct PanelFit: Equatable, Sendable {
 }
 
 /// The hover panel drawn for an agent that checks how a layout looks: a screen's whole panel as the layout in effect
-/// there draws it, on the island's black card, as PNG data. It shows no account name and no session title
-/// (`IdentityMask`).
+/// there draws it, on the island's card in that screen's look, glass drawn as a stand-in, as PNG data. It shows no
+/// account name and no session title (`IdentityMask`).
 public struct PanelPicture: Equatable, Sendable {
     /// The pixels a point the picture is drawn at, unless that would make it taller than `pixelLimit`.
     public static let pointScale: Double = 2
@@ -57,8 +57,9 @@ public struct PanelPicture: Equatable, Sendable {
 }
 
 /// A screen's resting HUD drawn for an agent that checks how a style looks: the island at the notch, a Dynamic dock's
-/// marks or a Simple panel, as that screen draws it now with any style draft, on a dark backdrop, as PNG data. A dock is
-/// laid along a top edge, as Settings previews it. It shows marks and figures, and no account or session.
+/// marks or a Simple panel, as that screen draws it now with any style draft, in its look, glass drawn as a stand-in,
+/// on a dark backdrop, as PNG data. A dock is laid along a top edge, as Settings previews it. It shows marks and figures,
+/// and no account or session.
 public struct HUDPicture: Equatable, Sendable {
     /// The picture as PNG data, at `PanelPicture.pointScale` pixels a point.
     public let png: Data

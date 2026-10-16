@@ -2,22 +2,23 @@ import Accelerate
 import CoreGraphics
 import Foundation
 
-/// The dark hairline round a bot that sits on a wallpaper beside the logo queue's outlined marks: the bot's
+/// The hairline round a bot that sits on a wallpaper beside the logo queue's outlined marks: the bot's
 /// silhouette spread by a pixel, hardened so a soft edge still gives a crisp line, and laid behind the bot at
-/// half strength.
+/// half strength, dark round a bot in light ink and light round one in dark ink, drawn for a light ground.
 ///
 /// The marks build theirs once, from masks. A bot is drawn again whenever it blinks, so its hairline comes from
 /// the picture's own alpha instead, spread by Accelerate. Laid behind the bot by Core Graphics, through a mask,
 /// it cost a seventh of a frame, most of it a mask bitmap made and thrown away every time, so Accelerate lays it
 /// too: dark laid behind a pixel leaves its colour as it was and raises its alpha, one blend of two alpha planes.
 /// Core Graphics is asked once what it makes of every pair of alphas, and Accelerate lays the hairline only if it
-/// gives the very same bytes.
+/// gives the very same bytes. A light hairline changes the colour behind a pixel as well, so Core Graphics lays it.
 @MainActor
 enum BotHairline {
-    /// Darkens the pixels just outside the bot drawn in `context`, a square bitmap from `BotCanvas`.
+    /// Darkens the pixels just outside the bot drawn in `context`, a square bitmap from `BotCanvas`, or lightens them
+    /// round a bot drawn for a light `ground`.
     ///
     /// - byCoreGraphics: lays it the way it was laid before Accelerate did, to hold the two against each other.
-    static func lay(on context: CGContext, reach: Int, byCoreGraphics: Bool = false) {
+    static func lay(on context: CGContext, reach: Int, ground: HUDLook.Appearance, byCoreGraphics: Bool = false) {
         guard let data = context.data else { return }
         let side = context.width, count = side * side, size = vImagePixelCount(side)
         // A frame is far too small to be worth splitting across threads, which is what vImage does unasked.
@@ -34,9 +35,9 @@ enum BotHairline {
         guard vImageExtractChannel_ARGB8888(&picture, &own, 3, flags) == kvImageNoError,
               vImageMax_Planar8(&own, &spread, nil, 0, 0, kernel, kernel, flags) == kvImageNoError
         else { return }
-        guard !byCoreGraphics, let strength = strengths(for: context) else {
+        guard !byCoreGraphics, ground == .dark, let strength = strengths(for: context) else {
             vImageTableLookUp_Planar8(&spread, &spread, harder, flags)
-            return layWithCoreGraphics(scratch + count, on: context)
+            return layWithCoreGraphics(scratch + count, on: context, ink: ground == .light ? .white : .black)
         }
         guard vImageTableLookUp_Planar8(&spread, &spread, strength, flags) == kvImageNoError,
               vImagePremultipliedAlphaBlend_Planar8(&own, &own, &spread, &laid, flags) == kvImageNoError
@@ -49,8 +50,8 @@ enum BotHairline {
     private static let harder: [UInt8] = (0..<256).map { UInt8(min(255, $0 * 3)) }
 
     /// Lays `mask`, one byte a pixel in the bitmap's own row order, behind what `context` holds, the way the
-    /// hairline was laid before Accelerate laid it: black at half strength, through the mask.
-    private static func layWithCoreGraphics(_ mask: UnsafePointer<UInt8>, on context: CGContext) {
+    /// hairline was laid before Accelerate laid it: `ink` at half strength, through the mask.
+    private static func layWithCoreGraphics(_ mask: UnsafePointer<UInt8>, on context: CGContext, ink: CGColor) {
         let width = context.width, height = context.height
         guard let provider = CGDataProvider(data: Data(bytes: mask, count: width * height) as CFData),
               let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: width,
@@ -62,7 +63,7 @@ enum BotHairline {
         context.setBlendMode(.destinationOver)
         context.setAlpha(LogoImages.outlineOpacity)
         context.clip(to: whole, mask: image)
-        context.setFillColor(.black)
+        context.setFillColor(ink)
         context.fill(whole)
         context.restoreGState()
     }
@@ -104,7 +105,7 @@ enum BotHairline {
             rising.withUnsafeBytes { _ = memcpy(masks + row * 256, $0.baseAddress!, 256) }
         }
         memcpy(expected, data, count * 4)
-        layWithCoreGraphics(masks, on: probe)
+        layWithCoreGraphics(masks, on: probe, ink: .black)
 
         // Over nothing, what Core Graphics lays is the hairline's own strength.
         let pixels = data.assumingMemoryBound(to: UInt8.self), laid = rising.map { pixels[Int($0) * 4 + 3] }

@@ -31,6 +31,24 @@ public enum HUDEdge: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// The colours one screen's HUD is drawn in: light ink on a dark surface, the HUD as it has always been, dark ink on a
+/// light one, or whichever of the two macOS is set to. It is the HUD's own, apart from the Appearance the app's windows
+/// take (`Settings.appearance`).
+public enum HUDAppearance: String, Codable, Sendable, CaseIterable {
+    case dark
+    case light
+    /// Light or dark as macOS is set, whatever the app's own Appearance.
+    case system
+}
+
+/// What one screen's HUD surface is made of: an opaque fill, or glass that lets the desktop behind it show through,
+/// blurred. Glass keeps the HUD's appearance, dark glass with light ink or light glass with dark ink, whatever is behind
+/// it.
+public enum HUDMaterial: String, Codable, Sendable, CaseIterable {
+    case solid
+    case glass
+}
+
 /// One screen's HUD. Everything here is per screen: two displays can run different modes, sit on
 /// different edges and size their logos differently. The glow is per screen too, kept beside this in
 /// `Settings.screenGlow` under the same display key, with `Settings.glow` for a display that has none.
@@ -46,6 +64,14 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     public static let simpleSizeRange: ClosedRange<Double> = 20...50
     /// Stroke of that ring, in points.
     public static let ringWidthRange: ClosedRange<Double> = 1...4
+    /// How much of the desktop the HUD lets through, glass or solid. At 0 the HUD's own surface is drawn whole; the top
+    /// stops short of a bare surface, whose colours would follow the desktop behind it and leave the HUD's fixed ink
+    /// unread on a desktop of the other shade.
+    public static let glassTransparencyRange: ClosedRange<Double> = 0...0.9
+    /// Glass at first: half and half, dark glass that is plainly not black, and light glass that is plainly not white.
+    public static let standardGlassTransparency = 0.5
+    /// A solid surface at first: opaque, as the HUD has always been.
+    public static let standardSolidTransparency = 0.0
     public var mode: HUDMode
     public var edge: HUDEdge
     /// The queue's centre along its edge, as a fraction of that edge's length, so it survives a
@@ -66,6 +92,16 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// A docked HUD answers for one agent at a time: hovering a mark opens that agent's own panel from the
     /// mark, and a request or reminder grows from the mark of the agent that sent it while the others stay.
     public var separatesAgents: Bool
+    /// The colours of the HUD, its panel and its cards: dark, the HUD as it has always been, unless chosen otherwise.
+    public var appearance: HUDAppearance
+    /// The surface of the HUD, its panel and its cards: solid unless chosen otherwise.
+    public var material: HUDMaterial
+    /// How much of the desktop shows through glass, from 0 to 0.9 (`glassTransparencyRange`): the share of the glass
+    /// left uncovered by the HUD's own surface. Kept while the material is solid, for when glass is chosen again.
+    public var glassTransparency: Double
+    /// How much of the desktop shows through a solid surface, unblurred, 0 to 0.9 as for glass; 0, opaque, by default.
+    /// Kept while the material is glass.
+    public var solidTransparency: Double
 
     public init(
         mode: HUDMode = .logos,
@@ -79,7 +115,11 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         ringWidth: Double = 1.5,
         showsRings: Bool = true,
         showsNumbers: Bool = true,
-        separatesAgents: Bool = false
+        separatesAgents: Bool = false,
+        appearance: HUDAppearance = .dark,
+        material: HUDMaterial = .solid,
+        glassTransparency: Double = ScreenPlacement.standardGlassTransparency,
+        solidTransparency: Double = ScreenPlacement.standardSolidTransparency
     ) {
         self.mode = mode
         self.edge = edge
@@ -93,9 +133,13 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         self.showsRings = showsRings
         self.showsNumbers = showsNumbers
         self.separatesAgents = separatesAgents
+        self.appearance = appearance
+        self.material = material
+        self.glassTransparency = Self.clamp(glassTransparency, to: Self.glassTransparencyRange)
+        self.solidTransparency = Self.clamp(solidTransparency, to: Self.glassTransparencyRange)
     }
 
-    /// A display's starting point: a notched screen keeps its island, anything else shows the queue.
+    /// A display's starting point: a notched screen keeps its island, anything else shows the queue, both dark and solid.
     public static func `default`(hasNotch: Bool) -> ScreenPlacement {
         ScreenPlacement(mode: hasNotch ? .notch : .logos)
     }
@@ -107,6 +151,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case mode, edge, offset, logoSize, logoEdgeDistance, gapScale, showsLogos
         case simpleSize, ringWidth, showsRings, showsNumbers, separatesAgents
+        case appearance, material, glassTransparency, solidTransparency
     }
 
     public init(from decoder: Decoder) throws {
@@ -124,7 +169,48 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
             ringWidth: try c.decodeIfPresent(Double.self, forKey: .ringWidth) ?? d.ringWidth,
             showsRings: try c.decodeIfPresent(Bool.self, forKey: .showsRings) ?? d.showsRings,
             showsNumbers: try c.decodeIfPresent(Bool.self, forKey: .showsNumbers) ?? d.showsNumbers,
-            separatesAgents: try c.decodeIfPresent(Bool.self, forKey: .separatesAgents) ?? d.separatesAgents
+            separatesAgents: try c.decodeIfPresent(Bool.self, forKey: .separatesAgents) ?? d.separatesAgents,
+            // A name saved by a newer build falls back to the default instead of failing the whole placement, and with
+            // it every screen's (`Settings.screens`).
+            appearance: (try? c.decodeIfPresent(HUDAppearance.self, forKey: .appearance)) ?? d.appearance,
+            material: (try? c.decodeIfPresent(HUDMaterial.self, forKey: .material)) ?? d.material,
+            glassTransparency: try c.decodeIfPresent(Double.self, forKey: .glassTransparency) ?? d.glassTransparency,
+            solidTransparency: try c.decodeIfPresent(Double.self, forKey: .solidTransparency) ?? d.solidTransparency
         )
+    }
+}
+
+// MARK: The look drawn
+
+extension ScreenPlacement {
+    /// Whether the HUD is drawn light: its appearance, `system` as macOS is set now (`systemIsLight`). Every mode draws
+    /// its look, Notch mode at a hardware notch too, where the camera housing itself stays black and the look grows
+    /// round it.
+    public func drawsLight(systemIsLight: Bool) -> Bool {
+        switch appearance {
+        case .dark: return false
+        case .light: return true
+        case .system: return systemIsLight
+        }
+    }
+
+    /// Whether the HUD is drawn as glass: its material, solid while Reduce Transparency is on (`reducesTransparency`).
+    public func drawsGlass(reducesTransparency: Bool) -> Bool {
+        material == .glass && !reducesTransparency
+    }
+
+    /// The transparency of the material chosen, glass's or solid's.
+    public var transparency: Double {
+        get { material == .glass ? glassTransparency : solidTransparency }
+        set {
+            let value = Self.clamp(newValue, to: Self.glassTransparencyRange)
+            if material == .glass { glassTransparency = value } else { solidTransparency = value }
+        }
+    }
+
+    /// How much of the desktop the HUD lets through as it is drawn: its material's transparency, and none at all while
+    /// Reduce Transparency is on, which draws glass solid and a see-through solid opaque.
+    public func drawsTransparency(reducesTransparency: Bool) -> Double {
+        reducesTransparency ? 0 : transparency
     }
 }

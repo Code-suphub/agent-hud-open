@@ -9,9 +9,11 @@ import XCTest
 final class PanelToolsStyleAloneTests: PanelToolsCase {
     private let builtIn = PanelScreen(key: "BUILT-IN-UUID", name: "Built-in display", mode: .notch, edge: .top, hasNotch: true,
                                       agents: ["Claude", "Codex", "DeepSeek"],
-                                      otherModes: [.logos: ["Claude", "Codex", "Cursor"], .simple: ["Claude", "Codex", "Kimi"]])
+                                      otherModes: [.logos: ["Claude", "Codex", "Cursor"], .simple: ["Claude", "Codex", "Kimi"]],
+                                      systemIsLight: false, reducesTransparency: false)
     private let second = PanelScreen(key: "SECOND-UUID", name: "Display 2", mode: .logos, edge: .right, hasNotch: false,
-                                     agents: ["Claude", "Codex", "Cursor"])
+                                     agents: ["Claude", "Codex", "Cursor"],
+                                     systemIsLight: false, reducesTransparency: false)
     private let key = "SECOND-UUID"
     private let unchanged = " The layout of the panel on \"Display 2\" is unchanged: a call with only hud style fields leaves "
         + "the layout as it is."

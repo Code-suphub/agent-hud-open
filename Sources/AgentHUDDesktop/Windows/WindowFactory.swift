@@ -25,6 +25,8 @@ enum WindowFactory {
 class HostedWindowController: NSWindowController, NSWindowDelegate {
     private let hosting = NSHostingView(rootView: AnyView(EmptyView()))
     private let baseSize: CGSize
+    /// The look the window takes from its screen, which its content reads (`WindowGround`).
+    private let surface = WindowSurface()
 
     init(size: CGSize, title: String, resizable: Bool = false) {
         let window = WindowFactory.make(size: size, title: title, resizable: resizable)
@@ -44,7 +46,7 @@ class HostedWindowController: NSWindowController, NSWindowDelegate {
 
     /// Replaces the root view; with `fitToContent` the window grows to the view's ideal height.
     func setContent<Content: View>(_ content: Content, fitToContent: Bool = false) {
-        hosting.rootView = AnyView(content.ignoresSafeArea())
+        hosting.rootView = AnyView(content.ignoresSafeArea().environment(surface))
         guard fitToContent, let window else { return }
         hosting.sizingOptions = [.intrinsicContentSize]
         let fitting = hosting.fittingSize
@@ -58,8 +60,25 @@ class HostedWindowController: NSWindowController, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         if let window, !window.isVisible { window.center() }
+        // Centring can take a hidden window to another screen, so its look is taken where it now is.
+        refreshLook()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Takes the look of the screen the window is on with Match screen on, or gives the window back the
+    /// app's own (`WindowLook`).
+    func refreshLook() {
+        guard let window else { return }
+        let look = WindowLook.look(on: window.screen)
+        if window.appearance?.name != look?.appearanceName {
+            window.appearance = look.flatMap { NSAppearance(named: $0.appearanceName) }
+        }
+        if surface.look != look { surface.look = look }
+    }
+
+    func windowDidChangeScreen(_ notification: Notification) {
+        refreshLook()
     }
 
     func windowWillClose(_ notification: Notification) {

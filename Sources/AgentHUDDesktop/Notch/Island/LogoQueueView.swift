@@ -91,6 +91,8 @@ struct LogoQueueConfig: Equatable {
 /// Status colour is carried by the glow behind them.
 struct LogoQueueView: NSViewRepresentable {
     let config: LogoQueueConfig
+    /// The marks are drawn for a light ground, the surface of a light HUD behind them: in dark ink, and their bots too
+    /// (`LogoImages.Key.light`). Marks bare on the wallpaper are drawn for it, whatever the look.
     let light: Bool
     /// Wakes every bot whether its agent is working or not, so the settings preview shows their motion.
     var previewsMotion = false
@@ -148,12 +150,18 @@ final class LogoQueueLayerView: NSView {
     func apply(config: LogoQueueConfig, light: Bool, scale: CGFloat, animates: Bool, previewsMotion: Bool = false) {
         if let applied, applied.config == config, applied.light == light, applied.scale == scale,
            applied.animates == animates, applied.previews == previewsMotion { return }
-        let rebuild = applied?.config.items.map(\.id) != config.items.map(\.id)
-            || applied?.light != light || applied?.scale != scale
+        let reshaped = applied?.config.items.map(\.id) != config.items.map(\.id)
+            || applied?.scale != scale
             || applied?.config.logo != config.logo
             || applied?.config.bots != config.bots || applied?.config.workingSeconds != config.workingSeconds
+        let regrounded = applied.map { $0.light != light } ?? false
         applied = (config, light, scale, animates, previewsMotion)
-        if rebuild { build(config: config, light: light, scale: scale) }
+        if reshaped || regrounded {
+            // Marks drawn again for another ground alone fade into it, as the surface behind them moves to its new
+            // colours. A queue that changes otherwise is laid out again at once, as it always has been.
+            if regrounded, !reshaped, animates, let layer { IslandAnimation.fadeLook(of: layer) }
+            build(config: config, light: light, scale: scale)
+        }
         matchDisplay()
         position(config: config)
         animate(config: config, animates: animates, previewsMotion: previewsMotion)
@@ -167,20 +175,21 @@ final class LogoQueueLayerView: NSView {
         // border drawn around it.
         let outline = 1
         bleed = CGFloat(outline) / max(1, scale)
-        // The queue sits on the wallpaper: the dark artwork variant is the one that reads there.
+        // The queue sits on the wallpaper, and on the HUD's surface once it opens: the marks are drawn for the ground they
+        // stand on.
         visibleBounds = []
         marks = config.items.map { item in
             let mark = CALayer()
             mark.contentsScale = scale
             mark.contentsGravity = .resizeAspect
-            let key = LogoImages.Key(vendor: item.vendor, side: side, outline: outline, light: false)
+            let key = LogoImages.Key(vendor: item.vendor, side: side, outline: outline, light: light)
             mark.contents = LogoImages.image(key)
             visibleBounds.append(LogoImages.visibleBounds(key))
             layer?.addSublayer(mark)
             return mark
         }
         actors = config.items.map { item in
-            guard config.bots, let form = BotForm.form(for: item.vendor) else { return nil }
+            guard config.bots, let form = BotForm.form(for: item.vendor, ground: light ? .light : .dark) else { return nil }
             let actor = BotActor(form: form, staysBot: false, period: config.workingSeconds)
             actor.resize(side: config.logo, scale: scale, outline: outline)
             layer?.addSublayer(actor.layer)

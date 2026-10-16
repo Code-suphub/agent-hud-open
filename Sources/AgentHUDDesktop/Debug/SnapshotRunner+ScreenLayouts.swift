@@ -20,6 +20,8 @@ extension SnapshotRunner {
         let store = demoStore(settings)
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: DemoClock.now))
         let layout = settings.panelLayout
+        // The HUD's pieces drawn apart from the island are in the standard look, as the island's are.
+        let look = HUDLook.standard
         func keep(_ own: PanelLayout, for screen: String) {
             layout.propose(.own(own), for: screen)
             layout.save(.screen(screen))
@@ -38,19 +40,20 @@ extension SnapshotRunner {
         save("panel-layout-hud-simple",
              SimpleMeterView(config: meter)
                 .frame(width: meter.stripSize.width, height: meter.stripSize.height)
+                .hudLook(look)
                 .frame(width: 420, height: 90)
                 .background(Color(white: 0.10)),
              folder: folder, scheme: .dark)
 
         // Beside the notch: a warning and a critical agent's colours alone, where every agent's would be many.
         keep(PanelLayout(hud: PanelLayout.HUD(agents: ["OpenClaw", "GitHub Copilot", "Claude"])), for: "snapshot-notch")
-        save("panel-layout-hud-notch-glow", IslandScene(store: store, settings: settings, open: false, light: false,
+        save("panel-layout-hud-notch-glow", IslandScene(store: store, settings: settings, open: false, light: false, look: .standard,
                                                         screen: "snapshot-notch"),
              folder: folder, scheme: .dark)
         // That screen's panel with a draft of its own, whose bar says it is this display's alone.
         layout.propose(.own(PanelLayout(hiddenSections: [.blocks], hud: PanelLayout.HUD(agents: ["OpenClaw", "Claude"]))),
                        for: "snapshot-notch")
-        save("panel-layout-screen-draft", IslandScene(store: store, settings: settings, open: true, light: false,
+        save("panel-layout-screen-draft", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard,
                                                       screen: "snapshot-notch"),
              folder: folder, scheme: .dark)
         // The same draft in Claude's own panel on a dock that separates its agents, whose narrower bar keeps one line.
@@ -60,7 +63,8 @@ extension SnapshotRunner {
         save("panel-layout-screen-draft-agent",
              agentPanel.frame(width: CGFloat(layout.effective(for: "snapshot-notch").style.agentPanelWidth), alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
-                .background(Color.black, in: RoundedRectangle(cornerRadius: IslandController.expandedRadius))
+                .background(look.theme.islandFill, in: RoundedRectangle(cornerRadius: IslandController.expandedRadius))
+                .hudLook(look)
                 .padding(20).background(Color(white: 0.10)),
              folder: folder, scheme: .dark)
         layout.discard(.screen("snapshot-notch"))

@@ -19,6 +19,8 @@ final class GlowFrameRenderer: Sendable {
         /// The soft style's island and falloff, which shape its blurred bitmap.
         var islandSize: CGSize = .zero
         var outwardOnly: Bool = true
+        /// The island cut out of every frame, for a glass island that would show the glow under it; nil for a solid one.
+        let cutout: GlowCutout?
     }
 
     private static let paletteSize = 64
@@ -103,7 +105,8 @@ final class GlowFrameRenderer: Sendable {
     static func resting(_ key: Key) -> GlowImage? {
         guard key.pattern.usesGrid else {
             return GlowRenderer.render(glow: key.glow, islandSize: key.islandSize, islandRadius: key.islandRadius,
-                                       outwardOnly: key.outwardOnly, stops: key.stops, scale: key.scale, colorSpace: key.colorSpace)
+                                       outwardOnly: key.outwardOnly, cutout: key.cutout, stops: key.stops, scale: key.scale,
+                                       colorSpace: key.colorSpace)
         }
         return GlowFrameRenderer(key).render(time: 0, blend: 0, breathSeconds: 0, breathAmplitude: 0)
     }
@@ -118,13 +121,20 @@ final class GlowFrameRenderer: Sendable {
                             glowWidth: key.glow.width, breathAmplitude: breathAmplitude, levels: levels)
         if let soft { return renderSoft(soft, motion: motion) }
         return GlowRenderer.renderBitmap(width: key.glow.width, height: key.glow.height, blur: 0, padding: 0, scale: key.scale,
-                                         colorSpace: key.colorSpace) { _, context, _ in
+                                         colorSpace: key.colorSpace) { rect, context, _ in
             switch key.pattern.style {
             case .dots: drawDots(in: context, motion: motion)
             case .braille: drawBraille(in: context, motion: motion)
             case .ascii, .blocks, .binary: drawCharacters(in: context, motion: motion)
             case .blur: break
             }
+            // The grid leaves out the cells under the island, but not the marks that reach over its edge or sit
+            // under its flares.
+            guard let cutout = key.cutout else { return }
+            context.setAlpha(1)
+            context.setBlendMode(.clear)
+            context.addPath(cutout.path(glow: key.glow, islandRadius: key.islandRadius, in: rect))
+            context.fillPath()
         }
     }
 
@@ -432,20 +442,23 @@ private struct SoftGlow: Sendable {
     /// Field cells, top row first, in glow-rect coordinates; noise indices step every `softPitch` points.
     let cells: [GlowMatrix.Cell]
     /// The parts of the bitmap beside and below the island, in context coordinates. The island covers the rest,
-    /// which around an expanded panel is most of the bitmap, so frames only draw these.
+    /// which around an expanded panel is most of the bitmap, so frames only draw these. A glass island covers nothing,
+    /// but its cutout leaves the base bitmap as clear there as the frames.
     let strips: [CGRect]
     /// Field cells that can show through a strip, including one cell of margin for smooth scaling.
     let visibleCells: [Int]
 
     init?(key: GlowFrameRenderer.Key) {
+        // Both carry the key's cutout, so a frame drawn from either leaves a glass island as clear as the resting bitmap.
         guard let base = GlowRenderer.render(glow: key.glow, islandSize: key.islandSize, islandRadius: key.islandRadius,
-                                             outwardOnly: key.outwardOnly, stops: key.stops, scale: key.scale,
+                                             outwardOnly: key.outwardOnly, cutout: key.cutout, stops: key.stops, scale: key.scale,
                                              colorSpace: key.colorSpace) else { return nil }
         self.base = base
         let white = [GradientStop(color: .white, location: 0), GradientStop(color: .white, location: 1)]
         shape = key.pattern.effect == .flow
             ? GlowRenderer.render(glow: key.glow, islandSize: key.islandSize, islandRadius: key.islandRadius,
-                                  outwardOnly: key.outwardOnly, stops: white, scale: key.scale).flatMap { Self.coverageMask($0.image) }
+                                  outwardOnly: key.outwardOnly, cutout: key.cutout, stops: white,
+                                  scale: key.scale).flatMap { Self.coverageMask($0.image) }
             : nil
         let columns = max(1, Int((base.size.width / GlowFrameRenderer.softFieldCell).rounded(.up)))
         let rows = max(1, Int((base.size.height / GlowFrameRenderer.softFieldCell).rounded(.up)))
@@ -546,14 +559,15 @@ final class GlowFrameCache {
 final class GlowImageCache {
     private var cached: (key: GlowFrameRenderer.Key, image: GlowImage)?
 
+    /// - cutout: the island cut out of the glow, for a glass island that shows what is under it; nil for a solid one.
     func render(glow: GlowGeometry, islandSize: CGSize, islandRadius: CGFloat,
-                outwardOnly: Bool, stops: [GradientStop], scale: CGFloat,
+                outwardOnly: Bool, cutout: GlowCutout?, stops: [GradientStop], scale: CGFloat,
                 pattern: GlowPattern = GlowPattern()) -> GlowImage? {
         // The resting bitmap does not depend on which effect plays while agents run.
         var resting = pattern
         resting.effect = .breathe
         let key = GlowFrameRenderer.Key(glow: glow, islandRadius: islandRadius, stops: stops, scale: scale, pattern: resting,
-                                        islandSize: islandSize, outwardOnly: outwardOnly)
+                                        islandSize: islandSize, outwardOnly: outwardOnly, cutout: cutout)
         if let cached, cached.key == key { return cached.image }
         guard let image = GlowFrameRenderer.resting(key) else { return nil }
         cached = (key, image)

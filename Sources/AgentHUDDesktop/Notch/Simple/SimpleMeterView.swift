@@ -10,8 +10,12 @@ struct SimpleMeterView: View {
     /// The island draws the panel behind the figures, so that the same frame can grow into the usage panel.
     /// Left off, the view draws its own fill and hairline, as a preview with no island does.
     var onIsland = false
-    /// How dark the panel is; whatever grows out of it is filled the same.
-    static let fillOpacity = 0.82
+    /// The look of the HUD the panel belongs to: the island's round it, the standard one in a preview with none.
+    @Environment(\.hudLook) private var look
+    /// Glass drawn as its stand-in, in a preview or a picture of the panel.
+    @Environment(\.drawsGlassStandIn) private var glassStandIn
+
+    private var theme: Theme { look.theme }
 
     var body: some View {
         let panel = config.panelSize
@@ -26,22 +30,26 @@ struct SimpleMeterView: View {
         .padding(EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right))
         .frame(width: panel.width, height: panel.height, alignment: .leading)
         .background {
-            shape.fill(.black.opacity(Self.fillOpacity))
-                .overlay { shape.strokeBorder(.white.opacity(0.14), lineWidth: 1) }
-                .opacity(onIsland ? 0 : 1)
+            if !onIsland {
+                HUDSurface(shape, look: look, fill: theme.islandFill.opacity(theme.restingFillOpacity), contact: nil)
+                    .overlay { shape.strokeBorder(look.outline(theme.islandOutline, standIn: glassStandIn), lineWidth: 1) }
+            }
         }
         .padding(margin, SimpleMeterConfig.edgeMargin)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
-        .environment(\.colorScheme, .dark)
+        // The marks take the artwork made for the panel's surface, also in a window set to the other scheme.
+        .environment(\.colorScheme, look.colorScheme)
         .accessibilityElement(children: .combine)
     }
 
+    /// The ring takes the level's colour and the number, which is text, the level's text colour.
     private func cell(_ item: SimpleMeterItem) -> some View {
-        let tint = item.level.map { Color(StatusPalette.color(for: $0)) } ?? Color(StatusPalette.idle)
+        let tint = item.level.map { theme.status($0) } ?? theme.idle
+        let ink = item.level.map { theme.statusText($0) } ?? theme.idleText
         return HStack(spacing: config.labelSpacing) {
             ZStack {
                 if config.showsRings {
-                    Circle().strokeBorder(.white.opacity(0.14), lineWidth: config.ringWidth)
+                    Circle().strokeBorder(theme.meterTrack, lineWidth: config.ringWidth)
                     Circle().inset(by: config.ringWidth / 2)
                         .trim(from: 0, to: min(1, max(0, (item.usedPct ?? 0) / 100)))
                         .stroke(tint, style: StrokeStyle(lineWidth: config.ringWidth, lineCap: .round))
@@ -57,7 +65,7 @@ struct SimpleMeterView: View {
             if config.showsNumbers {
                 Text(item.label)
                     .font(.tabular(config.fontSize, .regular))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(ink)
                     .lineLimit(1)
                     .fixedSize()
                     .frame(width: config.edge.isHorizontal ? config.labelWidth(item) : config.labelColumn, alignment: .trailing)

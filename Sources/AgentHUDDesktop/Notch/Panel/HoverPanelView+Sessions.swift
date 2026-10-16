@@ -106,7 +106,7 @@ extension HoverPanelView {
                      ? L10n.text("返回失败，点击标题重试", "Couldn't return. Click the title to retry.")
                      : L10n.text("无法返回此会话", "Session return unavailable"))
                     .font(.ui(11))
-                    .foregroundStyle(theme.status(.warning))
+                    .foregroundStyle(theme.statusText(.warning))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 14)
             }
@@ -158,7 +158,7 @@ extension HoverPanelView {
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(Capsule().fill(theme.status(.warning).opacity(0.16)))
-            .foregroundStyle(theme.status(.warning))
+            .foregroundStyle(theme.statusText(.warning))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -265,7 +265,7 @@ extension HoverPanelView {
     private func dotColor(_ dot: SessionDot, session: LiveSession) -> Color {
         switch dot {
         case .waiting: return theme.status(.warning)
-        case .running: return AgentPalette.swiftUIColor(index: store.consumerPaletteIndex(session.agentId))
+        case .running: return theme.agent(store.consumerPaletteIndex(session.agentId))
         case .ended: return theme.dotEnded
         }
     }

@@ -185,7 +185,8 @@ final class BotClock {
 /// has opened and stays it for as long as it is shown: asking on a request, smiling on a reply. A mark that
 /// follows its agent instead is the bot while the agent works and the logo while it rests, as in a logo queue.
 ///
-/// With bots switched off, or motion reduced, it is the plain logo.
+/// With bots switched off, or motion reduced, it is the plain logo. The bot is drawn for the ground of the HUD it is on,
+/// in light ink on a dark HUD and in dark ink on a light one (`BotForm.ground`).
 struct BotMark: View {
     /// How long a reminder's mark stays the logo: the card's own opening, and a moment to read the logo in.
     static let arrival: TimeInterval = IslandAnimation.duration + 0.3
@@ -196,10 +197,11 @@ struct BotMark: View {
     var staysBot = true
     @Environment(\.botLogos) private var botLogos
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hudLook) private var look
 
     var body: some View {
-        if botLogos, !reduceMotion, BotForm.form(for: vendor) != nil {
-            BotStage(vendor: vendor, size: size, phase: phase, staysBot: staysBot)
+        if botLogos, !reduceMotion, BotForm.form(for: vendor, ground: look.appearance) != nil {
+            BotStage(vendor: vendor, size: size, phase: phase, staysBot: staysBot, ground: look.appearance)
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
         } else {
@@ -213,22 +215,26 @@ private struct BotStage: NSViewRepresentable {
     let size: CGFloat
     let phase: BotPhase
     let staysBot: Bool
+    let ground: HUDLook.Appearance
     @Environment(\.displayScale) private var displayScale
 
     func makeNSView(context: Context) -> BotStageView { BotStageView() }
 
     func updateNSView(_ view: BotStageView, context: Context) {
-        view.show(vendor: vendor, size: size, scale: displayScale, phase: phase, staysBot: staysBot)
+        view.show(vendor: vendor, size: size, scale: displayScale, phase: phase, staysBot: staysBot, ground: ground)
     }
 
     static func dismantleNSView(_ view: BotStageView, coordinator: ()) { BotClock.shared.drop(view) }
 }
 
-/// Hosts one bot's layer, centred, with room round it for a hop.
+/// Hosts one bot's layer, centred, with room round it for a hop. A bot for another ground is another bot: a change of
+/// the HUD's look builds it again, in the new ground's ink, and fades it in over the old one. A bot is on stage only
+/// while motion is on (`BotMark`), so the fade never runs under Reduce Motion.
 final class BotStageView: NSView {
     private var actor: BotActor?
     private var vendor = ""
     private var staysBot = true
+    private var ground = HUDLook.Appearance.dark
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -239,12 +245,17 @@ final class BotStageView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    func show(vendor: String, size: CGFloat, scale: CGFloat, phase: BotPhase, staysBot: Bool = true) {
-        if vendor != self.vendor || staysBot != self.staysBot || actor == nil {
+    func show(vendor: String, size: CGFloat, scale: CGFloat, phase: BotPhase, staysBot: Bool = true,
+              ground: HUDLook.Appearance) {
+        if vendor != self.vendor || staysBot != self.staysBot || ground != self.ground || actor == nil {
+            if actor != nil, vendor == self.vendor, staysBot == self.staysBot, let layer {
+                IslandAnimation.fadeLook(of: layer)
+            }
             self.vendor = vendor
             self.staysBot = staysBot
+            self.ground = ground
             actor?.layer.removeFromSuperlayer()
-            actor = BotForm.form(for: vendor).map {
+            actor = BotForm.form(for: vendor, ground: ground).map {
                 let actor = BotActor(form: $0, staysBot: staysBot, period: 3, arrivesAfter: staysBot ? BotMark.arrival : 0)
                 // Nothing else draws this mark, so the actor draws its logo too.
                 actor.restsHidden = false

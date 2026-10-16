@@ -209,7 +209,7 @@ final class HoverPanelLayoutTests: XCTestCase {
         let cap: CGFloat = 320
         var root = IslandRootView(store: store, isOpen: true, collapsedSize: CGSize(width: 216, height: 32),
                                   collapsedTopRadius: 16, collapsedBottomRadius: 12,
-                                  lightBorder: false, onOpenStats: {},
+                                  look: .standard, lightBorder: false, onOpenStats: {},
                                   additionalHUDControls: { AnyView(FooterMarker().frame(width: 16, height: 28)) })
         root.presentationSize = CGSize(width: width, height: cap)
         root.animatesGeometry = false

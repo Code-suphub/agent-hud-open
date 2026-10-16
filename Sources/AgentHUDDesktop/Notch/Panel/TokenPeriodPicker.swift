@@ -17,7 +17,8 @@ extension PanelTokenPeriod {
 /// picker neither grows the panel nor resizes it with a flip.
 struct TokenPeriodPicker: View {
     @Binding var selection: PanelTokenPeriod
-    var theme: Theme = .island
+    /// The tokens of the chart it heads.
+    let theme: Theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// How far a chip reaches above and below its label.
     private static let overhang: CGFloat = 3

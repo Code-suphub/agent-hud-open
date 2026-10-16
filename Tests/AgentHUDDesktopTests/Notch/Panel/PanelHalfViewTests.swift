@@ -283,7 +283,8 @@ final class PanelHalfViewTests: XCTestCase {
             var asked = layout((.ring, .number), separators: separators, hidden: [.tokens, .sessions])
             asked.blocks[Self.balance] = PanelLayout.Block(hidden: true)
             keep(store, asked)
-            let renderer = PanelPictureRenderer(store: store, display: .init(insets: HoverPanelView.notchInsets, maximumHeight: 2_000))
+            let renderer = PanelPictureRenderer(store: store, display: .init(insets: HoverPanelView.notchInsets, maximumHeight: 2_000,
+                                                                             look: .standard))
             let picture = try XCTUnwrap(renderer.draw(masked: false))
             let rep = try XCTUnwrap(NSBitmapImageRep(data: picture.png))
             let scale = picture.scale

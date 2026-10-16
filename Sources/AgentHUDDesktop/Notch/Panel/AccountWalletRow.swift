@@ -6,7 +6,7 @@ import AgentHUDCore
 /// they do not fit beside it.
 struct AccountWalletRow: View {
     let wallet: AccountWallet
-    private let theme = Theme.island
+    @Environment(\.hudTheme) private var theme
     @Environment(\.panelHalf) private var half
 
     var body: some View {

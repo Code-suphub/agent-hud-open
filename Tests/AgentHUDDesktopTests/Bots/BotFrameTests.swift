@@ -79,7 +79,7 @@ final class BotFrameTests: XCTestCase {
     func testAFrameFromKeptPartsIsTheFrameDrawnWhole() throws {
         var frames = 0, differing: [String] = []
         for vendor in AgentArtwork.allVendors {
-            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
             let screens = (0..<2).map { Self.motions(of: form, seed: UInt64($0 + 1), until: 9, phases: Self.phases) }
             // Both screens' frames, in every setting, in turn the way the clock draws them, from whatever is kept.
             var kept: [[[Data]]] = Array(repeating: Array(repeating: [], count: Self.settings.count), count: 2)
@@ -110,7 +110,7 @@ final class BotFrameTests: XCTestCase {
     /// passed between bots and let go.
     func testFramesOfManyBotsInTurnAreTheFramesDrawnWhole() throws {
         let bots = try AgentArtwork.allVendors.map { vendor in
-            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
             return (vendor, form, Self.motions(of: form, seed: 5, until: 9, phases: Self.phases))
         }
         let settings = Array(Self.settings.prefix(3))
@@ -142,7 +142,7 @@ final class BotFrameTests: XCTestCase {
     func testTheOutlineIsTheOneBuiltBefore() throws {
         var outlines = 0, differing: [String] = []
         for vendor in AgentArtwork.allVendors {
-            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
             var moments = Self.motions(of: form, seed: 3, until: 9, phases: Self.phases)
                 .map { (BotMotion.easeInOut($0.morph), $0.turn) }
             moments += [(0, 0), (1, 0), (0.5, 359.75), (1, -12.5), (0.25, 721.5), (1, 0)]
@@ -167,7 +167,7 @@ final class BotFrameTests: XCTestCase {
         }
         var frames = 0, differing: [String] = []
         for vendor in AgentArtwork.allVendors {
-            let form = try XCTUnwrap(BotForm.form(for: vendor))
+            let form = try XCTUnwrap(BotForm.form(for: vendor, ground: .dark))
             let motions = Self.motions(of: form, seed: 3, until: 9, phases: Self.phases)
             for (index, motion) in motions.enumerated() where index % 3 == 0 {
                 for setting in Self.settings where setting.outline > 0 {
@@ -205,7 +205,7 @@ final class BotFrameTests: XCTestCase {
         // The drawing alone: every frame a working bot draws in that minute, best of five rounds.
         var drawn: [(BotForm, BotMotion)] = []
         for (index, row) in rows.enumerated() {
-            let form = try XCTUnwrap(BotForm.form(for: row.0))
+            let form = try XCTUnwrap(BotForm.form(for: row.0, ground: .dark))
             drawn += Self.motions(of: form, seed: UInt64(index + 1), until: 60, phases: minute).map { (form, $0) }
         }
         var best = TimeInterval.infinity
@@ -222,7 +222,7 @@ final class BotFrameTests: XCTestCase {
         var actors: [BotActor] = []
         for screen in 0..<2 {
             for (index, row) in rows.enumerated() {
-                let actor = BotActor(form: try XCTUnwrap(BotForm.form(for: row.0)), staysBot: false, period: 3,
+                let actor = BotActor(form: try XCTUnwrap(BotForm.form(for: row.0, ground: .dark)), staysBot: false, period: 3,
                                      seed: UInt64(screen * 100 + index + 1))
                 actor.resize(side: 20, scale: 2, outline: 1)
                 actor.show(in: space)

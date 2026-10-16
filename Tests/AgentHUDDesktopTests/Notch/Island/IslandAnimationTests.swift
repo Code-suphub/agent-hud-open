@@ -100,7 +100,8 @@ final class IslandAnimationTests: XCTestCase {
                     islandRadius: IslandController.expandedRadius, range: maximum, blur: maximum)
                     .fitted(within: screenHeight)
                 controller.update(geometry: geometry, island: island, islandRadius: IslandController.expandedRadius,
-                    glow: glow, outwardOnly: true, appearance: .idle(), animated: animated)
+                    islandFlare: NotchGeometry.expandedTopRadius, glow: glow, outwardOnly: true, appearance: .idle(),
+                    look: .standard, shells: HUDShells(surface: nil, dock: nil), animated: animated, animatesShells: animated)
             }
 
             func checkClipping() throws {
@@ -137,8 +138,10 @@ final class IslandAnimationTests: XCTestCase {
         let breathing = GlowAppearance(stops: GlowGradient.idleStops, peakOpacity: 0.9, troughOpacity: 0.4, breathing: true,
                                        breathSeconds: 3, hidden: false)
         controller.update(geometry: geometry, island: geometry.rect, islandRadius: 12,
+            islandFlare: NotchGeometry.collapsedTopRadius,
             glow: GlowGeometry.compute(islandWidth: 216, islandHeight: 32, islandRadius: 12, range: 14, blur: 8),
-            outwardOnly: true, appearance: breathing, animated: false, pattern: GlowPattern(style: .dots, effect: .flow))
+            outwardOnly: true, appearance: breathing, look: .standard, shells: HUDShells(surface: nil, dock: nil),
+            animated: false, animatesShells: false, pattern: GlowPattern(style: .dots, effect: .flow))
         try XCTSkipUnless(controller.isAnimating, "motion is reduced on this Mac, so no frames run")
         controller.close()
         XCTAssertFalse(controller.isAnimating, "a HUD whose display went away draws no more frames")

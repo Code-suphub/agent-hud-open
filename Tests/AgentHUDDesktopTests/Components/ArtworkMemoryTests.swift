@@ -43,10 +43,13 @@ final class ArtworkMemoryTests: XCTestCase {
                 XCTAssertEqual(bytes(LogoImages.image(key)), first, "\(vendor) \(side)")
                 XCTAssertEqual(LogoImages.visibleBounds(key), bounds, "\(vendor) \(side)")
             }
-            let form = BotForm.read(vendor), again = BotForm.read(vendor)
-            XCTAssertEqual(bytes(again?.artwork), bytes(form?.artwork), vendor)
-            XCTAssertEqual(bytes(again?.field), bytes(form?.field), vendor)
-            XCTAssertEqual(again?.logoReach, form?.logoReach, vendor)
+            // A bot is drawn for the ground it stands on, a dark HUD's or a light one's.
+            for ground in [HUDLook.Appearance.dark, .light] {
+                let form = BotForm.read(vendor, ground: ground), again = BotForm.read(vendor, ground: ground)
+                XCTAssertEqual(bytes(again?.artwork), bytes(form?.artwork), "\(vendor) \(ground)")
+                XCTAssertEqual(bytes(again?.field), bytes(form?.field), "\(vendor) \(ground)")
+                XCTAssertEqual(again?.logoReach, form?.logoReach, "\(vendor) \(ground)")
+            }
         }
     }
 
@@ -67,9 +70,12 @@ final class ArtworkMemoryTests: XCTestCase {
                     }
                 }
             }
-            let form = BotForm.read(vendor)
-            output["bot/\(vendor)"] = [hash(form?.artwork), hash(form?.field), hash(form?.stripped),
-                                       "\(form?.logoReach.reduce(0, +) ?? -1)", "\(form?.bodyReach.reduce(0, +) ?? -1)"].joined(separator: "|")
+            for ground in [HUDLook.Appearance.dark, .light] {
+                let form = BotForm.read(vendor, ground: ground)
+                output["bot/\(ground)/\(vendor)"] = [hash(form?.artwork), hash(form?.field), hash(form?.stripped),
+                                                      "\(form?.logoReach.reduce(0, +) ?? -1)",
+                                                      "\(form?.bodyReach.reduce(0, +) ?? -1)"].joined(separator: "|")
+            }
             output["accent/\(vendor)"] = AgentArtwork.accent(for: vendor).map { "\($0.redComponent),\($0.greenComponent),\($0.blueComponent)" } ?? "none"
         }
         let encoder = JSONEncoder()

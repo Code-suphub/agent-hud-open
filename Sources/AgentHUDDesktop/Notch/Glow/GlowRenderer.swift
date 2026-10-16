@@ -22,19 +22,21 @@ private final class BlurContext: @unchecked Sendable {
 /// Rasterises the soft glow, the panel shadow and bitmaps drawn by others; `GlowFrameRenderer` decides what a style's
 /// frame shows.
 enum GlowRenderer {
-    /// The soft glow: keeps colour dense at the island's contour, then fades it out across the glow's range.
+    /// The soft glow: keeps colour dense at the island's contour, then fades it out across the glow's range. The colour
+    /// fills the island's own place too, which a solid island hides; `cutout` clears it for a glass one.
     static func render(
         glow: GlowGeometry,
         islandSize: CGSize,
         islandRadius: CGFloat,
         outwardOnly: Bool,
+        cutout: GlowCutout?,
         stops: [GradientStop],
         scale: CGFloat,
         colorSpace: CGColorSpace? = nil
     ) -> GlowImage? {
         let padding = ceil(max(0, glow.blur) * 3)
-        return renderBitmap(width: glow.width, height: glow.height, blur: outwardOnly ? 0 : glow.blur, padding: padding, scale: scale,
-                            colorSpace: colorSpace) { rect, context, space in
+        let image = renderBitmap(width: glow.width, height: glow.height, blur: outwardOnly ? 0 : glow.blur, padding: padding,
+                                 scale: scale, colorSpace: colorSpace) { rect, context, space in
             // A zero-width band has no outward falloff; avoid dividing by its range.
             if outwardOnly && glow.blur > 0 && glow.sideInset > 0 {
                 drawOutwardFalloff(glow: glow, islandSize: islandSize, islandRadius: islandRadius, in: rect, context: context, scale: scale)
@@ -45,6 +47,9 @@ enum GlowRenderer {
             context.setBlendMode(.sourceIn)
             drawGradient(stops, in: rect, context: context, space: space)
         }
+        guard let cutout, let image else { return image }
+        let rect = CGRect(x: padding, y: padding, width: glow.width, height: glow.height)
+        return cutting([cutout.path(glow: glow, islandRadius: islandRadius, in: rect)], from: image, scale: scale)
     }
 
     /// Feather only the outer edge; zero blur keeps the full band solid.
@@ -171,6 +176,51 @@ enum GlowRenderer {
             context.clip()
             drawGradient([GradientStop(color: black, location: 0), GradientStop(color: black, location: 1)], in: rect, context: context, space: space)
         }
+    }
+
+    /// A light or glass shell's shadow (`0 6px 24px rgba(0,0,0,.22)`): softer than the panel's, and enough to stand a
+    /// light shell off a light desktop. It falls down the screen whichever edge the shell is on, as a window's does.
+    static let shellShadowBlur: CGFloat = 12
+    static let shellShadowOpacity: CGFloat = 0.22
+    static let shellShadowDrop: CGFloat = 6
+    /// The margin round a shell's shadow bitmap, which its blur fills.
+    static var shellShadowPadding: CGFloat { ceil(shellShadowBlur * 3) }
+
+    /// The shadow `shape` casts, its core at the bitmap's padding, with `cutouts` cleared from it: under glass, the
+    /// shell itself where its shadow falls behind it, and any shell beside it that the shadow reaches.
+    static func renderShellShadow(_ shape: ShellShape, cutouts: [ShellCutout], scale: CGFloat) -> GlowImage? {
+        let padding = shellShadowPadding
+        let shadow = renderBitmap(width: shape.size.width, height: shape.size.height, blur: shellShadowBlur, padding: padding,
+                                  scale: scale) { rect, context, _ in
+            context.setFillColor(gray: 0, alpha: shellShadowOpacity)
+            context.addPath(shape.path(at: rect.origin))
+            context.fillPath()
+        }
+        guard let shadow else { return nil }
+        return cutting(cutouts.map { $0.shape.path(at: CGPoint(x: padding + $0.offset.width, y: padding + $0.offset.height)) },
+                       from: shadow, scale: scale)
+    }
+
+    /// `image` with each of `paths`, in points from its lower-left corner, cleared out of it. It is cut after the blur,
+    /// so the cut keeps the edge of the shape that would otherwise show what lies under it.
+    private static func cutting(_ paths: [CGPath], from image: GlowImage, scale: CGFloat) -> GlowImage? {
+        guard !paths.isEmpty else { return image }
+        guard !Task.isCancelled else { return nil }
+        let width = image.image.width, height = image.image.height
+        guard let space = bitmapSpace(image.image.colorSpace),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.draw(image.image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context.scaleBy(x: scale, y: scale)
+        context.setBlendMode(.clear)
+        // One fill each, so shapes that overlap clear their overlap too.
+        for path in paths {
+            context.addPath(path)
+            context.fillPath()
+        }
+        guard let cut = context.makeImage() else { return nil }
+        return GlowImage(image: cut, padding: image.padding, size: image.size)
     }
 
     private static func drawGradient(_ stops: [GradientStop], in rect: CGRect, context: CGContext, space: CGColorSpace) {
