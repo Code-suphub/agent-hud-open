@@ -71,6 +71,24 @@ struct BotSpec: Sendable {
         var width: CGFloat
     }
 
+    /// A fin that stands behind the body, in body radii from the body's centre: a rounded paddle from a root inside the
+    /// body out past its outline (`BotFins.path`).
+    struct Fin: Sendable {
+        /// Where it grows from, inside the body.
+        var root: CGPoint
+        /// Which way it points, in degrees clockwise from the right, with y running down.
+        var angle: CGFloat
+        /// From the root to the far edge of its tip.
+        var length: CGFloat
+        /// The radius of its round root, and of its round tip.
+        var base: CGFloat
+        var tip: CGFloat
+        /// How far its tip leans to the left of where it points, as a fin on a fish's back sweeps toward its tail.
+        var sweep: CGFloat = 0
+        /// A hand, which the motion raises about its root (`BotFlap`): −1 on the left, 1 on the right. 0 keeps still.
+        var hand: CGFloat = 0
+    }
+
     enum Decor: Sendable {
         /// Rounded pieces in one colour laid on the body and kept to its outline, later ones over earlier:
         /// a fringe, a scarf. `round` 1 is a full capsule or ball, 0 a block.
@@ -78,6 +96,9 @@ struct BotSpec: Sendable {
         /// Thin lines with round ends that stand behind the body, so only what clears its outline shows:
         /// a pair of antennae.
         case feelers([[CGPoint]], RGBA, width: CGFloat)
+        /// Filled fins that stand behind the body, so only what clears its outline shows: a fish's hands and the fin on
+        /// its back.
+        case fins([Fin], RGBA)
         /// Filled blocks, such as hair or a hat. `followsFace` rides with the eyes when the bot looks around.
         case blocks([CGRect], RGBA, followsFace: Bool)
         /// Pieces taken out of the silhouette.
@@ -183,6 +204,7 @@ struct BotSpec: Sendable {
             switch item {
             case .soft(let rects, let value, let round): .soft(rects, swap(value), round: round)
             case .feelers(let lines, let value, let width): .feelers(lines, swap(value), width: width)
+            case .fins(let fins, let value): .fins(fins, swap(value))
             case .blocks(let rects, let value, let follows): .blocks(rects, swap(value), followsFace: follows)
             case .cut, .notch, .line: item
             }
@@ -210,9 +232,17 @@ struct BotSpec: Sendable {
         // 0.14 to 0.86. The finished bot settles by that difference, so its top and bottom line up with theirs.
         "Antigravity": BotSpec(reach: 0.75, shape: .outline(keep: 0.5, smooth: 16), face: CGPoint(x: 0, y: -0.2),
                                settle: 0.093),
-        // A ball like any other but for a whale's pale belly, which is what tells it from the plain balls.
+        // A big fat fish: the whale's blue ball with its pale belly, a little hand low on each side and a fin on its back,
+        // swept back a little left of the top, clear of the sign over its head and of the copy at its lower right.
         "DeepSeek": BotSpec(face: CGPoint(x: 0, y: -0.14),
-                            decor: [.soft([rect(-0.86, 0.34, 0.86, 1.9)], RGBA(hex: 0xc9d4ff), round: 1)],
+                            decor: [.fins([Fin(root: CGPoint(x: -0.5, y: 0.34), angle: 150, length: 0.82, base: 0.13, tip: 0.23,
+                                               hand: -1),
+                                           Fin(root: CGPoint(x: 0.5, y: 0.34), angle: 30, length: 0.82, base: 0.13, tip: 0.23,
+                                               hand: 1),
+                                           Fin(root: CGPoint(x: -0.12, y: -0.7), angle: -100, length: 0.64, base: 0.34, tip: 0.15,
+                                               sweep: 0.22)],
+                                          RGBA(hex: 0x3f5ae6)),
+                                    .soft([rect(-0.86, 0.34, 0.86, 1.9)], RGBA(hex: 0xc9d4ff), round: 1)],
                             crossesEyes: true),
         "Grok": BotSpec(radius: 0.33, reach: 0.55, face: CGPoint(x: 0, y: -0.3),
                         ring: Ring(radiusX: 1.5, radiusY: 0.32, drop: 0.3, tilt: -20, width: 0.14)),

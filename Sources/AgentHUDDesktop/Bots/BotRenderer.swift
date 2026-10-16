@@ -16,6 +16,7 @@ enum BotRenderer {
     struct Look: Hashable {
         var morph, turn, open, look, lookY, wide, happy, lean, crossed, lift, scale: Int
         var limbs: BotLimbs
+        var flap: BotFlap
         var sign: BotSign?
         var lit: Int
         var helper: Bool
@@ -28,7 +29,7 @@ enum BotRenderer {
                     look: step(face.look, 50), lookY: step(face.lookY, 50), wide: step(face.wide, 50),
                     happy: step(face.happy, 30), lean: step(face.lean, 30), crossed: step(face.crossed, 30),
                     lift: step(motion.kept.lift, 300), scale: step(motion.kept.scale, 60), limbs: motion.limbs,
-                    sign: motion.sign, lit: motion.lit, helper: motion.helper)
+                    flap: motion.flap, sign: motion.sign, lit: motion.lit, helper: motion.helper)
     }
 
     /// The island's own dark: eyes drawn in it read as cut out of any body, on the island or over a wallpaper.
@@ -159,10 +160,12 @@ enum BotRenderer {
         // Everything drawn before a kept piece, or before a piece that rides with the face, moves with the morph
         // and the turn alone. A bot that does not spin draws that part once and then only what its face changes.
         let settled = spec.keeps == nil ? spec.decor.firstIndex { $0.followsFace } ?? spec.decor.count : 0
-        let still = BotStill(form: form, morph: morph.share, turn: motion.turn, helper: motion.helper, on: context)
+        let still = BotStill(form: form, morph: morph.share, turn: motion.turn, helper: motion.helper, flap: motion.flap,
+                             on: context)
         if !still.restore() {
             context.saveGState()
-            stillPart(form, morph: morph, turn: motion.turn, decor: settled, helper: motion.helper, on: context)
+            stillPart(form, morph: morph, turn: motion.turn, decor: settled, helper: motion.helper, flap: motion.flap,
+                      on: context)
             context.restoreGState()
             still.keep()
         }
@@ -196,9 +199,9 @@ enum BotRenderer {
     /// The part of a body that only the morph and the turn change: the logo fading out, the body and its
     /// paint, a ring, and what it wears up to the first piece that moves with its face; then the small copy of the body
     /// that stands for its sub-agents, when they run. `decor` counts the pieces of `spec.decor` drawn here; a body with
-    /// a kept piece draws none here, as that piece comes first.
+    /// a kept piece draws none here, as that piece comes first. A fish's hands are part of it too, raised by `flap`.
     private static func stillPart(_ form: BotForm, morph: Morph, turn: CGFloat, decor: Int, helper: Bool = false,
-                                  on context: CGContext) {
+                                  flap: BotFlap = BotFlap(), on context: CGContext) {
         let spec = form.spec, share = morph.share, eased = morph.eased, solid = morph.solid, dressed = morph.dressed
         let center = spec.center, radius = spec.radius
         // The artwork fades into the colour field while the outline is still close to the logo's.
@@ -235,6 +238,19 @@ enum BotRenderer {
             context.setLineCap(.round)
             for line in lines { context.addLines(between: line) }
             context.strokePath()
+            context.restoreGState()
+        }
+        // So do fins, which grow out of their roots as the bot arrives.
+        for item in spec.decor where dressed > 0 {
+            guard case .fins(let fins, let paint) = item else { continue }
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.scaleBy(x: radius, y: radius)
+            context.setAlpha(dressed)
+            context.setFillColor(color(paint))
+            let grown = 0.3 + 0.7 * dressed
+            for fin in fins { context.addPath(BotFins.path(fin, grown: grown, raised: flap.raised(fin.hand))) }
+            context.fillPath()
             context.restoreGState()
         }
 
@@ -324,6 +340,8 @@ enum BotRenderer {
             context.setLineWidth(helperGap * 2 / scale)
             context.setLineJoin(.round)
             context.addPath(outline)
+            // A fish's copy keeps the gap round its fins too.
+            if let fins = BotFins.silhouette(of: spec) { context.addPath(fins) }
             context.strokePath()
             context.restoreGState()
             // As one picture, so the copy's own parts do not show through each other at its strength. The still part
@@ -413,7 +431,7 @@ enum BotRenderer {
             context.setLineCap(.round)
             context.addLines(between: points)
             context.strokePath()
-        case .soft, .feelers:
+        case .soft, .feelers, .fins:
             break
         }
         context.restoreGState()

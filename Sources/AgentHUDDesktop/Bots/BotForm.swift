@@ -57,9 +57,9 @@ final class BotForm {
         return form
     }
 
-    /// Reads a mark afresh, without the cache.
-    static func read(_ vendor: String, ground: HUDLook.Appearance) -> BotForm? {
-        BotSpec.spec(for: vendor, ground: ground).flatMap { BotForm(vendor: vendor, ground: ground, spec: $0) }
+    /// Reads a mark afresh, without the cache, as `spec` draws it when one is given.
+    static func read(_ vendor: String, ground: HUDLook.Appearance, spec: BotSpec? = nil) -> BotForm? {
+        (spec ?? BotSpec.spec(for: vendor, ground: ground)).flatMap { BotForm(vendor: vendor, ground: ground, spec: $0) }
     }
 
     private init?(vendor: String, ground: HUDLook.Appearance, spec: BotSpec) {
