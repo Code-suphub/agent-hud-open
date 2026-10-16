@@ -39,10 +39,9 @@ public enum CompactionHooks {
     }
 
     public static var directory: URL { AppSupport.directory.appendingPathComponent("compaction") }
-    /// A compaction begun this long ago is over, whether or not its boundary reached the log.
+    /// A compaction begun this long ago is over, whether or not its boundary reached the log. Its record is forgotten the
+    /// next time a compaction is recorded: every collection pass reads every record kept, and an older one never counts.
     public static let limit: TimeInterval = 300
-    /// A record is forgotten after this long.
-    static let retention: TimeInterval = 86400
 
     /// The compaction the payload says began, of the session's own conversation. Claude Code runs the hook inside a
     /// sub-agent too, with the session's id and the sub-agent's `agent_id`; that compaction ends in the sub-agent's log,
@@ -63,7 +62,7 @@ public enum CompactionHooks {
         // Records age by when compaction began, which is inside them; a file's own timestamps say nothing about that.
         for file in try inbox.files() where file.lastPathComponent != name + ".json" {
             let stored = (try? HookInbox.data(of: file)).flatMap { try? JSONDecoder().decode(Event.self, from: $0) }
-            if stored.map({ $0.at <= now.addingTimeInterval(-retention) }) ?? true { try? FileManager.default.removeItem(at: file) }
+            if stored.map({ $0.at <= now.addingTimeInterval(-limit) }) ?? true { try? FileManager.default.removeItem(at: file) }
         }
     }
 

@@ -32,6 +32,18 @@ final class CompactionHookTests: XCTestCase, @unchecked Sendable {
                      "what the user asked compaction to keep never leaves the payload")
     }
 
+    func testARecordTooOldToCountIsForgottenAtTheNextCompaction() throws {
+        // Only the last five minutes count, and every collection pass reads every record kept.
+        let inbox = try directory()
+        for hour in stride(from: 23, through: 1, by: -1) {
+            try compact(["session_id": "s\(hour)", "trigger": "auto"], at: now.addingTimeInterval(-Double(hour) * 3600), in: inbox)
+        }
+        try compact(["session_id": "recent", "trigger": "auto"], at: now.addingTimeInterval(-60), in: inbox)
+        try compact(["session_id": "fresh", "trigger": "auto"], at: now, in: inbox)
+        XCTAssertEqual(try HookInbox(directory: inbox, source: "claude").files().count, 2)
+        XCTAssertEqual(CompactionHooks.read(source: .claude, now: now, directory: inbox).keys.sorted(), ["fresh", "recent"])
+    }
+
     func testASubAgentsCompactionIsNotItsSessions() throws {
         // Claude Code runs the hook inside a sub-agent with the session's own id and the sub-agent's beside it. The
         // sub-agent's log takes the boundary and every line after it, so the session's log could never end it.
