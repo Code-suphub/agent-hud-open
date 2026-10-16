@@ -8,9 +8,9 @@ import AgentHUDCore
 /// menu take the app's Appearance, as they always have.
 ///
 /// A window takes the look through its appearance, which moves its tokens (`Theme.forScheme`), its controls, its sheets
-/// and its popovers together. Glass reaches a window only where macOS itself draws a window translucent, its sidebar
-/// (`WindowGround`): the statistics and the settings stay on an opaque ground, which their charts and small grey text
-/// need over any desktop. A window changes its appearance at once, as macOS changes it.
+/// and its popovers together, and its material through its grounds (`WindowGround`): under a look of glass the window's
+/// ground and its sidebar are a blur of what is behind the window, covered with their own colour as the HUD's glass is,
+/// while the cards on them keep their fill. A window changes its appearance at once, as macOS changes it.
 @MainActor
 enum WindowLook {
     /// The look of the HUD on a screen for a window or the menu, or nil where they take the app's Appearance. Set by
@@ -47,9 +47,9 @@ final class WindowSurface {
     var look: HUDLook?
 }
 
-/// A window's ground where macOS draws a window translucent, its sidebar: `color`, or under a look of glass a blur of
-/// what is behind the window, covered with `color` at the screen's transparency, as the HUD's glass is
-/// (`HUDLook.glassCover`).
+/// A window's ground, its page or its sidebar: `color`, or under a look of glass a blur of what is behind the window,
+/// covered with `color` as much as the screen's transparency leaves it, as the HUD's glass is (`HUDLook.coverOpacity`).
+/// A solid look keeps the window opaque whatever its transparency: a window read through unblurred is no window.
 struct WindowGround: View {
     let color: Color
     @Environment(WindowSurface.self) private var surface: WindowSurface?
@@ -57,21 +57,22 @@ struct WindowGround: View {
     var body: some View {
         if let look = surface?.look, look.material == .glass {
             WindowBlur()
-                .overlay { color.opacity(1 - look.transparency) }
+                .overlay { color.opacity(look.coverOpacity) }
         } else {
             color
         }
     }
 }
 
-/// The blur of a sidebar: what is behind the window, in the window's own appearance, dimmed as macOS dims a sidebar
-/// when its window is not the active one.
+/// A blur of what is behind the window, in the window's own appearance: the HUD's frosted glass (`FrostedGlass`), whose
+/// material lets the desktop through where a window's or a sidebar's own tints it nearly away, and drawn the same
+/// whether the window is the active one or not, as the HUD's is.
 private struct WindowBlur: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.blendingMode = .behindWindow
-        view.material = .sidebar
-        view.state = .followsWindowActiveState
+        view.material = .hudWindow
+        view.state = .active
         return view
     }
 

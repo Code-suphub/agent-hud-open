@@ -21,9 +21,10 @@ struct GeneralPane: View {
                 SettingsDivider(theme: theme)
                 SettingsToggleRow(
                     label: L10n.text("跟随所在屏幕", "Match screen"),
-                    subtitle: L10n.text("每个窗口和菜单栏菜单采用所在屏幕的 HUD 外观，窗口移到另一块屏幕时跟着变；玻璃时设置的侧边栏是磨砂的。",
+                    subtitle: L10n.text("每个窗口和菜单栏菜单采用所在屏幕的 HUD 外观，窗口移到另一块屏幕时跟着变；玻璃时窗口是磨砂的。",
                                         "Each window and the menu-bar menu take the HUD look of the screen they are on, "
-                                            + "and change with it when moved; with Glass, the Settings sidebar is frosted."),
+                                            + "and change with it when moved; with Glass, the windows are frosted."),
+                    tag: L10n.text("实验", "Experimental"),
                     isOn: settings.binding(\.appearanceFollowsScreen)
                 )
                 SettingsDivider(theme: theme)
