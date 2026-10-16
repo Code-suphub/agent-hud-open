@@ -97,6 +97,24 @@ final class ClawdActorTests: XCTestCase {
         XCTAssertNil(actor.layer.animationKeys())
     }
 
+    /// A dock built again after a card, or a stage built anew, sets its bot and tells it an event before the first step,
+    /// which is when the sprites take over: the event still plays.
+    func testAnEventToldBeforeTheFirstStepPlays() throws {
+        let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))
+        for awake in [false, true] {
+            let actor = BotActor(form: form, staysBot: false, period: 3, seed: 5, sprites: ClawdSprites(sheet: sheet), awake: awake)
+            actor.resize(side: 20, scale: 2, outline: 1)
+            let host = CALayer()
+            host.addSublayer(actor.layer)
+            hosts.append(host)
+            actor.set(BotState(look: .idle, badge: .failed), at: 10)
+            actor.play(.failed, at: 10)
+            var played = false
+            run(actor, from: 10, until: 13) { _, _ in played = played || actor.clawd?.performer.player.playing == .failed }
+            XCTAssertTrue(played, "awake \(awake)")
+        }
+    }
+
     func testWithoutSpritesOrBelowTheirSizeClawdIsDrawn() throws {
         for actor in [try actor(ClawdSprites()), try actor(side: 12)] {
             actor.set(BotState(look: .tool(.edit)), at: 10)

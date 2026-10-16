@@ -28,6 +28,8 @@ final class BotActor {
     private let awake: Bool
     /// When the bot was first given a state: a staying Clawd that takes over later arrives when the drawn one did.
     private var firstSet: TimeInterval?
+    /// The event told last, and when: Clawd's sprites, taking over after it was told, still play it while it is fresh.
+    private var told: (event: BotEvent, at: TimeInterval)?
     /// The actor has shown a frame.
     private var stepped = false
     private var shown: BotRenderer.Look?
@@ -120,6 +122,7 @@ final class BotActor {
 
     /// Plays an event over the look once the bot is up (`BotMotion.play`).
     func play(_ event: BotEvent, at now: TimeInterval) {
+        told = (event, now)
         motion.play(event, at: now)
         clawd?.play(event, at: now)
         due = 0
@@ -188,6 +191,7 @@ final class BotActor {
             if let firstSet {
                 if resumes { clawd.resume(motion.state, at: now) } else { clawd.set(motion.state, at: staysBot ? firstSet : now) }
             }
+            if let told, now - told.at <= BotEvent.freshness { clawd.play(told.event, at: told.at) }
             return clawd
         }
         if clawd != nil {
