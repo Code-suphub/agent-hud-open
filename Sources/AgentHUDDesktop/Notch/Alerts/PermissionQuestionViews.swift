@@ -236,7 +236,7 @@ struct PermissionQuestionCard: View {
     }
 }
 
-private struct QuestionButton: View {
+struct QuestionButton: View {
     let title: String
     let symbol: String?
     let identifier: String
