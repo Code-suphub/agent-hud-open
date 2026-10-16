@@ -310,8 +310,16 @@ final class LogoQueueLayerView: NSView {
             }
             let stands = animates && actor != nil
             wear(stands ? nil : item?.shown.stillSign, at: index, vendor: item?.vendor, config: config)
+            if !stands { marks[index].opacity = stillOpacity(at: index) }
         }
         followBots()
+    }
+
+    /// How strongly the mark at `index` shows while it is its still logo, with bots off or motion reduced: half for no
+    /// news, which needs no motion to say.
+    private func stillOpacity(at index: Int) -> Float {
+        guard let items = applied?.config.items, index < items.count else { return 1 }
+        return items[index].shown.look == .noNews ? 0.5 : 1
     }
 
     /// Lays `sign` over the mark at `index` as a still picture of its own, or takes the one there away; a logo that
@@ -356,7 +364,7 @@ final class LogoQueueLayerView: NSView {
         guard applied?.animates == true else {
             for (index, actor) in actors.enumerated() {
                 actor?.layer.isHidden = true
-                marks[index].opacity = 1
+                marks[index].opacity = stillOpacity(at: index)
             }
             return nil
         }

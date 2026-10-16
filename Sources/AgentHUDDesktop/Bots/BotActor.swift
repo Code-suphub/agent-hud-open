@@ -404,7 +404,7 @@ struct BotMark: View {
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
         } else {
-            StillMark(vendor: vendor, size: size, sign: state.stillSign)
+            StillMark(vendor: vendor, size: size, sign: state.stillSign, faded: state.look == .noNews)
         }
     }
 }
@@ -415,11 +415,14 @@ struct StillMark: View {
     let vendor: String
     var size: CGFloat = 17
     let sign: BotSign?
+    /// The logo shows at half strength, as no news does; its sign does not.
+    var faded = false
     @Environment(\.hudLook) private var look
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         AgentLogo(vendor: vendor, size: size)
+            .opacity(faded ? 0.5 : 1)
             .overlay(alignment: .topLeading) {
                 if let sign,
                    let still = BotSigns.still(sign, form: BotForm.form(for: vendor, ground: look.appearance), side: size,

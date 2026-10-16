@@ -191,6 +191,19 @@ final class BotQueueTests: XCTestCase {
         XCTAssertNil(view.marks[0].animation(forKey: "bob"))
     }
 
+    func testNoNewsFadesTheStillLogoToo() {
+        for (bots, animates) in [(true, false), (false, true)] {
+            let (view, window) = hosted()
+            defer { BotClock.shared.drop(view); window.close() }
+            var config = queue([("Claude", false), ("Cursor", false)], bots: bots)
+            config.items[0].state = BotState(look: .noNews)
+            view.apply(config: config, light: false, scale: 2, animates: animates)
+            _ = run(view, from: CACurrentMediaTime(), frames: 2)
+            XCTAssertEqual(view.marks[0].opacity, 0.5, "bots \(bots), motion \(animates): no news needs no motion to say")
+            XCTAssertEqual(view.marks[1].opacity, 1)
+        }
+    }
+
     /// Not a benchmark: a guard against a frame becoming expensive enough to show up in the HUD's own cost.
     func testDrawingAQueueBotIsCheap() throws {
         let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))

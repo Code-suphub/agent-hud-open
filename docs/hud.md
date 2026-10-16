@@ -78,7 +78,7 @@ Each display has its own HUD and settings. Notch mode uses the physical notch or
 - A reminder's mark opens as the agent's logo and turns into its bot 0.7 s later, once its card has opened, and stays its bot while the card shows. A request's bot asks for what it waits for. A reply's bot smiles, and Clawd jumps for joy, or dances for the end of a turn of ten minutes or more. A quota window that reset, or usage resets added to an account, are good news the bot greets, Clawd with a spark. A window used up shows the logo wearing `⧗`; a warning, the plain logo.
 - The logo turns into a drawn bot in half a second: the outline relaxes, the artwork fades into the mark's colours and the eyes open.
 - One timer steps every bot, waking only when a frame is due, on a grid every bot shares: every 1/24 s for a morph, a move, a blink or a hop, 1/12 s for eyes following the pointer and every frame of a sprite, 1/6 s for a breath, and not at all while every mark rests or holds still. A bot nobody can see, in a covered window, on sleeping displays or while another user has the screen, is left out until it can be seen, and then picks up where the clock is without playing what it missed.
-- Reduce Motion, or `botLogos` off, leaves every mark its logo, and a mark that has a waiting request or a badge wears its sign over the logo, still.
+- Reduce Motion, or `botLogos` off, leaves every mark its logo, and a mark that has a waiting request or a badge wears its sign over the logo, still; a mark with no news shows its logo at half strength.
 
 ### Type sizes
 
