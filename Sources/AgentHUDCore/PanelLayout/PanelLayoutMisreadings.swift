@@ -3,7 +3,7 @@ import Foundation
 
 extension PanelLayout {
     /// What reading a layout's JSON would forgive, as sentences for the agent that sent it: a value of the wrong type,
-    /// a name this build does not know, a span's among them, columns outside 2 to 6, a width outside 480 to 720, a
+    /// a name this build does not know, a span's and a period's among them, columns outside 2 to 6, a width outside 480 to 720, a
     /// session limit outside 1 to 10, a hud style value outside its range, a property a block, the style, the sessions,
     /// the tokens, the hud or its glow does not have.
     /// Stored layouts are read forgivingly so that a newer build's layout still loads; an agent's proposal is told
@@ -48,9 +48,11 @@ extension PanelLayout {
                 found += misnamed(value, at: "\(path).ringSize", among: PanelRingSize.allCases.map(\.rawValue))
             case "span":
                 found += misnamed(value, at: "\(path).span", among: PanelSpan.allCases.map(\.rawValue))
+            case "period":
+                found += misnamed(value, at: "\(path).period", among: PanelTokenPeriod.allCases.map(\.rawValue))
             default:
                 found.append("\(path) has no property \"\(property)\"; a block takes widget, measures, hidden, hiddenRows, "
-                             + "countdown, columns, ringSize and span.")
+                             + "countdown, columns, ringSize, span and period.")
             }
         }
         return found

@@ -31,6 +31,7 @@ final class PanelToolsTests: PanelToolsCase {
         XCTAssertNil(claude["measure"], "the measure shown first is the first of measures")
         XCTAssertNil(claude["columns"], "bars have no cells")
         XCTAssertNil(claude["ringSize"])
+        XCTAssertNil(claude["period"], "bars cover no period")
         let rows = (claude["rows"]?.arrayValue ?? []).compactMap(\.objectValue)
         XCTAssertEqual(rows.map { $0["key"] }, [.string("claude-session"), .string("claude-weekly"), .string("claude-weekly-fable")])
         let session = try XCTUnwrap(rows.first)
@@ -48,6 +49,7 @@ final class PanelToolsTests: PanelToolsCase {
         for property in ["countdown", "columns", "ringSize"] {
             XCTAssertNil(deepseek[property], "a balance has no \(property) to set")
         }
+        XCTAssertEqual(deepseek["period"], .string("day"), "its estimated cost covers the token chart's period")
         let balance = try XCTUnwrap(deepseek["balances"]?.arrayValue?.first?.objectValue)
         XCTAssertEqual(balance["currency"], .string("CNY"))
         XCTAssertEqual(balance["amount"], .string("8.85"))
@@ -270,7 +272,7 @@ final class PanelToolsTests: PanelToolsCase {
         for part in ["blocks.Claude.widget is one of \"bar\", \"ring\", \"number\", \"chart\"",
                      "blocks.Claude.measures[0]: \"speed\" is not one of \"quota\", \"burn\", \"tokens\", \"cost\"",
                      "blocks.Claude.measures[1] is a string", "blocks.Claude has no property \"hide\"",
-                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, countdown, columns, ringSize and span.",
+                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, countdown, columns, ringSize, span and period.",
                      "blocks.Claude.hidden is true or false", "sections[0]: \"weather\" is not one of", "order is a list"] {
             XCTAssertTrue(names.contains(part), "\(part) — \(names)")
         }

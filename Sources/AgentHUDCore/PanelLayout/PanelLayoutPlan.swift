@@ -24,12 +24,17 @@ public struct PanelBlockPlan: Hashable, Sendable {
     /// How much of its line the block takes: half only beside another half block, where the panel has room for two;
     /// else the whole line. A block the panel leaves out is told the span the layout asks for, where it can take it.
     public let span: PanelSpan
+    /// The period the block covers where it covers one (`PanelBlockKind.takesPeriod(under:)`): the layout's, else the
+    /// latest 24 hours on a chart and the period the token chart starts from on a balance. A day for a block that covers
+    /// none.
+    public let period: PanelTokenPeriod
 
     /// The measure shown first when the panel opens: the first one offered.
     public var measure: PanelMeasure { measures.first ?? .quota }
 
     public init(key: String, kind: PanelBlockKind, widget: PanelWidget, measures: [PanelMeasure], hiddenRows: Set<String> = [],
-                countdown: Bool = true, columns: Int = 4, ringSize: PanelRingSize = .medium, span: PanelSpan = .full) {
+                countdown: Bool = true, columns: Int = 4, ringSize: PanelRingSize = .medium, span: PanelSpan = .full,
+                period: PanelTokenPeriod = .day) {
         self.key = key
         self.kind = kind
         self.widget = widget
@@ -39,6 +44,7 @@ public struct PanelBlockPlan: Hashable, Sendable {
         self.columns = columns
         self.ringSize = ringSize
         self.span = span
+        self.period = period
     }
 }
 
@@ -48,7 +54,8 @@ public struct PanelBlockPlan: Hashable, Sendable {
 ///
 /// With the default layout the plan is the default view: every block in the order given, across the whole line, each
 /// with its kind's default widget and every measure that widget offers, the three sections in their default order, the
-/// default style, five session rows of every session, and the token chart of every agent over the latest 24 hours.
+/// default style, five session rows of every session of the last day, and the token chart of every model over the latest
+/// 24 hours.
 public struct PanelLayoutPlan: Hashable, Sendable {
     /// The blocks shown, in order: those `PanelLayout.order` names first, in that order, then the others in default
     /// order, each with the span it takes (`lines`). A block is left out when the layout hides it, or hides every row it
@@ -80,7 +87,9 @@ public struct PanelLayoutPlan: Hashable, Sendable {
         let named = layout.order.filter { existing[$0] != nil }
         let keys = (named + blocks.map(\.key)).withoutRepeats
         let planned = keys.compactMap { key in
-            existing[key].flatMap { Self.plan(of: $0, changed: layout.blocks[key] ?? PanelLayout.Block()) }
+            existing[key].flatMap {
+                Self.plan(of: $0, changed: layout.blocks[key] ?? PanelLayout.Block(), tokenPeriod: layout.tokens.chartPeriod)
+            }
         }
         let width = contentWidth ?? Double(layout.style.panelWidth) - PanelLines.sideInsets
         let half = PanelLines.halfWidth(in: width, spacing: layout.style.spacing)
@@ -95,8 +104,9 @@ public struct PanelLayoutPlan: Hashable, Sendable {
 
     /// A block as a layout's change draws it; nil when the change leaves it out. A block without rows, such as a
     /// balance, is never left out for its hidden rows.
-    private static func plan(of block: PanelBlockInfo, changed change: PanelLayout.Block) -> PanelBlockPlan? {
-        let drawn = PanelBlockPlan(block, changed: change)
+    private static func plan(of block: PanelBlockInfo, changed change: PanelLayout.Block,
+                             tokenPeriod: PanelTokenPeriod) -> PanelBlockPlan? {
+        let drawn = PanelBlockPlan(block, changed: change, tokenPeriod: tokenPeriod)
         if change.hidden { return nil }
         if !block.rowKeys.isEmpty && drawn.hiddenRows.count == Set(block.rowKeys).count { return nil }
         return drawn
@@ -107,7 +117,9 @@ extension PanelBlockPlan {
     /// How a layout's change draws a block, whether or not the change also leaves it out of the panel: what an agent
     /// is told of a block it has hidden. What the block has nothing to set for is its default, and a span is the one
     /// asked for where the block can take it, before the panel sets its blocks in lines.
-    init(_ block: PanelBlockInfo, changed change: PanelLayout.Block) {
+    /// - tokenPeriod: the period the layout's token chart starts from, which a balance covers where its change gives
+    ///   none.
+    init(_ block: PanelBlockInfo, changed change: PanelLayout.Block, tokenPeriod: PanelTokenPeriod) {
         let kind = block.kind
         let widget = kind.widget(for: change.widget)
         var columns: Int = PanelLayout.Block.defaultColumns
@@ -117,8 +129,11 @@ extension PanelBlockPlan {
         var ringSize: PanelRingSize = .medium
         if kind.takesRingSize(under: widget), let asked = change.ringSize { ringSize = asked }
         let span: PanelSpan = change.span == .half && kind.takesHalf(under: widget) ? .half : .full
+        var period: PanelTokenPeriod = .day
+        if kind.takesPeriod(under: widget) { period = change.period ?? kind.defaultPeriod(tokens: tokenPeriod) }
         self.init(key: block.key, kind: kind, widget: widget, measures: kind.measures(change.measures, under: widget),
                   hiddenRows: Set(block.rowKeys).intersection(change.hiddenRows),
-                  countdown: change.countdown || !kind.takesCountdown, columns: columns, ringSize: ringSize, span: span)
+                  countdown: change.countdown || !kind.takesCountdown, columns: columns, ringSize: ringSize, span: span,
+                  period: period)
     }
 }
