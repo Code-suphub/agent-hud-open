@@ -126,7 +126,8 @@ extension ClawdClips {
             ],
             pointsAtCard: ClawdFrame(pointing, 18),
             miniShift: 13,
-            signShifts: [:],
+            // Clear of the claw raised to wave, and of the arms thrown up before pointing.
+            signShifts: [.waving: ClawdOffset(x: 7), .pointing: ClawdOffset(x: 5)],
             frameCounts: [
                 .dancingHappy: 40, .desktop: 88, .dizzy: 41, .excited: 23, .facepalm: 35, .jumpingHappy: 21,
                 .laptop: 43, .lightbulb: 50, .lookingAround: 31, .lookingAroundEyesOnly: 42, .meditating: 60,
