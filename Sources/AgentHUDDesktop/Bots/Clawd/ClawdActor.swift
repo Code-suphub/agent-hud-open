@@ -34,7 +34,8 @@ final class ClawdActor {
     private var stale = false
     /// When the fade under way ends.
     private var fadesUntil: TimeInterval?
-    /// Since when the mark has rested as its logo.
+    /// Since when the mark has rested as its logo, its visits as its bot counted in: a calm mark visits more often than
+    /// once a minute.
     private var restingSince: TimeInterval?
     /// The mark was out before this actor was built for it, and takes up its strength at once: nothing has changed.
     private var resumes: Bool
@@ -104,8 +105,10 @@ final class ClawdActor {
             back.isHidden = true
             back.contents = nil
         }
-        restingSince = picture == nil ? restingSince ?? now : nil
-        if let since = restingSince, now - since >= Self.keepsFrames - BotPace.slack, baker.count > 0 { baker.purge() }
+        if picture == nil { restingSince = restingSince ?? now } else if !performer.state.look.isCalm { restingSince = nil }
+        if picture == nil, let since = restingSince, now - since >= Self.keepsFrames - BotPace.slack, baker.count > 0 {
+            baker.purge()
+        }
 
         // Once Clawd has faded into the logo, and the logo back to full strength, the queue's own mark takes over.
         if restsHidden, next == .logo, seen.map({ $0 == .logo }) ?? true, opacity == 1, layer.opacity == 1, fadesUntil == nil {
@@ -143,7 +146,7 @@ final class ClawdActor {
         var soonest = performer.due
         func take(_ time: TimeInterval?) { if let time { soonest = min(soonest ?? time, time) } }
         take(fadesUntil)
-        if let since = restingSince, baker.count > 0 { take(Self.frame(after: since + Self.keepsFrames)) }
+        if performer.picture == nil, let since = restingSince, baker.count > 0 { take(Self.frame(after: since + Self.keepsFrames)) }
         return soonest.map { max(0, $0 - now) }
     }
 

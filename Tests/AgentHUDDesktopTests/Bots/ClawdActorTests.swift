@@ -341,6 +341,26 @@ final class ClawdActorTests: XCTestCase {
         XCTAssertNil(step(actor, last + 1), "a mark with no news rests with no clock")
     }
 
+    /// An idle mark visits as its bot every 20 to 35 s, so it never rests a whole minute as its logo; the time it spends
+    /// at rest is counted across its visits, and its frames go between two of them.
+    func testAnIdleMarkLetsItsFramesGoBetweenVisits() throws {
+        let actor = try actor()
+        actor.set(BotState(look: .tool(.edit)), at: 10)
+        run(actor, from: 10, until: 70)
+        let clawd = try XCTUnwrap(actor.clawd)
+        actor.set(BotState(), at: 70)
+        var visits = 0, showing = false, purged = false, steps = 0
+        run(actor, from: 70, until: 70 + 1800) { _, _ in
+            steps += 1
+            if clawd.performer.picture != nil, !showing { visits += 1 }
+            showing = clawd.performer.picture != nil
+            if !showing, clawd.baker.count == 0 { purged = true }
+        }
+        XCTAssertGreaterThan(visits, 10, "an idle mark visits")
+        XCTAssertTrue(purged, "its frames go between visits")
+        XCTAssertLessThan(steps, 1800 * 12, "it is not woken more than its frames ask")
+    }
+
     // MARK: Reminder cards
 
     func testAReminderCardOpensAsItsLogoThenPlaysItsClipAndStands() throws {
