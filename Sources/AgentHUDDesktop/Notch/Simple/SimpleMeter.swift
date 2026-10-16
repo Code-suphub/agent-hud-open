@@ -101,8 +101,9 @@ struct SimpleMeterConfig: Equatable {
     var ringWidth: CGFloat
     var showsRings: Bool
     var showsNumbers: Bool
-    /// Marks turn into bots while their agents work, as a logo queue's do: Settings' `botLogos` on screen. A picture
-    /// leaves it off, since a still has no motion to show.
+    /// Marks turn into bots while their agents work, as a logo queue's do: Settings' `botLogos`, on screen and in an
+    /// agent's picture of the resting HUD (`HUDPictureRenderer`). Left out, it is off, for a panel that is only measured
+    /// or drawn still in a snapshot.
     var bots: Bool
     /// The panel comes back after a card hid it: its bots take up their looks at once (`DockMemory`).
     var resumes = false

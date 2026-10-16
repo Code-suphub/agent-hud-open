@@ -19,13 +19,20 @@ public enum MCPTools {
         and restyle one screen's resting HUD. A change is a draft until the user presses Save in the panel.
         """
 
+    /// The app's own settings are told so that an agent can foresee what its draft does beyond the HUD, and are told
+    /// read only, since no tool changes a Settings switch.
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
         with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
         widgets and measures each block accepts; how many sessions it lists and its token chart's period and total; \
-        and the attached screens, each with its resting HUD's style, the look it draws now and the agents it can \
-        show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the \
-        panel shows them, in the application's language.
+        the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show and \
+        agentPanelWidth, the width of one agent's own panel on a dock that separates its agents; and app, the whole \
+        app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style \
+        draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into \
+        bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are written \
+        in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it \
+        before changing the layout; block, row and screen keys come from here. Names are written as the panel shows \
+        them, in the application's language.
         """
 
     /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in, the
