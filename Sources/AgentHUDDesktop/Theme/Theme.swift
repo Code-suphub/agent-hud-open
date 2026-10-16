@@ -84,8 +84,6 @@ struct Theme {
 
     /// The HUD's surface: the island's silhouette, a detached card, the Simple panel and the panel's picture.
     private(set) var islandFill: Color
-    /// How opaque `islandFill` is on the Simple panel at rest and on the line that grows out of it.
-    private(set) var restingFillOpacity: Double
     /// The hairline round a surface that floats free of the screen's edge: the Simple panel and a detached card.
     private(set) var islandOutline: Color
     /// The hairline round the island while the desktop behind it is light, so the two do not run together.
@@ -184,7 +182,6 @@ struct Theme {
         sidebarText: Color(hex: 0xd0d0d5),
         dotEnded: Color(hex: 0x6e6e73),
         islandFill: Color.black,
-        restingFillOpacity: 0.82,
         islandOutline: Color.white.opacity(0.14),
         desktopOutline: Color.white.opacity(0.18),
         meterTrack: Color.white.opacity(0.14),
@@ -222,7 +219,6 @@ struct Theme {
         // The light HUD: the window's near-white with its ink, hairlines of black at 8 to 10 %, an edge round a shell
         // that stands on a light desktop, and boxes raised in white or set in a shade of black.
         islandFill: Color(hex: 0xf5f5f7),
-        restingFillOpacity: 0.9,
         islandOutline: Color.black.opacity(0.10),
         desktopOutline: Color.black.opacity(0.10),
         meterTrack: Color.black.opacity(0.10),

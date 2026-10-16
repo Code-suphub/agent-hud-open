@@ -31,7 +31,7 @@ struct SimpleMeterView: View {
         .frame(width: panel.width, height: panel.height, alignment: .leading)
         .background {
             if !onIsland {
-                HUDSurface(shape, look: look, fill: theme.islandFill.opacity(theme.restingFillOpacity), contact: nil)
+                HUDSurface(shape, look: look, fill: theme.islandFill, contact: nil)
                     .overlay { shape.strokeBorder(look.outline(theme.islandOutline, standIn: glassStandIn), lineWidth: 1) }
             }
         }
