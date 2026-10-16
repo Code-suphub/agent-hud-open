@@ -13,7 +13,11 @@ final class ClawdBakerTests: XCTestCase {
         let row = image.bytesPerRow / 4
         return data.withUnsafeBytes { raw in
             let words = raw.bindMemory(to: UInt32.self)
-            return (0..<image.height).flatMap { y in (0..<image.width).map { words[y * row + $0] } }
+            var all: [UInt32] = []
+            for y in 0..<image.height {
+                for x in 0..<image.width { all.append(words[y * row + x]) }
+            }
+            return all
         }
     }
 

@@ -62,7 +62,8 @@ final class ClawdActorTests: XCTestCase {
     // MARK: Sprites or the drawn Clawd
 
     func testClaudesMarkPlaysTheSpritesForEveryLook() throws {
-        let looks: [BotLook] = [.permission, .question, .plan, .compacting, .thinking, .plain] + BotTool.allCases.map { .tool($0) }
+        let tools: [BotLook] = BotTool.allCases.map { BotLook.tool($0) }
+        let looks: [BotLook] = [.permission, .question, .plan, .compacting, .thinking, .plain] + tools
         for look in looks {
             let actor = try actor()
             actor.set(BotState(look: look), at: 10)

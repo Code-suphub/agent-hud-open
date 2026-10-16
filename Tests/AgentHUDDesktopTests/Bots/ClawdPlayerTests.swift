@@ -86,7 +86,10 @@ final class ClawdPlayerTests: XCTestCase {
 
     /// The frames of one sprite as "tick Sprite index" lines, one tick apart from `tick`.
     private func run(from tick: Int, _ sprite: ClawdSpriteName, _ frames: [Int], ticks: Int = 1) -> [String] {
-        frames.enumerated().map { "\(tick + $0.offset * ticks) \(sprite.rawValue) \($0.element)" }
+        frames.enumerated().map { (offset: Int, frame: Int) -> String in
+            let at: Int = tick + offset * ticks
+            return "\(at) \(sprite.rawValue) \(frame)"
+        }
     }
 
     private func frame(_ shots: [Shot], at tick: Int) -> Shot? { shots.last { $0.tick <= tick } }
@@ -249,7 +252,8 @@ final class ClawdPlayerTests: XCTestCase {
         let shots = film([show(.thinking, at: 0)], until: 40)
         let cycles = starts(of: ClawdFrame(.thinking, 6), in: shots)
         // The loop starts on tick 2 and runs in full for 20 seconds.
-        XCTAssertEqual(Array(cycles.prefix(19)), (0..<19).map { 2 + 14 * $0 })
+        let wanted: [Int] = (0..<19).map { (cycle: Int) -> Int in 2 + 14 * cycle }
+        XCTAssertEqual(Array(cycles.prefix(19)), wanted)
         XCTAssertEqual(cycles[18], 254)
         // From then on its first frame stays three seconds more, and the rest of the cycle plays.
         XCTAssertEqual(frame(shots, at: 290)?.picture?.frame, ClawdFrame(.thinking, 6))

@@ -194,7 +194,11 @@ final class BotFrameTests: XCTestCase {
             // The pixels the copy and the gap round it changed, in a 160-pixel frame where the mark is 100.
             var xs: [Int] = [], ys: [Int] = []
             for y in 0..<160 {
-                for x in 0..<160 where abs(Int(alone[(y * 160 + x) * 4 + 3]) - Int(helped[(y * 160 + x) * 4 + 3])) > 60 {
+                for x in 0..<160 {
+                    // Each step on its own line: as one condition, Xcode 16.4's type checker gives up on it.
+                    let index: Int = (y * 160 + x) * 4 + 3
+                    let change: Int = abs(Int(alone[index]) - Int(helped[index]))
+                    guard change > 60 else { continue }
                     xs.append(x)
                     ys.append(y)
                 }
@@ -213,7 +217,12 @@ final class BotFrameTests: XCTestCase {
             let main = CGRect(x: (spec.center.x - spec.radius + 0.3) * 100, y: (spec.center.y - spec.radius + 0.3) * 100,
                               width: 2 * spec.radius * 100, height: 2 * spec.radius * 100)
             var moved = 0
-            for y in box.1 { for x in box.0 where !main.contains(CGPoint(x: x, y: y)) && looking[(y * 160 + x) * 4 + 3] != helped[(y * 160 + x) * 4 + 3] { moved += 1 } }
+            for y in box.1 {
+                for x in box.0 where !main.contains(CGPoint(x: x, y: y)) {
+                    let index: Int = (y * 160 + x) * 4 + 3
+                    if looking[index] != helped[index] { moved += 1 }
+                }
+            }
             XCTAssertEqual(moved, 0, "\(vendor): the copy stays still")
         }
     }
