@@ -232,13 +232,14 @@ struct BotSpec: Sendable {
         // 0.14 to 0.86. The finished bot settles by that difference, so its top and bottom line up with theirs.
         "Antigravity": BotSpec(reach: 0.75, shape: .outline(keep: 0.5, smooth: 16), face: CGPoint(x: 0, y: -0.2),
                                settle: 0.093),
-        // A big fat fish: the whale's blue ball with its pale belly, a little hand low on each side and a fin on its back,
-        // swept back a little left of the top, clear of the sign over its head and of the copy at its lower right.
+        // A big fat fish: the whale's blue ball with its pale belly, a small triangular fin low on each side for hands and
+        // a fin on its back, swept back a little left of the top, clear of the sign over its head. The copy for sub-agents
+        // stands in front of the hand on its side.
         "DeepSeek": BotSpec(face: CGPoint(x: 0, y: -0.14),
-                            decor: [.fins([Fin(root: CGPoint(x: -0.5, y: 0.34), angle: 150, length: 0.82, base: 0.13, tip: 0.23,
-                                               hand: -1),
-                                           Fin(root: CGPoint(x: 0.5, y: 0.34), angle: 30, length: 0.82, base: 0.13, tip: 0.23,
-                                               hand: 1),
+                            decor: [.fins([Fin(root: CGPoint(x: -0.5, y: 0.38), angle: 142, length: 0.7, base: 0.27,
+                                               tip: 0.06, hand: -1),
+                                           Fin(root: CGPoint(x: 0.5, y: 0.38), angle: 38, length: 0.7, base: 0.27,
+                                               tip: 0.06, hand: 1),
                                            Fin(root: CGPoint(x: -0.12, y: -0.7), angle: -100, length: 0.64, base: 0.34, tip: 0.15,
                                                sweep: 0.22)],
                                           RGBA(hex: 0x3f5ae6)),
