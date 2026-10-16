@@ -5,7 +5,7 @@ import Foundation
 ///     Walking:{cat:"Core",w:24,h:18,fps:12,palette:["#141413",…],base:"…",deltas:"…".split("("),a0:[0,2,24,16],standMatch:1}
 ///
 /// Agent HUD bundles the sprites its clips play as JSON, which `scripts/clawd-sprites.py` copies out of the game's
-/// script with every field unchanged and the deltas always a list. JSON is a literal of the same kind, and the
+/// script: the nine fields it reads, each value unchanged, and the deltas always a list. JSON is a literal of the same kind, and the
 /// reader takes the game's own literals too, in any key order; a sprite that does not read is passed over.
 ///
 /// A sprite's frames are kept as the game keeps them: `base` is the first frame, one base-36 palette index per pixel

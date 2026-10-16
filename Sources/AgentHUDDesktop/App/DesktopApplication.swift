@@ -74,9 +74,9 @@ public final class DesktopApplication {
         settings.update { $0.applyLiveStatusDefaults(sources: sources) }
         WindowLook.source = { [weak self] screen in self?.settings.windowLook(on: screen) }
         applyAppearance()
-        // Clawd plays the Claude app's own sprites, bundled with Agent HUD and decoded once its first mark is built. A
-        // demo, whose pictures may be recorded and shown anywhere, keeps the Clawd Agent HUD draws itself.
-        if !options.demo, options.recordPath == nil { ClawdSprites.shared.source = .shared }
+        // Clawd plays the Claude app's own sprites, bundled with Agent HUD and decoded once its first mark is built, in a
+        // demo and a recording too.
+        ClawdSprites.shared.source = .shared
         let notch = IslandController(store: store, settings: settings, additionalHUDControls: additionalHUDControls,
                                      startedAt: startedAt)
         notch.onOpenStats = { [weak self] in self?.showStats() }

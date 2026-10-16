@@ -117,7 +117,7 @@ def game_script(asar):
 
 
 def find_sprite(script, name):
-    """The first object written for `name` that holds a sprite which decodes, with its fields in the game's order."""
+    """The first object written for `name` that holds a sprite which decodes: the nine fields Agent HUD reads, in its own order."""
     for match in re.finditer(r"(?<![\w$])([\"']?)" + re.escape(name) + r"\1:\{", script):
         try:
             fields, _ = Literal(script, match.end() - 1).value()
