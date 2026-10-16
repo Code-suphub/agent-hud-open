@@ -71,6 +71,44 @@ final class PanelToolsTests: PanelToolsCase {
         XCTAssertEqual(tokens["onInSettings"], .bool(false))
     }
 
+    /// What the whole app is set to is read with the panel as Settings has it, the language its names are written in
+    /// beside the one chosen, and every tool's answer carries it; none changes it, and a call that tries is refused.
+    func testTheAppsSettingsAreReadAndNoToolChangesThem() throws {
+        XCTAssertEqual(try result(MCPTools.getPanel)["app"], .object([
+            "appearance": .string("system"), "matchScreen": .bool(false), "botLogos": .bool(true),
+            "language": .string("system"), "writtenIn": .string("en"),
+            "hover": .object(["pressOptionToOpen": .bool(false), "openAtTopEdge": .bool(false),
+                              "delayMs": .integer(400), "collapseDelayMs": .integer(200)]),
+        ]), "the defaults, with the names in English as the tests write them")
+
+        settings.update {
+            $0.appearance = .light
+            $0.appearanceFollowsScreen = true
+            $0.botLogos = false
+            $0.language = .zhHans
+            $0.requiresOptionToOpen = true
+            $0.openImmediatelyAtTop = true
+            $0.hoverDelayMs = 650
+            $0.collapseDelayMs = 0
+        }
+        changes = 0
+        let saved = settings.settings
+        let app: JSONValue = .object([
+            "appearance": .string("light"), "matchScreen": .bool(true), "botLogos": .bool(false),
+            "language": .string("zh-Hans"), "writtenIn": .string("zh-Hans"),
+            "hover": .object(["pressOptionToOpen": .bool(true), "openAtTopEdge": .bool(true),
+                              "delayMs": .integer(650), "collapseDelayMs": .integer(0)]),
+        ])
+        XCTAssertEqual(try result(MCPTools.getPanel)["app"], app)
+        XCTAssertEqual(try result(MCPTools.setPanelLayout, ["hiddenSections": .array([.string("tokens")])])["app"], app,
+                       "a proposal answers with the panel as get_panel reads it")
+        XCTAssertEqual(try result(MCPTools.discardPanelDraft)["app"], app)
+        let refused = try refusal(["app": .object(["botLogos": .bool(true)])])
+        XCTAssertTrue(refused.contains("Unknown: \"app\"."), refused)
+        XCTAssertEqual(settings.settings, saved)
+        XCTAssertEqual(changes, 0, "no tool changes a Settings switch")
+    }
+
     /// A window's name is how the person who looks at the panel calls the row, so it follows the application's
     /// language as the panel does; keys, notes and refusals do not.
     func testARowIsNamedAsThePanelNamesItInTheApplicationsLanguage() throws {

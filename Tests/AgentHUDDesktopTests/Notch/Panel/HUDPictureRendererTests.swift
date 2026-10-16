@@ -114,6 +114,24 @@ final class HUDPictureRendererTests: XCTestCase {
         XCTAssertEqual(picture.height, Double(strip.height + 2 * HUDPictureRenderer.margin), accuracy: 1)
     }
 
+    /// A Simple panel's marks in the picture follow Bot logos, as the dock's do and as the panel on screen does, and the
+    /// panel is the same size either way. Whether a bot is out also depends on Reduce Motion, which this does not read.
+    func testASimplePanelsMarksFollowBotLogos() throws {
+        layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
+        var sizes: [CGSize] = []
+        for on in [true, false] {
+            store.settings.update { $0.botLogos = on }
+            let renderer = renderer()
+            XCTAssertEqual(renderer.placement.mode, .simple, "a switch of the whole app leaves the style draft")
+            XCTAssertEqual(renderer.simpleMeter.bots, on)
+            let dock = LogoQueueConfig(items: [], placement: renderer.placement, settings: store.settings.settings)
+            XCTAssertEqual(renderer.simpleMeter.bots, dock.bots, "as a dock's picture follows it")
+            let picture = try XCTUnwrap(renderer.picture())
+            sizes.append(CGSize(width: picture.width, height: picture.height))
+        }
+        XCTAssertEqual(sizes.first, sizes.last)
+    }
+
     /// The picture is drawn in the screen's look: over the same backdrop, a Simple panel's own fill is black in the
     /// standard look and the light surface in the light one, and the panel is the same size in both.
     func testASimplePanelIsDrawnInTheScreensLook() throws {
