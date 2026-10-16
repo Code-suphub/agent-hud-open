@@ -48,12 +48,20 @@ struct BotPose: Equatable, Sendable {
     }
 }
 
-/// Where a bot's arms and legs are, in whole steps of its pixel art (`BotSpec.Limbs`). Bots without limbs keep it at rest.
+/// Where a sprite is, for a bot drawn as pixel art with limbs (`BotSpec.Limbs`): its arms and legs, where the whole
+/// body has stepped or hopped to, and the sign over its head, all in whole steps of the art. Other bots keep it at rest.
 struct BotLimbs: Hashable, Sendable {
     /// How far each arm is raised: 0 at its side, 1 a step up, 2 up and out.
     var left = 0, right = 0
-    /// The pair of legs lifted: 0 neither, 1 the first and third, 2 the second and fourth.
+    /// The legs lifted: 0 none, 1 the first and third, 2 the second and fourth, 3 all four, tucked up for a jump.
     var lifted = 0
+    /// How far the whole body has stepped aside or hopped, right and down positive.
+    var x = 0, y = 0
+    /// Over its head while its agent works: Claude Code's spinner, a frame of its star from 1 (a dot) to 6
+    /// (the fullest); 0 for none.
+    var spinner = 0
+    /// Over its head while a request waits: an exclamation mark.
+    var exclaims = false
 }
 
 /// How long a bot can go without a frame. Every frame it is drawn costs a picture or at least a move of its
@@ -84,8 +92,10 @@ struct BotMotion: Sendable {
     var period: TimeInterval = 3
     /// Degrees per second the body turns under the face while awake.
     var spin: CGFloat = 0
-    /// The body has arms and legs to move.
+    /// The body has arms and legs to move, and is moved as pixel art: in whole steps, with no breathing.
     var limbed = false
+    /// One step of a limbed body's art, as a share of the mark's side: how far it moves the whole body at a time.
+    var stepShare: CGFloat = 0
 
     private(set) var phase: BotPhase = .idle
     private(set) var since: TimeInterval = -10
@@ -119,8 +129,8 @@ struct BotMotion: Sendable {
     private struct Act {
         enum Kind: CaseIterable {
             case glance, blinkTwice, squint, widen, smile, inspect, tilt, stretch, wiggle, turn
-            /// For a body with limbs: one arm up and waving; both arms tapping in turn; the legs stepping in place.
-            case wave, type, scuttle
+            /// For a body with limbs: one arm up and waving; a few steps aside and back; a jump.
+            case wave, scuttle, hop
         }
         var kind: Kind
         var start: TimeInterval
@@ -136,6 +146,7 @@ struct BotMotion: Sendable {
     mutating func fit(_ spec: BotSpec) {
         spin = spec.spin
         limbed = spec.limbs != nil
+        stepShare = spec.limbs.map { $0.pixel / 2 * spec.radius } ?? 0
     }
 
     /// Nothing left to draw or wait for: the logo is back and at rest.
@@ -228,11 +239,14 @@ struct BotMotion: Sendable {
         } else if morph > 0.5 {
             pose.x += 0.025 * face.look
         }
+        limbs = limbed && arrived ? stance(age: age, now: now) : BotLimbs()
+        // A sprite's steps and hops move the whole picture, a step of its art at a time.
+        pose.x += CGFloat(limbs.x) * stepShare * morph
+        pose.y += CGFloat(limbs.y) * stepShare * morph
 
         if arrived, !actsInPlace || morph > 0 { look(age: age, now: now, dt: dt, aim: aim, swell: swell) }
         else { (following, blinking) = (false, false) }
         if arrived { keep(age: age, now: now, dt: dt) }
-        limbs = limbed && arrived ? stance(age: age, now: now) : BotLimbs()
         wait = nextFrame(now: now, age: age, wanted: wanted)
     }
 
@@ -283,7 +297,8 @@ struct BotMotion: Sendable {
         let t = CGFloat(age)
         switch phase {
         case .working, .idle, .opened:
-            // Breathing changes the body's shape around its fixed centre.
+            // Breathing changes the body's shape around its fixed centre. Pixel art keeps its shape.
+            guard !limbed else { break }
             let breath = 2 * CGFloat.pi * CGFloat(age / period)
             pose.scaleX = 1 + 0.03 * sin(2 * breath)
             pose.scaleY = 1 - 0.03 * sin(2 * breath)
@@ -299,7 +314,8 @@ struct BotMotion: Sendable {
             pose.scaleY *= raised
             // A knock every few seconds, until it is answered.
             let cycle = (t - 1.2).truncatingRemainder(dividingBy: 2.6)
-            if t > 1.2, cycle < 0.55 {
+            // A body with limbs jumps for its knock instead (`stance`).
+            if t > 1.2, cycle < 0.55, !limbed {
                 let x = cycle / 0.55
                 pose.rotation = 8 * sin(2 * .pi * 2.5 * x) * (1 - x)
             }
@@ -311,7 +327,8 @@ struct BotMotion: Sendable {
                 pose.y = -0.1 * pop
             }
         }
-        guard let act else { return pose }
+        // A sprite's acts move it in steps (`stance`), never by turning or stretching the picture.
+        guard let act, !limbed else { return pose }
         switch act.kind {
         case .tilt: pose.rotation += act.side * 9 * swell
         case .stretch:
@@ -347,6 +364,8 @@ struct BotMotion: Sendable {
                     target.lean = act.side * swell
                     target.look += (act.side * 0.6 - target.look) * swell
                     target.lookY -= target.lookY * swell
+                case .stretch where limbed: target.open = 1 - 0.9 * swell
+                case .hop: target.wide = 1 + 0.2 * swell
                 default: break
                 }
             }
@@ -412,36 +431,76 @@ struct BotMotion: Sendable {
         kept.scale += (scale - kept.scale) * ease
     }
 
-    /// Where the arms and legs are now, in whole steps, as pixel art moves: a hand up while a request waits, waved
-    /// through the hop and each knock; both arms up for a reply; and whatever the act in hand moves.
+    /// Where the sprite is now, in whole steps of its art. While its agent works, Claude Code's spinner turns over its
+    /// head and the sprite types, a hand at a time, in bursts of three seconds with a pause between. While a request waits an exclamation mark stands there; the sprite waves both arms in turn through the hop
+    /// and jumps through each knock, and keeps a hand up between knocks. A reply gets a dance: arms up in turn and a
+    /// jump on every other beat. Then whatever the act in hand moves.
     private func stance(age: TimeInterval, now: TimeInterval) -> BotLimbs {
         var limbs = BotLimbs()
         func beat(_ seconds: TimeInterval, _ every: TimeInterval) -> Int { Int(max(0, seconds) / every) }
         switch phase {
-        case .asking:
-            let knock = (age - 1.2).truncatingRemainder(dividingBy: 2.6)
-            limbs.right = age < 1.2 || knock < 0.55 ? 2 - beat(age, 0.15) % 2 : 2
-        case .done:
-            if age < 1.25 {
-                limbs.left = 2 - (age < 0.3 ? 0 : beat(age - 0.3, 0.2) % 2)
-                limbs.right = limbs.left
+        case .working:
+            // Its six shapes out and back.
+            let frame = beat(now, 0.12) % 10
+            limbs.spinner = frame < 6 ? frame + 1 : 11 - frame
+            if age.truncatingRemainder(dividingBy: 4.5) < 3 {
+                let tap = beat(age, 0.13)
+                limbs.left = tap % 2
+                limbs.right = 1 - limbs.left
+                // Leaning into the keys every other pair of taps.
+                limbs.y = tap / 2 % 2
             }
-        case .working, .idle, .opened:
+        case .asking:
+            limbs.exclaims = true
+            let knock = (age - 1.2).truncatingRemainder(dividingBy: 2.6)
+            if age < 1.2 || knock < 0.55 {
+                limbs.left = 1 + beat(age, 0.15) % 2
+                limbs.right = 3 - limbs.left
+                if age >= 1.2, beat(knock, 0.14) % 2 == 0 {
+                    limbs.y = -2
+                    limbs.lifted = 3
+                }
+            } else {
+                limbs.right = 2
+            }
+        case .done:
+            if age < 1.6 {
+                let step = beat(age, 0.2)
+                limbs.left = step % 2 == 0 ? 2 : 0
+                limbs.right = 2 - limbs.left
+                if step % 2 == 1 {
+                    limbs.y = -2
+                    limbs.lifted = 3
+                }
+            }
+        case .idle, .opened:
             break
         }
         guard let act, phase.staysInPlace else { return limbs }
         let since = now - act.start, ending = since > act.length - 0.15
+        func frame(_ count: Int) -> Int { min(count - 1, beat(since, act.length / Double(count))) }
+        // An act of the body's takes its arms and legs from whatever they were doing; the face's acts leave them.
+        if [.wave, .scuttle, .hop, .stretch].contains(act.kind) { (limbs.left, limbs.right, limbs.y) = (0, 0, 0) }
         switch act.kind {
         case .wave:
+            // A small jump to say hello, then the arm on the pointer's side up and waving.
+            if since < 0.24 { limbs.y = -1 }
             let arm = since < 0.12 || ending ? 1 : 2 - beat(since - 0.12, 0.16) % 2
             if act.side < 0 { limbs.left = arm } else { limbs.right = arm }
-        case .type:
-            if !ending {
-                limbs.left = beat(since, 0.12) % 2
-                limbs.right = 1 - limbs.left
-            }
         case .scuttle:
-            if !ending { limbs.lifted = 1 + beat(since, 0.12) % 2 }
+            // Sideways, as crabs go: two steps out, back past where it stood, and home, a pair of legs up on each step.
+            let path = [0, 1, 2, 1, 0, -1, -2, -1, 0], step = frame(path.count)
+            limbs.x = path[step] * (act.side < 0 ? -1 : 1)
+            limbs.lifted = step == 0 || step == path.count - 1 ? 0 : 1 + step % 2
+        case .hop:
+            // Down onto bent legs, up three steps with the arms flung up, and down onto bent legs again.
+            let path: [(y: Int, lifted: Int, arms: Int)] = [(1, 3, 0), (-2, 0, 1), (-3, 0, 2), (-3, 0, 2), (-2, 0, 1),
+                                                          (0, 0, 0), (1, 3, 0), (0, 0, 0)]
+            let at = path[frame(path.count)]
+            (limbs.y, limbs.lifted, limbs.left, limbs.right) = (at.y, at.lifted, at.arms, at.arms)
+        case .stretch:
+            // Arms up and out and a step taller, eyes shut, as at a yawn.
+            if since > 0.15, !ending { (limbs.left, limbs.right, limbs.y) = (2, 2, -1) }
         default:
             break
         }
@@ -455,11 +514,15 @@ struct BotMotion: Sendable {
                                           (.inspect, 2), (.tilt, 3), (.stretch, 2), (.wiggle, 2)]
         if spin != 0 { pool.append((.turn, 3)) }
         if limbed {
-            // Busy hands while its agent works, a wave for whoever looks, a few steps now and then.
+            // A sprite does not tilt or wobble; its stretch reaches up. Now and then it steps aside, jumps or waves
+            // between bursts of typing; a wave and a jump for whoever looks; and a short visit is always one of its
+            // own moves.
+            pool.removeAll { $0.0 == .tilt || $0.0 == .wiggle }
             switch phase {
-            case .working: pool += [(.type, 9), (.scuttle, 3), (.wave, 1)]
-            case .opened: pool += [(.wave, 4), (.scuttle, 2), (.type, 1)]
-            case .idle, .asking, .done: pool += [(.wave, 3), (.scuttle, 3)]
+            case .working: pool += [(.scuttle, 4), (.hop, 3), (.wave, 1)]
+            case .opened: pool += [(.wave, 4), (.hop, 2), (.scuttle, 2)]
+            case .idle: pool = [(.scuttle, 3), (.hop, 3), (.stretch, 3), (.wave, 2)]
+            case .asking, .done: break
             }
         }
         var roll = random.unit() * pool.reduce(0) { $0 + $1.1 }
@@ -485,8 +548,8 @@ struct BotMotion: Sendable {
         case .wiggle: length = 0.6
         case .turn: length = 0.7
         case .wave: length = 1.4
-        case .type: length = 1.6 + random.unit() * 0.8
         case .scuttle: length = 1.1
+        case .hop: length = 0.8
         }
         let angle = random.unit() * 2 * .pi
         return Act(kind: kind, start: now, length: length, side: random.unit() < 0.5 ? -1 : 1,

@@ -70,20 +70,37 @@ final class BotMotionTests: XCTestCase {
         XCTAssertEqual(plain.limbs, BotLimbs())
     }
 
-    func testABotWithArmsTypesAndStepsWhileItsAgentWorks() {
+    func testABotWithArmsTypesUnderTheSpinnerAndStepsAndJumpsWhileItsAgentWorks() {
         let seen = limbs([(.working, 0)], for: 60).map(\.1)
-        XCTAssertTrue(seen.contains(BotLimbs(left: 1, right: 0)) && seen.contains(BotLimbs(left: 0, right: 1)), "typing, a hand at a time")
-        XCTAssertTrue(seen.contains { $0.lifted == 1 } && seen.contains { $0.lifted == 2 }, "stepping, a pair of legs at a time")
-        XCTAssertFalse(seen.contains { $0.left > 0 && $0.lifted > 0 }, "one thing at a time")
+        XCTAssertTrue(seen.allSatisfy { (1...6).contains($0.spinner) && !$0.exclaims }, "Claude Code's spinner over its head throughout")
+        XCTAssertEqual(Set(seen.map(\.spinner)).count, 6, "through all six of its shapes")
+        XCTAssertTrue(seen.contains { $0.left == 1 && $0.right == 0 } && seen.contains { $0.left == 0 && $0.right == 1 },
+                      "typing, a hand at a time")
+        XCTAssertTrue(seen.contains { abs($0.x) == 2 && $0.lifted > 0 }, "stepping aside, legs going")
+        XCTAssertTrue(seen.contains { $0.y == -3 && $0.left == 2 && $0.right == 2 }, "jumping, arms flung up")
+        XCTAssertTrue(seen.allSatisfy { abs($0.x) <= 2 && (-3...1).contains($0.y) }, "never far from its place")
     }
 
-    func testABotWithArmsRaisesAHandWhileAskingAndBothForAReply() {
-        let asking = limbs([(.asking, 0)], for: 6)
-        XCTAssertTrue(asking.filter { $0.0 > 1.25 }.allSatisfy { $0.1.right >= 1 && $0.1.left == 0 }, "a hand up until it is answered")
-        XCTAssertTrue(asking.filter { $0.0 > 2 && $0.0 < 3.5 }.allSatisfy { $0.1.right == 2 }, "held still between knocks")
-        let reply = limbs([(.working, 0), (.done, 1)], for: 4)
-        XCTAssertTrue(reply.contains { $0.0 > 1 && $0.1.left == 2 && $0.1.right == 2 }, "both arms up")
-        XCTAssertTrue(reply.filter { $0.0 > 2.3 }.allSatisfy { $0.1 == BotLimbs() }, "and down again")
+    func testABotWithArmsCallsForAnAnswerAndDancesForAReply() {
+        let asking = limbs([(.asking, 0)], for: 6).map(\.1)
+        XCTAssertTrue(asking.allSatisfy { $0.exclaims && $0.spinner == 0 }, "an exclamation mark over its head")
+        XCTAssertTrue(asking.contains { $0.left == 2 && $0.right == 1 } && asking.contains { $0.left == 1 && $0.right == 2 },
+                      "both arms waving in turn")
+        XCTAssertTrue(asking.contains { $0.y == -2 && $0.lifted == 3 }, "jumping at a knock")
+        let between = limbs([(.asking, 0)], for: 3.5).filter { $0.0 > 2 }.map(\.1)
+        XCTAssertTrue(between.allSatisfy { $0.left == 0 && $0.right == 2 && $0.y == 0 }, "a hand up, still, between knocks")
+
+        let reply = limbs([(.working, 0), (.done, 1)], for: 4).filter { $0.0 > 1 }
+        XCTAssertTrue(reply.contains { $0.1.left == 2 && $0.1.right == 0 } && reply.contains { $0.1.left == 0 && $0.1.right == 2 },
+                      "arms up in turn")
+        XCTAssertTrue(reply.contains { $0.1.y == -2 }, "a jump on every other beat")
+        XCTAssertTrue(reply.filter { $0.0 > 2.7 }.allSatisfy { $0.1 == BotLimbs() }, "and still again")
+    }
+
+    func testAShortVisitOfABotWithArmsIsOneOfItsOwnMoves() {
+        let visits = limbs([(.idle, 0)], for: 120).filter { $0.1 != BotLimbs() }
+        XCTAssertFalse(visits.isEmpty)
+        XCTAssertTrue(visits.contains { $0.1.x != 0 || $0.1.y != 0 || $0.1.left > 0 || $0.1.right > 0 })
     }
 
     func testAMarkFollowsItsAgentUnlessItsCardIsBeingLookedAt() {

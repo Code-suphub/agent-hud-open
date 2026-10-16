@@ -70,7 +70,7 @@ final class BotQueueTests: XCTestCase {
     func testAWorkingQueueKeepsItsBotThroughoutTheTurn() throws {
         let (view, window) = hosted()
         defer { BotClock.shared.drop(view); window.close() }
-        view.apply(config: queue([("Claude", true)]), light: false, scale: 2, animates: true)
+        view.apply(config: queue([("Codex", true)]), light: false, scale: 2, animates: true)
         let actor = try XCTUnwrap(view.actors[0])
         let start = CACurrentMediaTime()
         for frame in 1...1500 {
@@ -87,7 +87,7 @@ final class BotQueueTests: XCTestCase {
     func testAnIdleQueueOccasionallyShowsItsBotThenReturnsToTheLogo() throws {
         let (view, window) = hosted()
         defer { BotClock.shared.drop(view); window.close() }
-        view.apply(config: queue([("Claude", false)]), light: false, scale: 2, animates: true)
+        view.apply(config: queue([("Codex", false)]), light: false, scale: 2, animates: true)
         let actor = try XCTUnwrap(view.actors[0])
         let start = CACurrentMediaTime()
         var sawBot = false, returnedToLogo = false, returnedToBot = false
@@ -110,6 +110,33 @@ final class BotQueueTests: XCTestCase {
         XCTAssertTrue(sawBot)
         XCTAssertTrue(returnedToLogo)
         XCTAssertTrue(returnedToBot)
+    }
+
+    /// Clawd is the one bot that leaves its logo's place: it steps aside and jumps, in whole steps of its art, never
+    /// more than two aside or three up, and comes back.
+    func testClawdMovesInWholeStepsAndComesBack() throws {
+        let (view, window) = hosted()
+        defer { BotClock.shared.drop(view); window.close() }
+        view.apply(config: queue([("Claude", true)]), light: false, scale: 2, animates: true)
+        let actor = try XCTUnwrap(view.actors[0])
+        // One step of the art at the queue's logo size: a quarter of the body's radius.
+        let step = 0.25 * 0.22 * queue([("Claude", true)]).logo
+        let start = CACurrentMediaTime()
+        var aside = Set<Int>(), up = Set<Int>()
+        for frame in 1...1800 {
+            XCTAssertNotNil(view.stepBots(to: start + Double(frame) / 30))
+            guard frame > 20 else { continue }
+            let moved = actor.layer.affineTransform()
+            let x = moved.tx / step, y = moved.ty / step
+            XCTAssertEqual(x, x.rounded(), accuracy: 0.0001, "frame \(frame)")
+            XCTAssertEqual(y, y.rounded(), accuracy: 0.0001, "frame \(frame)")
+            aside.insert(Int(x.rounded()))
+            up.insert(Int(y.rounded()))
+        }
+        XCTAssertTrue(aside.isSubset(of: -2...2) && aside.count > 1, "\(aside)")
+        // The queue lays its layers out with y running down: a jump is a move up the screen.
+        XCTAssertTrue(up.isSubset(of: -3...1) && up.contains(-3), "\(up)")
+        XCTAssertTrue(aside.contains(0) && up.contains(0))
     }
 
     func testAnIdleQueueAsksForNoFrameBeforeItsNextVisit() throws {

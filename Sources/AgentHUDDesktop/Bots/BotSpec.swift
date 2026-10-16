@@ -45,7 +45,8 @@ struct BotSpec: Sendable {
 
     /// Arms and legs the motion moves, in the body's own paint: boxes in body radii from the body's centre, as the
     /// limbs of pixel art are, and moved in whole steps of `pixel`. A raised arm climbs a step; raised further it
-    /// takes another step up and out, one arm's width. A lifted leg rises half a step into the body.
+    /// takes another step up and out, one arm's width. A lifted leg rises half a step into the body. A body with limbs
+    /// is moved as pixel art throughout: the whole of it in steps of half a `pixel`, its eyes too.
     struct Limbs: Sendable {
         /// The arm on the left, then the one on the right.
         var arms: [CGRect]
@@ -191,7 +192,7 @@ struct BotSpec: Sendable {
         // Clawd, Claude Code's own creature, as its pixel art draws it: a wide block of the logo's orange, an arm out of
         // each side, four short legs and two upright bars for eyes. A pixel of the art is half a body radius; the
         // body is six pixels by four.
-        "Claude": BotSpec(radius: 0.22, center: CGPoint(x: 0.5, y: 0.445), reach: 0.3,
+        "Claude": BotSpec(radius: 0.22, center: CGPoint(x: 0.5, y: 0.445), reach: 0.7,
                           shape: .rect(width: 0.66, height: 0.44, round: 0.008), face: CGPoint(x: 0, y: -0.25),
                           eye: Eye(height: 0.64, width: 0.32, round: 0, across: 0.875),
                           limbs: Limbs(arms: [rect(-2, 0, -1.5, 0.5), rect(1.5, 0, 2, 0.5)],

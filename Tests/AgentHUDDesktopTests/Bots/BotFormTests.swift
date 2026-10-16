@@ -45,8 +45,9 @@ final class BotFormTests: XCTestCase {
         motion.fit(form.spec)
         motion.set(.working, at: 0)
         var now: TimeInterval = 0
-        while now < 0.8 { motion.step(to: now); now += 1.0 / 30 }
-        XCTAssertEqual(motion.limbs, BotLimbs(), "no act has started yet")
+        // At a moment the left hand is down between taps.
+        repeat { motion.step(to: now); now += 1.0 / 30 } while now < 10 && (motion.morph < 1 || motion.limbs.left != 0)
+        XCTAssertEqual(motion.limbs.left, 0)
         let bot = try XCTUnwrap(BotRenderer.image(form, motion: motion, side: 100))
         // The left arm's middle, in the picture's pixels: the mark's side is 100 and 30 more on every edge.
         let arm = CGPoint(x: (0.5 - 1.75 * 0.22 + 0.3) * 100, y: (0.445 + 0.25 * 0.22 + 0.3) * 100)

@@ -241,7 +241,8 @@ enum BotRenderer {
         for item in spec.decor.prefix(decor) { decorate(item, spec: spec, offset: .zero, strength: dressed, on: context) }
     }
 
-    /// Arms and legs where the motion has put them, filled with the body's own paint. They come with the eyes.
+    /// Arms and legs where the motion has put them, and the sign over the head, filled with the body's own paint. They
+    /// come with the eyes.
     private static func limbs(_ form: BotForm, stance: BotLimbs, strength: CGFloat, on context: CGContext) {
         guard let limbs = form.spec.limbs else { return }
         let spec = form.spec, step = limbs.pixel
@@ -252,20 +253,47 @@ enum BotRenderer {
             if raised > 1 { pieces.append(arm.offsetBy(dx: out * arm.width, dy: -2 * step)) }
         }
         for (index, leg) in limbs.legs.enumerated() {
-            let lifted = stance.lifted > 0 && index % 2 == stance.lifted - 1
+            let lifted = stance.lifted == 3 || stance.lifted > 0 && index % 2 == stance.lifted - 1
             pieces.append(leg.offsetBy(dx: 0, dy: lifted ? -step / 2 : 0))
+        }
+        if stance.exclaims {
+            // An exclamation mark over the middle of the head, a step clear of it.
+            let half = step / 4
+            pieces += [CGRect(x: -half, y: -1 - 2.6 * step, width: 2 * half, height: 1.3 * step),
+                       CGRect(x: -half, y: -1 - 1.0 * step, width: 2 * half, height: 0.45 * step)]
         }
         // A path is kept in the space it was added in, so the pieces stay in body radii once the space is restored.
         context.saveGState()
         context.translateBy(x: spec.center.x, y: spec.center.y)
         context.scaleBy(x: spec.radius, y: spec.radius)
         context.addRects(pieces)
+        if stance.spinner > 0 { spinner(stance.spinner, at: CGPoint(x: 2.2 * step, y: -1 - 1.5 * step), size: 0.75 * step, on: context) }
         context.restoreGState()
         context.saveGState()
         context.clip()
         context.setAlpha(strength)
         fill(spec.paint, form: form, on: context)
         context.restoreGState()
+    }
+
+    /// Claude Code's spinner, one of its six frames from a dot to the fullest star, added to the current path as the
+    /// outlines of its spokes. `size` is the longest spoke.
+    private static func spinner(_ frame: Int, at center: CGPoint, size: CGFloat, on context: CGContext) {
+        let shapes: [(spokes: Int, length: CGFloat, width: CGFloat)] = [(0, 0.24, 0.24), (4, 0.55, 0.2), (4, 0.85, 0.22),
+                                                                       (6, 0.9, 0.2), (8, 1, 0.2), (8, 1, 0.28)]
+        let shape = shapes[max(0, min(shapes.count - 1, frame - 1))]
+        guard shape.spokes > 0 else {
+            let side = shape.length * size
+            context.addRect(CGRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side))
+            return
+        }
+        let spokes = CGMutablePath()
+        for index in 0..<shape.spokes {
+            let angle = -CGFloat.pi / 2 + CGFloat(index) * 2 * .pi / CGFloat(shape.spokes)
+            spokes.move(to: center)
+            spokes.addLine(to: CGPoint(x: center.x + cos(angle) * shape.length * size, y: center.y + sin(angle) * shape.length * size))
+        }
+        context.addPath(spokes.copy(strokingWithWidth: shape.width * size, lineCap: .round, lineJoin: .round, miterLimit: 1))
     }
 
     /// One piece a body wears over its outline, `offset` from where it sits on the body.
@@ -375,15 +403,19 @@ enum BotRenderer {
     private static func eyes(_ spec: BotSpec, face: BotFace, yaw: CGFloat, pitch: CGFloat, awake: CGFloat,
                              on context: CGContext) {
         let radius = spec.radius, size: CGFloat = 0.78, spread = spec.eye.spread, flat = spec.eye.across
+        // The smallest step of a pixel-art body's art, in body radii: half a limb's step.
+        let grain = spec.limbs.map { $0.pixel / 2 }
+        func snapped(_ value: CGFloat) -> CGFloat { grain.map { ($0 > 0 ? (value / $0).rounded() * $0 : value) } ?? value }
         let paint = spec.eyeColor.map(color) ?? ink
         // A smile is sized from how far apart the eyes are right now, so two never join into one line.
         let apart = flat.map { 2 * $0 * radius } ?? (sin(yaw + spread) - sin(yaw - spread)) * radius * 0.76
         for side in [-1.0, 1.0] as [CGFloat] {
             let angle = flat == nil ? yaw + side * spread : 0
-            // On a flat face the two slide across together; on a ball each goes round it.
+            // On a flat face the two slide across together, in whole steps where the body is pixel art; on a ball each
+            // goes round it.
             let x = spec.center.x + spec.face.x * radius
-                + (flat.map { side * $0 * radius + sin(yaw) * radius * 0.76 } ?? sin(angle) * radius * 0.76)
-            let y = spec.center.y + spec.face.y * radius + sin(pitch) * radius * 0.62
+                + (flat.map { side * $0 * radius + snapped(sin(yaw) * 0.76) * radius } ?? sin(angle) * radius * 0.76)
+            let y = spec.center.y + spec.face.y * radius + (flat == nil ? sin(pitch) * 0.62 : snapped(sin(pitch) * 0.62)) * radius
             let narrow = pow(max(0.25, cos(angle)), 1.4), tall = (0.72 + 0.28 * cos(angle)) * pow(cos(pitch), 0.5)
             let big = (1 + 0.26 * side * face.lean) * face.wide * (0.6 + 0.4 * awake) * size
             let width = spec.eye.width * radius * big * narrow
