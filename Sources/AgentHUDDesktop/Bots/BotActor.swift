@@ -18,10 +18,9 @@ final class BotActor {
     private var motion: BotMotion
     private var shown: BotRenderer.Look?
     private var placed: CGAffineTransform?
+    private var faded: CGFloat = 1
     /// When the bot next needs a frame, on the clock it is stepped with; nil once it rests as its logo.
     private var due: TimeInterval? = 0
-    /// A timer rarely fires on the dot: a step this close to its time is on time.
-    private static let slack: TimeInterval = 0.004
     /// Side of the mark in points, the display's pixel scale, and the hairline outline in pixels.
     private var side: CGFloat = 0
     private var scale: CGFloat = 2
@@ -46,10 +45,11 @@ final class BotActor {
         layer.isHidden = true
         // Every change here is already one frame of an animation; an implicit one on top would smear it.
         layer.actions = ["contents": NSNull(), "transform": NSNull(), "hidden": NSNull(), "bounds": NSNull(),
-                         "position": NSNull()]
+                         "position": NSNull(), "opacity": NSNull()]
     }
 
     var phase: BotPhase { motion.phase }
+    var state: BotState { motion.state }
 
     /// How big the layer has to be to hold a mark `side` points wide, with its room for overflow and outline.
     static func extent(side: CGFloat, scale: CGFloat, outline: Int) -> CGFloat {
@@ -79,8 +79,17 @@ final class BotActor {
     }
 
     /// A phase is acted out from the next frame, however long the bot meant to wait.
-    func set(_ phase: BotPhase, at now: TimeInterval) {
-        motion.set(phase, at: now)
+    func set(_ phase: BotPhase, at now: TimeInterval) { set(phase.state, at: now) }
+
+    /// A state is acted out from the next frame, however long the bot meant to wait.
+    func set(_ state: BotState, at now: TimeInterval) {
+        motion.set(state, at: now)
+        due = 0
+    }
+
+    /// Plays an event over the look once the bot is up (`BotMotion.play`).
+    func play(_ event: BotEvent, at now: TimeInterval) {
+        motion.play(event, at: now)
         due = 0
     }
 
@@ -92,16 +101,20 @@ final class BotActor {
     /// - aim: where to look, from `BotMotion.aim(from:to:)`. It is asked only while there are eyes to turn.
     func step(to now: TimeInterval, yRunsDown: Bool, aim: () -> CGPoint) -> TimeInterval? {
         guard let due else { return nil }
-        if now < due - Self.slack { return due - now }
+        if now < due - BotPace.slack { return due - now }
         motion.step(to: now, aim: motion.morph > 0 || motion.staysBot ? aim() : .zero)
         let wait = motion.wait
         self.due = wait.map { now + $0 }
         // Setting a layer's property, even to what it already is, makes the frame's commit carry the layer.
-        if restsHidden, wait == nil || (motion.phase == .idle && !motion.staysBot && motion.morph == 0) {
+        if restsHidden, motion.restsAsLogo {
             if !layer.isHidden { layer.isHidden = true }
             return wait
         }
         if layer.isHidden { layer.isHidden = false }
+        if motion.opacity != faded {
+            faded = motion.opacity
+            layer.opacity = Float(faded)
+        }
         let look = BotRenderer.look(of: motion)
         if look != shown, side > 0 {
             shown = look
@@ -128,26 +141,129 @@ final class BotActor {
 
 /// One timer for every bot on screen. Each follower says how long its bots can go without a frame and the
 /// timer fires at the soonest of those: every frame while something moves, a few times a second while bots only
-/// breathe, and not until the next visit while every mark rests as its logo.
+/// breathe, and not until the next visit while every mark rests as its logo. Every wait ends on a frame of the shared
+/// clock (`BotPace`), so bots that move at once, on any screen, wake it once.
+///
+/// Nobody sees a bot whose window is covered or off screen, while the displays sleep, or while another user has the
+/// screen. Such followers are left out until they can be seen again; then they step straight to where the clock says
+/// they are, without playing what they missed.
 @MainActor
 final class BotClock {
-    static let shared = BotClock()
-    static let frame: TimeInterval = BotPace.lively
+    static let shared = BotClock(watches: true)
+
+    private struct Follower {
+        weak var owner: AnyObject?
+        let step: (TimeInterval) -> TimeInterval?
+    }
 
     private var timer: Timer?
-    private var followers: [ObjectIdentifier: (TimeInterval) -> TimeInterval?] = [:]
+    private var followers: [ObjectIdentifier: Follower] = [:]
+    /// Followers left out of the last tick because nobody could see them.
+    private var unseen: Set<ObjectIdentifier> = []
+    /// The displays sleep, or another user has the screen.
+    private(set) var screensAsleep = false, sessionAway = false
+    /// When the next tick is due, on the clock bots are stepped with; nil while the timer is stopped.
+    private(set) var due: TimeInterval?
+    private var observers: [NSObjectProtocol] = []
+
+    /// - watches: follows windows, displays and the user session, to leave out what nobody sees. A clock made for a test
+    ///   is told of them instead.
+    init(watches: Bool = false) {
+        guard watches else { return }
+        let windows = NotificationCenter.default, workspace = NSWorkspace.shared.notificationCenter
+        func on(_ center: NotificationCenter, _ name: Notification.Name, _ act: @escaping @MainActor (BotClock) -> Void) {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { if let self { act(self) } }
+            })
+        }
+        on(windows, NSWindow.didChangeOcclusionStateNotification) { $0.wake() }
+        on(workspace, NSWorkspace.screensDidSleepNotification) { $0.screens(asleep: true) }
+        on(workspace, NSWorkspace.screensDidWakeNotification) { $0.screens(asleep: false) }
+        on(workspace, NSWorkspace.sessionDidResignActiveNotification) { $0.session(away: true) }
+        on(workspace, NSWorkspace.sessionDidBecomeActiveNotification) { $0.session(away: false) }
+    }
+
+    /// The timer is set: some follower that can be seen has a frame coming.
+    var isRunning: Bool { timer != nil }
 
     /// Calls `step` within a frame and then again after each wait it returns, until it returns nil or `owner` is
     /// dropped. Following again brings the next call forward to now.
     func follow(_ owner: AnyObject, _ step: @escaping (TimeInterval) -> TimeInterval?) {
-        followers[ObjectIdentifier(owner)] = step
-        if let timer {
-            let now = Date()
-            if timer.fireDate > now { timer.fireDate = now }
-            return
+        let id = ObjectIdentifier(owner)
+        followers[id] = Follower(owner: owner, step: step)
+        unseen.remove(id)
+        fire()
+    }
+
+    func drop(_ owner: AnyObject) {
+        followers[ObjectIdentifier(owner)] = nil
+        if followers.isEmpty { stop() }
+    }
+
+    /// Steps every follower that can be seen, and sets the timer for the soonest frame any of them asks for.
+    func tick(at now: TimeInterval = CACurrentMediaTime()) {
+        var soonest: TimeInterval?
+        unseen = []
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (id, follower) in followers {
+            guard let owner = follower.owner else {
+                followers[id] = nil
+                continue
+            }
+            guard sees(owner) else {
+                unseen.insert(id)
+                continue
+            }
+            if let wait = follower.step(now) { soonest = min(soonest ?? wait, wait) } else { followers[id] = nil }
         }
-        let timer = Timer(timeInterval: Self.frame, repeats: true) { _ in
-            MainActor.assumeIsolated { BotClock.shared.tick() }
+        CATransaction.commit()
+        // Nothing anyone can see is due: the timer stops, and what is left waits to be seen again.
+        guard let soonest else { return stop() }
+        due = now + soonest
+        start()
+        // The wait counts from `now`, and stepping took some of it.
+        timer?.fireDate = Date(timeIntervalSinceNow: max(0, now + soonest - CACurrentMediaTime()))
+    }
+
+    /// Something may be seen again: a window uncovered, the displays awake, the session back. A follower left out of
+    /// the last tick that can be seen now steps at once.
+    func wake() {
+        guard !followers.isEmpty, !screensAsleep, !sessionAway else { return }
+        if timer == nil || unseen.contains(where: { followers[$0]?.owner.map(sees) == true }) { fire() }
+    }
+
+    func screens(asleep: Bool) {
+        screensAsleep = asleep
+        if asleep { stop() } else { wake() }
+    }
+
+    func session(away: Bool) {
+        sessionAway = away
+        if away { stop() } else { wake() }
+    }
+
+    /// Whether anyone can see what `owner` draws: a view in a window that is on screen and not covered.
+    private func sees(_ owner: AnyObject) -> Bool {
+        guard !screensAsleep, !sessionAway else { return false }
+        guard let window = (owner as? NSView)?.window else { return true }
+        return window.isVisible && window.occlusionState.contains(.visible)
+    }
+
+    /// Brings the next tick forward to now.
+    private func fire() {
+        start()
+        let now = Date()
+        if let timer, timer.fireDate > now { timer.fireDate = now }
+        due = CACurrentMediaTime()
+    }
+
+    private func start() {
+        guard timer == nil else { return }
+        let timer = Timer(timeInterval: BotPace.lively, repeats: true) { [weak self] timer in
+            // A clock made for a test may be gone before its timer: the timer then stops itself.
+            guard let self else { return timer.invalidate() }
+            MainActor.assumeIsolated { self.tick() }
         }
         timer.tolerance = 0.004
         // Common modes, so bots keep moving while a menu is open or a window is being dragged.
@@ -155,29 +271,10 @@ final class BotClock {
         self.timer = timer
     }
 
-    func drop(_ owner: AnyObject) {
-        followers[ObjectIdentifier(owner)] = nil
-        stopIfIdle()
-    }
-
-    private func tick() {
-        let now = CACurrentMediaTime()
-        var soonest: TimeInterval?
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        for (owner, step) in followers {
-            if let wait = step(now) { soonest = min(soonest ?? wait, wait) } else { followers[owner] = nil }
-        }
-        CATransaction.commit()
-        stopIfIdle()
-        // The timer repeats a frame apart by itself; a longer wait moves its next firing.
-        if let soonest, soonest > Self.frame * 1.5 { timer?.fireDate = Date(timeIntervalSinceNow: soonest) }
-    }
-
-    private func stopIfIdle() {
-        guard followers.isEmpty else { return }
+    private func stop() {
         timer?.invalidate()
         timer = nil
+        due = nil
     }
 }
 
@@ -185,27 +282,52 @@ final class BotClock {
 /// has opened and stays it for as long as it is shown: asking on a request, smiling on a reply. A mark that
 /// follows its agent instead is the bot while the agent works and the logo while it rests, as in a logo queue.
 ///
-/// With bots switched off, or motion reduced, it is the plain logo. The bot is drawn for the ground of the HUD it is on,
-/// in light ink on a dark HUD and in dark ink on a light one (`BotForm.ground`).
+/// With bots switched off, or motion reduced, it is the plain logo, wearing a waiting request's or a badge's sign as a
+/// still picture over it. The bot is drawn for the ground of the HUD it is on, in light ink on a dark HUD and in dark
+/// ink on a light one (`BotForm.ground`).
 struct BotMark: View {
     /// How long a reminder's mark stays the logo: the card's own opening, and a moment to read the logo in.
     static let arrival: TimeInterval = IslandAnimation.duration + 0.3
 
     let vendor: String
     var size: CGFloat = 17
-    let phase: BotPhase
+    let state: BotState
+    /// The newest event, played once if it is still fresh when the mark is told of it.
+    var cue: BotCue? = nil
     var staysBot = true
     @Environment(\.botLogos) private var botLogos
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.hudLook) private var look
+    @Environment(\.displayScale) private var displayScale
+
+    init(vendor: String, size: CGFloat = 17, phase: BotPhase, staysBot: Bool = true) {
+        self.init(vendor: vendor, size: size, state: phase.state, staysBot: staysBot)
+    }
+
+    init(vendor: String, size: CGFloat = 17, state: BotState, cue: BotCue? = nil, staysBot: Bool = true) {
+        self.vendor = vendor
+        self.size = size
+        self.state = state
+        self.cue = cue
+        self.staysBot = staysBot
+    }
 
     var body: some View {
-        if botLogos, !reduceMotion, BotForm.form(for: vendor, ground: look.appearance) != nil {
-            BotStage(vendor: vendor, size: size, phase: phase, staysBot: staysBot, ground: look.appearance)
+        let form = BotForm.form(for: vendor, ground: look.appearance)
+        if botLogos, !reduceMotion, form != nil {
+            BotStage(vendor: vendor, size: size, state: state, cue: cue, staysBot: staysBot, ground: look.appearance)
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
         } else {
             AgentLogo(vendor: vendor, size: size)
+                .overlay(alignment: .topLeading) {
+                    if let sign = state.stillSign,
+                       let still = BotSigns.still(sign, form: form, side: size, scale: displayScale, ground: look.appearance) {
+                        Image(decorative: still.image, scale: max(1, displayScale))
+                            .offset(x: still.frame.minX, y: still.frame.minY)
+                            .accessibilityHidden(true)
+                    }
+                }
         }
     }
 }
@@ -213,7 +335,8 @@ struct BotMark: View {
 private struct BotStage: NSViewRepresentable {
     let vendor: String
     let size: CGFloat
-    let phase: BotPhase
+    let state: BotState
+    let cue: BotCue?
     let staysBot: Bool
     let ground: HUDLook.Appearance
     @Environment(\.displayScale) private var displayScale
@@ -221,7 +344,8 @@ private struct BotStage: NSViewRepresentable {
     func makeNSView(context: Context) -> BotStageView { BotStageView() }
 
     func updateNSView(_ view: BotStageView, context: Context) {
-        view.show(vendor: vendor, size: size, scale: displayScale, phase: phase, staysBot: staysBot, ground: ground)
+        view.show(vendor: vendor, size: size, scale: displayScale, state: state, cue: cue, staysBot: staysBot,
+                  ground: ground)
     }
 
     static func dismantleNSView(_ view: BotStageView, coordinator: ()) { BotClock.shared.drop(view) }
@@ -235,6 +359,8 @@ final class BotStageView: NSView {
     private var vendor = ""
     private var staysBot = true
     private var ground = HUDLook.Appearance.dark
+    /// The last event this stage was told of, which a bot built again for another ground does not play again.
+    private var played: BotCue?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -246,6 +372,11 @@ final class BotStageView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func show(vendor: String, size: CGFloat, scale: CGFloat, phase: BotPhase, staysBot: Bool = true,
+              ground: HUDLook.Appearance) {
+        show(vendor: vendor, size: size, scale: scale, state: phase.state, staysBot: staysBot, ground: ground)
+    }
+
+    func show(vendor: String, size: CGFloat, scale: CGFloat, state: BotState, cue: BotCue? = nil, staysBot: Bool = true,
               ground: HUDLook.Appearance) {
         if vendor != self.vendor || staysBot != self.staysBot || ground != self.ground || actor == nil {
             if actor != nil, vendor == self.vendor, staysBot == self.staysBot, let layer {
@@ -266,7 +397,13 @@ final class BotStageView: NSView {
         guard let actor else { return }
         actor.resize(side: size, scale: scale, outline: 0)
         actor.show(in: window?.colorSpace?.cgColorSpace)
-        actor.set(phase, at: CACurrentMediaTime())
+        let now = CACurrentMediaTime()
+        actor.set(state, at: now)
+        if let cue, cue != played {
+            played = cue
+            // An event the stage hears of too late is let go, as the bot itself would let it go.
+            if -cue.at.timeIntervalSinceNow <= BotEvent.freshness { actor.play(cue.event, at: now) }
+        }
         needsLayout = true
         follow()
     }
