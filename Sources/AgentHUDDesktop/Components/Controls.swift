@@ -111,12 +111,18 @@ struct SelectionMenu<Value: Hashable>: NSViewRepresentable {
 }
 
 /// Spacious settings row with trailing native controls.
-struct SettingRow<Control: View>: View {
+public struct SettingRow<Control: View>: View {
     let label: String
     var subtitle: String? = nil
     @ViewBuilder let control: () -> Control
 
-    var body: some View {
+    public init(label: String, subtitle: String? = nil, @ViewBuilder control: @escaping () -> Control) {
+        self.label = label
+        self.subtitle = subtitle
+        self.control = control
+    }
+
+    public var body: some View {
         HStack(spacing: 24) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(label)

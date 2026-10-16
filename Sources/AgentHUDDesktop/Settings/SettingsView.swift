@@ -225,12 +225,16 @@ struct SettingsSidebar: View {
     }
 }
 
-/// One titled group for settings content.
-struct SettingsSection<Content: View>: View {
+/// One titled group for settings content: its title and subtitle above, its rows on the group's card (`SettingsCard`).
+/// Public, with `SettingRow`, `SettingsToggleRow` and `SettingsDivider`, so that the pages a host app adds to Settings
+/// are built as the app's own are.
+public struct SettingsSection<Content: View>: View {
     let title: String
     var subtitle: String? = nil
-    let theme: Theme
+    /// The window's theme, or nil to take it from the colour scheme the section is drawn in, as a host's page does.
+    private let theme: Theme?
     @ViewBuilder let content: () -> Content
+    @Environment(\.colorScheme) private var scheme
 
     init(title: String, subtitle: String? = nil, theme: Theme, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
@@ -239,12 +243,19 @@ struct SettingsSection<Content: View>: View {
         self.content = content
     }
 
-    var body: some View {
+    public init(title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.subtitle = subtitle
+        self.theme = nil
+        self.content = content
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.ui(15, .semibold))
                 if let subtitle {
-                    Text(subtitle).font(.ui(12)).foregroundStyle(theme.secondary)
+                    Text(subtitle).font(.ui(12)).foregroundStyle((theme ?? Theme.forScheme(scheme)).secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -278,17 +289,34 @@ public extension View {
     }
 }
 
-struct SettingsDivider: View {
-    let theme: Theme
-    var body: some View { Rectangle().fill(theme.divider).frame(height: 1).padding(.horizontal, 16) }
+/// The line between two rows of a settings group.
+public struct SettingsDivider: View {
+    private let theme: Theme?
+    @Environment(\.colorScheme) private var scheme
+
+    init(theme: Theme) { self.theme = theme }
+
+    /// A divider in the theme of the colour scheme it is drawn in, as a host's page draws it.
+    public init() { self.theme = nil }
+
+    public var body: some View {
+        Rectangle().fill((theme ?? Theme.forScheme(scheme)).divider).frame(height: 1).padding(.horizontal, 16)
+    }
 }
 
-struct SettingsToggleRow: View {
+/// A settings row whose control is a switch.
+public struct SettingsToggleRow: View {
     let label: String
     var subtitle: String? = nil
     @Binding var isOn: Bool
 
-    var body: some View {
+    public init(label: String, subtitle: String? = nil, isOn: Binding<Bool>) {
+        self.label = label
+        self.subtitle = subtitle
+        self._isOn = isOn
+    }
+
+    public var body: some View {
         SettingRow(label: label, subtitle: subtitle) {
             Toggle(label, isOn: $isOn).labelsHidden().toggleStyle(.switch).controlSize(.small)
         }
