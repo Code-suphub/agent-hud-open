@@ -125,7 +125,6 @@ public enum MCPTools {
             "ringWidth": number("Simple: ring stroke in points,", .ringWidth),
             "showRings": described("boolean", "Simple: a ring round each mark."),
             "showNumbers": described("boolean", "Simple: the percentage beside each mark."),
-            "bots": described("boolean", "Simple: marks turn into bots."),
             "separateAgents": described("boolean", "Dynamic or simple: hovering a mark opens that agent's own panel."),
             "glow": object([
                 "style": text("Glow style.", oneOf: GlowStyle.allCases.map(\.rawValue)),

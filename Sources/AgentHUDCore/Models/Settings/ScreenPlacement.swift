@@ -43,7 +43,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// separate marks rather than one queue.
     public static let gapScaleRange: ClosedRange<Double> = 0.1...0.6
     /// Diameter of one ring in Simple mode, in points. The marks and numbers are sized from it.
-    public static let simpleSizeRange: ClosedRange<Double> = 16...40
+    public static let simpleSizeRange: ClosedRange<Double> = 20...50
     /// Stroke of that ring, in points.
     public static let ringWidthRange: ClosedRange<Double> = 1...4
     public var mode: HUDMode
@@ -63,8 +63,6 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     public var showsRings: Bool
     /// Simple mode writes the percentage used beside each mark.
     public var showsNumbers: Bool
-    /// Simple mode turns a working agent's mark into its bot, and lets idle marks visit as bots.
-    public var simpleBots: Bool
     /// A docked HUD answers for one agent at a time: hovering a mark opens that agent's own panel from the
     /// mark, and a request or reminder grows from the mark of the agent that sent it while the others stay.
     public var separatesAgents: Bool
@@ -81,7 +79,6 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         ringWidth: Double = 1.5,
         showsRings: Bool = true,
         showsNumbers: Bool = true,
-        simpleBots: Bool = false,
         separatesAgents: Bool = false
     ) {
         self.mode = mode
@@ -95,7 +92,6 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
         self.ringWidth = Self.clamp(ringWidth, to: Self.ringWidthRange)
         self.showsRings = showsRings
         self.showsNumbers = showsNumbers
-        self.simpleBots = simpleBots
         self.separatesAgents = separatesAgents
     }
 
@@ -110,7 +106,7 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case mode, edge, offset, logoSize, logoEdgeDistance, gapScale, showsLogos
-        case simpleSize, ringWidth, showsRings, showsNumbers, simpleBots, separatesAgents
+        case simpleSize, ringWidth, showsRings, showsNumbers, separatesAgents
     }
 
     public init(from decoder: Decoder) throws {
@@ -128,7 +124,6 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
             ringWidth: try c.decodeIfPresent(Double.self, forKey: .ringWidth) ?? d.ringWidth,
             showsRings: try c.decodeIfPresent(Bool.self, forKey: .showsRings) ?? d.showsRings,
             showsNumbers: try c.decodeIfPresent(Bool.self, forKey: .showsNumbers) ?? d.showsNumbers,
-            simpleBots: try c.decodeIfPresent(Bool.self, forKey: .simpleBots) ?? d.simpleBots,
             separatesAgents: try c.decodeIfPresent(Bool.self, forKey: .separatesAgents) ?? d.separatesAgents
         )
     }

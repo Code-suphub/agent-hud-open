@@ -35,7 +35,7 @@ final class DockLayoutTests: XCTestCase {
                                            scale: IslandRootView.dockScale(mode: placement.mode, placement: placement)).height
         }
         // A Simple panel's mark is its ring, drawn or not. A ring shorter than the default pill leaves the pill alone.
-        for (ring, height): (Double, CGFloat) in [(16, 26), (22, 26), (26, 26), (27, 27), (30, 30), (33, 33), (40, 40)] {
+        for (ring, height): (Double, CGFloat) in [(20, 26), (22, 26), (26, 26), (27, 27), (30, 30), (33, 33), (40, 40), (50, 50)] {
             XCTAssertEqual(pill(ScreenPlacement(mode: .simple, simpleSize: ring)), height, "A \(ring) pt ring")
             XCTAssertEqual(pill(ScreenPlacement(mode: .simple, simpleSize: ring, showsRings: false)), height)
         }
@@ -46,7 +46,8 @@ final class DockLayoutTests: XCTestCase {
         // The notch has no size of its own to follow, so neither dock's setting reaches it.
         XCTAssertEqual(IslandRootView.dockScale(mode: .notch, placement: ScreenPlacement(mode: .notch, logoSize: 36, simpleSize: 40)), 1)
         // The row and its two margins are the pill, to the point, at every size.
-        for size in stride(from: 16.0, through: 40, by: 1) {
+        let sizes = ScreenPlacement.simpleSizeRange
+        for size in stride(from: sizes.lowerBound, through: sizes.upperBound, by: 1) {
             let row = IslandRootView.dockCompactRow(scale: IslandRootView.dockScale(mode: .simple, placement: ScreenPlacement(mode: .simple, simpleSize: size)))
             XCTAssertEqual(row.height + 2 * row.inset, max(26, size), "A \(size) pt ring")
         }

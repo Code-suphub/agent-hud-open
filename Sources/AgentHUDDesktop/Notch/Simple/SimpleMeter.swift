@@ -89,17 +89,18 @@ struct SimpleMeterConfig: Equatable {
     var ringWidth: CGFloat
     var showsRings: Bool
     var showsNumbers: Bool
-    /// Marks turn into bots while their agents work, as a logo queue's do.
+    /// Marks turn into bots while their agents work, as a logo queue's do: Settings' `botLogos` on screen. A picture
+    /// leaves it off, since a still has no motion to show.
     var bots: Bool
 
-    init(items: [SimpleMeterItem], placement: ScreenPlacement) {
+    init(items: [SimpleMeterItem], placement: ScreenPlacement, bots: Bool = false) {
         self.items = items
         edge = placement.edge
         size = placement.simpleSize
         ringWidth = placement.ringWidth
         showsRings = placement.showsRings
         showsNumbers = placement.showsNumbers
-        bots = placement.simpleBots
+        self.bots = bots
     }
 
     /// Side of one mark: inside its ring, or a little larger when it stands alone.

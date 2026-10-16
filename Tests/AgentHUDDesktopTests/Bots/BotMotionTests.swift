@@ -12,29 +12,14 @@ final class BotMotionTests: XCTestCase {
         }
     }
 
-    func testAGlancedMarkSettlesIntoItsLogoWhateverItsAgentIsDoing() {
+    func testAnOpenedMarkIsItsBotWatchingThePointerUntilItsCardCloses() {
         var motion = BotMotion(seed: 3)
-        motion.set(.working, at: 10)
-        run(&motion, from: 10, for: 2)
-        XCTAssertEqual(motion.morph, 1)
-        motion.set(.glanced, at: 12)
-        run(&motion, from: 12, for: 1)
-        XCTAssertEqual(motion.morph, 0)
-        XCTAssertEqual(motion.pose, BotPose())
-        XCTAssertTrue(motion.isAtRest, "a glanced mark has no visit to wait for")
-        XCTAssertNil(motion.wait)
-        // However long the glance lasts, it stays the logo.
-        run(&motion, from: 13, for: 60)
-        XCTAssertEqual(motion.morph, 0)
-    }
-
-    func testAnOpenedMarkIsItsBotWatchingThePointerUntilItsPanelCloses() {
-        var motion = BotMotion(seed: 3)
-        motion.set(.glanced, at: 10)
+        motion.set(.idle, at: 10)
         run(&motion, from: 10, for: 0.5)
+        XCTAssertEqual(motion.morph, 0)
         motion.set(.opened, at: 10.5)
         run(&motion, from: 10.5, for: 1, aim: CGPoint(x: 0.6, y: 0.2))
-        XCTAssertEqual(motion.morph, 1, "half a second after the click it is the bot")
+        XCTAssertEqual(motion.morph, 1, "half a second after its card opens it is the bot")
         XCTAssertEqual(motion.pose.y, 0, "and it stays where its logo was")
         XCTAssertGreaterThan(motion.face.look, 0.3, "its eyes go to the pointer")
         // However long the panel stays open, the bot stays up.
@@ -58,7 +43,7 @@ final class BotMotionTests: XCTestCase {
     func testAMarkFollowsItsAgentUnlessItsCardIsBeingLookedAt() {
         XCTAssertEqual(MarkAttention.none.phase(working: true), .working)
         XCTAssertEqual(MarkAttention.none.phase(working: false), .idle)
-        XCTAssertEqual(MarkAttention.glanced.phase(working: true), .glanced)
+        XCTAssertEqual(MarkAttention.opened.phase(working: true), .opened)
         XCTAssertEqual(MarkAttention.opened.phase(working: false), .opened)
     }
 

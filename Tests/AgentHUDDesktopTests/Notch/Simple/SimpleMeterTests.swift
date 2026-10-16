@@ -137,7 +137,7 @@ final class SimpleMeterTests: XCTestCase {
 
         let working = store.queueVendors.filter(\.isWorking).map(\.vendor)
         let config = SimpleMeterConfig(items: SimpleMeterItem.items(rows: store.rows, balances: SimpleMeterItem.balances(store), working: working),
-                                       placement: placement)
+                                       placement: placement, bots: settings.settings.botLogos)
         XCTAssertFalse(config.items.isEmpty)
         XCTAssertTrue(config.items.contains(where: \.isWorking), "The demo has work in flight for the panel's bots to show")
         XCTAssertEqual(hud.geometry.mode, .simple)
@@ -249,8 +249,25 @@ final class SimpleMeterTests: XCTestCase {
         XCTAssertGreaterThan(wait, 15, "a visible resting mark still asks for no frame before its visit")
     }
 
-    func testThePanelsBotsAreItsOwnSwitchAndOffToBeginWith() {
-        XCTAssertFalse(SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple)).bots)
-        XCTAssertTrue(SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple, simpleBots: true)).bots)
+    @MainActor
+    func testThePanelsBotsFollowBotLogos() throws {
+        _ = NSApplication.shared
+        let screen = try XCTUnwrap(NSScreen.main)
+        let key = ScreenIdentity.key(for: screen)
+        for on in [true, false] {
+            let domain = "app.agenthud.tests.simple-bots.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+            defer { defaults.removePersistentDomain(forName: domain) }
+            let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
+            settings.update {
+                $0.screens[key] = ScreenPlacement(mode: .simple)
+                $0.botLogos = on
+            }
+            let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
+            let hud = ScreenHUD(key: key, screen: screen, store: store, settings: settings)
+            defer { hud.close() }
+            XCTAssertEqual(hud.island.rootView.simpleMeter?.bots, on, "the panel follows the one switch for every mark")
+        }
+        XCTAssertFalse(SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple)).bots, "a picture keeps its logos")
     }
 }

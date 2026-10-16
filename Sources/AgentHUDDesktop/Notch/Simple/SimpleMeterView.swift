@@ -3,8 +3,8 @@ import AgentHUDCore
 
 /// The collapsed HUD on a screen in Simple mode: a small floating panel with no glow behind it. Each agent
 /// is its mark, with its tightest window drawn as a ring round the mark, written as a percentage beside it,
-/// or both. The ring and the number take the window's level colour. Nothing moves unless the panel's bots are
-/// switched on: a working agent's mark is then its bot, and an idle one visits as a bot now and then.
+/// or both. The ring and the number take the window's level colour. Nothing moves unless bot logos are switched
+/// on: a working agent's mark is then its bot, and an idle one visits as a bot now and then.
 struct SimpleMeterView: View {
     let config: SimpleMeterConfig
     /// The island draws the panel behind the figures, so that the same frame can grow into the usage panel.
@@ -48,9 +48,7 @@ struct SimpleMeterView: View {
                         .rotationEffect(.degrees(-90))
                 }
                 if config.bots {
-                    // The panel has its own switch, so it does not follow the one for dock marks and reminders.
                     BotMark(vendor: item.vendor, size: config.logo, phase: item.attention.phase(working: item.isWorking), staysBot: false)
-                        .environment(\.botLogos, true)
                 } else {
                     AgentLogo(vendor: item.vendor, size: config.logo)
                 }

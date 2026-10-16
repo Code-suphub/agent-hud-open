@@ -36,8 +36,8 @@ struct IslandPane: View {
             SettingsSection(title: L10n.text("Logo", "Logos"), theme: theme) {
                 SettingsToggleRow(
                     label: L10n.text("Bot 形象", "Bot logos"),
-                    subtitle: L10n.text("工作时保持 Bot；空闲时偶尔变成 Bot 活动几秒，再回到 Logo。等待批准或刚回复时也显示 Bot。",
-                                        "Working agents stay bots. Idle logos occasionally become bots for a few seconds. Bots also appear for approvals and replies."),
+                    subtitle: L10n.text("工作时保持 Bot；空闲时偶尔变成 Bot 活动几秒，再回到 Logo。悬停、等待批准或刚回复时也显示 Bot。",
+                                        "Working agents stay bots. Idle logos occasionally become bots for a few seconds. Bots also appear on hover, for approvals and replies."),
                     isOn: settings.binding(\.botLogos)
                 )
             }
