@@ -104,6 +104,13 @@ final class MarkDirectorTests: XCTestCase {
         XCTAssertEqual(look(director(reading: [mark([compacting, asked])], at: 3)), .permission)
         // Compaction runs out after five minutes with no newer line.
         XCTAssertEqual(look(director(reading: [mark([compacting])], at: 1 + CompactionHooks.limit)), .thinking)
+        // It comes and goes at once, with no confirmation and no hold, however recently the work's look changed.
+        var director = director(reading: [mark([editing(opened: 0)])], at: 0)
+        let editingAndCompacting = session("a", activity: activity([("edit-0", .edit, 0, nil)], line: .call, compacting: 1), observed: 0)
+        read(&director, [mark([editingAndCompacting])], at: 1)
+        XCTAssertEqual(look(director), .compacting)
+        read(&director, [mark([editing(opened: 0, observed: 2)])], at: 2)
+        XCTAssertEqual(look(director), .tool(.edit))
     }
 
     func testTheSessionShownKeepsTheMarkWhileItWorks() {

@@ -9,7 +9,7 @@ import Foundation
 /// A mark (one per `VendorMark.key`) shows the first of these that applies (`want(of:owner:at:)`):
 /// 1. A request waiting on the user: an approval before a question before a plan, and of two alike the one that has
 ///    waited longest. It shows at once.
-/// 2. Claude compacting a conversation on its own.
+/// 2. Claude compacting a conversation on its own. It shows at once, and the work after it too.
 /// 3. Work, as one session does it, the owner: the session shown keeps the mark for as long as it works, and when it
 ///    stops the session whose log wrote last takes over. Work shows at once. A new look of the same session shows only
 ///    once two reads at least `confirmation` apart want it, and not before the one shown has held for `hold`; looks that
@@ -184,9 +184,9 @@ extension MarkDirector {
                 show(want, at: now)
                 return false
             }
-            guard want.look.isWorking, shown.isWorking, want.owner == owner else {
-                // A request cuts in at once; rest comes as soon as work ends; work shows as soon as it begins, or as soon
-                // as another session takes over from one that stopped.
+            guard want.look.isWorking, shown.isWorking, want.look != .compacting, shown != .compacting, want.owner == owner else {
+                // A request cuts in at once, and so does a compaction, and the work it ends; rest comes as soon as work
+                // ends; work shows as soon as it begins, or as soon as another session takes over from one that stopped.
                 let rested = shown == .asleep
                     || shown == .idle && now.timeIntervalSince(restingSince ?? now) >= MarkDirector.restBeforeStart
                 show(want, at: now)
