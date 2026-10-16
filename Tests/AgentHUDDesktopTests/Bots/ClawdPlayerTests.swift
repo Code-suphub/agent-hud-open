@@ -15,7 +15,7 @@ final class ClawdPlayerTests: XCTestCase {
             var text = "\(tick) \(picture.frame)"
             if picture.offset != .zero { text += " (\(picture.offset.x),\(picture.offset.y))" }
             if let sign = picture.sign { text += " \(sign.rawValue)" }
-            if picture.mini { text += " +mini" }
+            if let mini = picture.mini { text += " +mini \(mini)" }
             return text
         }
     }
@@ -373,8 +373,28 @@ final class ClawdPlayerTests: XCTestCase {
 
     func testSubAgentsAddTheMiniToWorkingLooksOnly() {
         let shots = film([show(.command, at: 10, subagents: true), play(.failed, at: 11), show(.permission, at: 16)], until: 18)
-        XCTAssertTrue(shots.filter { $0.picture?.frame.sprite == .laptop }.allSatisfy { $0.picture?.mini == true })
-        XCTAssertTrue(shots.filter { $0.picture?.frame.sprite != .laptop }.allSatisfy { $0.picture?.mini != true })
+        XCTAssertTrue(shots.filter { $0.picture?.frame.sprite == .laptop }.allSatisfy { $0.picture?.mini != nil })
+        XCTAssertTrue(shots.filter { $0.picture?.frame.sprite != .laptop }.allSatisfy { $0.picture?.mini == nil })
+    }
+
+    func testTheMiniStandsWhereEachClipLeavesRoom() {
+        let shots = film([show(.thinking, at: 10, subagents: true), show(.command, at: 12, subagents: true),
+                          show(.longCommand, at: 16, subagents: true)], until: 24)
+        // Right of the body while thinking, left of it beside the laptop, and nowhere beside the desk.
+        XCTAssertTrue(shots.filter { $0.picture?.frame.sprite == .thinking }.allSatisfy { $0.picture?.mini == 13 })
+        XCTAssertTrue(shots.filter { $0.picture?.frame.sprite == .laptop }.allSatisfy { $0.picture?.mini == -14 })
+        let desk = shots.filter { $0.picture?.frame.sprite == .desktop }
+        XCTAssertFalse(desk.isEmpty)
+        XCTAssertTrue(desk.allSatisfy { $0.picture?.mini == nil })
+    }
+
+    func testTheDeskIsLeftFromAnyFrame() {
+        // Well into the desk's five-second cycle, the turn ends: it packs up after the frame on screen.
+        let shots = film([show(.longCommand, at: 10), show(nil, at: Self.into(150))], until: 20)
+        XCTAssertEqual(frame(shots, at: 150)?.description, "150 Desktop 33 (-3,0)")
+        XCTAssertEqual(frame(shots, at: 151)?.description, "151 Desktop 76 (-3,0)")
+        XCTAssertEqual(frame(shots, at: 162)?.description, "162 Desktop 87")
+        XCTAssertEqual(frame(shots, at: 163)?.description, "163 logo")
     }
 
     func testABadgeShowsUnlessASignComesFirst() {

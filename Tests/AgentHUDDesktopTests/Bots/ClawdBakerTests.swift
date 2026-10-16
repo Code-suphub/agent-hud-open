@@ -129,7 +129,7 @@ final class ClawdBakerTests: XCTestCase {
         let place = ClawdBaker.placement(side: 30, scale: 2)
         XCTAssertEqual(place.grain, 4)
         let alone = try pixels(try XCTUnwrap(baker.image(ClawdPicture(frame: .standing), side: 30, scale: 2, space: srgb)))
-        let both = try pixels(try XCTUnwrap(baker.image(ClawdPicture(frame: .standing, mini: true), side: 30, scale: 2, space: srgb)))
+        let both = try pixels(try XCTUnwrap(baker.image(ClawdPicture(frame: .standing, mini: 13), side: 30, scale: 2, space: srgb)))
         let walking = try XCTUnwrap(sheet[.walking])
         // One device pixel to a sprite pixel, its middle 13 sprite pixels of the body to the right, on the same feet line.
         let middle = place.foot.x + 26

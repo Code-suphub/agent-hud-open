@@ -128,9 +128,9 @@ final class ClawdBaker {
         let shift = (x: Self.pixels(picture.offset.x * flip, n), y: Self.pixels(picture.offset.y, n))
         let foot = (x: place.foot.x + shift.x, y: place.foot.y + shift.y)
         fill(sprite, frame: picture.frame.index, at: foot, scale: (n, 2), mirrored: picture.mirrored, on: context)
-        if picture.mini, let standing = sheet[ClawdFrame.standing.sprite] {
+        if let shift = picture.mini, let standing = sheet[ClawdFrame.standing.sprite] {
             // Half the size, standing on the same line beside the body.
-            let middle = place.foot.x + Self.pixels(clips.miniShift, n)
+            let middle = place.foot.x + Self.pixels(shift, n)
             fill(standing, frame: ClawdFrame.standing.index, at: (middle, place.foot.y), scale: (n, 4), mirrored: false, on: context)
         }
         if let sign = picture.sign, let paintSign {

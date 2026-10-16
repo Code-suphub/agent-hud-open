@@ -7,8 +7,9 @@ struct ClawdPicture: Hashable, Sendable {
     /// In sprite pixels from where every frame stands.
     var offset = ClawdOffset.zero
     var sign: ClawdSign?
-    /// The still mini Clawd beside a look whose agent has sub-agents at work.
-    var mini = false
+    /// The still mini Clawd beside a look whose agent has sub-agents at work: its middle this many sprite pixels right of
+    /// the body's (`ClawdClip.miniShift`); nil for none.
+    var mini: Int?
     /// Facing left.
     var mirrored = false
 }
@@ -292,8 +293,8 @@ struct ClawdPlayer: Sendable {
         var ticks = 1
         var offset = ClawdOffset.zero
         var sign: ClawdSign?
-        /// Part of a working look, which carries the mini Clawd of its sub-agents.
-        var working = false
+        /// Where the mini Clawd of sub-agents stands on a working look's frame; nil where it has none.
+        var mini: Int?
         /// A frame held on purpose, which a change asked for may end with the next tick.
         var holds = false
         /// The last frame of a cycle, or of an intro: where a working look may change.
@@ -352,7 +353,7 @@ struct ClawdPlayer: Sendable {
         var sign = step.sign
         if let badge, sign.map({ badge < $0 }) ?? true { sign = badge }
         return ClawdPicture(frame: sheet?.canonical(frame) ?? frame, offset: step.offset, sign: sign,
-                            mini: subagents && step.working, mirrored: step.mirrored)
+                            mini: subagents ? step.mini : nil, mirrored: step.mirrored)
     }
 
     private func sameClip(_ look: ClawdLook, _ shown: Shown) -> Bool { clips.clip(for: look).name == shown.clip.name }
@@ -436,7 +437,7 @@ struct ClawdPlayer: Sendable {
         activity = .entering(shown)
         var steps = frames.enumerated().map { at, frame in
             Step(frame: frame, ticks: clip.ticks, offset: clip.offset.eased(frames.count > 1 ? CGFloat(at) / CGFloat(frames.count - 1) : 1),
-                 sign: clip.sign, working: clip.working)
+                 sign: clip.sign, mini: clip.miniShift)
         }
         if !steps.isEmpty { steps[steps.count - 1].endsCycle = true }
         begin(steps, at: tick)
@@ -453,7 +454,7 @@ struct ClawdPlayer: Sendable {
     private func cycle(_ shown: Shown, at tick: Int64) -> [Step] {
         let clip = shown.clip, each = clip.ticks
         func step(_ index: Int, _ ticks: Int) -> Step {
-            Step(frame: ClawdFrame(clip.sprite, index), ticks: ticks, offset: clip.offset, sign: clip.sign, working: clip.working)
+            Step(frame: ClawdFrame(clip.sprite, index), ticks: ticks, offset: clip.offset, sign: clip.sign, mini: clip.miniShift)
         }
         guard !shown.still, !clip.loop.isEmpty else {
             var still = clip.loop.first.map { step($0, .max) } ?? Step(ticks: .max)
@@ -518,7 +519,7 @@ struct ClawdPlayer: Sendable {
         let outro = clip.outro.enumerated().map { at, frame in
             Step(frame: frame, ticks: clip.ticks,
                  offset: clip.offset.eased(clip.outro.count > 1 ? 1 - CGFloat(at) / CGFloat(clip.outro.count - 1) : 0),
-                 working: clip.working, outro: true)
+                 mini: clip.miniShift, outro: true)
         }
         let leaving = script.isEmpty
         activity = .leaving(shown)
@@ -529,7 +530,7 @@ struct ClawdPlayer: Sendable {
     private func exitLead(_ clip: ClawdClip) -> [Step] {
         guard case .through(let frame) = clip.exit, let end = clip.loop.firstIndex(of: frame) else { return [] }
         return clip.loop[...end].map {
-            Step(frame: ClawdFrame(clip.sprite, $0), ticks: clip.ticks, offset: clip.offset, working: clip.working)
+            Step(frame: ClawdFrame(clip.sprite, $0), ticks: clip.ticks, offset: clip.offset, mini: clip.miniShift)
         }
     }
 

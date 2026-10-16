@@ -42,6 +42,8 @@ final class ClawdClipsTests: XCTestCase {
         XCTAssertEqual(laptop.loop, Array(17...33))
         XCTAssertEqual(laptop.outro, ClawdSpriteName.laptop[34...42])
         XCTAssertEqual(laptop.offset, ClawdOffset(x: -1))
+        XCTAssertEqual(laptop.miniShift, -14, "the mini stands left of the laptop")
+        XCTAssertEqual(thinking.miniShift, 13)
 
         let desktop = clips.clip(for: .longCommand)
         XCTAssertEqual(desktop.intro, ClawdSpriteName.desktop[3...15])
@@ -49,12 +51,16 @@ final class ClawdClipsTests: XCTestCase {
         XCTAssertEqual(desktop.loop, Array(16...75))
         XCTAssertEqual(desktop.outro, ClawdSpriteName.desktop[76...87])
         XCTAssertEqual(desktop.offset, ClawdOffset(x: -3))
+        XCTAssertEqual(desktop.exit, .anyFrame, "a finished turn does not wait out the five-second cycle")
+        XCTAssertNil(desktop.miniShift, "no room for the mini beside the desk")
 
         let reading = clips.clip(for: .read)
         XCTAssertEqual(reading.sprite, .lookingAround)
         XCTAssertEqual(reading.loop, Array(6...15))
         XCTAssertEqual(reading.ticks, 2, "6 fps")
         XCTAssertTrue(reading.intro.isEmpty && reading.outro.isEmpty && reading.entry == nil)
+        XCTAssertEqual(reading.miniShift, 13)
+        for look in ClawdLook.allCases where !look.isWorking { XCTAssertNil(clips.clip(for: look).miniShift, "\(look)") }
 
         let meditating = clips.clip(for: .compacting)
         XCTAssertEqual(meditating.intro, ClawdSpriteName.meditating[6...13])

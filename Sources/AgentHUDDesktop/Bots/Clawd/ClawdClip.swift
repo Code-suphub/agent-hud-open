@@ -117,6 +117,9 @@ struct ClawdClip: Sendable {
     var pace = ClawdPace.steady
     /// A clip of an agent at work, which may carry the mini Clawd of its sub-agents.
     var working = false
+    /// Where a working clip stands the still mini Clawd of its agent's sub-agents: its middle this many sprite pixels
+    /// right of the body's, on the line the feet stand on. Nil where the clip's prop leaves no room for it.
+    var miniShift: Int?
 
     var loopFrames: [ClawdFrame] { loop.map { ClawdFrame(sprite, $0) } }
 }

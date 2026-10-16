@@ -15,9 +15,6 @@ struct ClawdClips: Sendable {
     var cards: [ClawdCard: ClawdShot]
     /// Held still on a dock that separates its agents while this agent's card is up, turned toward the card.
     var pointsAtCard: ClawdFrame
-    /// Where the still mini Clawd of a look with sub-agents stands: its middle this many sprite pixels right of
-    /// the body's, on the same line as its feet.
-    var miniShift: Int
     /// Where a sprite's sign sits, in sprite pixels from where every sign sits, for a sprite whose art is in the way.
     var signShifts: [ClawdSpriteName: ClawdOffset]
     /// How many frames each sprite the clips use had when they were written. A Claude app whose sprites differ has
@@ -77,19 +74,24 @@ extension ClawdClips {
         let longRun = ClawdPace.resting(after: 20, hold: 3)
         // A wait loops for a while, then plays once in a while, and after two minutes more rarely still.
         let longWait = ClawdPace.waiting(after: 8, every: 2.6, slowAfter: 120, slowEvery: 8)
+        // The mini Clawd of sub-agents stands to the right of the body, clear of everything but a prop on that side.
+        let miniRight = 13
         return ClawdClips(
             thinking: ClawdClip(name: "thinking", sprite: thinking, intro: thinking[4...5], loop: Array(6...19),
-                                outro: thinking[5, 4] + [.standing], pace: longRun, working: true),
-            // Cut straight from standing to the laptop on the ground: its own intro takes longer than most edits.
+                                outro: thinking[5, 4] + [.standing], pace: longRun, working: true, miniShift: miniRight),
+            // Cut straight from standing to the laptop on the ground: its own intro takes longer than most edits. The
+            // laptop is on the right, so the mini stands on the left.
             laptop: ClawdClip(name: "laptop", sprite: laptop, intro: laptop[14...16], loop: Array(17...33),
-                              outro: laptop[34...42], offset: ClawdOffset(x: -1), pace: longRun, working: true),
-            // From the laptop, the computer slides in from behind without the turn and the reach.
+                              outro: laptop[34...42], offset: ClawdOffset(x: -1), pace: longRun, working: true,
+                              miniShift: -14),
+            // From the laptop, the computer slides in from behind without the turn and the reach. Its five-second cycle
+            // is left from any frame, so a turn that ends does not wait for it; the desk leaves no room for the mini.
             desktop: ClawdClip(name: "desktop", sprite: desktop, intro: desktop[3...15], entry: desktop[7...15],
-                               loop: Array(16...75), outro: desktop[76...87], offset: ClawdOffset(x: -3),
+                               loop: Array(16...75), outro: desktop[76...87], exit: .anyFrame, offset: ClawdOffset(x: -3),
                                pace: longRun, working: true),
             // At the game's 12 fps the whole body swivels every frame, too busy for the commonest tool.
             reading: ClawdClip(name: "reading", sprite: .lookingAround, loop: Array(6...15), ticks: 2,
-                               pace: longRun, working: true),
+                               pace: longRun, working: true, miniShift: miniRight),
             // Mid-breath frames jump to the stand-up; only the still one leads into it.
             meditating: ClawdClip(name: "meditating", sprite: meditating, intro: meditating[6...13], loop: Array(23...34),
                                   outro: meditating[45...54], exit: .through(23)),
@@ -125,7 +127,6 @@ extension ClawdClips {
                                   offset: ClawdOffset(x: -2), easeIn: 3, easeOut: 4),
             ],
             pointsAtCard: ClawdFrame(pointing, 18),
-            miniShift: 13,
             // Clear of the claw raised to wave, and of the arms thrown up before pointing.
             signShifts: [.waving: ClawdOffset(x: 7), .pointing: ClawdOffset(x: 5)],
             frameCounts: [
