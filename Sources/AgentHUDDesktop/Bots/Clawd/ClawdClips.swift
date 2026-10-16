@@ -126,7 +126,8 @@ extension ClawdClips {
                 .reset: ClawdShot(ClawdSpriteName.spark[4...21] + ClawdSpriteName.spark[57...68],
                                   offset: ClawdOffset(x: -2), easeIn: 3, easeOut: 4),
             ],
-            pointsAtCard: ClawdFrame(pointing, 18),
+            // Frame 19 has the arm out at eye height; 18, the turn before it, reads as standing at a mark's size.
+            pointsAtCard: ClawdFrame(pointing, 19),
             // Clear of the claw raised to wave, and of the arms thrown up before pointing.
             signShifts: [.waving: ClawdOffset(x: 7), .pointing: ClawdOffset(x: 5)],
             frameCounts: [

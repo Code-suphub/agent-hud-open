@@ -360,7 +360,7 @@ final class ClawdPlayerTests: XCTestCase {
     func testAMarkBesideItsCardPointsAtIt() {
         var player = ClawdPlayer()
         player.pointAtCard(mirrored: true, at: 0)
-        XCTAssertEqual(player.picture, ClawdPicture(frame: ClawdFrame(.pointing, 18), mirrored: true))
+        XCTAssertEqual(player.picture, ClawdPicture(frame: ClawdFrame(.pointing, 19), mirrored: true))
         XCTAssertNil(player.due)
         player.show(nil, at: 1)
         XCTAssertNil(player.picture)

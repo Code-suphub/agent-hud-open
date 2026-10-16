@@ -136,7 +136,7 @@ final class ClawdClipsTests: XCTestCase {
         XCTAssertEqual(reset.steps.first?.offset, .zero)
         XCTAssertEqual(reset.steps.last?.offset, .zero)
         XCTAssertEqual(reset.steps[10].offset, ClawdOffset(x: -2))
-        XCTAssertEqual(clips.pointsAtCard, ClawdFrame(.pointing, 18))
+        XCTAssertEqual(clips.pointsAtCard, ClawdFrame(.pointing, 19))
     }
 
     func testOnlySpritesTheClipsWereWrittenForFitThem() throws {
