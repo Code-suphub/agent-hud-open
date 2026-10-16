@@ -249,9 +249,32 @@ struct SettingsSection<Content: View>: View {
                 }
             }
             VStack(spacing: 0, content: content)
-                .background(theme.card, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(theme.cardBorder.opacity(0.55), lineWidth: 1))
+                .settingsCard()
         }
+    }
+}
+
+/// The ground every settings group stands on, Settings → General's: the window theme's card with its hairline, light or
+/// dark as the window is. Public so that the pages a host app adds to Settings stand on the same ground as the app's own.
+public struct SettingsCard: ViewModifier {
+    var cornerRadius: CGFloat = SettingsCard.cornerRadius
+    @Environment(\.colorScheme) private var scheme
+
+    /// The corner of a settings group.
+    public static let cornerRadius: CGFloat = 12
+
+    public func body(content: Content) -> some View {
+        let theme = Theme.forScheme(scheme), shape = RoundedRectangle(cornerRadius: cornerRadius)
+        content
+            .background(theme.card, in: shape)
+            .overlay(shape.stroke(theme.cardBorder.opacity(0.55), lineWidth: 1))
+    }
+}
+
+public extension View {
+    /// Stands the view on a settings group's ground (`SettingsCard`).
+    func settingsCard(cornerRadius: CGFloat = SettingsCard.cornerRadius) -> some View {
+        modifier(SettingsCard(cornerRadius: cornerRadius))
     }
 }
 
