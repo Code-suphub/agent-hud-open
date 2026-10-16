@@ -204,8 +204,8 @@ final class PanelLayoutStyleDraftTests: XCTestCase {
         XCTAssertEqual(settings.settings.screenGlow[screen]?.brightness, 0.4, "the look it had when it was reverted from")
     }
 
-    /// An agent's proposal of the previous version waits as a draft that draws that version's look whole, a glow's grid
-    /// that no agent sets included, and lists what an agent can read of it; Save writes it back as it was kept.
+    /// An agent's proposal of the previous version waits as a draft that draws that version's look whole and lists what
+    /// an agent can read of it, the glow's grid among it; Save writes it back as it was kept.
     func testProposingThePreviousVersionDrawsAndSavesItsLookWhole() {
         let settings = makeSettings()
         let layout = settings.panelLayout
@@ -219,7 +219,7 @@ final class PanelLayoutStyleDraftTests: XCTestCase {
         changes = 0
 
         XCTAssertTrue(layout.proposePrevious(.screen(screen), hasNotch: true))
-        XCTAssertEqual(layout.styleDraft(of: screen), HUDStyle(glow: HUDStyle.Glow(style: .dots)))
+        XCTAssertEqual(layout.styleDraft(of: screen), HUDStyle(glow: HUDStyle.Glow(style: .dots, gridPitch: 6)))
         XCTAssertEqual(settings.effectiveGlow(on: screen), glow, "drawn whole, the grid included")
         XCTAssertEqual(changes, 0)
         layout.save(.screen(screen))

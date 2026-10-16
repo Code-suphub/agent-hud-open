@@ -129,7 +129,8 @@ final class HUDPictureRendererTests: XCTestCase {
     /// 0.805 of its look's own surface at the standard Transparency, 50 %, which clear glass draws at 0.3, darker than
     /// the backdrop for dark glass and lighter for light glass, short of the solid fill. The stand-in thins as the
     /// dimming beneath the glass does: the surface whole at 0, and at the material's top, 100 % drawn whole, the third
-    /// of it a picture always keeps, dark glass still darker than the backdrop and light glass still lighter.
+    /// of it a picture always keeps, dark glass still darker than the backdrop and light glass still lighter. Every glass
+    /// style is the same stand-in at the transparency it draws, so a picture shows them alike but for that.
     func testAGlassPanelIsDrawnAsItsStandIn() throws {
         layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
         func glass(_ appearance: HUDLook.Appearance, _ transparency: Double, style: HUDGlassStyle = .clear) throws
@@ -150,6 +151,10 @@ final class HUDPictureRendererTests: XCTestCase {
         XCTAssertLessThan(light.fill, solid.fill - 0.1, "short of the light surface itself")
         XCTAssertEqual(light.picture.width, solid.picture.width)
         XCTAssertEqual(light.picture.height, solid.picture.height)
+        for style in HUDGlassStyle.allCases {
+            XCTAssertEqual(try glass(.dark, standard, style: style).fill, dark.fill, accuracy: 0.005, "\(style)")
+            XCTAssertEqual(try glass(.light, standard, style: style).fill, light.fill, accuracy: 0.005, "\(style)")
+        }
 
         XCTAssertEqual(try glass(.light, 0).fill, solid.fill, accuracy: 0.02, "the light surface whole at 0")
         XCTAssertLessThan(try glass(.dark, 0).fill, 0.02, "black whole at 0")

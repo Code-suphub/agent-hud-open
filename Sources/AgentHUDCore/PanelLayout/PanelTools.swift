@@ -256,6 +256,11 @@ public struct PanelTools {
             note += " The dock it becomes starts at position 0, the top left, clear of the notch, as Settings places one; "
                 + "another position can be proposed once the user has saved it."
         }
+        if let glass = style.keptForGlass, let key = scope.screenKey {
+            note += " The resting HUD of \(name(of: key, among: attached)) would be solid, so its glass style "
+                + "\"\(glass.rawValue)\" is kept, as Settings keeps it, and takes effect once its material is "
+                + "\"glass\"."
+        }
         if styleAlone {
             note += scope.screenKey.map { " The layout of the panel on \(name(of: $0, among: attached)) is unchanged" }
                 ?? " The shared layout is unchanged"
@@ -265,10 +270,11 @@ public struct PanelTools {
     }
 
     /// Whether a call gives a screen's style alone: beside `screen` and `revision` it names only a `hud`, every property
-    /// of which is a style field, `reset` included, and none `agents`. A key given as null is not given, so a hud that
-    /// gives nothing, like a call without one, is the default layout.
+    /// of which is a style field, `reset` or a transparency the screen keeps included, and none `agents`. A key given
+    /// as null is not given, so a hud that gives nothing, like a call without one, is the default layout.
     private static func givesStyleAlone(_ arguments: [String: JSONValue]) -> Bool {
-        let taken: Set<String> = ["screen", "revision", "hud"], style = Set(HUDStyle.names + [HUDStyle.resetName])
+        let taken: Set<String> = ["screen", "revision", "hud"]
+        let style = Set(HUDStyle.names + [HUDStyle.resetName] + HUDStyle.KeptTransparency.allCases.map(\.rawValue))
         let named = arguments.filter { $0.value != .null }.keys
         guard named.allSatisfy({ taken.contains($0) }), let hud = arguments["hud"]?.objectValue else { return false }
         let given = hud.filter { $0.value != .null }.keys
