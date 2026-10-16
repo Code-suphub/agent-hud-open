@@ -423,8 +423,10 @@ final class WindowLookTests: XCTestCase {
             // The box's lower edge is 80 points down; 4 more is in its shadow.
             return try color(of: hosting, at: CGPoint(x: 0.5, y: 84.0 / 120)).redComponent
         }
-        XCTAssertLessThan(try beneath(nil), 0.98, "a shadow under no look")
-        XCTAssertLessThan(try beneath(HUDLook(appearance: .light)), 0.98, "and on an opaque ground")
+        // How dark the shadow draws differs from renderer to renderer (0.96 here, 0.98 on CI's), so a shadow is any
+        // darkening of the white page beyond the no-shadow tolerance below.
+        XCTAssertLessThan(try beneath(nil), 0.995, "a shadow under no look")
+        XCTAssertLessThan(try beneath(HUDLook(appearance: .light)), 0.995, "and on an opaque ground")
         for look in [HUDLook(appearance: .light, material: .glass, transparency: 0.3),
                      HUDLook(appearance: .light, material: .glass, transparency: 1, glassStyle: .material),
                      HUDLook(appearance: .light, transparency: 0.3)] {

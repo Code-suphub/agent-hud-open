@@ -244,15 +244,17 @@ final class HUDLookResolutionTests: XCTestCase {
                                               glassTransparency: 0.2)
         }
         XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.2 * 0.6)
-        XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, .regular)
+        // A look drawn solid, under Reduce Transparency, has no glass to be made of (`HUDLook(drawing:)`).
+        XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, reduces ? .clear : .regular)
         settings.panelLayout.proposeStyle(HUDStyle(transparency: 0.7), for: key, hasNotch: false)
         XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.7 * 0.6,
                        "the style draft is drawn over the settings")
-        XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, .regular, "the draft keeps the screen's glass")
+        XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, reduces ? .clear : .regular,
+                       "the draft keeps the screen's glass")
         settings.panelLayout.discardStyle(key)
         XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.2 * 0.6)
         settings.update { $0.screens[key]?.glassStyle = .material }
-        XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, .material)
+        XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, reduces ? .clear : .material)
         XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.2, "the material draws all of it")
     }
 
