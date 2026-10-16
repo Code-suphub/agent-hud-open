@@ -16,7 +16,8 @@ Agent HUD Open reads agent activity and usage metadata on your Mac. It has no Ag
 | Grok CLI | Local session records and credential file | Official Grok CLI billing endpoint |
 | OpenCode, Kimi, GLM, Pi | Local JSON/SQLite session records and supported provider configuration, including an `ANTHROPIC_BASE_URL` and its token from the environment or Claude Code's `settings.json` `env` that point at a Kimi or GLM plan; automatically prepared Pi lifecycle observer and OpenCode completion plugin | Official Kimi, GLM, OpenCode Go, and Pi ChatGPT quota endpoints where configured |
 | GitHub Copilot CLI | Local session events and OpenTelemetry export files | GitHub Copilot quota endpoint with the GitHub CLI sign-in, only after consent in Settings |
-| OpenClaw, Hermes Agent, ZCode, CodeBuddy, WorkBuddy, Qwen Code | Local session databases and transcripts | None |
+| OpenClaw, Hermes Agent, ZCode, CodeBuddy, Qwen Code | Local session databases and transcripts | None |
+| WorkBuddy | Local session databases and transcripts, the app's own per-session metering (`session_usage`) and its session names, both in `~/.workbuddy/workbuddy.db` | Official GLM Coding Plan quota endpoint with the key a WorkBuddy model entry keeps in `~/.workbuddy/models.json` |
 | Qoder, Qoder CN, QoderWork | Nothing read; the approval hook is added to each build's settings | None |
 
 Per-client fields, endpoints and stored data: [providers](providers.md). Token counts, percentages, alert levels, request intervals and reading retention: [usage semantics](usage-semantics.md).
@@ -29,6 +30,7 @@ Per-client fields, endpoints and stored data: [providers](providers.md). Token c
 - GitHub Copilot quota reads no credential until the user confirms Settings → Agents → GitHub Copilot → Read quota; the dialog, shown each time it is switched on, names the environment variables, the keychain item `gh:github.com` and the GitHub CLI `hosts.yml`, and macOS may ask for keychain access. Switching it off forgets the account, its rows and its quota history at once.
 - OpenClaw's agent database also stores authentication profiles; only its session tables are queried.
 - Custom endpoints are not assumed to share official billing accounts, and executable key resolvers are never run.
+- WorkBuddy's model list, `~/.workbuddy/models.json`, is read for a GLM Coding Plan entry whose URL is Zhipu's own coding endpoint; that entry's `apiKey` is the only value taken from the file, and it is used for Zhipu's official quota endpoint and for nothing else. Only those endpoints are read, mirroring the restriction the same function applies to every other client's stored credentials: a key behind a custom endpoint, or behind another vendor's entry, is not read. A plan whose key only WorkBuddy's clients carry is shown inside the WorkBuddy group, named with its provider beside it; the same key read from Pi or Claude Code stays under GLM.
 - Kimi account identity is confirmed through the official profile endpoint, separately for each deployment; only hashed credential-to-account associations are cached, and accounts are never merged from matching quota values, reset times or unverified token claims.
 - DeepSeek session liveness inspection reads executable identity and start time. Question-host discovery reads command names, profile and port arguments; it does not read profile contents or browser credentials.
 
