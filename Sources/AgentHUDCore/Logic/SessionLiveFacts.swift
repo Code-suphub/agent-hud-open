@@ -70,7 +70,8 @@ public struct SessionLiveFacts: Hashable, Sendable, Identifiable {
     public let outcome: TurnOutcome?
     public let endedAt: Date?
     /// When the usage limit that ended the newest turn lifts: the reset its client wrote, else the reset of the vendor's
-    /// window that ran out. Nil for a limit that lasts until the next prompt, and when no limit ended the turn.
+    /// window that ran out, else when one of its windows began anew after the turn ended. Nil for a limit that lasts
+    /// until the next prompt, and when no limit ended the turn.
     public let limitedUntil: Date?
     /// When the session's log last wrote anything; reading it again does not move it.
     public let observedAt: Date

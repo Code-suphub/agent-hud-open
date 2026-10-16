@@ -77,8 +77,8 @@ extension MarkDirector {
     }
 
     /// The badge a mark wears at `now`. A failed turn's `×`, until a prompt follows it, its card is looked at after it
-    /// (`lookedAt`), or `badgeLife` passes; else a limit's `⧗`, while a turn's limit holds or one of the vendor's windows
-    /// is used up. A window used up never outranks work: it is only ever the badge.
+    /// (`lookedAt`), or `badgeLife` passes; else a limit's `⧗`, while a turn's limit holds and no prompt has followed it,
+    /// or one of the vendor's windows is used up. A window used up never outranks work: it is only ever the badge.
     static func badge(of mark: ReportView.QueueMark, lookedAt: Date?, at now: Date) -> BotBadge? {
         let prompted = mark.sessions.compactMap(\.turnStartedAt).max() ?? .distantPast
         let failed = mark.sessions.contains { session in
@@ -86,7 +86,10 @@ extension MarkDirector {
             return now.timeIntervalSince(end) < badgeLife && end > (lookedAt ?? .distantPast) && prompted <= end
         }
         if failed { return .failed }
-        if mark.sessions.contains(where: { $0.limited(at: now) }) { return .limited }
+        let limited = mark.sessions.contains { session in
+            session.limited(at: now) && prompted <= (session.endedAt ?? .distantFuture)
+        }
+        if limited { return .limited }
         if let until = mark.exhaustedUntil, until > now { return .limited }
         return nil
     }

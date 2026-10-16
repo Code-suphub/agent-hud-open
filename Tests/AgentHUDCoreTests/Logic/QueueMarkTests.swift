@@ -164,6 +164,37 @@ final class QueueMarkTests: XCTestCase {
         XCTAssertEqual(cursor.sessions.first?.look(at: now), .plain)
     }
 
+    func testALimitWithNoResetOfItsOwnLiftsOnceTheWindowHasReset() throws {
+        let row = AgentDescriptor(id: "codex-session", vendor: "Codex", model: "Session", source: "", enabled: true)
+        let consumer = agent("codex-model:gpt-5", "Codex")
+        let sessions = [session("limited", "codex-model:gpt-5", ended: -300, observed: -300, activity: SessionActivity())]
+        let turns = [turn("limited", "codex", .ended, started: -400, observed: -300, outcome: .limited(resetsAt: nil))]
+        func limit(_ snapshot: UsageSnapshot?, at offset: TimeInterval) throws -> SessionLiveFacts {
+            let report = UsageReport(generatedAt: at(offset), snapshots: snapshot.map { [$0] } ?? [], sessions: sessions,
+                                     consumers: [consumer], turns: turns)
+            let view = ReportView(report: report, agents: [row], settings: Settings(), now: at(offset))
+            return try XCTUnwrap(view.queueMarks.first { $0.key == "ChatGPT" }?.sessions.first)
+        }
+        let window: TimeInterval = 5 * 3600
+        let spent = UsageSnapshot(agentId: row.id, remainingPct: 0, resetAt: at(1800), windowDuration: window, updatedAt: now)
+        let before = try limit(spent, at: 0)
+        XCTAssertEqual(before.limitedUntil, at(1800), "it lifts with the window that ran out")
+        XCTAssertTrue(before.limited(at: now))
+
+        let pending = try limit(spent, at: 1805)
+        XCTAssertFalse(pending.limited(at: at(1805)), "the window reset, though no reading has said so yet")
+        let refilled = UsageSnapshot(agentId: row.id, remainingPct: 100, resetAt: at(1800 + window), windowDuration: window,
+                                     updatedAt: at(1850))
+        let after = try limit(refilled, at: 1900)
+        XCTAssertEqual(after.limitedUntil, at(1800), "the window that began after the limit lifted it")
+        XCTAssertFalse(after.limited(at: at(1900)))
+
+        // A window that began before the turn ended says nothing of the limit, nor does a vendor with no window read.
+        let running = UsageSnapshot(agentId: row.id, remainingPct: 40, resetAt: at(3600), windowDuration: window, updatedAt: now)
+        XCTAssertTrue(try limit(running, at: 0).limited(at: now))
+        XCTAssertTrue(try limit(nil, at: 0).limited(at: now), "with no reset known, until the next prompt")
+    }
+
     func testANotificationOnlyWaitAndLiveStatusOff() throws {
         let consumer = agent("claude-model:opus", "Claude")
         // A turn waiting for approval with no request on the HUD: Claude Code's notification hook said so.

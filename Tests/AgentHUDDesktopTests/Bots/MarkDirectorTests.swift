@@ -375,6 +375,11 @@ final class MarkDirectorTests: XCTestCase {
         // A failure's badge comes before a limit's.
         let both = [session("a", .idle, outcome: .failed, ended: 0), limited]
         XCTAssertEqual(state(self.director(reading: [mark(both)], at: 1))?.badge, .failed)
+        // A limit with no reset known lasts until a prompt, in any of the agent's sessions.
+        let unknown = session("a", .idle, outcome: .limited(resetsAt: nil), ended: 0)
+        XCTAssertEqual(state(self.director(reading: [mark([unknown])], at: 3600))?.badge, .limited)
+        director = self.director(reading: [mark([unknown, commanding("b", opened: 5, observed: 5, turn: 5)])], at: 5)
+        XCTAssertEqual(state(director), BotState(look: .tool(.command)))
     }
 
     func testTheDockNeverShowsDoneAndMarksGoneFromTheQueueAreForgotten() {
