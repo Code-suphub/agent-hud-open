@@ -16,8 +16,8 @@ struct ScreensPane: View {
 
     @Binding var selected: String
     @State private var screens: [Screen] = ScreensPane.attached()
-    /// Reduce Transparency, which draws a HUD of glass solid. Read here so that the look row's note follows it as it is
-    /// switched.
+    /// Reduce Transparency, which draws a HUD of glass solid and a see-through solid one opaque. Read here so that the
+    /// material row's note follows it as it is switched.
     @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
 
     struct Screen: Identifiable, Hashable {
@@ -120,9 +120,12 @@ struct ScreensPane: View {
             SettingsDivider(theme: theme)
             lookRow
             SettingsDivider(theme: theme)
-            // Glass and solid keep a transparency each; the slider shows the one of the material chosen.
+            materialRow
+            SettingsDivider(theme: theme)
+            // Glass and solid keep a transparency each, 0 to 100 %; the slider shows the one of the material chosen, which
+            // Solid, Clear and Regular draw at three fifths (`ScreenPlacement.transparencyScale(material:glassStyle:)`).
             SliderRow(label: L10n.text("透明度", "Transparency"), value: binding(\.transparency),
-                      range: ScreenPlacement.glassTransparencyRange, step: 0.05,
+                      range: ScreenPlacement.transparencyRange(for: placement.material), step: 0.05,
                       format: { "\(Int(($0 * 100).rounded()))%" }, theme: theme)
                 .id(placement.material)
             SettingsDivider(theme: theme)
@@ -230,11 +233,11 @@ struct ScreensPane: View {
                         "No notch here — the notch shape draws a stand-in bar instead.")
     }
 
-    /// The selected screen's look, in one row: its appearance, Dark, Light or Match system, and its material, Solid or
-    /// Glass, for the HUD, its panel and its cards. At a hardware notch the row says that the notch's row stays dark;
-    /// with Reduce Transparency on it says that glass shows solid. Glass brings a Transparency slider below the row. The HUD style's Reset to Default gives Dark and Solid back (`ScreenStyleRow`).
+    /// The selected screen's appearance, Dark, Light or Match system, for the HUD, its panel and its cards; its material
+    /// has the row below (`materialRow`). At a hardware notch the row says that the notch's row stays dark. The HUD
+    /// style's Reset to Default gives Dark and Solid back (`ScreenStyleRow`).
     private var lookRow: some View {
-        SettingRow(label: L10n.text("HUD 外观", "HUD appearance"), subtitle: lookNote) {
+        SettingRow(label: L10n.text("HUD 外观", "HUD appearance"), subtitle: notchNote) {
             HStack(spacing: 8) {
                 SegmentedPills(options: [
                     SegmentOption(value: HUDAppearance.dark, label: L10n.text("深色", "Dark")),
@@ -244,23 +247,69 @@ struct ScreensPane: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(L10n.text("HUD 外观", "HUD appearance"))
                 .accessibilityIdentifier("settings-screen-appearance")
-                SegmentedPills(options: [
-                    SegmentOption(value: HUDMaterial.solid, label: L10n.text("实色", "Solid")),
-                    SegmentOption(value: HUDMaterial.glass, label: L10n.text("玻璃", "Glass")),
-                ], selection: binding(\.material), theme: theme)
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(L10n.text("材质", "Material"))
-                .accessibilityIdentifier("settings-screen-material")
             }
             .disabled(current == nil)
         }
     }
 
-    /// The look row's one line, where it has one: what Reduce Transparency does to glass, or what stays black at a notch.
-    private var lookNote: String? {
-        if reducesTransparency, placement.material == .glass {
-            return L10n.text("「降低透明度」已打开，玻璃显示为实色。", "Reduce Transparency is on, so Glass shows as solid.")
+    /// The selected screen's material in one choice: Solid, or glass of one of its styles, clear or regular Liquid Glass
+    /// or a frosted material (`HUDGlassStyle`). The HUD and, with Match screen on, the app's windows on that screen draw
+    /// it alike. With Reduce Transparency on the row says what it leaves undrawn (`reduceTransparencyNote`); the
+    /// Transparency slider below it is the material's.
+    private var materialRow: some View {
+        SettingRow(label: L10n.text("材质", "Material"), subtitle: reduceTransparencyNote) {
+            SegmentedPills(options: [
+                SegmentOption(value: SurfaceChoice.solid, label: L10n.text("实色", "Solid")),
+                SegmentOption(value: SurfaceChoice.glass(.clear), label: "Clear"),
+                SegmentOption(value: SurfaceChoice.glass(.regular), label: "Regular"),
+                SegmentOption(value: SurfaceChoice.glass(.material), label: L10n.text("磨砂", "Material")),
+            ], selection: surfaceBinding, theme: theme)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(L10n.text("材质", "Material"))
+            .accessibilityIdentifier("settings-screen-material")
+            .disabled(current == nil)
         }
+    }
+
+    /// The material and the glass style as one choice. Choosing Solid keeps the glass style for when glass is chosen
+    /// again.
+    private enum SurfaceChoice: Hashable {
+        case solid
+        case glass(HUDGlassStyle)
+    }
+
+    private var surfaceBinding: Binding<SurfaceChoice> {
+        Binding(
+            get: { placement.material == .solid ? .solid : .glass(placement.glassStyle) },
+            set: { choice in
+                edit { next, _ in
+                    switch choice {
+                    case .solid: next.material = .solid
+                    case .glass(let style): next.material = .glass; next.glassStyle = style
+                    }
+                }
+            }
+        )
+    }
+
+    /// The material row's one line while Reduce Transparency is on and the screen's HUD would let the desktop through:
+    /// glass shows solid, and a Solid surface with a Transparency opaque, since Reduce Transparency draws none of it
+    /// (`ScreenPlacement.drawsTransparency(reducesTransparency:)`).
+    private var reduceTransparencyNote: String? {
+        guard reducesTransparency else { return nil }
+        switch placement.material {
+        case .glass:
+            return L10n.text("「降低透明度」已打开，Clear、Regular 和磨砂都显示为实色。",
+                             "Reduce Transparency is on, so Clear, Regular and Material show as solid.")
+        case .solid:
+            guard placement.transparency > 0 else { return nil }
+            return L10n.text("「降低透明度」已打开，透明度不生效。",
+                             "Reduce Transparency is on, so the Transparency is not drawn.")
+        }
+    }
+
+    /// The appearance row's one line at a hardware notch: what stays black there.
+    private var notchNote: String? {
         guard atHardwareNotch else { return nil }
         return L10n.text("刘海那一行始终是深色：收起时纯黑，提醒两翼在玻璃下是黑玻璃；展开的面板和卡片使用这里的外观。",
                          "The notch's row stays dark: black at rest, and a reminder's wings black glass under Glass; the "

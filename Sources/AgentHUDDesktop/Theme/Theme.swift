@@ -100,8 +100,9 @@ struct Theme {
     private(set) var raisedSurface: Color
     /// A box set into a card, such as a request's command inside the request's own card.
     private(set) var insetSurface: Color
-    /// What glass is covered with under the HUD's ink, before the screen's transparency thins it (`HUDLook.glassCover`):
-    /// the island's own surface, black on dark glass and the light window's near-white on light glass.
+    /// The look's own colour where it meets glass: the dimming layer beneath it (`HUDLook.glassDimming`), and what stands
+    /// in for glass where nothing is behind to blur (`HUDLook.glassStandIn`); the island's own surface, black beneath dark
+    /// glass and the light window's near-white beneath light glass.
     private(set) var glassTint: Color
     /// The alerts' accents (`IslandAlert.accent`) as text and thin glyphs: a finished turn's blue, calm news's green and
     /// a warning's warm. On the dark HUD they are the accents themselves; on a light one, darker versions that stay
@@ -247,18 +248,45 @@ struct Theme {
     }()
 
     /// Light glass's tokens: the light HUD's, with its secondary and tertiary ink a grade darker, since glass over a dark
-    /// desktop is a greyer ground than the solid surface and the window's own greys fall to 2:1 there, and a request's
-    /// card a thinned white that lets the glass show through it, as white at 5 % does on dark glass.
+    /// desktop is a greyer ground than the solid surface and the window's own greys fall to 2:1 there. A window on light
+    /// glass, with Match screen on, takes the same two greys (`under(_:)`). Its cards, rows and inputs thin with the
+    /// transparency drawn, as every light box does on a ground the desktop shows through (`HUDLook.innerOpacity`): to
+    /// about half at Clear's and Regular's top, 60 % drawn, and to a fifth at the material's, 100 %.
     static let lightGlass: Theme = {
         var theme = Theme.lightIsland
         theme.secondary = Color(hex: 0x55555a)
         theme.tertiary = Color(hex: 0x737378)
-        theme.card = Color.white.opacity(0.55)
         return theme
     }()
 
     static func forScheme(_ scheme: ColorScheme) -> Theme {
         scheme == .light ? .light : .dark
+    }
+
+    /// These tokens on a ground of `look`, the HUD's or, with Match screen on, a window's (`WindowSurface`), so that what
+    /// lies on the ground follows the look as the ground does, light and dark alike:
+    /// - The boxes painted on it, cards, rows and inputs, which are opaque where the dark ones are tints of white, thin
+    ///   as the ground does (`HUDLook.innerOpacity`), so that a light card lets the glass or the desktop through as a dark
+    ///   card does.
+    /// - On light glass the secondary and tertiary ink are light glass's, a grade darker.
+    /// A selected segment (`segmentSelected`) stays opaque on purpose, white or grey whatever the ground: a selected
+    /// control is drawn opaque, as macOS draws it on glass too. Under no look, or an opaque one, the tokens are as they
+    /// are.
+    func under(_ look: HUDLook?) -> Theme {
+        guard let look else { return self }
+        var theme = self
+        if look.appearance == .light, look.material == .glass {
+            theme.secondary = Theme.lightGlass.secondary
+            theme.tertiary = Theme.lightGlass.tertiary
+        }
+        let share = look.innerOpacity
+        guard share < 1 else { return theme }
+        theme.inputBackground = inputBackground.opacity(share)
+        if isLight {
+            theme.card = card.opacity(share)
+            theme.rowBackground = rowBackground.opacity(share)
+        }
+        return theme
     }
 }
 

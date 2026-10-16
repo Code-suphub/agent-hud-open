@@ -29,15 +29,4 @@ enum StatusIconRenderer {
         image.isTemplate = false
         return image
     }
-
-    /// Small filled circle used for menu rows.
-    static func dot(color: NSColor, diameter: CGFloat = 7) -> NSImage {
-        let image = NSImage(size: NSSize(width: diameter, height: diameter), flipped: false) { rect in
-            color.setFill()
-            NSBezierPath(ovalIn: rect).fill()
-            return true
-        }
-        image.isTemplate = false
-        return image
-    }
 }

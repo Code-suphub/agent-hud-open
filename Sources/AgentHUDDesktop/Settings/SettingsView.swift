@@ -72,6 +72,7 @@ struct SettingsView: View {
     /// The Experimental page's install row, given where a test or a still stands in for this Mac.
     var clientSetup: MCPClientSetup?
     @State private var navigation: SettingsNavigation
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
     @Environment(\.colorScheme) private var scheme
 
     init(settings: SettingsStore, store: UsageStore, initialTab: SettingsTab = .display,
@@ -94,12 +95,14 @@ struct SettingsView: View {
 
     var body: some View {
         @Bindable var navigation = navigation
-        let theme = Theme.forScheme(scheme)
+        // The window's tokens on the ground its screen's look gives it, with Match screen on (`Theme.under(_:)`).
+        let theme = Theme.forScheme(scheme).under(surface?.look)
         HStack(spacing: 0) {
             SettingsSidebar(selection: $navigation.pageID, additionalPages: additionalPages, theme: theme)
                 .frame(width: SettingsWindowLayout.sidebarWidth)
+                // The border on the sidebar's own ground: a line of its own would leave a slit of desktop under glass.
+                .overlay(alignment: .trailing) { Rectangle().fill(theme.sidebarBorder).frame(width: 1) }
                 .layoutPriority(1)
-            Rectangle().fill(theme.sidebarBorder).frame(width: 1)
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(pageTitle).font(.ui(24, .semibold))
@@ -129,10 +132,11 @@ struct SettingsView: View {
             }
             .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .clipped()
+            // The page's ground beside the sidebar's, never under it: glass over glass does not see the desktop.
+            .background(WindowGround(color: theme.windowBackground))
         }
         .frame(minWidth: SettingsWindowLayout.minimum.width, idealWidth: SettingsWindowLayout.size.width,
                minHeight: SettingsWindowLayout.minimum.height, idealHeight: SettingsWindowLayout.size.height)
-        .background(WindowGround(color: theme.windowBackground))
         .foregroundStyle(theme.text)
         .font(.ui(13))
         .tint(Color.accentColor)
@@ -234,6 +238,7 @@ public struct SettingsSection<Content: View>: View {
     /// The window's theme, or nil to take it from the colour scheme the section is drawn in, as a host's page does.
     private let theme: Theme?
     @ViewBuilder let content: () -> Content
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
     @Environment(\.colorScheme) private var scheme
 
     init(title: String, subtitle: String? = nil, theme: Theme, @ViewBuilder content: @escaping () -> Content) {
@@ -255,7 +260,7 @@ public struct SettingsSection<Content: View>: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.ui(15, .semibold))
                 if let subtitle {
-                    Text(subtitle).font(.ui(12)).foregroundStyle((theme ?? Theme.forScheme(scheme)).secondary)
+                    Text(subtitle).font(.ui(12)).foregroundStyle((theme ?? Theme.forScheme(scheme).under(surface?.look)).secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -266,16 +271,18 @@ public struct SettingsSection<Content: View>: View {
 }
 
 /// The ground every settings group stands on, Settings → General's: the window theme's card with its hairline, light or
-/// dark as the window is. Public so that the pages a host app adds to Settings stand on the same ground as the app's own.
+/// dark as the window is, and thinned with the window's ground under a look the desktop shows through (`Theme.under(_:)`).
+/// Public so that the pages a host app adds to Settings stand on the same ground as the app's own.
 public struct SettingsCard: ViewModifier {
     var cornerRadius: CGFloat = SettingsCard.cornerRadius
     @Environment(\.colorScheme) private var scheme
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
 
     /// The corner of a settings group.
     public static let cornerRadius: CGFloat = 12
 
     public func body(content: Content) -> some View {
-        let theme = Theme.forScheme(scheme), shape = RoundedRectangle(cornerRadius: cornerRadius)
+        let theme = Theme.forScheme(scheme).under(surface?.look), shape = RoundedRectangle(cornerRadius: cornerRadius)
         content
             .background(theme.card, in: shape)
             .overlay(shape.stroke(theme.cardBorder.opacity(0.55), lineWidth: 1))

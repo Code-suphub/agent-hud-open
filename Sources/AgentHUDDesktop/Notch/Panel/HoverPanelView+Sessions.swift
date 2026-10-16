@@ -131,10 +131,11 @@ extension HoverPanelView {
         }
         return AnyView(
             ZStack(alignment: .bottomTrailing) {
+                // The ring round the dot is cut out of the mark, so that whatever ground the row stands on shows in it.
                 AgentLogo(vendor: vendor, size: 14)
+                    .clipShape(SessionMarkCut(), style: FillStyle(eoFill: true))
                 Circle().fill(color)
                     .frame(width: 6, height: 6)
-                    .overlay(Circle().stroke(theme.windowBackground, lineWidth: 1.5))
                     .offset(x: 2, y: 2)
             }
             .frame(width: 14, height: 14)
@@ -280,5 +281,20 @@ extension HoverPanelView {
         let words = task.split(separator: " ")
         if words.count > 3 { return words.prefix(3).joined(separator: " ") }
         return String(task.prefix(14))
+    }
+}
+
+/// The agent's mark in a session row with the ring round its state dot taken out (`HoverPanelView.sessionMark`), so that
+/// whatever ground the row stands on shows in it: the mark, filled even-odd with a disc round the dot's centre, a point
+/// in from the mark's corner where the dot hangs off it, 1.5 points wider than the dot all round. A clip, where a disc
+/// blended out of the mark in a compositing group was not kept to the mark by the software renderer the HUD's pictures
+/// are drawn with: it cut through the panel beneath too, leaving a ring of holes beside each title, and text
+/// recognition then read "iOS" beside it as "iOs".
+private struct SessionMarkCut: Shape {
+    func path(in rect: CGRect) -> Path {
+        // Room round the mark for the disc, which reaches past its corner.
+        var path = Path(rect.insetBy(dx: -4, dy: -4))
+        path.addEllipse(in: CGRect(x: rect.maxX - 5.5, y: rect.maxY - 5.5, width: 9, height: 9))
+        return path
     }
 }

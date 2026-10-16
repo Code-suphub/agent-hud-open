@@ -84,6 +84,12 @@ final class IslandHoverAnchorView<Content: View>: NSView {
             if popup.panel.appearance?.name != look.appearanceName {
                 popup.panel.appearance = NSAppearance(named: look.appearanceName)
             }
+            // A shadow under details the desktop shows through would darken them, as the HUD keeps shadows from under
+            // its own see-through shells.
+            if popup.panel.hasShadow == look.seeThrough {
+                popup.panel.hasShadow = !look.seeThrough
+                popup.panel.invalidateShadow()
+            }
         }
         guard isHovered, enabled, let window, let pointerLocation else {
             dismiss()
@@ -99,7 +105,7 @@ final class IslandHoverAnchorView<Content: View>: NSView {
         let details = Details(rootView: content.hudLook(look))
         let panel = OverlayPanel(frame: .zero, level: .popUpMenu, acceptsMouse: false)
         panel.title = "Island hover details"
-        panel.hasShadow = true
+        panel.hasShadow = !look.seeThrough
         panel.appearance = NSAppearance(named: look.appearanceName)
         panel.contentView = details
         popup = (panel, details)
