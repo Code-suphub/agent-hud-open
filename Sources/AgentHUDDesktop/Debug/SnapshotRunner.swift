@@ -151,6 +151,25 @@ public enum SnapshotRunner {
         save("bots-asking", BotSheetScene(phase: .asking), folder: folder, scheme: .dark)
         save("bots-done", BotSheetScene(phase: .done, seconds: 0.9), folder: folder, scheme: .dark)
         save("bots-resting", BotSheetScene(phase: .idle, seconds: 2), folder: folder, scheme: .dark)
+        // Every mark in every state a mark can be told, at the dock's default and largest sizes, on both grounds.
+        for side in [20.0, 36.0] {
+            for ground in [HUDLook.Appearance.dark, .light] {
+                save("bots-states-\(Int(side))-\(ground)", BotStatesScene(side: side, ground: ground), folder: folder,
+                     scheme: ground == .dark ? .dark : .light)
+            }
+        }
+        // Clawd's sprites through every clip, only where this Mac has the Claude app they are read from. The pictures are
+        // for checking the clips here and are never published; a Mac without the app, as a build machine is, skips them.
+        if let sheet = await ClawdSheetSource.shared.sheet(fitting: .standard) {
+            for side in [20.0, 36.0] {
+                for ground in [HUDLook.Appearance.dark, .light] {
+                    save("clawd-sprites-local-\(Int(side))-\(ground)", ClawdSpritesScene(sheet: sheet, side: side, ground: ground),
+                         folder: folder, scheme: ground == .dark ? .dark : .light)
+                }
+            }
+        } else {
+            print("snapshot skipped clawd-sprites-local: no Claude app whose sprites fit the clips")
+        }
         // The Display pane with this machine's screen put in logo mode, to check the preview against the HUD.
         if let main = NSScreen.main {
             let key = ScreenIdentity.key(for: main)
