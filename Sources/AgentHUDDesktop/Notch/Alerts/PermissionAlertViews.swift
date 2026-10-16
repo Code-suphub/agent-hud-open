@@ -147,13 +147,15 @@ private struct PermissionOpenRow: View {
             }
             if request.isQuestion {
                 PermissionQuestionCard(request: request, onDecide: onDecide)
+            } else if request.answersPlan {
+                PermissionPlanCard(request: request, onDecide: onDecide)
             } else if request.removed != nil || request.added != nil {
                 PermissionDiff(removed: request.removed, added: request.added)
             } else if let detail = request.detail {
                 PermissionDetail(text: detail, lines: 6)
             }
             if request.isPlan {
-                PlanNotice(request: request, onDecide: onDecide)
+                if !request.answersPlan { PlanNotice(request: request, onDecide: onDecide) }
             } else if !request.isQuestion {
                 if let rule = request.alwaysAllowRule { PermissionRuleNote(rule: rule) }
                 PermissionButtons(request: request, onDecide: onDecide)
@@ -301,19 +303,26 @@ struct PermissionAlertInlineView: View {
     var waiting = 1
     @Environment(\.permissionColor) private var color
 
-    /// A plan is answered in its client, so there is nothing here to read before allowing it.
+    /// A plan answered in its client has nothing here to read before allowing it.
     private var subject: String? { request.isPlan ? nil : request.detail }
 
     var body: some View {
-        if request.isQuestion {
-            // A question cannot be answered from one line, so inside the panel it is the whole card.
+        if request.isQuestion || request.answersPlan {
+            // A question cannot be answered from one line, nor a plan read in one, so inside the panel each is the
+            // whole card.
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     PermissionSymbol(requestID: request.id)
-                    Text(L10n.text("\(request.vendor) 在问你", "\(request.vendor) asks")).font(.ui(12, .medium))
+                    Text(request.isQuestion ? L10n.text("\(request.vendor) 在问你", "\(request.vendor) asks")
+                                            : L10n.text("\(request.vendor) 有计划待审", "\(request.vendor) has a plan to review"))
+                        .font(.ui(12, .medium))
                     WaitingCount(waiting: waiting)
                 }
-                PermissionQuestionCard(request: request, onDecide: onDecide)
+                if request.isQuestion {
+                    PermissionQuestionCard(request: request, onDecide: onDecide)
+                } else {
+                    PermissionPlanCard(request: request, onDecide: onDecide, planHeight: 120)
+                }
             }.foregroundStyle(color.text).padding(.vertical, 8)
         } else {
             VStack(alignment: .leading, spacing: 8) {
@@ -345,9 +354,8 @@ struct PermissionAlertInlineView: View {
     }
 }
 
-/// A plan is approved where it was written: the client offers choices about how to go on that an allow cannot carry,
-/// and a plan deserves more reading than a card can hold. The card says where to go and can be put away; putting it
-/// away answers nothing, and the client's own dialog is there either way.
+/// A plan from a client that takes no answer to it from a hook is approved where it was written. The card says where
+/// to go and can be put away; putting it away answers nothing, and the client's own dialog is there either way.
 private struct PlanNotice: View {
     let request: PermissionRequest
     let onDecide: (PermissionDecision) -> Void

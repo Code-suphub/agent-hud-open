@@ -129,7 +129,7 @@ public struct DeepSeekQuestions: Sendable {
             toolName: PermissionQuestion.tool,
             summary: frame.questions.first?.question ?? "",
             detail: nil, cwd: nil,
-            questions: frame.questions, questionInput: input, at: now
+            questions: frame.questions, answerInput: input, at: now
         )
         return Pending(request: request, rpcID: frame.rpcID, port: port)
     }

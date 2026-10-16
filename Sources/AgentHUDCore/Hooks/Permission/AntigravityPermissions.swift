@@ -65,7 +65,7 @@ public struct AntigravityPermissions: Sendable {
         case .leave: return
         case .allow: allow = true
         case .deny: allow = false
-        case .allowAlways, .answer: throw Failure.unsupportedDecision
+        case .allowAlways, .answer, .approvePlan, .keepPlanning: throw Failure.unsupportedDecision
         }
         let endpoints = try await discover(true)
         try Task.checkCancellation()
