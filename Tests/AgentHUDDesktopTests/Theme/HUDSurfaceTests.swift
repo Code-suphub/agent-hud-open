@@ -101,6 +101,25 @@ final class HUDSurfaceTests: XCTestCase {
         }
     }
 
+    /// Clear and regular glass are Liquid Glass where glass is, and not as their stand-in; solid and the material never
+    /// are. Checked with glass both Liquid Glass and frosted, whatever this Mac and its build draw.
+    func testOnlyClearAndRegularGlassDrawLiquidGlassWhereGlassIsLiquid() {
+        for liquid in [true, false] {
+            for appearance in [HUDLook.Appearance.dark, .light] {
+                for style in [HUDGlassStyle.clear, .regular] {
+                    let glass = HUDLook(appearance: appearance, material: .glass, glassStyle: style)
+                    XCTAssertEqual(glass.drawsLiquidGlass(standIn: false, liquid: liquid), liquid, "\(appearance) \(style)")
+                    XCTAssertFalse(glass.drawsLiquidGlass(standIn: true, liquid: liquid), "\(appearance) \(style)")
+                }
+                let material = HUDLook(appearance: appearance, material: .glass, glassStyle: .material)
+                XCTAssertFalse(material.drawsLiquidGlass(standIn: false, liquid: liquid), "\(appearance)")
+                XCTAssertFalse(HUDLook(appearance: appearance).drawsLiquidGlass(standIn: false, liquid: liquid))
+            }
+        }
+        let glass = HUDLook(appearance: .dark, material: .glass)
+        XCTAssertEqual(glass.drawsLiquidGlass(standIn: false), HUDGlass.isLiquid)
+    }
+
     /// Beneath glass lies a dimming layer, as Apple asks of clear glass to keep what is on it legible: the look's own
     /// colour, which the theme gives opaque, black beneath dark glass and near-white beneath light glass, at what the
     /// transparency drawn leaves of it: all of it at 0, 0.7 at the standard glass's 0.3, 0.4 at Liquid Glass's top of

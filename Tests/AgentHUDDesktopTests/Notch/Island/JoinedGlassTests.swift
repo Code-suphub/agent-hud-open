@@ -43,24 +43,30 @@ final class JoinedGlassTests: XCTestCase {
     }
 
     /// Liquid Glass, clear or regular, joins the panel and the line; every other way of drawing keeps each surface its
-    /// own, as it always was.
+    /// own, as it always was. Checked with glass both Liquid Glass and frosted, whatever this Mac and its build draw.
     func testOnlyLiquidGlassJoinsThePanelAndTheLine() {
-        let liquid = HUDGlass.isLiquid
-        for appearance in [HUDLook.Appearance.dark, .light] {
-            for style in [HUDGlassStyle.clear, .regular] {
-                let glass = HUDLook(appearance: appearance, material: .glass, transparency: 0.5, glassStyle: style)
-                XCTAssertEqual(root(look: glass).joinsPanelGlass(standIn: false), liquid, "\(appearance) \(style)")
-                XCTAssertEqual(root(look: glass).cardJoinsPanel(standIn: false), liquid, "\(appearance) \(style)")
-                XCTAssertFalse(root(look: glass).joinsPanelGlass(standIn: true), "\(appearance) \(style): a picture")
+        for liquid in [true, false] {
+            for appearance in [HUDLook.Appearance.dark, .light] {
+                for style in [HUDGlassStyle.clear, .regular] {
+                    let glass = HUDLook(appearance: appearance, material: .glass, transparency: 0.5, glassStyle: style)
+                    let name = "\(appearance) \(style), \(liquid ? "Liquid Glass" : "frosted")"
+                    XCTAssertEqual(root(look: glass).joinsPanelGlass(standIn: false, liquid: liquid), liquid, name)
+                    XCTAssertEqual(root(look: glass).cardJoinsPanel(standIn: false, liquid: liquid), liquid, name)
+                    XCTAssertFalse(root(look: glass).joinsPanelGlass(standIn: true, liquid: liquid), "\(name): a picture")
+                }
+                let others = [HUDLook(appearance: appearance), HUDLook(appearance: appearance, transparency: 0.4),
+                              HUDLook(appearance: appearance, material: .glass, transparency: 0.5, glassStyle: .material)]
+                for look in others {
+                    XCTAssertFalse(root(look: look).joinsPanelGlass(standIn: false, liquid: liquid), "\(look)")
+                    XCTAssertFalse(root(look: look).cardJoinsPanel(standIn: false, liquid: liquid), "\(look)")
+                }
             }
-            let others = [HUDLook(appearance: appearance), HUDLook(appearance: appearance, transparency: 0.4),
-                          HUDLook(appearance: appearance, material: .glass, transparency: 0.5, glassStyle: .material)]
-            for look in others {
-                XCTAssertFalse(root(look: look).joinsPanelGlass(standIn: false), "\(look)")
-                XCTAssertFalse(root(look: look).cardJoinsPanel(standIn: false), "\(look)")
-            }
+            XCTAssertFalse(root(look: .standard).joinsPanelGlass(standIn: false, liquid: liquid))
         }
-        XCTAssertFalse(root(look: .standard).joinsPanelGlass(standIn: false))
+        // Unless told otherwise, the glass is what this Mac and its build draw.
+        let glass = HUDLook(appearance: .dark, material: .glass, transparency: 0.5)
+        XCTAssertEqual(root(look: glass).joinsPanelGlass(standIn: false), HUDGlass.isLiquid)
+        XCTAssertEqual(root(look: glass).cardJoinsPanel(standIn: false), HUDGlass.isLiquid)
     }
 
     /// Only the line flows into the panel. A full card, a reminder or a request sits 6 points off it and keeps a surface
@@ -68,19 +74,25 @@ final class JoinedGlassTests: XCTestCase {
     /// event from an agent with no mark here draw as they always have.
     func testOnlyTheLineJoinsAndOnlyOnASeparatingSimpleDock() {
         let glass = HUDLook(appearance: .dark, material: .glass, transparency: 0.5)
-        let liquid = HUDGlass.isLiquid
-        XCTAssertEqual(root(look: glass, pinned: true).joinsPanelGlass(standIn: false), liquid, "the panel beside a full card")
-        XCTAssertFalse(root(look: glass, pinned: true).cardJoinsPanel(standIn: false), "a full card")
-        XCTAssertEqual(root(look: glass, open: false, alert: reply).joinsPanelGlass(standIn: false), liquid)
-        XCTAssertFalse(root(look: glass, open: false, alert: reply).cardJoinsPanel(standIn: false), "a reminder")
-        XCTAssertFalse(root(look: glass, alert: reply).cardJoinsPanel(standIn: false), "an event's card")
-        XCTAssertEqual(root(look: glass, open: false, focus: nil).joinsPanelGlass(standIn: false), liquid, "the panel alone")
-        XCTAssertFalse(root(look: glass, open: false, focus: nil).cardJoinsPanel(standIn: false))
-        XCTAssertFalse(root(look: glass, open: false, focus: nil, alert: reply).joinsPanelGlass(standIn: false),
-                       "the island grown for an agent with no mark")
-        XCTAssertFalse(root(look: glass, separates: false).joinsPanelGlass(standIn: false))
-        XCTAssertFalse(root(look: glass, simple: false, style: .bubble).joinsPanelGlass(standIn: false))
-        XCTAssertFalse(root(look: glass, placed: false).joinsPanelGlass(standIn: false), "no panel placed yet")
+        for liquid in [true, false] {
+            func joins(_ view: IslandRootView) -> Bool { view.joinsPanelGlass(standIn: false, liquid: liquid) }
+            func cardJoins(_ view: IslandRootView) -> Bool { view.cardJoinsPanel(standIn: false, liquid: liquid) }
+            let glassName = liquid ? "Liquid Glass" : "frosted"
+            XCTAssertEqual(joins(root(look: glass)), liquid, "\(glassName): the panel beside the line")
+            XCTAssertEqual(cardJoins(root(look: glass)), liquid, "\(glassName): the line")
+            XCTAssertEqual(joins(root(look: glass, pinned: true)), liquid, "\(glassName): the panel beside a full card")
+            XCTAssertFalse(cardJoins(root(look: glass, pinned: true)), "\(glassName): a full card")
+            XCTAssertEqual(joins(root(look: glass, open: false, alert: reply)), liquid, glassName)
+            XCTAssertFalse(cardJoins(root(look: glass, open: false, alert: reply)), "\(glassName): a reminder")
+            XCTAssertFalse(cardJoins(root(look: glass, alert: reply)), "\(glassName): an event's card")
+            XCTAssertEqual(joins(root(look: glass, open: false, focus: nil)), liquid, "\(glassName): the panel alone")
+            XCTAssertFalse(cardJoins(root(look: glass, open: false, focus: nil)), glassName)
+            XCTAssertFalse(joins(root(look: glass, open: false, focus: nil, alert: reply)),
+                           "\(glassName): the island grown for an agent with no mark")
+            XCTAssertFalse(joins(root(look: glass, separates: false)), glassName)
+            XCTAssertFalse(joins(root(look: glass, simple: false, style: .bubble)), glassName)
+            XCTAssertFalse(joins(root(look: glass, placed: false)), "\(glassName): no panel placed yet")
+        }
     }
 
     /// While its glass is drawn with the line's, the panel draws its figures alone.
