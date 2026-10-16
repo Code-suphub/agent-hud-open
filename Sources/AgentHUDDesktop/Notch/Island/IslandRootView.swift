@@ -21,11 +21,15 @@ struct CompactWings: Equatable {
     var padding: CGFloat
     var width: CGFloat { leading + gap + trailing + 2 * padding }
 
-    /// A size of a reminder's words or of the symbol beside them, in points before a dock's scale, from the size it has
-    /// beside the notch, where the name is the cards' 13 and the status 12. On a dock it is two sizes smaller, the name
-    /// 11 and the status 10, so words and symbol sit in the pill, which keeps a mark's height, a step under the agent's
-    /// mark beside them, with room above and below. The agent's mark keeps its size.
-    static func size(_ beside: CGFloat, onDock: Bool) -> CGFloat { onDock ? beside - 2 : beside }
+    /// The size of a reminder's name or status, in points before a dock's scale, from the size it has beside the notch,
+    /// where the name is the cards' 13 and the status 12. On a dock both are `IslandRootView.dockTextSize`, the size of
+    /// everything a dock writes, so the pill reads as the Simple panel's numbers and its hover line do.
+    static func words(_ beside: CGFloat, onDock: Bool) -> CGFloat { onDock ? IslandRootView.dockTextSize : beside }
+    /// The size of the symbol beside a status, from its size beside the notch: on a dock as much smaller as the status
+    /// is. The agent's mark keeps its size.
+    static func size(_ beside: CGFloat, onDock: Bool) -> CGFloat {
+        onDock ? beside - (12 - IslandRootView.dockTextSize) : beside
+    }
 
     /// The halves of `alert`'s reminder on a dock set to `scale`, each measured from its text and no wider than a
     /// wing, so the pill is placed before anything is drawn. The lengths are the ones the reminders' views use.
@@ -40,28 +44,29 @@ struct CompactWings: Equatable {
                 .withSymbolConfiguration(.init(pointSize: size, weight: .semibold))?.size.width
             return ceil(drawn ?? size * 1.4)
         }
+        func w(_ value: CGFloat) -> CGFloat { s(Self.words(value, onDock: true)) }
         func t(_ value: CGFloat) -> CGFloat { s(Self.size(value, onDock: true)) }
-        let name = NSFont.systemFont(ofSize: t(13), weight: .semibold)
+        let name = NSFont.systemFont(ofSize: w(13), weight: .semibold)
         let who: String, what: String, mark: CGFloat, status: NSFont
         var count: CGFloat = 0
         switch alert {
         case .completion(let event):
             who = event.agentVendor; what = IslandAlertCompactView.replyStatus; mark = symbol("text.bubble", t(16))
-            status = .systemFont(ofSize: t(12), weight: .medium)
+            status = .systemFont(ofSize: w(12), weight: .medium)
         case .permission(let request):
             who = request.project ?? request.vendor; what = PermissionAlertCompactView.status(of: request)
             mark = symbol("hand.raised.fill", t(14))
-            status = .systemFont(ofSize: t(12), weight: .medium)
+            status = .systemFont(ofSize: w(12), weight: .medium)
             if waiting > 1 {
                 count = s(7) + width("×\(waiting)", .monospacedDigitSystemFont(ofSize: s(10), weight: .semibold)) + 2 * s(5)
             }
         case .quota(let event):
             // These two symbols sit in a frame of their own, two points over their size.
             who = event.agent.vendorName; what = QuotaAlertCompactView.status(of: event); mark = t(12) + 2
-            status = .monospacedDigitSystemFont(ofSize: t(12), weight: .medium)
+            status = .monospacedDigitSystemFont(ofSize: w(12), weight: .medium)
         case .resetCredits(let grant):
             who = grant.account.account.provider; what = ResetCreditAlertCompactView.status(of: grant); mark = t(12) + 2
-            status = .monospacedDigitSystemFont(ofSize: t(12), weight: .medium)
+            status = .monospacedDigitSystemFont(ofSize: w(12), weight: .medium)
         }
         let wing = s(IslandController.alertWingWidth)
         // A point to spare each: a width measured here and one laid out by SwiftUI can differ by a fraction.
@@ -281,9 +286,12 @@ struct IslandRootView: View {
     /// A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt for a 17 pt mark
     /// and 13 pt text, where the notch's own height made it 48.
     nonisolated static let dockCompactHeight: CGFloat = 26
-    /// The tallest the pill grows beside a large mark. Past it the pill stays a slim line centred on the mark, and
-    /// its words stay the size of a menu's instead of a heading's.
-    nonisolated static let dockCompactMaxHeight: CGFloat = 32
+    /// The size of every word a dock writes, in points before its scale: a reminder's name and status in its pill, the
+    /// Simple panel's numbers and the line it grows on hover. One size for all, so they read as one piece, a step under
+    /// the 12 the notch's reminders and cards are written at.
+    nonisolated static let dockTextSize: CGFloat = 11
+    /// `dockTextSize` on a dock set to `scale`, never smaller than at the default, rounded as a dock's lengths are.
+    nonisolated static func dockText(scale: CGFloat) -> CGFloat { (dockTextSize * max(1, scale)).rounded() }
     /// Above and below the pill's row. The row already keeps its own padding at each end, so the card adds none.
     static let dockCompactInsets = EdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
     /// This screen's `dockScale`. A compact reminder is the dock growing an arm, as the Simple panel's line is,
@@ -292,15 +300,14 @@ struct IslandRootView: View {
 
     /// How much larger than at its default a dock writes what it grows out of itself: enough for a compact
     /// reminder's pill and the hover line to be as tall as one of the dock's marks, a Simple panel's ring or a
-    /// Dynamic dock's logo, up to `dockCompactMaxHeight`. Never below 1, so beside a mark shorter than the default
-    /// pill nothing is written smaller than it was. The notch has no size to follow and keeps 1.
+    /// Dynamic dock's logo. Never below 1, so beside a mark shorter than the default pill nothing is written smaller
+    /// than it was. The notch has no size to follow and keeps 1.
     nonisolated static func dockScale(mode: HUDMode, placement: ScreenPlacement) -> CGFloat {
-        let mark: Double = switch mode {
-        case .simple: placement.simpleSize
-        case .logos: placement.logoSize
-        case .notch: Double(dockCompactHeight)
+        switch mode {
+        case .simple: max(1, CGFloat(placement.simpleSize) / dockCompactHeight)
+        case .logos: max(1, CGFloat(placement.logoSize) / dockCompactHeight)
+        case .notch: 1
         }
-        return min(dockCompactMaxHeight, max(dockCompactHeight, CGFloat(mark))) / dockCompactHeight
     }
 
     /// A compact reminder's row and the room above and below it, on a dock set to `scale`. The row is what the

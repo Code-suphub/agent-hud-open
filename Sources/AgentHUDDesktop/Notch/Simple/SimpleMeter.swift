@@ -107,7 +107,9 @@ struct SimpleMeterConfig: Equatable {
     var logo: CGFloat { (size * (showsRings ? 0.55 : 0.68)).rounded() }
     /// The square a mark takes, ring included.
     var mark: CGFloat { showsRings ? size : logo }
-    var fontSize: CGFloat { max(9, (size * 0.59).rounded()) }
+    /// The numbers are written as everything the dock grows out of itself is, a reminder's words and the hover line:
+    /// `IslandRootView.dockText` at the panel's scale, so the three read at one size beside any ring.
+    var fontSize: CGFloat { IslandRootView.dockText(scale: size / IslandRootView.dockCompactHeight) }
     /// Between a mark and its number.
     var labelSpacing: CGFloat { (size * 0.23).rounded() }
     /// Between two agents along the panel.

@@ -159,8 +159,8 @@ final class ScreenHUD {
     }
 
     /// What the dock grows out of itself — the Simple panel's line, the Dynamic dock's bubble, a compact reminder —
-    /// is written to this scale: as tall as one of the dock's marks up to `IslandRootView.dockCompactMaxHeight`, and
-    /// never smaller than at the default. Cards keep their own sizes.
+    /// is written to this scale: as tall as one of the dock's marks, and never smaller than at the default. Cards
+    /// keep their own sizes.
     private var stripScale: CGFloat { IslandRootView.dockScale(mode: geometry.mode, placement: placement) }
 
     /// The halves of the reminder on show, as its view lays them out on this dock.

@@ -29,19 +29,18 @@ final class DockLayoutTests: XCTestCase {
     }
 
     @MainActor
-    func testADockReminderIsAsTallAsOneOfTheDocksMarksUpToItsMostAndTheNotchHasNoScale() {
+    func testADockReminderIsAsTallAsOneOfTheDocksMarksAndTheNotchHasNoScale() {
         func pill(_ placement: ScreenPlacement) -> CGFloat {
             IslandRootView.dockCompactSize(edge: placement.edge, collapsedSize: CGSize(width: 216, height: 32),
                                            scale: IslandRootView.dockScale(mode: placement.mode, placement: placement)).height
         }
-        // A Simple panel's mark is its ring, drawn or not. A ring shorter than the default pill leaves the pill alone,
-        // and one taller than the most a pill grows leaves it at that.
-        for (ring, height): (Double, CGFloat) in [(20, 26), (22, 26), (26, 26), (27, 27), (30, 30), (32, 32), (33, 32), (40, 32), (50, 32)] {
+        // A Simple panel's mark is its ring, drawn or not. A ring shorter than the default pill leaves the pill alone.
+        for (ring, height): (Double, CGFloat) in [(20, 26), (22, 26), (26, 26), (27, 27), (30, 30), (33, 33), (40, 40), (50, 50)] {
             XCTAssertEqual(pill(ScreenPlacement(mode: .simple, simpleSize: ring)), height, "A \(ring) pt ring")
             XCTAssertEqual(pill(ScreenPlacement(mode: .simple, simpleSize: ring, showsRings: false)), height)
         }
         // A Dynamic dock's is its logo, whatever the Simple panel on the same screen was set to.
-        for (logo, height): (Double, CGFloat) in [(12, 26), (20, 26), (27, 27), (30, 30), (36, 32)] {
+        for (logo, height): (Double, CGFloat) in [(12, 26), (20, 26), (27, 27), (36, 36)] {
             XCTAssertEqual(pill(ScreenPlacement(mode: .logos, logoSize: logo, simpleSize: 40)), height, "A \(logo) pt logo")
         }
         // The notch has no size of its own to follow, so neither dock's setting reaches it.
@@ -50,8 +49,31 @@ final class DockLayoutTests: XCTestCase {
         let sizes = ScreenPlacement.simpleSizeRange
         for size in stride(from: sizes.lowerBound, through: sizes.upperBound, by: 1) {
             let row = IslandRootView.dockCompactRow(scale: IslandRootView.dockScale(mode: .simple, placement: ScreenPlacement(mode: .simple, simpleSize: size)))
-            XCTAssertEqual(row.height + 2 * row.inset, min(32, max(26, size)), "A \(size) pt ring")
+            XCTAssertEqual(row.height + 2 * row.inset, max(26, size), "A \(size) pt ring")
         }
+    }
+
+    @MainActor
+    func testADockWritesAReminderTheNumbersAndTheHoverLineAtOneSize() {
+        let sizes = ScreenPlacement.simpleSizeRange
+        for ring in stride(from: sizes.lowerBound, through: sizes.upperBound, by: 1) {
+            let placement = ScreenPlacement(mode: .simple, edge: .right, simpleSize: ring)
+            let scale = IslandRootView.dockScale(mode: .simple, placement: placement)
+            let text = IslandRootView.dockText(scale: scale)
+            XCTAssertEqual(SimpleMeterConfig(items: [], placement: placement).fontSize, text, "A \(ring) pt ring's numbers")
+            var line = AgentPeek(vendor: "Claude", lines: [], running: 0, style: .line)
+            line.scale = scale
+            XCTAssertEqual(line.lineFont, text, "A \(ring) pt ring's hover line")
+            // A reminder's views write its name and status at the dock's scale, as `s(_:)` rounds it.
+            for beside: CGFloat in [13, 12] {
+                XCTAssertEqual((CompactWings.words(beside, onDock: true) * scale).rounded(), text, "A \(ring) pt ring's reminder")
+            }
+        }
+        XCTAssertEqual(IslandRootView.dockText(scale: 1), 11)
+        XCTAssertEqual(IslandRootView.dockText(scale: IslandRootView.dockScale(mode: .simple, placement: ScreenPlacement(mode: .simple, simpleSize: 50))), 21)
+        // Beside the notch a reminder keeps the cards' sizes.
+        XCTAssertEqual(CompactWings.words(13, onDock: false), 13)
+        XCTAssertEqual(CompactWings.words(12, onDock: false), 12)
     }
 
     @MainActor
