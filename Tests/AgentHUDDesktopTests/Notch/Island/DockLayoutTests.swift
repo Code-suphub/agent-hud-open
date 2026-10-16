@@ -69,8 +69,8 @@ final class DockLayoutTests: XCTestCase {
                 XCTAssertEqual((CompactWings.words(beside, onDock: true) * scale).rounded(), text, "A \(ring) pt ring's reminder")
             }
         }
-        XCTAssertEqual(IslandRootView.dockText(scale: 1), 11)
-        XCTAssertEqual(IslandRootView.dockText(scale: IslandRootView.dockScale(mode: .simple, placement: ScreenPlacement(mode: .simple, simpleSize: 50))), 21)
+        XCTAssertEqual(IslandRootView.dockText(scale: 1), 9)
+        XCTAssertEqual(IslandRootView.dockText(scale: IslandRootView.dockScale(mode: .simple, placement: ScreenPlacement(mode: .simple, simpleSize: 50))), 17)
         // Beside the notch a reminder keeps the cards' sizes.
         XCTAssertEqual(CompactWings.words(13, onDock: false), 13)
         XCTAssertEqual(CompactWings.words(12, onDock: false), 12)

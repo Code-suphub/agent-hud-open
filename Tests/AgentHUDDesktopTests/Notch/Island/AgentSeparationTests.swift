@@ -88,15 +88,15 @@ final class AgentSeparationTests: XCTestCase {
             return peek
         }
         let usual = line(panel: 22), large = line(panel: 36), small = line(panel: 16)
-        XCTAssertEqual(usual.lineFont, 11, "Every word a dock writes is 11 pt at the default")
+        XCTAssertEqual(usual.lineFont, 9, "Every word a dock writes is 9 pt at the default")
         XCTAssertEqual(usual.size.height, 26, "The default panel's line is what it always was")
         XCTAssertEqual(line(panel: 26).size, usual.size, "A ring no taller than the line leaves it alone")
         XCTAssertEqual(line(panel: 30).size.height, 30, "Past that the line is as tall as the ring")
-        XCTAssertEqual(line(panel: 30).lineFont, 13)
+        XCTAssertEqual(line(panel: 30).lineFont, 10)
         XCTAssertEqual(large.size.height, 36)
-        XCTAssertEqual(large.lineFont, 15, "Its text grows by as much as it does")
+        XCTAssertEqual(large.lineFont, 12, "Its text grows by as much as it does")
         XCTAssertGreaterThan(large.size.width, usual.size.width * 1.3)
-        XCTAssertEqual(small.lineFont, 11, "Nothing is written smaller than at the default")
+        XCTAssertEqual(small.lineFont, 9, "Nothing is written smaller than at the default")
         XCTAssertEqual(small.size, usual.size)
 
         // The Dynamic dock's bubble keeps pace with its marks the same way.

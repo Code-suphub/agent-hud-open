@@ -287,9 +287,9 @@ struct IslandRootView: View {
     /// and 13 pt text, where the notch's own height made it 48.
     nonisolated static let dockCompactHeight: CGFloat = 26
     /// The size of every word a dock writes, in points before its scale: a reminder's name and status in its pill, the
-    /// Simple panel's numbers and the line it grows on hover. One size for all, so they read as one piece, a step under
-    /// the 12 the notch's reminders and cards are written at.
-    nonisolated static let dockTextSize: CGFloat = 11
+    /// Simple panel's numbers and the line it grows on hover. One size for all, so they read as one piece, three steps
+    /// under the 12 the notch's reminders and cards are written at.
+    nonisolated static let dockTextSize: CGFloat = 9
     /// `dockTextSize` on a dock set to `scale`, never smaller than at the default, rounded as a dock's lengths are.
     nonisolated static func dockText(scale: CGFloat) -> CGFloat { (dockTextSize * max(1, scale)).rounded() }
     /// Above and below the pill's row. The row already keeps its own padding at each end, so the card adds none.
