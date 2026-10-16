@@ -18,6 +18,11 @@ struct PermissionColor {
     var allow: Color { Color(StatusPalette.ok) }
     /// Refusing it.
     var deny: Color { Color(StatusPalette.critical) }
+    /// The two as an outline or a faint fill, an outlined button's edge or Deny's ground: the theme's level fills, the
+    /// bright hues on a dark HUD and the light HUD's deeper ones on a light one, where the bright hues at a fraction
+    /// all but vanish on near-white and the button reads as loose text.
+    var allowEdge: Color { theme.status(.ok) }
+    var denyEdge: Color { theme.status(.critical) }
     /// Ink on a fill of `allow`, which stays bright whatever the theme.
     var onAllow: Color { theme.onAccent }
     /// The three as text and thin glyphs: themselves on a dark HUD, darker on a light one, where the bright fills would
@@ -415,14 +420,14 @@ private struct PermissionButtons: View {
     var body: some View {
         HStack(spacing: 6) {
             button(L10n.text("拒绝", "Deny"), symbol: "xmark", identifier: "island-permission-deny",
-                   fill: color.deny.opacity(0.14), stroke: color.deny.opacity(0.3),
+                   fill: color.denyEdge.opacity(0.14), stroke: color.denyEdge.opacity(0.3),
                    foreground: color.denyText) { onDecide(.deny) }
             Spacer(minLength: 8)
             if let always = request.alwaysAllow {
                 // A seal, not a tick: this answer outlives the call it was given for.
                 button(L10n.text("总是允许", "Always allow"), symbol: "checkmark.seal",
                        identifier: "island-permission-always",
-                       fill: .clear, stroke: color.allow.opacity(0.4),
+                       fill: .clear, stroke: color.allowEdge.opacity(0.4),
                        foreground: color.allowText) { onDecide(.allowAlways(always)) }
             }
             button(request.allowLabel, symbol: "checkmark", identifier: "island-permission-approve",

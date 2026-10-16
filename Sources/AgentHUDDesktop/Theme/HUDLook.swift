@@ -52,14 +52,13 @@ struct HUDLook: Equatable, Sendable {
     /// The notch row's glass: four fifths black beneath it.
     static let notchRowTransparency = 0.2
 
-    /// The tokens the HUD draws with: the island's own for a dark HUD, solid or glass; the light window's, set for the
-    /// HUD, for a light one; and for light glass, those with ink a grade darker. Their painted boxes thin with the look
-    /// (`Theme.under(_:)`), as a window's do.
+    /// The tokens the HUD draws with: the island's own for a dark HUD, and the light window's, set for the HUD, for a
+    /// light one, solid or glass, on the look's ground (`Theme.under(_:)`), as a window's are: on a ground the desktop
+    /// shows through their greys are tints of the ink, a grade darker on light glass, and their painted boxes thin.
     var theme: Theme {
-        switch (appearance, material) {
-        case (.dark, _): Theme.island.under(self)
-        case (.light, .solid): Theme.lightIsland.under(self)
-        case (.light, .glass): Theme.lightGlass.under(self)
+        switch appearance {
+        case .dark: Theme.island.under(self)
+        case .light: Theme.lightIsland.under(self)
         }
     }
 
@@ -117,6 +116,22 @@ struct HUDLook: Equatable, Sendable {
 
     /// What glass stands in as at its most transparent.
     static let standInFloor = 0.35
+
+    /// A box raised over content, a chart's or a row's hover details (`drawsRaisedBox`): drawn solid, never thinner than
+    /// nine tenths, and as glass's stand-in never thinner than `raisedStandInFloor`, so that the bars, the grid and the
+    /// rows beneath it never show through its text. On an opaque look it is whole either way.
+    var raisedCoverOpacity: Double {
+        max(coverOpacity, Self.raisedCoverFloor)
+    }
+
+    /// The stand-in for glass under a raised box: the look's own colour, as `glassStandIn`, at a floor of its own.
+    var raisedStandIn: Color {
+        theme.glassTint.opacity(Self.raisedStandInFloor + (1 - Self.raisedStandInFloor) * dimmingOpacity)
+    }
+
+    /// What a raised box's solid fill and its glass stand-in are drawn at, at the least.
+    static let raisedCoverFloor = 0.9
+    static let raisedStandInFloor = 0.85
 
     /// Whether the desktop shows through the HUD: glass, or a solid surface with a transparency. What lies under the
     /// HUD's surfaces, the glow and the shadows, is then kept out from under them (`GlowCutout`, `castsShellShadows`).

@@ -10,6 +10,10 @@ extension EnvironmentValues {
     /// Whether a material stands in too, where Liquid Glass would not: in a Settings preview, whose wallpaper is painted
     /// inside the window, which a material, a blur of what is behind the window, does not take in.
     @Entry var drawsMaterialStandIn = false
+    /// Whether the surface is a box raised over content, a chart's or a row's hover details, which a solid look and
+    /// glass's stand-in draw nearly opaque (`HUDLook.raisedCoverOpacity`, `raisedStandIn`), so that what lies beneath it
+    /// never shows through its text. Real glass and a material keep their blur.
+    @Entry var drawsRaisedBox = false
 }
 
 /// Where glass is Liquid Glass and where it is frosted.
@@ -29,10 +33,16 @@ enum HUDGlass {
 }
 
 extension HUDLook {
+    /// Whether a surface in this look is Liquid Glass here: clear or regular glass, not drawn as its stand-in, where
+    /// glass is Liquid Glass (`HUDGlass.isLiquid`).
+    func drawsLiquidGlass(standIn: Bool) -> Bool {
+        material == .glass && glassStyle != .material && !standIn && HUDGlass.isLiquid
+    }
+
     /// The hairline round a surface in this look: `color`, or none where Liquid Glass lights a rim of its own. Glass drawn
     /// as its stand-in keeps the hairline, as solid does, and so does a material, which has no rim of its own.
     func outline(_ color: Color, standIn: Bool) -> Color {
-        material == .glass && glassStyle != .material && !standIn && HUDGlass.isLiquid ? .clear : color
+        drawsLiquidGlass(standIn: standIn) ? .clear : color
     }
 }
 
@@ -55,10 +65,13 @@ extension HUDLook {
 ///   dimming they read less well over a desktop of the other shade.
 /// - Where nothing is behind to blur (`drawsGlassStandIn`), glass is the look's own surface standing in for it
 ///   (`HUDLook.glassStandIn`), and in a Settings preview a material is too (`drawsMaterialStandIn`).
+/// - A box raised over content (`drawsRaisedBox`) is drawn nearly opaque when solid or a stand-in, so that what lies
+///   beneath it never shows through its text.
 ///
 /// The surface is drawn behind what the HUD holds, never round it: glass that holds the HUD's content would turn that
 /// content's colour scheme with the desktop behind it, and glass drawn in a `GlassEffectContainer` with the content
-/// beside it blurs the content as if it were the desktop. So no surface is ever put in such a container.
+/// beside it blurs the content as if it were the desktop. So no surface is ever put in such a container. The one
+/// container the HUD draws holds glass and nothing else (`JoinedGlass`).
 ///
 /// A change of look cross-fades on the island's curve, and under Reduce Motion is made at once. A blur or glass does not
 /// fade with a colour, so each way of drawing is a layer of its own, and a change between them fades one layer out as
@@ -73,6 +86,7 @@ struct HUDSurface<S: Shape>: View {
     let contact: HUDEdge?
     @Environment(\.drawsGlassStandIn) private var standIn
     @Environment(\.drawsMaterialStandIn) private var materialStandIn
+    @Environment(\.drawsRaisedBox) private var raised
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ shape: S, look: HUDLook, fill: Color, contact: HUDEdge?) {
@@ -103,10 +117,10 @@ struct HUDSurface<S: Shape>: View {
             switch drawing {
             case .solid:
                 shape.fill(fill)
-                    .opacity(look.coverOpacity)
+                    .opacity(raised ? look.raisedCoverOpacity : look.coverOpacity)
                     .transition(.opacity)
             case .standIn:
-                shape.fill(look.glassStandIn)
+                shape.fill(raised ? look.raisedStandIn : look.glassStandIn)
                     .transition(.opacity)
             case .frosted:
                 // A blur of what is behind the window hides what the window holds beneath it, so the dimming lies over
@@ -135,17 +149,16 @@ struct HUDSurface<S: Shape>: View {
     }
 
     /// Liquid Glass in the shape, run past the screen edge the surface stands on, in the look's colour scheme, with no
-    /// tint of its own: a tint is taken as a hint the glass lets the desktop overrule. It is the screen's choice of
-    /// variant: the clear one, the same at any size, which lets more of the desktop through, or the regular one, which
-    /// turns light or dark with the size of the piece it is drawn in, a narrow panel light and a wide card dark over the
-    /// same window.
+    /// tint of its own: a tint is taken as a hint the glass lets the desktop overrule. It is always the clear glass, for
+    /// Regular as for Clear: the regular glass turns light or dark with the size of the piece it is drawn in, so the
+    /// dock, its hover bar and a card side by side parted in colour, a narrow bar white beside a dark dock. The owner
+    /// chose it: Regular stays the regular glass in the windows, each one piece.
     @ViewBuilder
     private var liquid: some View {
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
             Color.clear
-                .glassEffect(look.glassStyle == .regular ? .regular : .clear,
-                             in: ContactBleed(base: shape, edge: contact, depth: HUDGlass.bleed))
+                .glassEffect(.clear, in: ContactBleed(base: shape, edge: contact, depth: HUDGlass.bleed))
                 .environment(\.colorScheme, look.colorScheme)
         }
         #endif
@@ -174,6 +187,52 @@ struct ContactBleed<Base: Shape>: Shape {
         case .right: CGRect(x: rect.maxX, y: rect.minY, width: depth, height: rect.height)
         }
         return shape.union(Path(strip))
+    }
+}
+
+/// Liquid Glass in several pieces that join into one where they meet: the Simple panel and the line that grows out of
+/// it. Two pieces of glass drawn side by side each light a rim, and the panel's lights a bright band down the line's end
+/// where the two meet; drawn in one `GlassEffectContainer` they are one piece of glass with a smooth fillet between
+/// them, which follows the line as it grows and shrinks. The container holds the pieces (`hudGlassPiece(in:shown:)`)
+/// and nothing else: what else it held it would blur as if it were the desktop. The dimming beneath the glass is the
+/// caller's, outside it. Where glass is not Liquid Glass it draws nothing; its callers draw `HUDSurface` there.
+struct JoinedGlass<Content: View>: View {
+    let look: HUDLook
+    /// How near two pieces come before they flow together.
+    var spacing: CGFloat = JoinedGlassMetrics.spacing
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            GlassEffectContainer(spacing: spacing) { content }
+                .environment(\.colorScheme, look.colorScheme)
+        }
+        #endif
+    }
+}
+
+enum JoinedGlassMetrics {
+    /// Enough for the line, which tucks under the panel, to flow into it with a soft fillet. A full card, 6 points off
+    /// its dock, would flow into the panel at this spacing as well, so none is ever put in the container: it stays a
+    /// piece of its own (`HUDSurface`).
+    static let spacing: CGFloat = 10
+}
+
+extension View {
+    /// One piece of a `JoinedGlass`: the clear glass in `shape`, as `HUDSurface` draws it, or no glass at all while not
+    /// `shown`, which keeps the piece in its place so that it can come back.
+    @ViewBuilder
+    func hudGlassPiece<S: Shape>(in shape: S, shown: Bool = true) -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            glassEffect(shown ? .clear : .identity, in: shape)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }
 

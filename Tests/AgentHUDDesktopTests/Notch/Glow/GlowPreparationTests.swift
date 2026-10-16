@@ -311,6 +311,140 @@ final class GlowPreparationTests: XCTestCase {
         XCTAssertEqual(controller.dockShadowLayer.opacity, 1)
     }
 
+    /// A detached card's shadow, held back until the card has grown out of its dock (`ScreenHUD`), fades in once it is
+    /// given, and the dock's, which glass shows through the card and which the card cuts from then on, fades to its new
+    /// cut with it rather than switch at once beside it. Given at once, as under Reduce Motion, neither fades.
+    @MainActor
+    func testARevealedCardsShadowAndTheDocksNewCutFadeInTogether() throws {
+        _ = NSApplication.shared
+        let geometry = geometry(edge: .top, mode: .simple)
+        let panel = geometry.rect.insetBy(dx: 0, dy: 2)
+        let card = CGRect(x: geometry.rect.midX - 60, y: geometry.rect.minY - 32, width: 120, height: 26)
+        let dock = HUDShell(frame: panel, radius: 10, flare: 0, floats: true, bare: false)
+        let shells = HUDShells(surface: HUDShell(frame: card, radius: 13, flare: 0, floats: true, bare: false), dock: dock)
+        let glow = GlowSettings().geometry(islandWidth: panel.width, islandHeight: 2, islandRadius: 0)
+        let glass = HUDLook(appearance: .dark, material: .glass, transparency: 0.5)
+        for animates in [true, false] {
+            let controller = GlowWindowController(geometry: geometry)
+            defer { controller.close() }
+            controller.update(geometry: geometry, island: panel, islandRadius: 0, islandFlare: 0, glow: glow,
+                outwardOnly: true, appearance: .idle(hidden: true), look: glass,
+                shells: HUDShells(surface: nil, dock: dock), animated: false, animatesShells: true, drawsGlow: false)
+            let uncut = controller.dockShadowLayer.contents as AnyObject?
+            XCTAssertNotNil(uncut)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            controller.dockShadowLayer.removeAllAnimations()
+            controller.shellShadowLayer.removeAllAnimations()
+
+            controller.updateShells(shells, look: glass, geometry: geometry, animates: animates)
+            XCTAssertFalse(controller.dockShadowLayer.contents as AnyObject? === uncut, "the card cuts the dock's shadow now")
+            XCTAssertEqual(controller.shellShadowLayer.opacity, 1)
+            let fade = controller.dockShadowLayer.animation(forKey: kCATransition) as? CATransition
+            if animates {
+                XCTAssertNotNil(controller.shellShadowLayer.animation(forKey: "opacity"), "the card's shadow fades in")
+                XCTAssertEqual(fade?.type, .fade, "and the dock's new cut fades in with it")
+                XCTAssertEqual(fade?.duration, IslandAnimation.duration)
+            } else {
+                XCTAssertNil(controller.shellShadowLayer.animation(forKey: "opacity"), "at once")
+                XCTAssertNil(fade, "at once")
+            }
+        }
+    }
+
+    /// A detached card that goes back into its dock drops its shadow at once: cut out where the card was, the shadow
+    /// fading there would show that place round the shrinking card. That holds when the card goes while the materials
+    /// are pending too, once they have come. Any other surface's shadow that goes, the island's grown for an event from
+    /// an agent with no mark, still fades out where it was.
+    @MainActor
+    func testOnlyADetachedCardThatLeavesDropsItsShadowAtOnce() throws {
+        _ = NSApplication.shared
+        let geometry = geometry(edge: .top, mode: .simple)
+        let panel = geometry.rect.insetBy(dx: 0, dy: 2)
+        let card = CGRect(x: geometry.rect.midX - 120, y: geometry.rect.minY - 126, width: 240, height: 120)
+        let surface = HUDShell(frame: card, radius: 22, flare: 0, floats: true, bare: false)
+        let dock = HUDShell(frame: panel, radius: 10, flare: 0, floats: true, bare: false)
+        let glow = GlowSettings().geometry(islandWidth: panel.width, islandHeight: 2, islandRadius: 0)
+        let light = HUDLook(appearance: .light)
+        for (cardLeaves, pending) in [(false, false), (true, false), (true, true)] {
+            let name = cardLeaves ? (pending ? "a card leaving while the materials are pending" : "a card leaving")
+                : "any other surface"
+            let controller = GlowWindowController(geometry: geometry)
+            defer { controller.close() }
+            func update(surface: HUDShell?, cardLeaves: Bool = false, pending: Bool = false) {
+                controller.update(geometry: geometry, island: panel, islandRadius: 0, islandFlare: 0, glow: glow,
+                    outwardOnly: true, appearance: .idle(hidden: true), look: light,
+                    shells: HUDShells(surface: surface, dock: dock), animated: false, animatesShells: true,
+                    cardLeaves: cardLeaves, drawsGlow: false, materialsPending: pending)
+            }
+            update(surface: surface)
+            XCTAssertEqual(controller.shellShadowLayer.opacity, 1, name)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            controller.shellShadowLayer.removeAllAnimations()
+
+            update(surface: nil, cardLeaves: cardLeaves, pending: pending)
+            if pending {
+                XCTAssertTrue(controller.shellShadowLayer.isHidden, name)
+                update(surface: nil)
+            }
+            XCTAssertFalse(controller.shellShadowLayer.isHidden, name)
+            XCTAssertEqual(controller.shellShadowLayer.opacity, 0, name)
+            if cardLeaves {
+                XCTAssertNil(controller.shellShadowLayer.animation(forKey: "opacity"), "\(name): at once")
+            } else {
+                XCTAssertNotNil(controller.shellShadowLayer.animation(forKey: "opacity"), "\(name): fades out")
+            }
+            XCTAssertEqual(controller.dockShadowLayer.opacity, 1, "\(name): the dock keeps its shadow")
+        }
+    }
+
+    /// A detached card whose shadow shows takes it to another mark, where the shadow follows the card; the dock's, cut
+    /// by the card under glass, cannot, so it fades to the card's new place as the card goes there rather than switch
+    /// there ahead of it. That holds when the card moves while the materials are pending too, once they have come. Any
+    /// other change of the dock's shadow, a card that does not slide, switches at once as before.
+    @MainActor
+    func testTheDocksCutFadesAfterAShownCardThatSlides() throws {
+        _ = NSApplication.shared
+        let geometry = geometry(edge: .top, mode: .simple)
+        let panel = geometry.rect.insetBy(dx: 0, dy: 2)
+        let dock = HUDShell(frame: panel, radius: 10, flare: 0, floats: true, bare: false)
+        func line(at x: CGFloat) -> HUDShell {
+            HUDShell(frame: CGRect(x: x, y: geometry.rect.minY - 32, width: 120, height: 26), radius: 13, flare: 0,
+                     floats: true, bare: false)
+        }
+        let glow = GlowSettings().geometry(islandWidth: panel.width, islandHeight: 2, islandRadius: 0)
+        let glass = HUDLook(appearance: .dark, material: .glass, transparency: 0.5)
+        for (slides, pending) in [(true, false), (true, true), (false, false)] {
+            let name = slides ? (pending ? "a card sliding while the materials are pending" : "a card sliding")
+                : "a card that does not slide"
+            let controller = GlowWindowController(geometry: geometry)
+            defer { controller.close() }
+            func update(surface: HUDShell, fadesDock: Bool = false, pending: Bool = false) {
+                controller.update(geometry: geometry, island: panel, islandRadius: 0, islandFlare: 0, glow: glow,
+                    outwardOnly: true, appearance: .idle(hidden: true), look: glass,
+                    shells: HUDShells(surface: surface, dock: dock), animated: false, animatesShells: true,
+                    fadesDock: fadesDock, drawsGlow: false, materialsPending: pending)
+            }
+            update(surface: line(at: panel.minX + 20))
+            let before = controller.dockShadowLayer.contents as AnyObject?
+            XCTAssertNotNil(before, name)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            controller.dockShadowLayer.removeAllAnimations()
+
+            let there = line(at: panel.maxX - 140)
+            update(surface: there, fadesDock: slides, pending: pending)
+            if pending { update(surface: there) }
+            XCTAssertFalse(controller.dockShadowLayer.contents as AnyObject? === before,
+                           "\(name): the dock's shadow is cut where the card is now")
+            let fade = controller.dockShadowLayer.animation(forKey: kCATransition) as? CATransition
+            if slides {
+                XCTAssertEqual(fade?.type, .fade, "\(name): the new cut fades in")
+                XCTAssertEqual(fade?.duration, IslandAnimation.duration, name)
+            } else {
+                XCTAssertNil(fade, "\(name): at once")
+            }
+        }
+    }
+
     /// A change of look keeps the old look's materials up while the new ones are drawn, so that the new fade in over
     /// them. One that also turns the canvas, as a drop that changes the mode does, hides them as any pending surface
     /// does, rather than show a glow laid out along the top turned onto a side.

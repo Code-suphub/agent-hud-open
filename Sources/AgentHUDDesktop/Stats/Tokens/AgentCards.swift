@@ -117,7 +117,7 @@ struct AgentCards: View {
             }
             if store.pickedAgents != nil {
                 Button(L10n.text("恢复默认选择", "Back to default selection")) { pick(nil) }
-                    .buttonStyle(.link).font(.ui(11)).padding(.top, 2)
+                    .themedLink(theme).font(.ui(11)).padding(.top, 2)
             }
         }
         .font(.ui(12))

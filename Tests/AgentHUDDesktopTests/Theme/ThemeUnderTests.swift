@@ -6,8 +6,9 @@ import XCTest
 
 /// What lies on a ground the desktop shows through (`Theme.under(_:)`): the boxes painted on it, cards, rows and inputs,
 /// thin as the ground does (`HUDLook.innerOpacity`), so that a light card lets the glass or the desktop through as a dark
-/// card's tint of white does; light glass inks its secondary and tertiary text a grade darker; and on an opaque ground,
-/// or with no look at all, every token is as it is.
+/// card's tint of white does; the greys are tints of the ink that give today's greys on the look's own colour, a grade
+/// darker on light glass; levels and accents as text take see-through shades; and on an opaque ground, or with no look
+/// at all, every token is as it is.
 @MainActor
 final class ThemeUnderTests: XCTestCase {
     // MARK: How much of a box is drawn
@@ -46,7 +47,8 @@ final class ThemeUnderTests: XCTestCase {
 
     /// On a light ground the desktop shows through, a card, a row and an input are the light tokens' white at the share
     /// the look leaves of them, solid or glass, the light window's and the light HUD's alike; what is not a painted box,
-    /// the ink, the hairlines and the window's own background, is as it was.
+    /// the main ink, the hairlines and the window's own background, is as it was, and a hovered session's tint is twice
+    /// as strong, since a tint's step shrinks as the ground darkens toward the ink.
     func testALightGroundThinsItsCardsRowsAndInputs() throws {
         let looks = [HUDLook(appearance: .light, transparency: 0.3),
                      HUDLook(appearance: .light, material: .glass, transparency: 0.3),
@@ -63,7 +65,7 @@ final class ThemeUnderTests: XCTestCase {
                 XCTAssertEqual(theme.cardBorder, base.1.cardBorder, what)
                 XCTAssertEqual(theme.rowBorder, base.1.rowBorder, what)
                 XCTAssertEqual(theme.windowBackground, base.1.windowBackground, what)
-                XCTAssertEqual(theme.sessionRowBackground, base.1.sessionRowBackground, what)
+                XCTAssertEqual(theme.sessionRowBackground, Color.black.opacity(0.06), "\(what): a hover twice as strong")
             }
         }
         let card = try XCTUnwrap(NSColor(Theme.light.under(looks[1]).card).usingColorSpace(.sRGB))
@@ -73,7 +75,8 @@ final class ThemeUnderTests: XCTestCase {
     }
 
     /// The dark tokens' cards and rows are tints of white already, which the desktop shows through, so a dark ground
-    /// leaves them as they are; only the input, an opaque near-black box, thins with the ground.
+    /// leaves them as they are; only the input, an opaque near-black box, thins with the ground. Its greys are tints of
+    /// white: a window's those that give its greys on #282828, the HUD's those that give them on black.
     func testADarkGroundThinsOnlyItsInputs() {
         for look in [HUDLook(appearance: .dark, transparency: 0.3), HUDLook(appearance: .dark, material: .glass, transparency: 0.3),
                      HUDLook(appearance: .dark, material: .glass, transparency: 0.6, glassStyle: .regular)] {
@@ -82,29 +85,109 @@ final class ThemeUnderTests: XCTestCase {
             XCTAssertEqual(theme.card, Theme.dark.card, what)
             XCTAssertEqual(theme.rowBackground, Theme.dark.rowBackground, what)
             XCTAssertEqual(theme.inputBackground, Theme.dark.inputBackground.opacity(look.innerOpacity), what)
-            XCTAssertEqual(theme.secondary, Theme.dark.secondary, what)
-            XCTAssertEqual(theme.tertiary, Theme.dark.tertiary, what)
+            XCTAssertEqual(theme.secondary, Color.white.opacity(0.52), what)
+            XCTAssertEqual(theme.tertiary, Color.white.opacity(0.33), what)
+            XCTAssertEqual(Theme.island.under(look).secondary, Color.white.opacity(0.60), what)
+            XCTAssertEqual(Theme.island.under(look).tertiary, Color.white.opacity(0.43), what)
         }
     }
 
-    /// Light glass inks its secondary and tertiary text a grade darker, light glass's own, at any transparency, 0
-    /// included, on the light window's tokens as on the HUD's; a light solid ground and dark glass keep their ink.
+    /// Light glass inks its secondary and tertiary text a grade darker than a light solid ground, at any transparency,
+    /// 0 included, on the light window's tokens as on the HUD's; a light solid ground the desktop shows through tints
+    /// its own greys, and an opaque one keeps them.
     func testLightGlassInksItsGreysAGradeDarker() {
         for transparency in [0, 0.3, 0.6, 1] {
             let glass = HUDLook(appearance: .light, material: .glass, transparency: transparency)
             for base in [Theme.light, Theme.lightIsland] {
-                XCTAssertEqual(base.under(glass).secondary, Theme.lightGlass.secondary, "\(transparency)")
-                XCTAssertEqual(base.under(glass).tertiary, Theme.lightGlass.tertiary, "\(transparency)")
+                XCTAssertEqual(base.under(glass).secondary, Color.black.opacity(0.65), "\(transparency)")
+                XCTAssertEqual(base.under(glass).tertiary, Color.black.opacity(0.53), "\(transparency)")
                 XCTAssertEqual(base.under(glass).text, base.text, "\(transparency): the main ink is the same")
             }
             let solid = HUDLook(appearance: .light, transparency: transparency)
-            XCTAssertEqual(Theme.light.under(solid).secondary, Theme.light.secondary, "\(transparency): solid")
-            XCTAssertEqual(Theme.light.under(solid).tertiary, Theme.light.tertiary, "\(transparency): solid")
-            let dark = HUDLook(appearance: .dark, material: .glass, transparency: transparency)
-            XCTAssertEqual(Theme.dark.under(dark).secondary, Theme.dark.secondary, "\(transparency): dark glass")
+            let tinted = transparency > 0
+            XCTAssertEqual(Theme.light.under(solid).secondary,
+                           tinted ? Color.black.opacity(0.55) : Theme.light.secondary, "\(transparency): solid")
+            XCTAssertEqual(Theme.light.under(solid).tertiary,
+                           tinted ? Color.black.opacity(0.42) : Theme.light.tertiary, "\(transparency): solid")
         }
-        XCTAssertNotEqual(Theme.lightGlass.secondary, Theme.light.secondary)
-        XCTAssertNotEqual(Theme.lightGlass.tertiary, Theme.light.tertiary)
+    }
+
+    /// Each grey on a ground the desktop shows through is a tint of the ink that, laid over the look's own colour, is
+    /// the grey drawn on the opaque ground, to within 2 levels of its red and green (the tints are neutral, so the
+    /// few levels of blue in #98989d and #6e6e73 are gone), so that nothing moves as the slider leaves 0: on a dark
+    /// window's #282828 page and #1f1f1f sidebar, on the HUD's black, on the light #f5f5f7, and on light glass, whose
+    /// greys are #55555a and #737378. The idle grey is the secondary's on dark and #9a9aa0 on light.
+    func testEachTintOverItsLooksColourIsTodaysGrey() throws {
+        struct Case {
+            let name: String
+            let theme: Theme
+            let page: UInt32
+            let greys: [(String, KeyPath<Theme, Color>, UInt32)]
+        }
+        let darkGlass = HUDLook(appearance: .dark, material: .glass, transparency: 0.3)
+        let lightSolid = HUDLook(appearance: .light, transparency: 0.3)
+        let lightGlass = HUDLook(appearance: .light, material: .glass, transparency: 0.3)
+        let dark: [(String, KeyPath<Theme, Color>, UInt32)] = [
+            ("secondary", \.secondary, 0x98989d), ("tertiary", \.tertiary, 0x6e6e73), ("dotEnded", \.dotEnded, 0x6e6e73),
+            ("idle", \.idle, 0x98989d), ("idleText", \.idleText, 0x98989d)]
+        let cases = [
+            Case(name: "a dark window", theme: Theme.dark.under(darkGlass), page: 0x282828, greys: dark),
+            Case(name: "a dark solid window", theme: Theme.dark.under(HUDLook(appearance: .dark, transparency: 0.3)),
+                 page: 0x282828, greys: dark),
+            Case(name: "the dark HUD", theme: darkGlass.theme, page: 0x000000, greys: dark),
+            Case(name: "the light window", theme: Theme.light.under(lightSolid), page: 0xf5f5f7, greys: [
+                ("secondary", \.secondary, 0x6e6e73), ("tertiary", \.tertiary, 0x8e8e93), ("dotEnded", \.dotEnded, 0xaeaeb2),
+                ("idle", \.idle, 0x9a9aa0), ("idleText", \.idleText, 0x6e6e73)]),
+            Case(name: "light glass", theme: lightGlass.theme, page: 0xf5f5f7, greys: [
+                ("secondary", \.secondary, 0x55555a), ("tertiary", \.tertiary, 0x737378), ("dotEnded", \.dotEnded, 0xaeaeb2),
+                ("idle", \.idle, 0x9a9aa0), ("idleText", \.idleText, 0x55555a)]),
+        ]
+        for item in cases {
+            XCTAssertTrue(item.theme.isSeeThrough, item.name)
+            for (name, path, grey) in item.greys {
+                try assertTint(item.theme[keyPath: path], over: item.page, gives: grey, "\(item.name)'s \(name)")
+            }
+        }
+        try assertTint(Theme.dark.under(darkGlass).sidebarText, over: 0x1f1f1f, gives: 0xd0d0d5, "a dark sidebar's names")
+        XCTAssertEqual(Theme.light.under(lightSolid).sidebarText, Theme.light.sidebarText, "the light sidebar's main ink")
+    }
+
+    /// A chosen segment is a tint of white a step over its track's on a dark ground, so that the two never run
+    /// together, from black to a ground as light as glass over a white desktop can make it.
+    func testTheChosenSegmentStaysLighterThanItsTrackOnAnyDarkGround() throws {
+        let selected = try sRGB(Theme.dark.segmentSelected), track = try sRGB(Theme.dark.segmentBackground)
+        XCTAssertEqual(selected.red, 1, accuracy: 0.002, "a tint of white")
+        for ground in stride(from: 0.0, through: 0.8, by: 0.05) {
+            let chosen = selected.red * selected.alpha + ground * (1 - selected.alpha)
+            let under = track.red * track.alpha + ground * (1 - track.alpha)
+            XCTAssertGreaterThan(chosen - under, 0.03, "on \(ground)")
+        }
+    }
+
+    /// On a ground the desktop shows through, a level and an alert's accent as text take their see-through shades,
+    /// paler on dark and deeper on light, while the fills keep their hues; the faint tints that mark a state are
+    /// stronger; on an opaque ground each is as it was.
+    func testSeeThroughShadesForTextAndStateTints() {
+        let dark = Theme.island.under(HUDLook(appearance: .dark, material: .glass, transparency: 0.3))
+        let light = Theme.lightIsland.under(HUDLook(appearance: .light, transparency: 0.3))
+        for level in StatusLevel.allCases {
+            XCTAssertEqual(dark.statusText(level), Color(StatusPalette.seeThroughTextColor(for: level, light: false)), "\(level)")
+            XCTAssertEqual(light.statusText(level), Color(StatusPalette.seeThroughTextColor(for: level, light: true)), "\(level)")
+            XCTAssertEqual(dark.status(level), Theme.island.status(level), "\(level): the fill keeps its hue")
+            XCTAssertEqual(light.status(level), Theme.lightIsland.status(level), "\(level): the fill keeps its hue")
+            XCTAssertEqual(HUDLook.standard.theme.statusText(level), Theme.island.statusText(level), "\(level)")
+        }
+        XCTAssertEqual(dark.alertTurnText, Color(hex: 0xb8cfff))
+        XCTAssertEqual(light.alertWarningText, Color(hex: 0x7c3b12))
+        XCTAssertEqual(dark.alertTurnFill, Theme.island.alertTurnFill, "the fill keeps its hue")
+        XCTAssertEqual(light.alertCalmFill, Theme.lightIsland.alertCalmFill, "the fill keeps its hue")
+        XCTAssertEqual(Theme.island.alertTurnText, Theme.island.alertTurnFill, "opaque, the accent itself")
+        XCTAssertEqual(dark.sessionRowBackground, Color.white.opacity(0.08))
+        XCTAssertEqual(light.sessionRowBackground, Color.black.opacity(0.06))
+        XCTAssertEqual(dark.selectedRowBackground, Color.accentColor.opacity(0.26))
+        XCTAssertEqual(dark.pickedChip, Theme.island.text.opacity(0.12))
+        XCTAssertEqual(dark.sidebarBorder, Color.white.opacity(0.14))
+        XCTAssertEqual(dark.link, dark.text)
     }
 
     /// With no look, as a window takes with Match screen off, and on an opaque ground, a solid one with no transparency
@@ -119,6 +202,19 @@ final class ThemeUnderTests: XCTestCase {
                 XCTAssertEqual(theme.inputBackground, base.inputBackground, name)
                 XCTAssertEqual(theme.secondary, base.secondary, name)
                 XCTAssertEqual(theme.tertiary, base.tertiary, name)
+                XCTAssertEqual(theme.dotEnded, base.dotEnded, name)
+                XCTAssertEqual(theme.sidebarText, base.sidebarText, name)
+                XCTAssertEqual(theme.idle, base.idle, name)
+                XCTAssertEqual(theme.idleText, base.idleText, name)
+                XCTAssertEqual(theme.sessionRowBackground, base.sessionRowBackground, name)
+                XCTAssertEqual(theme.selectedRowBackground, base.selectedRowBackground, name)
+                XCTAssertEqual(theme.sidebarBorder, base.sidebarBorder, name)
+                XCTAssertEqual(theme.pickedChip, base.pickedChip, name)
+                XCTAssertEqual(theme.alertTurnText, base.alertTurnText, name)
+                XCTAssertFalse(theme.isSeeThrough, name)
+                for level in StatusLevel.allCases {
+                    XCTAssertEqual(theme.statusText(level), base.statusText(level), "\(name) \(level)")
+                }
             }
         }
     }
@@ -127,16 +223,39 @@ final class ThemeUnderTests: XCTestCase {
     /// standard look's are the island's as they always were.
     func testTheHUDsThemeIsItsTokensOnItsOwnGround() {
         let glass = HUDLook(appearance: .light, material: .glass, transparency: 0.5)
-        XCTAssertEqual(glass.theme.card, Theme.lightGlass.card.opacity(glass.innerOpacity))
-        XCTAssertEqual(glass.theme.secondary, Theme.lightGlass.secondary)
+        XCTAssertEqual(glass.theme.card, Theme.lightIsland.card.opacity(glass.innerOpacity))
+        XCTAssertEqual(glass.theme.secondary, Color.black.opacity(0.65))
         let solid = HUDLook(appearance: .light, transparency: 0.3)
         XCTAssertEqual(solid.theme.card, Theme.lightIsland.card.opacity(solid.innerOpacity))
-        XCTAssertEqual(solid.theme.secondary, Theme.lightIsland.secondary)
+        XCTAssertEqual(solid.theme.secondary, Color.black.opacity(0.55))
         XCTAssertEqual(HUDLook(appearance: .light).theme.card, Theme.lightIsland.card, "opaque, white")
         XCTAssertEqual(HUDLook.standard.theme.card, Theme.island.card)
         XCTAssertEqual(HUDLook.standard.theme.inputBackground, Theme.island.inputBackground)
         let darkGlass = HUDLook(appearance: .dark, material: .glass, transparency: 0.5)
         XCTAssertEqual(darkGlass.theme.card, Theme.island.card, "a tint of white already")
         XCTAssertEqual(darkGlass.theme.inputBackground, Theme.island.inputBackground.opacity(darkGlass.innerOpacity))
+    }
+
+    // MARK: Helpers
+
+    private struct Components {
+        let red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat
+    }
+
+    private func sRGB(_ color: Color, file: StaticString = #filePath, line: UInt = #line) throws -> Components {
+        let ns = try XCTUnwrap(NSColor(color).usingColorSpace(.sRGB), file: file, line: line)
+        return Components(red: ns.redComponent, green: ns.greenComponent, blue: ns.blueComponent, alpha: ns.alphaComponent)
+    }
+
+    /// Asserts that `tint` laid over the opaque `ground` gives `grey`'s red and green to within 2 levels.
+    private func assertTint(_ tint: Color, over ground: UInt32, gives grey: UInt32, _ what: String,
+                            file: StaticString = #filePath, line: UInt = #line) throws {
+        let c = try sRGB(tint, file: file, line: line)
+        func channel(_ hex: UInt32, _ shift: UInt32) -> CGFloat { CGFloat((hex >> shift) & 0xff) / 255 }
+        let red = c.red * c.alpha + channel(ground, 16) * (1 - c.alpha)
+        let green = c.green * c.alpha + channel(ground, 8) * (1 - c.alpha)
+        XCTAssertLessThan(c.alpha, 1, "\(what) is a tint", file: file, line: line)
+        XCTAssertEqual(red, channel(grey, 16), accuracy: 2 / 255, "\(what): red", file: file, line: line)
+        XCTAssertEqual(green, channel(grey, 8), accuracy: 2 / 255, "\(what): green", file: file, line: line)
     }
 }

@@ -192,9 +192,12 @@ struct IslandRootView: View {
         var outline: Double
         let hairline: Color
         /// The card's surface, drawn in the card's own shape as it moves and widens: the look's, filled with `fill`
-        /// where it is solid.
+        /// where it is solid. None while the line's glass is drawn with the panel's (`joinedGlass`).
         let look: HUDLook
         let fill: Color
+        var drawsSurface = true
+        /// How the surface comes and goes on a change of look, with the panel's and the joined glass.
+        let lookAnimation: Animation?
 
         var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>,
                                            AnimatablePair<CGFloat, Double>> {
@@ -212,9 +215,57 @@ struct IslandRootView: View {
             content
                 .frame(width: max(0, frame.width), height: max(0, frame.height))
                 .clipShape(card)
-                .background { HUDSurface(card, look: look, fill: fill, contact: nil) }
+                .background {
+                    // The surface takes over from the line's joined glass, and hands back to it, at once, as `CardPiece`
+                    // does: cross-faded, two half-strength dimmings would lighten the card meanwhile, and Liquid Glass
+                    // faded by opacity loses its blur. Only its coming and going is made at once: the card's frame
+                    // still interpolates here, and the surface still fades to a new look on its own (`HUDSurface`).
+                    // A change of look that brings or takes the joined glass fades it in or out with that glass and
+                    // with the panel's surface, so the line and the panel change as one.
+                    Group { if drawsSurface { HUDSurface(card, look: look, fill: fill, contact: nil) } }
+                        .animation(lookAnimation, value: look)
+                        .transaction { $0.animation = nil }
+                }
                 .overlay { card.strokeBorder(hairline.opacity(outline), lineWidth: 1) }
                 .position(x: frame.midX, y: frame.midY)
+        }
+    }
+
+    /// A piece of the card that `joinedGlass` draws, its glass or the dimming beneath it, in the card's shape and place
+    /// as `CardPlacement` interpolates them, so the piece and the card never part. Drawn only while `shown`, while the
+    /// card is the line; the piece stays meanwhile, so it comes and goes with the card.
+    private struct CardPiece: ViewModifier, @preconcurrency Animatable {
+        var frame: CGRect
+        var radius: CGFloat
+        let shown: Bool
+        /// The dimming's colour, or nil for the glass.
+        let dimming: Color?
+        /// How the dimming moves to a new look's colour.
+        let lookAnimation: Animation?
+
+        var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>,
+                                           CGFloat> {
+            get { .init(.init(.init(frame.minX, frame.minY), .init(frame.width, frame.height)), radius) }
+            set {
+                frame = CGRect(x: newValue.first.first.first, y: newValue.first.first.second,
+                               width: newValue.first.second.first, height: newValue.first.second.second)
+                radius = newValue.second
+            }
+        }
+
+        func body(content: Content) -> some View {
+            let card = RoundedRectangle(cornerRadius: min(radius, min(frame.width, frame.height) / 2), style: .continuous)
+            Group {
+                if let dimming {
+                    card.fill(dimming).animation(lookAnimation, value: dimming).opacity(shown ? 1 : 0)
+                } else {
+                    content.hudGlassPiece(in: card, shown: shown)
+                }
+            }
+            // Shown or not at once, as the card's own surface comes and goes (`CardPlacement`).
+            .transaction(value: shown) { $0.animation = nil }
+            .frame(width: max(0, frame.width), height: max(0, frame.height))
+            .position(x: frame.midX, y: frame.midY)
         }
     }
 
@@ -230,9 +281,9 @@ struct IslandRootView: View {
         isOpen && !pinned && alert == nil && peek?.style == .line && simpleMeter != nil && !showsAlertDetails
     }
 
-    /// The Simple panel's own shape inside the window: its strip without the margin on the parked side.
-    private var simplePanelPath: Path? {
-        guard let simpleMeter, var panel = logoQueueFrame else { return nil }
+    /// The Simple panel's own place inside the window: its strip without the margin on the parked side.
+    private var simplePanelRect: CGRect? {
+        guard simpleMeter != nil, var panel = logoQueueFrame else { return nil }
         let margin = SimpleMeterConfig.edgeMargin
         switch edge {
         case .top: panel.origin.y += margin; panel.size.height -= margin
@@ -240,7 +291,42 @@ struct IslandRootView: View {
         case .left: panel.origin.x += margin; panel.size.width -= margin
         case .right: panel.size.width -= margin
         }
+        return panel
+    }
+
+    /// The Simple panel's own shape inside the window.
+    private var simplePanelPath: Path? {
+        guard let simpleMeter, let panel = simplePanelRect else { return nil }
         return Path(roundedRect: panel, cornerRadius: simpleMeter.cornerRadius, style: .continuous)
+    }
+
+    /// Everything in `bounds` but the Simple panel, which what grows out of it is cut by; everything where there is none.
+    @ViewBuilder
+    private func outsidePanel(_ bounds: CGSize) -> some View {
+        if separatesAgents, let panel = simplePanelPath {
+            Path { path in
+                path.addRect(CGRect(origin: .zero, size: bounds))
+                path.addPath(panel)
+            }.fill(style: FillStyle(eoFill: true))
+        } else {
+            Rectangle()
+        }
+    }
+
+    /// Whether the Simple panel's glass is drawn with the line's, as one piece of Liquid Glass (`joinedGlass`), rather
+    /// than each by a surface of its own: on a dock that separates its agents, while the panel stands beside its card or
+    /// alone, in a look that is Liquid Glass here (`HUDLook.drawsLiquidGlass(standIn:)`). Solid, the material, frosted
+    /// glass and glass's stand-in, in a picture or a recording, draw as they always have.
+    func joinsPanelGlass(standIn: Bool) -> Bool {
+        let visible = isOpen || alert != nil
+        return separatesAgents && simplePanelRect != nil && look.drawsLiquidGlass(standIn: standIn)
+            && (detached || !visible) && (alert == nil || focusVendor != nil)
+    }
+
+    /// Whether the card's glass is drawn with the panel's: only while it is the line. A full card, a reminder or a
+    /// request keeps its own surface, a piece apart from the panel's, 6 points off it.
+    func cardJoinsPanel(standIn: Bool) -> Bool {
+        joinsPanelGlass(standIn: standIn) && growsFromPanel
     }
     static let detachedInsets = EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 18)
 
@@ -394,7 +480,17 @@ struct IslandRootView: View {
                     .animation(lookAnimation, value: look)
                     .mask(alignment: surfaceAlignment) { shape.frame(width: size.width, height: size.height) }
                 }
+            let joinsGlass = joinsPanelGlass(standIn: standsInForGlass)
             ZStack(alignment: .topLeading) {
+                // Beneath the card and the panel's figures, which draw no surface of their own meanwhile.
+                Group {
+                    if joinsGlass, let simpleMeter, let panel = simplePanelRect {
+                        joinedGlass(panel: panel, radius: simpleMeter.cornerRadius,
+                                    card: visible && detached ? presentationFrame : nil, bounds: bounds)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(lookAnimation, value: look)
                 // The card's place in the view outlives the card: one that arrives with its own container has
                 // nothing to grow out of.
                 if separatesAgents, detached || !visible {
@@ -413,7 +509,9 @@ struct IslandRootView: View {
                                                     radius: detachedRadius(height: presentationFrame.height),
                                                     outline: grows ? 0 : 1, hairline: outline(theme.islandOutline),
                                                     look: look,
-                                                    fill: theme.islandFill))
+                                                    fill: theme.islandFill,
+                                                    drawsSurface: !(grows && joinsGlass),
+                                                    lookAnimation: lookAnimation))
                         // Keyed to the card's place on screen. Its place in the window also changes whenever the
                         // window around it is resized, and that must never move the card.
                         .animation(motion, value: cardScreenFrame)
@@ -421,17 +519,8 @@ struct IslandRootView: View {
                     }
                     }
                     .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
-                    .mask {
-                        // A full card never reaches the panel, so the cut can stay while a line is on its way out.
-                        if separatesAgents, let panel = simplePanelPath {
-                            Path { path in
-                                path.addRect(CGRect(origin: .zero, size: bounds))
-                                path.addPath(panel)
-                            }.fill(style: FillStyle(eoFill: true))
-                        } else {
-                            Rectangle()
-                        }
-                    }
+                    // A full card never reaches the panel, so the cut can stay while a line is on its way out.
+                    .mask { outsidePanel(bounds) }
                 } else if let presentationFrame {
                     // The native canvas changes immediately. Only the card's size and its position
                     // along the parked edge interpolate; the contact edge stays on that canvas.
@@ -478,7 +567,7 @@ struct IslandRootView: View {
                     let strip = logoQueueFrame ?? CGRect(x: 0, y: logoQueueInset, width: size.width, height: logoQueueHeight)
                     // The figures stay put as the island moves, and move to a new look's colours with the panel
                     // behind them.
-                    SimpleMeterView(config: simpleMeter, onIsland: !separatesAgents)
+                    SimpleMeterView(config: simpleMeter, onIsland: !separatesAgents, glassJoined: joinsGlass)
                         .animation(lookAnimation, value: look)
                         .frame(width: strip.width, height: strip.height)
                         .position(x: strip.midX, y: strip.midY)
@@ -490,6 +579,49 @@ struct IslandRootView: View {
         }
         .ignoresSafeArea()
         .id(store?.settings.settings.language ?? .system)
+    }
+
+    /// The Simple panel's glass and the line's as one piece of Liquid Glass (`JoinedGlass`), with the look's dimming
+    /// beneath them, which the glass blurs with the desktop. The panel's glass stays where the panel is, as its figures
+    /// do. The card's two pieces follow the card exactly: its frame and corner, interpolated as `CardPlacement`
+    /// interpolates them and keyed to its place on screen, and its way in and out of the dock. They draw only while the
+    /// card is the line; any other card draws its own surface.
+    private func joinedGlass(panel: CGRect, radius: CGFloat, card: CGRect?, bounds: CGSize) -> some View {
+        let joins = growsFromPanel
+        let motion: Animation? = reduceMotion ? nil : IslandAnimation.curve
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        func piece(_ card: CGRect, dimming: Color?) -> some View {
+            Color.clear
+                .modifier(CardPiece(frame: card, radius: detachedRadius(height: card.height), shown: joins,
+                                    dimming: dimming, lookAnimation: lookAnimation))
+                .animation(motion, value: cardScreenFrame)
+                .transition(cardTransition(card, in: bounds, line: joins).animation(motion ?? .easeOut(duration: 0.12)))
+        }
+        return ZStack(alignment: .topLeading) {
+            shape.fill(look.glassDimming)
+                .animation(lookAnimation, value: look)
+                .frame(width: panel.width, height: panel.height)
+                .position(x: panel.midX, y: panel.midY)
+                .transaction { $0.animation = nil }
+            // The line's dimming where it is not under the panel's, so the two never darken each other.
+            ZStack(alignment: .topLeading) {
+                if let card { piece(card, dimming: look.glassDimming) }
+            }
+            .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
+            .mask { outsidePanel(bounds) }
+            JoinedGlass(look: look) {
+                ZStack(alignment: .topLeading) {
+                    Color.clear
+                        .frame(width: panel.width, height: panel.height)
+                        .hudGlassPiece(in: shape)
+                        .position(x: panel.midX, y: panel.midY)
+                        .transaction { $0.animation = nil }
+                    if let card { piece(card, dimming: nil) }
+                }
+                .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
+            }
+        }
+        .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
     }
 
     /// What the island holds, drawn with this screen's look as `body` draws it. The island is also measured from this

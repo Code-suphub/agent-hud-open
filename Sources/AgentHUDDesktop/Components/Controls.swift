@@ -240,8 +240,9 @@ struct CardModifier: ViewModifier {
 /// A box raised off the ground it shows over, a chart's hover details: in a window the window's colour with a hairline
 /// and a shadow, or under the look of the window's screen (`WindowSurface`) the HUD's surface in that look, as a box
 /// raised off the island is in the HUD's (`hud`). Glass is drawn as its stand-in there, the look's own colour, which
-/// sets the box off the glass it stands on: glass laid over glass sees nothing. A box the desktop shows through casts no
-/// shadow, which would darken it.
+/// sets the box off the glass it stands on: glass laid over glass sees nothing. Solid or a stand-in, the box is drawn
+/// nearly opaque (`drawsRaisedBox`), so that the bars, the grid and the labels beneath it never show through its text.
+/// A box the desktop shows through casts no shadow, which would darken it.
 struct RaisedBoxModifier: ViewModifier {
     let theme: Theme
     /// The HUD's look, for a box raised off the island, which takes the HUD's raised surface; nil for one in a window.
@@ -256,6 +257,7 @@ struct RaisedBoxModifier: ViewModifier {
                     HUDSurface(shape, look: look, fill: hud == nil ? theme.windowBackground : theme.raisedSurface,
                                contact: nil)
                         .environment(\.drawsGlassStandIn, true)
+                        .environment(\.drawsRaisedBox, true)
                 } else {
                     shape.fill(theme.windowBackground)
                 }
@@ -265,7 +267,31 @@ struct RaisedBoxModifier: ViewModifier {
     }
 }
 
+/// A link drawn on a ground the desktop shows through: the theme's main ink, underlined, dimmed while pressed.
+private struct SeeThroughLinkStyle: ButtonStyle {
+    let theme: Theme
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(theme.link)
+            .underline()
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .contentShape(Rectangle())
+    }
+}
+
 extension View {
+    /// The button as a link on `theme`'s ground: the system's link style on an opaque ground, and on one the desktop
+    /// shows through, whose ground the system's blue can match, the main ink underlined (`Theme.link`).
+    @ViewBuilder
+    func themedLink(_ theme: Theme) -> some View {
+        if theme.isSeeThrough {
+            buttonStyle(SeeThroughLinkStyle(theme: theme))
+        } else {
+            buttonStyle(.link)
+        }
+    }
+
     func card(_ theme: Theme, padding: EdgeInsets = EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16), radius: CGFloat = 10) -> some View {
         modifier(CardModifier(theme: theme, padding: padding, radius: radius))
     }
