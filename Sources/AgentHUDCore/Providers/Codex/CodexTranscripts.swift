@@ -410,13 +410,14 @@ public struct CodexTranscript: Codable, Sendable {
         guard let timestamp = Self.timestamp(in: head), timestamp >= (startedAt ?? .distantPast),
               let index = turns?.indices.last, turns?[index].state == .running,
               let type = Self.string(after: Self.payloadType, in: head) else { return }
-        let isCall = type == "function_call" || type == "custom_tool_call"
+        // A local shell call has no name: it is the shell.
+        let isCall = type == "function_call" || type == "custom_tool_call" || type == "local_shell_call"
         guard isCall || type == "function_call_output" || type == "custom_tool_call_output",
               let id = Self.string(after: Self.callID, in: line) else { return }
         if timestamp > turns![index].observedAt { turns?[index].observedAt = timestamp }
         var activity = self.activity ?? SessionActivity()
         if isCall {
-            let name = Self.string(after: Self.callName, in: head)
+            let name = type == "local_shell_call" ? "shell" : Self.string(after: Self.callName, in: head)
             activity.open(id, work: name.flatMap { Self.work(ofCall: $0, namespace: Self.string(after: Self.callNamespace, in: head)) },
                           at: timestamp)
             activity.line = .call
@@ -438,7 +439,7 @@ public struct CodexTranscript: Codable, Sendable {
     /// questions; the tools of older rollouts that edit or view files too. Nil for any other tool.
     static func work(ofCall name: String, namespace: String?) -> SessionActivity.Work? {
         switch name {
-        case "exec", "shell", "exec_command", "write_stdin": return .shell
+        case "exec", "shell", "shell_command", "exec_command", "write_stdin": return .shell
         case "js", "js_reset": return .command
         case "apply_patch": return .edit
         case "view_image": return .read

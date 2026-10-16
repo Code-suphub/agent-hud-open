@@ -109,6 +109,20 @@ final class CodexActivityTests: XCTestCase {
         XCTAssertEqual(restored.activity, t.activity)
     }
 
+    func testEveryShellToolCodexHasIsAShellCommand() throws {
+        // The shell tool types a Codex config can pick: a function call named `shell_command`, or a local shell call
+        // with no name, whose output is a function call's.
+        var t = CodexTranscript()
+        read(&t, session(), started("t", at: 1), function("shell_command", id: "call_1", arguments: #"{"command":"cargo test"}"#, at: 2))
+        XCTAssertEqual(t.activity?.openCall?.work, .shell)
+        read(&t, output("call_1", at: 3),
+             line("response_item", #"{"type":"local_shell_call","id":"lsc_1","call_id":"call_2","status":"in_progress","action":{"type":"exec","command":["ls"]}}"#, at: 4))
+        let activity = try XCTUnwrap(t.activity)
+        XCTAssertEqual(activity.openCall, .init(id: "call_2", work: .shell, at: start.addingTimeInterval(4)))
+        read(&t, output("call_2", at: 5))
+        XCTAssertFalse(try XCTUnwrap(t.activity).hasOpenCall)
+    }
+
     func testATurnEndsCompletedLimitedFailedOrInterruptedByWhatTheRolloutSays() throws {
         var t = CodexTranscript()
         read(&t, session())
