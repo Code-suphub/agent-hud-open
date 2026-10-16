@@ -121,7 +121,6 @@ codex mcp remove agent-hud
 | --- | --- |
 | `SWIFT_SCRATCH_PATH` | Passed to `swift build` as `--scratch-path` by the build script |
 | `AGENTHUD_SNAPSHOT_PREFIX` | Limits `--snapshot` to snapshots whose name starts with the prefix |
-| `AGENT_HUD_REAL_CLAUDE_APP` | `1` runs the test that reads the installed Claude app, and lets `--snapshot` draw Clawd's sprites from it through every clip (`clawd-sprites-local-*`), for checking them on this Mac; never for media that is published |
 | `AGENT_HUD_PROBE_ADDITIONAL` | Enables the read-only probe test above |
 | `AGENT_HUD_PROBE_ANTIGRAVITY` | Enables the read-only native permission probe above |
 | `AGENT_HUD_PROBE_SESSION_USAGE` | Enables the session breakdown probe above, which reads `AGENT_HUD_PROBE_LEDGER`, `AGENT_HUD_PROBE_REPORT` and `AGENT_HUD_PROBE_OUTPUT` |
