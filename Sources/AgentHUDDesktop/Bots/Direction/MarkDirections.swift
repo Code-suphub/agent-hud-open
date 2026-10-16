@@ -28,12 +28,14 @@ final class MarkDirections {
         schedule()
     }
 
-    /// Someone looked at these marks' cards, or at every mark's for nil.
+    /// Someone looked at these marks' cards, or at every mark's for nil. What changes is told once the caller, which
+    /// is in the middle of drawing a screen, is done.
     func looked(at keys: Set<String>?) {
         let before = director.directions
         director.looked(at: keys, at: clock())
         schedule()
-        if director.directions != before { onChange?() }
+        guard director.directions != before else { return }
+        Task { @MainActor [weak self] in self?.onChange?() }
     }
 
     private func schedule() {

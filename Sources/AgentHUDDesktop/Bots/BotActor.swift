@@ -73,6 +73,8 @@ final class BotActor {
 
     var phase: BotPhase { motion.phase }
     var state: BotState { motion.state }
+    /// The event the bot plays now, as every bot is told it; Clawd's sprites play the same.
+    var playing: BotEvent? { motion.playing }
 
     /// How big the layer has to be to hold a mark `side` points wide, with its room for overflow and outline.
     static func extent(side: CGFloat, scale: CGFloat, outline: Int) -> CGFloat {

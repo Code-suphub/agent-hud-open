@@ -110,11 +110,11 @@ final class BotMotionTests: XCTestCase {
         XCTAssertTrue(visits.contains { $0.1.x != 0 || $0.1.y != 0 || $0.1.left > 0 || $0.1.right > 0 })
     }
 
-    func testAMarkFollowsItsAgentUnlessItsCardIsBeingLookedAt() {
-        XCTAssertEqual(MarkAttention.none.phase(working: true), .working)
-        XCTAssertEqual(MarkAttention.none.phase(working: false), .idle)
-        XCTAssertEqual(MarkAttention.opened.phase(working: true), .opened)
-        XCTAssertEqual(MarkAttention.opened.phase(working: false), .opened)
+    func testAMarkFollowsItsAgentAndALookAtItsCardPutsThePointerOnTop() {
+        XCTAssertEqual(MarkAttention.none.state(of: BotState(look: .plain)).phase, .working)
+        XCTAssertEqual(MarkAttention.none.state(of: BotState()).phase, .idle)
+        XCTAssertEqual(MarkAttention.opened.state(of: BotState(look: .plain)), BotState(look: .plain, hovered: true))
+        XCTAssertEqual(MarkAttention.opened.state(of: BotState()).phase, .opened)
     }
 
     func testANewIdleMarkWaitsAsItsLogoWithoutStoppingItsClock() {

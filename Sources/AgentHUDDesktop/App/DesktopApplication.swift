@@ -13,6 +13,8 @@ public final class DesktopApplication {
     private let additionalMenuItems: () -> [NSMenuItem]
     private let additionalHUDControls: @MainActor (@escaping @MainActor () -> Void) -> AnyView
     private let onIslandEvents: ((IslandEventTracker.Update, UsageReport, Date) -> Void)?
+    /// When the app started: what happened to an agent before it is history, for the island's events and the marks'.
+    private let startedAt: Date
     private var islandEvents = IslandEventTracker()
     /// The requests already on the island, so a change to the waiting list says which ones arrived and which left.
     private var shownRequests: [String] = []
@@ -56,7 +58,8 @@ public final class DesktopApplication {
         self.additionalMenuItems = additionalMenuItems
         self.additionalHUDControls = additionalHUDControls
         self.onIslandEvents = onIslandEvents
-        islandEvents = IslandEventTracker(startedAt: store.clock())
+        startedAt = store.clock()
+        islandEvents = IslandEventTracker(startedAt: startedAt)
         onboardingWindow = OnboardingWindowController(settings: settings, store: store,
             sources: options.demo ? { DemoData.sources } : { SourceDetector.detect() })
         onboardingWindow.onFinish = { [weak self] in
@@ -74,7 +77,8 @@ public final class DesktopApplication {
         // Clawd plays the sprites of the Claude app installed on this Mac, read once its first mark is built. A demo,
         // whose pictures may be recorded and shown anywhere, keeps the Clawd Agent HUD draws itself.
         if !options.demo, options.recordPath == nil { ClawdSprites.shared.source = .shared }
-        let notch = IslandController(store: store, settings: settings, additionalHUDControls: additionalHUDControls)
+        let notch = IslandController(store: store, settings: settings, additionalHUDControls: additionalHUDControls,
+                                     startedAt: startedAt)
         notch.onOpenStats = { [weak self] in self?.showStats() }
         notch.onOpenSettings = { [weak self] in self?.showSettings() }
         self.notch = notch
