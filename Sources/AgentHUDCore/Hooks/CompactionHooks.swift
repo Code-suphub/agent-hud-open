@@ -44,8 +44,12 @@ public enum CompactionHooks {
     /// A record is forgotten after this long.
     static let retention: TimeInterval = 86400
 
+    /// The compaction the payload says began, of the session's own conversation. Claude Code runs the hook inside a
+    /// sub-agent too, with the session's id and the sub-agent's `agent_id`; that compaction ends in the sub-agent's log,
+    /// which the session's record is never compared with, so it is not the session's.
     static func event(_ payload: ProviderJSON, now: Date) -> Event? {
-        guard let session = payload["session_id"].stringValue, !session.isEmpty else { return nil }
+        guard let session = payload["session_id"].stringValue, !session.isEmpty, payload["agent_id"].stringValue == nil
+        else { return nil }
         return Event(sessionID: session, at: now, trigger: payload["trigger"].stringValue)
     }
 

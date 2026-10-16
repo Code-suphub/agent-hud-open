@@ -32,6 +32,16 @@ final class CompactionHookTests: XCTestCase, @unchecked Sendable {
                      "what the user asked compaction to keep never leaves the payload")
     }
 
+    func testASubAgentsCompactionIsNotItsSessions() throws {
+        // Claude Code runs the hook inside a sub-agent with the session's own id and the sub-agent's beside it. The
+        // sub-agent's log takes the boundary and every line after it, so the session's log could never end it.
+        let inbox = try directory()
+        try compact(["session_id": "s", "agent_id": "a1", "hook_event_name": "PreCompact", "trigger": "auto"], at: now, in: inbox)
+        XCTAssertEqual(CompactionHooks.read(source: .claude, now: now.addingTimeInterval(10), directory: inbox), [:])
+        try compact(["session_id": "s", "hook_event_name": "PreCompact", "trigger": "auto"], at: now, in: inbox)
+        XCTAssertEqual(CompactionHooks.read(source: .claude, now: now.addingTimeInterval(10), directory: inbox).keys.sorted(), ["s"])
+    }
+
     func testTheHookIsInstalledForAutomaticCompactionBesideWhateverElseTheSettingsHold() throws {
         let home = try directory()
         let settings = home.appendingPathComponent(".claude/settings.json")

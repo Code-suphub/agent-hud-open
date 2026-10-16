@@ -103,6 +103,7 @@ Claude Code writes a compaction's boundary to the log only once the summary is i
 | Claude Code | Group appended to `hooks.PreCompact` of `settings.json` in `$CLAUDE_CONFIG_DIR` (default `~/.claude`), matcher `auto`; only commands ending in ` --compaction-hook claude` are Agent HUD's | `session_id` and `trigger`, at the callback time |
 
 - Only a compaction Claude Code starts on its own, in the middle of a turn, is reported: a `/compact` the user types runs while the session waits for them.
+- A sub-agent's own compaction is not its session's: Claude Code runs the hook inside a sub-agent with the session's id and the sub-agent's `agent_id`, and the boundary and every line after it go to the sub-agent's log, so such a payload is not recorded.
 - One record is kept per session, in `compaction/claude/<hashed session id>.json` in the data directory: session id, time and trigger, forgotten a day after it was made. A session compacts while its record is newer than its log's last line and at most 5 minutes old; the boundary, or any newer line, ends it.
 - The handler command is `'<executable path>' --compaction-hook claude` with a 5-second timeout and `async: true`, installed, taken over and removed by the same rules as the notification hook.
 
