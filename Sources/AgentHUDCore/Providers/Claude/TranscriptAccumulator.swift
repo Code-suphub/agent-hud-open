@@ -186,12 +186,13 @@ public struct TranscriptAccumulator: Hashable, Sendable, Codable {
     /// An interruption, which Claude Code records as a user line of its own.
     static func isInterruption(_ event: TranscriptEvent) -> Bool { event.text?.hasPrefix("[Request interrupted") == true }
 
-    /// Takes a main-log line into what the turn is busy with: a prompt starts it afresh, a call opens until its result
-    /// comes back, and the line says what the conversation's newest line is. Only a retry's own line says the client is
-    /// retrying the API.
+    /// Takes a main-log line into what the turn is busy with: a prompt that starts a turn starts it afresh, a call opens
+    /// until its result comes back, and the line says what the conversation's newest line is. Only a retry's own line says
+    /// the client is retrying the API.
     private mutating func note(_ event: TranscriptEvent) {
         var activity = self.activity ?? SessionActivity()
         if event.isPrompt {
+            guard event.timestamp >= (currentTurn?.observedAt ?? .distantPast) else { return }
             activity.startTurn()
             activity.line = Self.isInterruption(event) ? .context : .prompt
         } else if let id = event.toolUseID {

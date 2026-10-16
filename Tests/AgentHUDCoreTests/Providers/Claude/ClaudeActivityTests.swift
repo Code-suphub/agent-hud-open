@@ -197,6 +197,14 @@ final class ClaudeActivityTests: XCTestCase {
         XCTAssertNil(activity.toolAt)
     }
 
+    func testAPromptOlderThanTheTurnLeavesItsCallsOpen() throws {
+        var accumulator = TranscriptAccumulator(path: "/p/s-act.jsonl", isSubagent: false)
+        read(&accumulator, prompt("Build it", at: 10), call("Bash", id: "toolu_1", at: 11))
+        read(&accumulator, prompt("Written late", at: 5))
+        XCTAssertEqual(accumulator.build()?.activity?.openCall?.id, "toolu_1", "a prompt that starts no turn starts no activity either")
+        XCTAssertEqual(accumulator.build()?.activity?.line, .call)
+    }
+
     func testOnlyARetrysOwnLineSaysTheAPIIsRetried() throws {
         var accumulator = TranscriptAccumulator(path: "/p/s-act.jsonl", isSubagent: false)
         read(&accumulator, prompt("Build it", at: 0), retry(1, at: 5))
