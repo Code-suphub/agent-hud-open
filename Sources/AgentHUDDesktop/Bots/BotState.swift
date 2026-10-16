@@ -23,7 +23,7 @@ enum BotLook: Hashable, Sendable, CaseIterable {
     case idle
     /// Every session of the mark has been idle for an hour or more, or it has none: a doze now and then.
     case asleep
-    /// A turn just ended, on its reply card: the bot smiles. A dock never shows it.
+    /// A reminder card's good news, a reply or a reset (`BotState.card`): the bot smiles. A dock never shows it.
     case done
 
     static let allCases: [BotLook] = [.permission, .question, .plan, .compacting, .thinking]
@@ -84,6 +84,27 @@ enum BotBadge: Hashable, Sendable {
     case limited
 }
 
+/// The good news a reminder card's bot greets. Clawd plays a clip of its own for each; every other bot smiles the same
+/// way at all of them.
+enum BotCard: Hashable, Sendable, CaseIterable {
+    /// A turn ended with a reply.
+    case done
+    /// A reply to a turn of ten minutes or more.
+    case longDone
+    /// The usage was reset, or credit was added.
+    case reset
+
+    /// A turn at least this long earns the long reply's dance.
+    static let longTurn: TimeInterval = 600
+
+    /// The card for a reply to a turn that began at `start` and ended at `end`, as a `SessionCompletion` dates it. A turn
+    /// whose start is not known gets the plain one.
+    static func reply(from start: Date?, to end: Date) -> BotCard {
+        guard let start, end.timeIntervalSince(start) >= longTurn else { return .done }
+        return .longDone
+    }
+}
+
 /// Everything a mark is told about its agents at one moment.
 struct BotState: Hashable, Sendable {
     var look: BotLook = .idle
@@ -95,6 +116,8 @@ struct BotState: Hashable, Sendable {
     var hovered = false
     /// The look holds still, with no clock: a turn quiet for three minutes, or a request being retried.
     var holds = false
+    /// The news a `.done` look stands for.
+    var card = BotCard.done
 
     /// The phase that tells the same story, for callers that still speak in phases.
     var phase: BotPhase {
@@ -115,6 +138,13 @@ struct BotState: Hashable, Sendable {
         default: break
         }
         return BotSign.shown(sign, badge.map(BotSign.init))
+    }
+}
+
+extension BotState {
+    /// A reminder card's state for its good news: `.done`, for `card`.
+    init(card: BotCard) {
+        self.init(look: .done, card: card)
     }
 }
 

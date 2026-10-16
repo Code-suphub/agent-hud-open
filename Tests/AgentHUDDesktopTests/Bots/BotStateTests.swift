@@ -56,6 +56,16 @@ final class BotStateTests: XCTestCase {
         XCTAssertGreaterThan(BotEvent.limitHit.rank, BotEvent.start.rank)
     }
 
+    func testACardSaysWhichGoodNewsItGreets() {
+        XCTAssertEqual(BotState(card: .reset), BotState(look: .done, card: .reset))
+        XCTAssertEqual(BotState(card: .longDone).phase, .done)
+        XCTAssertEqual(BotState(look: .done).card, .done, "a reply, unless told otherwise")
+        let end = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertEqual(BotCard.reply(from: end.addingTimeInterval(-600), to: end), .longDone, "ten minutes or more")
+        XCTAssertEqual(BotCard.reply(from: end.addingTimeInterval(-599), to: end), .done)
+        XCTAssertEqual(BotCard.reply(from: nil, to: end), .done, "a turn whose start is not known")
+    }
+
     /// Every look, under the pointer or not, on a bot with limbs or without, staying or following its agent: each frame
     /// on the shared clock, and each look either at rest or still asking for frames when it should.
     func testEveryLookSettlesRestsOrKeepsTheClockAsItShould() {
