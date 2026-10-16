@@ -25,8 +25,16 @@ public struct CodexDesktopPermissions: Sendable {
     /// The flags Desktop sets on an active thread while it waits on the user.
     static let waitingFlags: Set<String> = ["waitingOnApproval", "waitingOnUserInput"]
 
-    public enum Failure: Error, Equatable, Sendable {
+    public enum Failure: Error, Equatable, Sendable, CustomStringConvertible, LoggableFailure {
         case noLongerWaiting, unsupportedDecision
+
+        /// The case, for a log.
+        public var description: String {
+            switch self {
+            case .noLongerWaiting: "noLongerWaiting: the thread, its owner or the request changed before the answer went out"
+            case .unsupportedDecision: "unsupportedDecision: the answer does not fit what Desktop asked"
+            }
+        }
     }
 
     private let dataDirectory: URL

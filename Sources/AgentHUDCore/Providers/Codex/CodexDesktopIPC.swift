@@ -4,11 +4,23 @@ import Foundation
 
 /// Desktop IPC frames are a UInt32 little-endian length followed by UTF-8 JSON, rather than app-server JSON-RPC.
 public final class CodexDesktopIPC {
-    public enum Failure: Error, Equatable, Sendable {
+    public enum Failure: Error, Equatable, Sendable, CustomStringConvertible, LoggableFailure {
         case invalidInput, unavailable, timedOut, protocolError
         case rejected(String)
         /// The submission may have been accepted. Do not automatically resend it.
         case acceptanceUncertain
+
+        /// The case and the reason Desktop gave, if any, for a log.
+        public var description: String {
+            switch self {
+            case .invalidInput: "invalidInput: the request to Desktop was not well formed"
+            case .unavailable: "unavailable: Desktop's socket was missing or the connection closed"
+            case .timedOut: "timedOut: Desktop did not reply in time"
+            case .protocolError: "protocolError: Desktop's reply was not in the form expected"
+            case .rejected(let reason): "rejected: Desktop refused the request with \"\(reason)\""
+            case .acceptanceUncertain: "acceptanceUncertain: the request was sent but Desktop did not confirm it"
+            }
+        }
     }
 
     private let descriptor: Int32

@@ -117,6 +117,24 @@ final class NativePermissionRequestsTests: XCTestCase {
         XCTAssertEqual(queue.pending.count, 1)
     }
 
+    func testAFailedAnswerIsLoggedWithWhatWasAskedAndWhyButNotTheAnswer() {
+        let question = PermissionRequest(
+            id: "codex-desktop-question:1", source: .codex, sessionID: "thread", toolName: "request_user_input_async",
+            summary: "Which branch should I merge?", detail: nil, cwd: nil,
+            questions: [PermissionQuestion(id: "question", question: "Which branch should I merge?", options: [.init(label: "main")])],
+            nativeApproval: .asynchronousQuestion(turnID: "turn"), at: Date())
+        XCTAssertEqual(PermissionRequests.answerFailure(question, CodexDesktopIPC.Failure.rejected("no-client-found")),
+                       "Native approval answer failed for Codex (question request_user_input_async): "
+                       + "rejected: Desktop refused the request with \"no-client-found\"")
+        XCTAssertEqual(PermissionRequests.answerFailure(question, CodexDesktopPermissions.Failure.noLongerWaiting),
+                       "Native approval answer failed for Codex (question request_user_input_async): "
+                       + "noLongerWaiting: the thread, its owner or the request changed before the answer went out")
+        // Any other error gives its domain, code and sentence, and none of the values it carries.
+        let typed = NSError(domain: "Example", code: 7, userInfo: [NSLocalizedDescriptionKey: "Refused", "input": "merge main"])
+        XCTAssertEqual(PermissionRequests.answerFailure(request(), typed),
+                       "Native approval answer failed for Antigravity (approval run_command): Example 7: Refused")
+    }
+
     func testExpiryAndStoppingNeverAnswerTheNativeClient() async throws {
         let queue = PermissionRequests(), item = request(at: .distantPast)
         queue.holdTime = 0
