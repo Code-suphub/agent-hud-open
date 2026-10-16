@@ -46,7 +46,7 @@ struct HeatmapCard: View {
                                     ForEach(Array(row.prefix(24).enumerated()), id: \.offset) { hour, value in
                                         let cell = Cell(day: index, hour: hour)
                                         RoundedRectangle(cornerRadius: 3)
-                                            .fill(Self.color(for: value))
+                                            .fill(Self.color(for: value, theme: theme))
                                             .frame(maxWidth: .infinity)
                                             .frame(height: Self.cellHeight)
                                             .overlay {
@@ -90,7 +90,7 @@ struct HeatmapCard: View {
                 Spacer()
                 Text(L10n.text("少", "Less"))
                 ForEach([0.0, 0.05, 0.2, 0.5, 1.0], id: \.self) { value in
-                    RoundedRectangle(cornerRadius: 2).fill(Self.color(for: value)).frame(width: 12, height: 10)
+                    RoundedRectangle(cornerRadius: 2).fill(Self.color(for: value, theme: theme)).frame(width: 12, height: 10)
                 }
                 Text(L10n.text("多", "More"))
             }
@@ -105,9 +105,15 @@ struct HeatmapCard: View {
         "\(L10n.weekdayNamesMondayFirst[cell.day]) \(String(format: "%02d:00–%02d:00", cell.hour, cell.hour + 1))"
     }
 
-    static func color(for value: Double) -> Color {
-        if value == 0 { return Color(.sRGB, red: 128 / 255, green: 128 / 255, blue: 136 / 255, opacity: 0.15) }
+    /// A cell's colour for its share of the busiest hour, on the card `theme` draws. An empty cell is a tint of the ink,
+    /// white on dark and black on light, so that the grid holds on any ground, where a fixed grey took the colour of a
+    /// mid-grey one. A busy cell is a green ramp, dark to bright; on a ground the desktop shows through, which can be
+    /// as bright as the ramp's middle, the theme's green over the ground, thicker as the value rises, so that the
+    /// contrast rises with it.
+    static func color(for value: Double, theme: Theme) -> Color {
+        if value == 0 { return (theme.isLight ? Color.black : Color.white).opacity(theme.isLight ? 0.075 : 0.06) }
         let intensity = sqrt(value)
+        if theme.isSeeThrough { return theme.status(.ok).opacity(0.2 + 0.8 * intensity) }
         return Color(.sRGB, red: 0.08 + 0.62 * intensity, green: 0.28 + 0.69 * intensity, blue: 0.17 + 0.53 * intensity)
     }
 }

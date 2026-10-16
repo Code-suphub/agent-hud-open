@@ -44,7 +44,8 @@ struct StatusMenuView: View {
         }
         .padding(.vertical, StatusMenuLayout.verticalInset)
         .frame(width: model.size.width, height: model.size.height, alignment: .top)
-        .background(HUDSurface(shape, look: look, fill: theme.raisedSurface, contact: nil))
+        .background(HUDSurface(shape, look: look, fill: theme.raisedSurface, contact: nil)
+            .environment(\.drawsRegularGlass, true))
         .overlay(shape.strokeBorder(look.outline(theme.cardBorder, standIn: false)))
         .hudLook(look)
         .accessibilityHidden(true)

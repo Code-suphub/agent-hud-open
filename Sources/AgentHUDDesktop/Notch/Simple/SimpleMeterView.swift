@@ -10,6 +10,11 @@ struct SimpleMeterView: View {
     /// The island draws the panel behind the figures, so that the same frame can grow into the usage panel.
     /// Left off, the view draws its own fill and hairline, as a preview with no island does.
     var onIsland = false
+    /// The panel's glass is drawn with the line that grows out of it, as one piece (`JoinedGlass`), on a dock that
+    /// separates its agents. The view then draws its figures alone, as on the island.
+    var glassJoined = false
+    /// Whether the view draws the panel's surface behind its figures itself.
+    var drawsSurface: Bool { !onIsland && !glassJoined }
     /// The look of the HUD the panel belongs to: the island's round it, the standard one in a preview with none.
     @Environment(\.hudLook) private var look
     /// Glass drawn as its stand-in, in a preview or a picture of the panel.
@@ -31,7 +36,7 @@ struct SimpleMeterView: View {
         .padding(EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right))
         .frame(width: panel.width, height: panel.height, alignment: .leading)
         .background {
-            if !onIsland {
+            if drawsSurface {
                 HUDSurface(shape, look: look, fill: theme.islandFill, contact: nil)
                     .overlay { shape.strokeBorder(look.outline(theme.islandOutline, standIn: glassStandIn), lineWidth: 1) }
             }

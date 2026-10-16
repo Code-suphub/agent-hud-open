@@ -58,6 +58,21 @@ public enum StatusPalette {
         }
     }
 
+    /// A level as text or a thin glyph on a ground the desktop shows through, which a dark look's glass lightens toward
+    /// mid-grey over a light desktop and a light look's darkens over a dark one: paler shades on dark and deeper ones on
+    /// light, about 1.5 to 2.2:1 on a dark look's ground at its lightest and 3 to 3.9:1 on a light one's at half its
+    /// transparency over black, where the opaque grounds' shades fall to 1.2 to 1.6 and 2.2 to 2.4.
+    public static func seeThroughTextColor(for level: StatusLevel, light: Bool) -> RGBA {
+        switch (level, light) {
+        case (.ok, false): return RGBA(hex: 0x9df0c0)
+        case (.warning, false): return RGBA(hex: 0xffe08a)
+        case (.critical, false): return RGBA(hex: 0xffa39b)
+        case (.ok, true): return RGBA(hex: 0x135e25)
+        case (.warning, true): return RGBA(hex: 0x6e4900)
+        case (.critical, true): return RGBA(hex: 0xa1000f)
+        }
+    }
+
     /// The idle grey as text: itself on a dark surface, darker on a light one.
     public static func idleTextColor(light: Bool) -> RGBA {
         light ? idleTextLight : idle
