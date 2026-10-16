@@ -71,11 +71,12 @@ enum BotMoves {
         guard age >= first else { return Move(index: -1, start: nil, next: first) }
         // The moves that start before two minutes come often, the rest rarely.
         let frequent = Int(((120 - first) / often).rounded(.up)), late = first + Double(frequent) * often
-        if age < late {
-            let index = Int((age - first) / often)
+        // A move's own start counts as in it, however the division rounds.
+        if age < late - 1e-9 {
+            let index = Int((age - first) / often + 1e-9)
             return Move(index: index, start: first + Double(index) * often, next: first + Double(index + 1) * often)
         }
-        let index = Int((age - late) / rarely)
+        let index = Int((age - late) / rarely + 1e-9)
         return Move(index: frequent + index, start: late + Double(index) * rarely, next: late + Double(index + 1) * rarely)
     }
 

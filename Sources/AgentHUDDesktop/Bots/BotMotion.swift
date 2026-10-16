@@ -242,7 +242,8 @@ struct BotMotion: Sendable {
             scheduleVisit(after: now + Self.morphSeconds)
         }
         let visiting = visits && botInterval?.contains(now) == true
-        let dozing = look == .asleep && !state.hovered && (visiting || staysBot)
+        // A sleeping mark that shows its bot at all shows it dozing, fading out included.
+        let dozing = look == .asleep && !state.hovered
         // Before a staying bot arrives it is the logo at rest: no morph, no pose, no face.
         let arrived = age >= 0
         if let asked = pending, now - asked.asked > BotEvent.freshness { pending = nil }
