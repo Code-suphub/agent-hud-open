@@ -79,12 +79,12 @@ extension PanelTools {
 
     /// One attached screen as an agent reads it: its key and role, how it presents the HUD, which layout its panel
     /// draws, the panel's width there and whether the panel shows a draft, its resting HUD's style in effect, the look it
-    /// draws now and whether a style draft waits, the agents its resting HUD can show now, and those it shows under its
-    /// layout.
+    /// draws now and whether a style draft waits, the agents its resting HUD can show now, those it shows under its
+    /// layout, and whether an agent's edit holds its panel open (`holdListing(_:)`).
     private func listing(_ screen: PanelScreen) -> JSONValue {
         let drawn = layout.effective(for: screen.key)
         let order = HUDAgentOrder(listed: drawn.hud.agents, available: screen.agents)
-        return .object([
+        let listed: [String: JSONValue] = [
             "key": .string(screen.key), "name": .string(screen.name), "mode": .string(screen.modeName),
             "edge": .string(screen.edge.rawValue), "hasNotch": .bool(screen.hasNotch),
             "layout": .string(layout.usesShared(screen.key) ? "shared" : "own"),
@@ -95,7 +95,8 @@ extension PanelTools {
             "styleUnsaved": .bool(layout.hasStyleDraft(screen.key)),
             "agents": .array(screen.agents.map(JSONValue.string)),
             "shows": .array(order.arrange(screen.agents) { $0 }.map(JSONValue.string)),
-        ])
+        ]
+        return .object(listed.merging(holdListing(screen.key)) { $1 })
     }
 
     /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns

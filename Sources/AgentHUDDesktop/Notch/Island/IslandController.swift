@@ -186,22 +186,26 @@ final class IslandController {
     }
 
     /// The attached displays as the MCP tools tell an agent of them, in the system's order: by role, with how each
-    /// presents the HUD now, a style draft included, the agents its resting HUD would show now in each mode, and how the
-    /// Mac is set for the look each draws (`SettingsStore.effectiveLook(on:)`).
+    /// presents the HUD now, a style draft included, the agents its resting HUD would show now in each mode, how the
+    /// Mac is set for the look each draws (`SettingsStore.effectiveLook(on:)`), and which one the person is at, the
+    /// pointer's, else the main display, whose panel an edit of the shared layout holds open.
     var panelScreens: [PanelScreen] {
         let systemIsLight = SystemAppearance.isLight
         let reducesTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let current = underPointer?.key
         return NSScreen.screens.enumerated().map { index, screen in
             let placement = ScreenIdentity.placement(for: screen, in: settings)
             var others: [HUDMode: [String]] = [:]
             for mode in HUDMode.allCases where mode != placement.mode {
                 others[mode] = ScreenAgents.available(store: store, mode: mode)
             }
-            return PanelScreen(key: ScreenIdentity.key(for: screen), name: ScreenIdentity.role(of: screen, at: index),
+            let key = ScreenIdentity.key(for: screen)
+            return PanelScreen(key: key, name: ScreenIdentity.role(of: screen, at: index),
                                mode: placement.mode, edge: placement.mode.isDocked ? placement.edge : .top,
                                hasNotch: ScreenIdentity.hasNotch(screen),
                                agents: ScreenAgents.available(store: store, mode: placement.mode), otherModes: others,
-                               systemIsLight: systemIsLight, reducesTransparency: reducesTransparency)
+                               systemIsLight: systemIsLight, reducesTransparency: reducesTransparency,
+                               hasPointer: key == current)
         }
     }
 
@@ -236,7 +240,10 @@ final class IslandController {
     // MARK: Pointer
 
     /// One monitor for every screen. A collapsed logo queue takes no mouse events so that clicks pass
-    /// through it, which also costs it its tracking; this is what tells each HUD where the pointer is.
+    /// through it, which also costs it its tracking; this is what tells each HUD where the pointer is. A click anywhere,
+    /// and Escape while this app has the keyboard, are a person at work, which ends an agent's hold on a panel
+    /// (`ScreenHUD.personClicked()`, `personPressedEscape()`). Keys typed in other apps are not watched: that would need
+    /// accessibility access, which Agent HUD does not ask for.
     private func startPointerMonitors() {
         let matching: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: matching, handler: { [weak self] _ in
@@ -250,7 +257,34 @@ final class IslandController {
         }) {
             pointerMonitors.append(local)
         }
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] _ in
+            Task { @MainActor in self?.personClicked() }
+        }) {
+            pointerMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: clicks, handler: { [weak self] event in
+            Task { @MainActor in self?.personClicked() }
+            return event
+        }) {
+            pointerMonitors.append(local)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+            if event.keyCode == Self.escapeKey { Task { @MainActor in self?.personPressedEscape() } }
+            return event
+        }) {
+            pointerMonitors.append(local)
+        }
     }
+
+    /// The virtual key code of Escape.
+    private nonisolated static let escapeKey: UInt16 = 53
+
+    /// A click anywhere: each HUD whose panel an agent holds open and the click missed lets go of it.
+    func personClicked() { huds.values.forEach { $0.personClicked() } }
+
+    /// Escape, while this app has the keyboard: every hold on a panel ends.
+    func personPressedEscape() { huds.values.forEach { $0.personTookOver() } }
 
     // MARK: Forwarding
 

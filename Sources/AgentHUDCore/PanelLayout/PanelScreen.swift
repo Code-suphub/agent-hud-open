@@ -22,13 +22,19 @@ public struct PanelScreen: Equatable, Sendable {
     /// Whether Reduce Transparency is on now, which draws a resting HUD of glass solid. The Mac's, the same for every
     /// screen.
     let reducesTransparency: Bool
+    /// Whether it is the display the person is at: the one the pointer is on, else the main display. An edit of the
+    /// shared layout holds this display's panel open where it draws that layout, else the first display's that does
+    /// (`PanelHolds`).
+    let hasPointer: Bool
 
     /// - otherModes: the agents its resting HUD would show in each other mode; a mode left out is taken to show
     ///   `agents`.
     /// - systemIsLight, reducesTransparency: how the Mac is set now, which decides what a resting HUD that matches
     ///   macOS, or is made of glass, draws.
+    /// - hasPointer: whether it is the display the person is at.
     public init(key: String, name: String, mode: HUDMode, edge: HUDEdge, hasNotch: Bool, agents: [String],
-                otherModes: [HUDMode: [String]] = [:], systemIsLight: Bool, reducesTransparency: Bool) {
+                otherModes: [HUDMode: [String]] = [:], systemIsLight: Bool, reducesTransparency: Bool,
+                hasPointer: Bool = false) {
         self.key = key
         self.name = name
         self.mode = mode
@@ -38,6 +44,7 @@ public struct PanelScreen: Equatable, Sendable {
         self.otherModes = otherModes
         self.systemIsLight = systemIsLight
         self.reducesTransparency = reducesTransparency
+        self.hasPointer = hasPointer
     }
 
     /// The mode as Agent HUD names it to a person: notch, dynamic or simple.

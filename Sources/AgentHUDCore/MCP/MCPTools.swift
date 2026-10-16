@@ -1,31 +1,34 @@
 import AgentHUDSupport
 
 /// The tools Agent HUD's MCP server offers: a fixed list, the same for every client and in the same order, so a
-/// client may cache it. All four act on the hover panel's layouts, the shared one or a screen's own, and on one
-/// screen's resting HUD style, and none of them saves: saving is the user's click in the panel. What a tool does with
-/// its arguments is the running application's business; only the names and the shapes are known here.
+/// client may cache it. Four act on the hover panel's layouts, the shared one or a screen's own, and on one screen's
+/// resting HUD style, and the fifth says an edit is done, which lets go of the panel an edit held open; none of them
+/// saves: saving is the user's click in the panel. What a tool does with its arguments is the running application's
+/// business; only the names and the shapes are known here.
 public enum MCPTools {
     /// The tools' names, as a client calls them and as the application is handed them.
     public static let getPanel = "get_panel"
     public static let getPanelImage = "get_panel_image"
     public static let setPanelLayout = "set_panel_layout"
     public static let discardPanelDraft = "discard_panel_draft"
-    static let names = [getPanel, getPanelImage, setPanelLayout, discardPanelDraft]
+    public static let finishPanelEdit = "finish_panel_edit"
+    static let names = [getPanel, getPanelImage, setPanelLayout, discardPanelDraft, finishPanelEdit]
 
     /// What a client's model is told about the server before it has called anything.
     static let instructions = """
         Agent HUD shows AI coding agents' quota, usage and sessions at the Mac's notch. \
         These tools read what its hover panel shows and rearrange it, for every screen or for one, \
-        and restyle one screen's resting HUD. A change is a draft until the user presses Save in the panel.
+        and restyle one screen's resting HUD. A change is a draft until the user presses Save in the panel. \
+        A layout edit holds the panel open for two minutes; call finish_panel_edit when you are done.
         """
 
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
         with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
         widgets and measures each block accepts; how many sessions it lists and its token chart's period and total; \
-        and the attached screens, each with its resting HUD's style, the look it draws now and the agents it can \
-        show. Call it before changing the layout; block, row and screen keys come from here. Names are written as the \
-        panel shows them, in the application's language.
+        and the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show \
+        and whether an edit holds its panel open. Call it before changing the layout; block, row and screen keys come \
+        from here. Names are written as the panel shows them, in the application's language.
         """
 
     /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in.
@@ -44,11 +47,17 @@ public enum MCPTools {
         at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD \
         restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a \
         screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; \
-        hud.reset proposes a screen's default HUD style.
+        hud.reset proposes a screen's default HUD style. A layout edit holds the panel open on screen for two minutes \
+        from the call, and a call with only hud style fields closes it so the HUD shows; call finish_panel_edit when \
+        you are done.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
-        + "layout and, for a screen, its resting HUD to its saved style."
+        + "layout and, for a screen, its resting HUD to its saved style. Like a layout edit it holds the panel open, "
+        + "unless it drops a HUD style alone."
+
+    private static let finishPanelEditDescription = "Say your edit of the Agent HUD panel is done, so the panel an edit "
+        + "held open closes unless the user's pointer is on it. Drafts stay as they are, waiting for the user's Save."
 
     /// What the look's fields leave as it is: the row of a hardware notch, which the island is one with.
     private static let housingStaysBlack = "At a hardware notch a notch HUD stays dark in the notch's row, black or black "
@@ -69,6 +78,10 @@ public enum MCPTools {
         tool(setPanelLayout, setPanelLayoutDescription, input: layout, changes: true),
         tool(discardPanelDraft, discardPanelDraftDescription, input: object(["screen": described("string", screenDescription)]),
              changes: true),
+        tool(finishPanelEdit, finishPanelEditDescription, input: object([
+            "screen": described("string", "A screen key from get_panel to let go of that screen's panel; 'all', the default, "
+                                + "for every screen's."),
+        ]), changes: true),
     ]
 
     /// What `set_panel_layout` takes: every property optional, and no others.

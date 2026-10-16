@@ -119,7 +119,7 @@ final class MCPStdioTests: XCTestCase {
         XCTAssertEqual(messages.first?["result"]["serverInfo"],
                        .object(["name": .string("agent-hud"), "title": .string("Agent HUD"), "version": .string(version)]),
                        "the server's version is the bundle's, and 0 for an executable outside one")
-        XCTAssertEqual(messages.last?["result"]["tools"].arrayValue?.count, 4)
+        XCTAssertEqual(messages.last?["result"]["tools"].arrayValue?.count, 5)
     }
 
     func testInputIsCutIntoLinesHoweverTheReadsFall() {
