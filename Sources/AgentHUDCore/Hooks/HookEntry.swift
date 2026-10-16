@@ -59,7 +59,11 @@ public enum HookEntry {
             PermissionHookClient.run(source: source)
             return 0
         case "--install-completion-hook":
-            guard let source = CompletionHooks.Source(rawValue: name) else { return 0 }
+            // A person types this one, not a client: a name it does not know is a mistake to say.
+            guard let source = CompletionHooks.Source(rawValue: name) else {
+                FileHandle.standardError.write(Data("Unknown client for a completion hook: \(name)\n".utf8))
+                return 1
+            }
             do {
                 try CompletionHooks.configure(source, enabled: true, executable: URL(fileURLWithPath: arguments[0]).standardizedFileURL)
                 print("Completion hook installed: \(source.rawValue)")

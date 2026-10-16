@@ -370,12 +370,15 @@ final class ClawdPlayerTests: XCTestCase {
     }
 
     func testAMarkByACardAboveOrBelowItStandsStillWithItsWaitsSign() {
-        let waits: [(ClawdLook, ClawdSign?)] = [(.permission, .permission), (.question, .question), (.plan, nil)]
-        for (look, sign) in waits {
+        // A plan's bulb is its sign: it holds the bulb lit, its loop's first frame, where a request stands with its sign.
+        let bulb = ClawdPicture(frame: ClawdFrame(.lightbulb, 11), offset: ClawdOffset(y: 1))
+        let waits: [(ClawdLook, ClawdPicture)] = [(.permission, ClawdPicture(frame: .standing, sign: .permission)),
+                                                  (.question, ClawdPicture(frame: .standing, sign: .question)), (.plan, bulb)]
+        for (look, held) in waits {
             var player = ClawdPlayer()
             player.show(look, at: 0)
             player.standAtCard(for: look, at: 1)
-            XCTAssertEqual(player.picture, ClawdPicture(frame: .standing, sign: sign), "\(look)")
+            XCTAssertEqual(player.picture, held, "\(look)")
             XCTAssertNil(player.due, "\(look): held, with no clock")
             // The card goes: the wait asked for again plays its clip from the start.
             player.show(look, at: 2)

@@ -107,13 +107,17 @@ final class ClawdPerformerTests: XCTestCase {
     /// Pointing would aim past a card above or below the mark, on a top or bottom dock: there Clawd stands still with
     /// the sign its wait wears.
     func testAWaitByACardAboveOrBelowItStandsStillWithItsSign() throws {
-        let waits: [(BotFacing, BotLook, ClawdSign?)] = [(.down, .question, .question), (.up, .permission, .permission),
-                                                          (.up, .plan, nil)]
-        for (facing, look, sign) in waits {
+        let bulb = ClawdPicture(frame: sheet.canonical(ClawdFrame(.lightbulb, 11)), offset: ClawdOffset(y: 1))
+        let waits: [(BotFacing, BotLook, ClawdPicture)] = [
+            (.down, .question, ClawdPicture(frame: sheet.canonical(.standing), sign: .question)),
+            (.up, .permission, ClawdPicture(frame: sheet.canonical(.standing), sign: .permission)),
+            (.up, .plan, bulb),
+        ]
+        for (facing, look, held) in waits {
             var standing = performer()
             standing.set(BotState(look: look, facing: facing), at: 10)
             standing.step(to: 10) { .zero }
-            XCTAssertEqual(standing.picture, ClawdPicture(frame: sheet.canonical(.standing), sign: sign), "\(look) \(facing)")
+            XCTAssertEqual(standing.picture, held, "\(look) \(facing)")
             XCTAssertNil(standing.due, "\(look): held, with no clock")
             // The card goes: the wait plays its own clip.
             standing.set(BotState(look: look), at: 12)

@@ -207,10 +207,18 @@ struct ClawdPlayer: Sendable {
         holdAtCard(Step(frame: clips.pointsAtCard, ticks: .max, holds: true, mirrored: mirrored), at: time)
     }
 
-    /// Holds Clawd standing still by its agent's card above or below it, which pointing would aim past, wearing the sign
-    /// of `look`'s clip: a request's, or none for a plan, whose bulb is its sign. The next look asked for ends it.
+    /// Holds Clawd still by its agent's card above or below it, which pointing would aim past: standing with the sign of
+    /// `look`'s clip for a request, and for a plan, whose bulb is its sign, the bulb lit, its loop's first frame. The next
+    /// look asked for ends it.
     mutating func standAtCard(for look: ClawdLook, at time: TimeInterval) {
-        holdAtCard(Step(frame: .standing, ticks: .max, sign: clips.clip(for: look).sign, holds: true), at: time)
+        let clip = clips.clip(for: look)
+        let held: Step
+        if clip.sign == nil, let first = clip.loopFrames.first {
+            held = Step(frame: first, ticks: .max, offset: clip.offset, holds: true)
+        } else {
+            held = Step(frame: .standing, ticks: .max, sign: clip.sign, holds: true)
+        }
+        holdAtCard(held, at: time)
     }
 
     /// The badge every picture carries, unless it carries a sign that comes before it.

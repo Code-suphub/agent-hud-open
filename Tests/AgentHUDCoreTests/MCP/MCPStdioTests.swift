@@ -50,7 +50,7 @@ final class MCPStdioTests: XCTestCase {
     func testAHookFlagOrClientThisBuildDoesNotKnowEndsQuietly() throws {
         let unknown = [["/tmp/hud", "--permission-hook", "nobody"], ["/tmp/hud", "--completion-hook", "nobody"],
                        ["/tmp/hud", "--attention-hook", "codex"], ["/tmp/hud", "--session-origin-hook", "nobody"],
-                       ["/tmp/hud", "--install-completion-hook", "nobody"], ["/tmp/hud", "--later-hook", "claude"],
+                       ["/tmp/hud", "--later-hook", "claude"],
                        ["/tmp/hud", "--later-hook"], ["/tmp/hud", "--permission-hook"],
                        ["/tmp/hud", "--permission-hook", "claude", "--later"]]
         let outbound = try pipe()
@@ -67,6 +67,8 @@ final class MCPStdioTests: XCTestCase {
         for (arguments, status) in zip(unknown, statuses) { XCTAssertEqual(status, 0, "\(arguments)") }
         XCTAssertEqual(String(decoding: output, as: UTF8.self), "", "prints nothing")
         XCTAssertTrue(HookEntry.isHookFlag("--compaction-hook"))
+        // An install command is typed by a person, not run by a client: a client it does not know is an error to say.
+        XCTAssertEqual(HookEntry.handle(arguments: ["/tmp/hud", "--install-completion-hook", "nobody"]), 1)
         XCTAssertFalse(HookEntry.isHookFlag("--hooks"))
         XCTAssertFalse(HookEntry.isHookFlag("permission-hook"))
     }
