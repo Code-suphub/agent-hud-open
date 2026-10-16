@@ -83,6 +83,7 @@ struct ExperimentalPane: View {
                 .disabled(!controls.picker)
                 .accessibilityIdentifier("experimental-agent-tools-client")
                 Button(setup.buttonTitle) { Task { await setup.perform() } }
+                    .controlSize(.small)
                     .disabled(!controls.action)
                     .accessibilityIdentifier("experimental-agent-tools-action")
             }

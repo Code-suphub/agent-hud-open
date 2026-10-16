@@ -36,8 +36,7 @@ struct SourcesPane: View {
                     }
                     .padding(6)
                 }
-                .background(theme.card, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.cardBorder.opacity(0.55), lineWidth: 1))
+                .settingsCard()
                 Text(L10n.text("拖动分组或窗口，调整光晕和面板中的顺序。", "Drag groups or windows to reorder the glow and panel."))
                     .font(.ui(11)).foregroundStyle(theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -156,7 +155,7 @@ private struct AgentProviderDetail: View {
         let windowSections = group.windowSections
         let observer = ClientObserverStatus(vendor: group.id, clientHooks: settings.settings.clientHooks, report: report)
         let hasClientReadings = observer != nil || group.id == AdditionalSource.copilot.vendor
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 28) {
             if !hasAccounts && group.agents.isEmpty && !group.hasLiveStatus && !hasClientReadings && group.clients.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(group.source?.statusLabel ?? L10n.text("暂无可配置项", "No settings available yet"))
