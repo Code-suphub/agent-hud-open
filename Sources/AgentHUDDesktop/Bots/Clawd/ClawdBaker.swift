@@ -105,23 +105,25 @@ final class ClawdBaker {
     func image(_ picture: ClawdPicture, side: CGFloat, scale: CGFloat, outline: Int = 0,
                ground: HUDLook.Appearance = .dark, space: CGColorSpace? = nil) -> CGImage? {
         let place = Self.placement(side: side, scale: scale, outline: outline)
-        guard place.grain >= 2, sheet[picture.frame.sprite] != nil,
-              let context = BotCanvas.clear(place.extent, space: space), let shownIn = context.colorSpace
-        else { return nil }
+        guard place.grain >= 2, sheet.has(picture.frame) else { return nil }
+        // The colours a frame is drawn in, as `BotCanvas` picks them.
+        let shownIn = space.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.sRGB)!
         let key = Key(picture: picture, side: place.side, outline: outline, space: shownIn, ground: ground)
         uses += 1
         if let hit = kept[key] {
             kept[key]?.used = uses
             return hit.image
         }
-        guard draw(picture, place: place, ground: ground, on: context), let image = context.makeImage() else { return nil }
+        guard let context = BotCanvas.clear(place.extent, space: shownIn),
+              draw(picture, place: place, ground: ground, on: context), let image = context.makeImage()
+        else { return nil }
         if kept.count >= Self.most, let oldest = kept.min(by: { $0.value.used < $1.value.used })?.key { kept[oldest] = nil }
         kept[key] = (image, uses)
         return image
     }
 
     private func draw(_ picture: ClawdPicture, place: Placement, ground: HUDLook.Appearance, on context: CGContext) -> Bool {
-        guard let sprite = sheet[picture.frame.sprite], sheet.has(picture.frame) else { return false }
+        guard let sprite = sheet[picture.frame.sprite] else { return false }
         let n = place.grain, flip = picture.mirrored ? -1 : 1
         let shift = (x: Self.pixels(picture.offset.x * flip, n), y: Self.pixels(picture.offset.y, n))
         let foot = (x: place.foot.x + shift.x, y: place.foot.y + shift.y)

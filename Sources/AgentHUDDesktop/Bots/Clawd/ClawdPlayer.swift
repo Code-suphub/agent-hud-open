@@ -237,8 +237,9 @@ struct ClawdPlayer: Sendable {
     /// The event playing now.
     var playing: ClawdEvent? { if case .event(let event, _) = activity { event } else { nil } }
 
-    /// When a change of working look asked for now would begin: now on a mark that rests, stands or holds a frame,
-    /// at the end of the cycle or intro that plays, or once the outro or one-off that plays is over.
+    /// When a change of look asked for now would begin: now on a mark that rests, with the next tick on a frame held
+    /// or standing and in a wait that may be left from any frame, at the end of the cycle or intro that plays, or once
+    /// the outro or one-off that plays is over. A wait asked for cuts in at once whatever this says.
     var switchPoint: TimeInterval {
         Self.time(of: switchTick)
     }
@@ -249,8 +250,10 @@ struct ClawdPlayer: Sendable {
     private var switchTick: Int64 {
         switch activity {
         case .resting, .visit, .greeting, .gazing, .card, .pointing: return now
-        case .looping:
-            if script[0].holds || picture?.frame == (sheet?.canonical(.standing) ?? .standing) { return now + 1 }
+        case .looping(let shown):
+            if script[0].holds || shown.clip.exit == .anyFrame || picture?.frame == (sheet?.canonical(.standing) ?? .standing) {
+                return now + 1
+            }
             var end = start
             for step in script {
                 end += Int64(step.ticks)
