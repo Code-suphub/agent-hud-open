@@ -9,9 +9,10 @@ import Foundation
 /// It is written in an agent's words, as `set_panel_layout`'s `hud` takes it beside `agents`: `mode` is `notch`,
 /// `dynamic` or `simple`; `position` is the placement's `offset`, `logoGap` its `gapScale`, `edgeDistance` its
 /// `logoEdgeDistance`, `showLogos`, `showRings` and `showNumbers` its `showsLogos`, `showsRings` and `showsNumbers`,
-/// `separateAgents` its `separatesAgents` and `transparency` the material's own, while `appearance` and `material`
-/// keep their names; under `glow`, `speed` is the glow's working period, `breathSeconds`, and `amplitude` its
-/// `breathAmplitude`.
+/// `separateAgents` its `separatesAgents` and `transparency` the material's own, while `appearance`, `material` and
+/// `glassStyle` keep their names; under `glow`, `speed` is the glow's working period, `breathSeconds`, `idleSpeed` its
+/// idle one, `idleBreathSeconds`, and `amplitude` its `breathAmplitude`, while the grid's `gridPitch`, `gridDensity`,
+/// `gridCore` and `gridFade` keep their names.
 public struct HUDStyle: Hashable, Sendable {
     public var mode: HUDMode?
     public var edge: HUDEdge?
@@ -33,9 +34,12 @@ public struct HUDStyle: Hashable, Sendable {
     public var appearance: HUDAppearance?
     /// Their surface, solid or glass.
     public var material: HUDMaterial?
+    /// What their glass is made of, clear or regular Liquid Glass or a material. It is kept while the material is
+    /// solid, as Settings keeps it, and drawn once the material is glass.
+    public var glassStyle: HUDGlassStyle?
     /// How much of the desktop the HUD lets through, 0 to 1, as the material in effect is: glass's, how little of its
-    /// colour lies beneath the glass, or solid's, how little of its fill is drawn; Solid and Liquid Glass draw three fifths
-    /// of it, the material all of it.
+    /// colour lies beneath the glass, or solid's, how little of its fill is drawn; Solid, Clear and Regular draw three
+    /// fifths of it, Material all of it (`ScreenPlacement.transparencyScale(material:glassStyle:)`).
     public var transparency: Double?
     public var glow: Glow
 
@@ -48,20 +52,37 @@ public struct HUDStyle: Hashable, Sendable {
         public var blur: Double?
         /// The period every effect plays at while an agent works, in seconds.
         public var speed: Double?
+        /// The period it slows to while every agent is idle, in seconds.
+        public var idleSpeed: Double?
         /// How deep a breath dips.
         public var amplitude: Double?
         public var outwardOnly: Bool?
+        /// A grid glow's spacing between cells, in points.
+        public var gridPitch: Double?
+        /// How much of its cell each of a grid glow's marks fills.
+        public var gridDensity: Double?
+        /// The rows a grid glow holds at full strength.
+        public var gridCore: Double?
+        /// The rows a grid glow fades over after them.
+        public var gridFade: Double?
 
         public init(style: GlowStyle? = nil, effect: GlowEffect? = nil, brightness: Double? = nil, range: Double? = nil,
-                    blur: Double? = nil, speed: Double? = nil, amplitude: Double? = nil, outwardOnly: Bool? = nil) {
+                    blur: Double? = nil, speed: Double? = nil, idleSpeed: Double? = nil, amplitude: Double? = nil,
+                    outwardOnly: Bool? = nil, gridPitch: Double? = nil, gridDensity: Double? = nil,
+                    gridCore: Double? = nil, gridFade: Double? = nil) {
             self.style = style
             self.effect = effect
             self.brightness = brightness
             self.range = range
             self.blur = blur
             self.speed = speed
+            self.idleSpeed = idleSpeed
             self.amplitude = amplitude
             self.outwardOnly = outwardOnly
+            self.gridPitch = gridPitch
+            self.gridDensity = gridDensity
+            self.gridCore = gridCore
+            self.gridFade = gridFade
         }
     }
 
@@ -69,7 +90,7 @@ public struct HUDStyle: Hashable, Sendable {
                 logoGap: Double? = nil, edgeDistance: Double? = nil, showLogos: Bool? = nil, simpleSize: Double? = nil,
                 ringWidth: Double? = nil, showRings: Bool? = nil, showNumbers: Bool? = nil,
                 separateAgents: Bool? = nil, appearance: HUDAppearance? = nil, material: HUDMaterial? = nil,
-                transparency: Double? = nil, glow: Glow = Glow()) {
+                glassStyle: HUDGlassStyle? = nil, transparency: Double? = nil, glow: Glow = Glow()) {
         self.mode = mode
         self.edge = edge
         self.position = position
@@ -84,6 +105,7 @@ public struct HUDStyle: Hashable, Sendable {
         self.separateAgents = separateAgents
         self.appearance = appearance
         self.material = material
+        self.glassStyle = glassStyle
         self.transparency = transparency
         self.glow = glow
     }
@@ -108,6 +130,7 @@ public struct HUDStyle: Hashable, Sendable {
         if let separateAgents { next.separatesAgents = separateAgents }
         if let appearance { next.appearance = appearance }
         if let material { next.material = material }
+        if let glassStyle { next.glassStyle = glassStyle }
         // The material in effect, this style's or the saved one, is the one whose transparency it sets.
         if let transparency { next.transparency = transparency }
         return next
@@ -122,8 +145,13 @@ public struct HUDStyle: Hashable, Sendable {
         if let range = self.glow.range { next.range = range }
         if let blur = self.glow.blur { next.blur = blur }
         if let speed = self.glow.speed { next.breathSeconds = speed }
+        if let idleSpeed = self.glow.idleSpeed { next.idleBreathSeconds = idleSpeed }
         if let amplitude = self.glow.amplitude { next.breathAmplitude = amplitude }
         if let outwardOnly = self.glow.outwardOnly { next.outwardOnly = outwardOnly }
+        if let gridPitch = self.glow.gridPitch { next.gridPitch = gridPitch }
+        if let gridDensity = self.glow.gridDensity { next.gridDensity = gridDensity }
+        if let gridCore = self.glow.gridCore { next.gridCore = gridCore }
+        if let gridFade = self.glow.gridFade { next.gridFade = gridFade }
         return next
     }
 
@@ -133,11 +161,12 @@ public struct HUDStyle: Hashable, Sendable {
                   logoGap: placement.gapScale, edgeDistance: placement.logoEdgeDistance, showLogos: placement.showsLogos,
                   simpleSize: placement.simpleSize, ringWidth: placement.ringWidth, showRings: placement.showsRings,
                   showNumbers: placement.showsNumbers, separateAgents: placement.separatesAgents,
-                  appearance: placement.appearance, material: placement.material,
+                  appearance: placement.appearance, material: placement.material, glassStyle: placement.glassStyle,
                   transparency: placement.transparency,
                   glow: Glow(style: glow.style, effect: glow.effect, brightness: glow.brightness, range: glow.range,
-                             blur: glow.blur, speed: glow.breathSeconds, amplitude: glow.breathAmplitude,
-                             outwardOnly: glow.outwardOnly))
+                             blur: glow.blur, speed: glow.breathSeconds, idleSpeed: glow.idleBreathSeconds,
+                             amplitude: glow.breathAmplitude, outwardOnly: glow.outwardOnly, gridPitch: glow.gridPitch,
+                             gridDensity: glow.gridDensity, gridCore: glow.gridCore, gridFade: glow.gridFade))
     }
 
     /// The style reduced to what it changes about a screen saved with `placement` and `glow`: a field set to the value
@@ -208,7 +237,7 @@ extension HUDStyle {
     /// A field of a screen's placement an agent can set, by the name it uses for it.
     enum Field: String, CaseIterable, Sendable {
         case mode, edge, position, logoSize, logoGap, edgeDistance, showLogos, simpleSize, ringWidth, showRings,
-             showNumbers, separateAgents, appearance, material, transparency
+             showNumbers, separateAgents, appearance, material, glassStyle, transparency
 
         /// The range a number keeps within, Settings' own; nil for a field that is no number.
         var range: ClosedRange<Double>? {
@@ -220,14 +249,15 @@ extension HUDStyle {
             case .simpleSize: ScreenPlacement.simpleSizeRange
             case .ringWidth: ScreenPlacement.ringWidthRange
             case .transparency: ScreenPlacement.glassTransparencyRange
-            case .mode, .edge, .showLogos, .showRings, .showNumbers, .separateAgents, .appearance, .material: nil
+            case .mode, .edge, .showLogos, .showRings, .showNumbers, .separateAgents, .appearance, .material,
+                 .glassStyle: nil
             }
         }
 
         /// The modes whose HUD the field changes, as Settings shows it for them. The look's fields change every mode's.
         var modes: [HUDMode] {
             switch self {
-            case .mode, .appearance, .material, .transparency: HUDMode.allCases
+            case .mode, .appearance, .material, .glassStyle, .transparency: HUDMode.allCases
             case .edge, .position, .separateAgents: [.logos, .simple]
             case .logoSize, .logoGap, .edgeDistance, .showLogos: [.logos]
             case .simpleSize, .ringWidth, .showRings, .showNumbers: [.simple]
@@ -237,7 +267,8 @@ extension HUDStyle {
 
     /// A field of a screen's glow an agent can set, by the name it uses for it.
     enum GlowField: String, CaseIterable, Sendable {
-        case style, effect, brightness, range, blur, speed, amplitude, outwardOnly
+        case style, effect, brightness, range, blur, speed, idleSpeed, amplitude, outwardOnly, gridPitch, gridDensity,
+             gridCore, gridFade
 
         /// The range a number keeps within, Settings' own; nil for a field that is no number.
         var range: ClosedRange<Double>? {
@@ -245,8 +276,36 @@ extension HUDStyle {
             case .brightness: GlowSettings.brightnessRange
             case .range, .blur: GlowSettings.sizeRange
             case .speed: GlowSettings.workingPeriodRange
+            case .idleSpeed: GlowSettings.breathSecondsRange
             case .amplitude: GlowSettings.amplitudeRange
+            case .gridPitch: GlowSettings.gridPitchRange
+            case .gridDensity: GlowSettings.gridDensityRange
+            case .gridCore: GlowSettings.gridCoreRange
+            case .gridFade: GlowSettings.gridFadeRange
             case .style, .effect, .outwardOnly: nil
+            }
+        }
+
+        /// The step a number keeps to from the start of its range, the one Settings' slider moves it by: a grid's pitch
+        /// in whole points, its core and fade in whole rows, its density in twentieths and the idle period in half
+        /// seconds. Nil for a field that takes any number in its range.
+        var step: Double? {
+            switch self {
+            case .gridPitch, .gridCore, .gridFade: 1
+            case .gridDensity: 0.05
+            case .idleSpeed: 0.5
+            case .style, .effect, .brightness, .range, .blur, .speed, .amplitude, .outwardOnly: nil
+            }
+        }
+
+        /// Whether the glow draws the field in `style`, as Settings shows its row only for that: a range, a feather and
+        /// an outward fade for the soft glow, `blur`, a pitch, a density, a core and a fade for the grid glows, and
+        /// every other field for any style.
+        func isDrawn(in style: GlowStyle) -> Bool {
+            switch self {
+            case .range, .blur, .outwardOnly: style == .blur
+            case .gridPitch, .gridDensity, .gridCore, .gridFade: style != .blur
+            case .style, .effect, .brightness, .speed, .idleSpeed, .amplitude: true
             }
         }
     }
@@ -268,6 +327,7 @@ extension HUDStyle {
         case .separateAgents: separateAgents.map(JSONValue.bool)
         case .appearance: appearance.map { .string($0.rawValue) }
         case .material: material.map { .string($0.rawValue) }
+        case .glassStyle: glassStyle.map { .string($0.rawValue) }
         case .transparency: transparency.map(JSONValue.number)
         }
     }
@@ -290,6 +350,7 @@ extension HUDStyle {
         case .separateAgents: separateAgents = json.boolValue
         case .appearance: appearance = json.stringValue.flatMap(HUDAppearance.init(rawValue:))
         case .material: material = json.stringValue.flatMap(HUDMaterial.init(rawValue:))
+        case .glassStyle: glassStyle = json.stringValue.flatMap(HUDGlassStyle.init(rawValue:))
         case .transparency: transparency = number
         }
     }
@@ -318,6 +379,22 @@ extension HUDStyle {
     /// The hud's switch that asks for a screen's default style whole, in place of the style's fields: the placement its
     /// hardware is given, dark and solid, and the default glow, as the HUD style's Reset to Default gives them.
     static let resetName = "reset"
+
+    /// A transparency a screen keeps for one material, solid's or glass's, which `get_panel` lists beside the style so
+    /// that an agent can tell what a change of material draws. No proposal sets one, since `transparency` sets the one
+    /// of the material the HUD would have, but a hud may give one as it was listed, so the style listed can be sent
+    /// back whole.
+    enum KeptTransparency: String, CaseIterable, Sendable {
+        case solidTransparency, glassTransparency
+
+        /// The material whose transparency it is.
+        var material: HUDMaterial { self == .solidTransparency ? .solid : .glass }
+
+        /// What `placement` keeps of it.
+        func value(in placement: ScreenPlacement) -> Double {
+            self == .solidTransparency ? placement.solidTransparency : placement.glassTransparency
+        }
+    }
 }
 
 extension HUDStyle.Glow {
@@ -329,11 +406,19 @@ extension HUDStyle.Glow {
         case .range: range.map(JSONValue.number)
         case .blur: blur.map(JSONValue.number)
         case .speed: speed.map(JSONValue.number)
+        case .idleSpeed: idleSpeed.map(JSONValue.number)
         case .amplitude: amplitude.map(JSONValue.number)
         case .outwardOnly: outwardOnly.map(JSONValue.bool)
+        case .gridPitch: gridPitch.map(JSONValue.number)
+        case .gridDensity: gridDensity.map(JSONValue.number)
+        case .gridCore: gridCore.map(JSONValue.number)
+        case .gridFade: gridFade.map(JSONValue.number)
         }
     }
 
+    /// Sets a field from what an agent wrote: a value the field takes, within its range, or nothing for any other. A
+    /// number between the steps it keeps to is read, and refused as the screen's issue (`HUDStyle.issues`), so that one
+    /// repeating what is saved changes nothing.
     mutating func set(_ field: HUDStyle.GlowField, _ json: JSONValue) {
         let number = json.numberValue.flatMap { value in field.range.map { $0.contains(value) } == true ? value : nil }
         switch field {
@@ -343,8 +428,13 @@ extension HUDStyle.Glow {
         case .range: range = number
         case .blur: blur = number
         case .speed: speed = number
+        case .idleSpeed: idleSpeed = number
         case .amplitude: amplitude = number
         case .outwardOnly: outwardOnly = json.boolValue
+        case .gridPitch: gridPitch = number
+        case .gridDensity: gridDensity = number
+        case .gridCore: gridCore = number
+        case .gridFade: gridFade = number
         }
     }
 }

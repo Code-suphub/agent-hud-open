@@ -28,23 +28,24 @@ public enum MCPTools {
         panel shows them, in the application's language.
         """
 
-    /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in.
+    /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in, the
+    /// same for every glass style.
     private static let getPanelImageDescription = """
-        Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, with account \
-        names masked and session titles left out, or with show 'hud' a screen's resting HUD as it looks now; glass is a \
-        stand-in. Use it to check how a change looks; get_panel reads the same as data.
+        Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, account names \
+        masked, session titles left out, or with show 'hud' a screen's resting HUD as it looks now; every glass style \
+        is one stand-in. Use it to check how a change looks; get_panel reads it as data.
         """
 
     private static let setPanelLayoutDescription = """
         Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its \
         width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, \
-        appearance, material and glow. Send the whole layout you want; anything left out uses the default, and a HUD \
-        style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the \
-        layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows \
-        at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD \
-        restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a \
-        screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; \
-        hud.reset proposes a screen's default HUD style.
+        appearance, material, glass style and glow. Send the whole layout you want; anything left out uses the \
+        default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as \
+        it is. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as \
+        it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when \
+        Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved \
+        one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared \
+        layout again; hud.reset proposes a screen's default HUD style.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
@@ -137,9 +138,20 @@ public enum MCPTools {
                              + "the appearance and the desktop make it; solid while Reduce Transparency is on. "
                              + "\(housingStaysBlack)",
                              oneOf: HUDMaterial.allCases.map(\.rawValue)),
-            "transparency": number("How much of the desktop shows through, glass's or solid's as the material is: glass "
-                                   + "lays less of the appearance's colour beneath it, solid draws less of its fill, all of "
-                                   + "it at 0; Solid and Liquid Glass draw three fifths of it, 0.6 at 1;", .transparency),
+            "glassStyle": text("What glass is made of: clear or regular Liquid Glass, which the HUD draws alike, "
+                               + "as clear, and a window that matches its screen as regular, or material, an even "
+                               + "frosted blur; Clear and Regular are a frosted blur before macOS 26. Kept while the "
+                               + "material is solid, as Settings keeps it.",
+                               oneOf: HUDGlassStyle.allCases.map(\.rawValue)),
+            "transparency": described("number", "How much of the desktop shows through, glass's or solid's as the "
+                                      + "material is: glass lays less of the appearance's colour beneath it, solid "
+                                      + "draws less of its fill, all of it at 0; Solid, Clear and Regular draw three "
+                                      + "fifths of it, 0.6 at 1, and Material all of it; "
+                                      + "\(bounds(HUDStyle.Field.transparency.range)) It sets the material the HUD "
+                                      + "would have; get_panel lists what each keeps as solidTransparency and "
+                                      + "glassTransparency."),
+            "solidTransparency": kept("solid's"),
+            "glassTransparency": kept("glass's"),
             "glow": object([
                 "style": text("Glow style.", oneOf: GlowStyle.allCases.map(\.rawValue)),
                 "effect": text("What it plays.", oneOf: GlowEffect.allCases.map(\.rawValue)),
@@ -147,8 +159,14 @@ public enum MCPTools {
                 "range": number("Blur style: reach in points,", glow: .range),
                 "blur": number("Blur style: feather in points,", glow: .blur),
                 "speed": number("Seconds a cycle takes while an agent works,", glow: .speed),
+                "idleSpeed": number("Seconds a cycle takes while every agent is idle,", glow: .idleSpeed),
                 "amplitude": number("Breathe effect: how deep a breath dips,", glow: .amplitude),
                 "outwardOnly": described("boolean", "Blur style: fade outward from the rim only."),
+                "gridPitch": number("Grid styles, all but blur: spacing between cells in points,", glow: .gridPitch),
+                "gridDensity": number("Grid styles: how much of its cell a mark fills, past 1 into its neighbours,",
+                                      glow: .gridDensity),
+                "gridCore": number("Grid styles: rows held at full strength,", glow: .gridCore),
+                "gridFade": number("Grid styles: rows it fades over after them,", glow: .gridFade),
             ], description: "Notch or dynamic: the glow."),
             HUDStyle.resetName: described("boolean", "True proposes the screen's default style, the placement its "
                                           + "hardware is given, dark and solid, and the default glow, with no other style "
@@ -202,14 +220,22 @@ public enum MCPTools {
         described("number", description + " " + bounds(field.range))
     }
 
-    /// A number field of a screen's glow, described with the range it keeps within.
+    /// A number field of a screen's glow, described with the range it keeps within and the step it keeps to.
     private static func number(_ description: String, glow field: HUDStyle.GlowField) -> JSONValue {
-        described("number", description + " " + bounds(field.range))
+        described("number", description + " " + bounds(field.range, step: field.step))
     }
 
-    private static func bounds(_ range: ClosedRange<Double>?) -> String {
+    /// A transparency a screen keeps for one material, which get_panel lists and no proposal sets
+    /// (`HUDStyle.KeptTransparency`).
+    private static func kept(_ material: String) -> JSONValue {
+        described("number", "Read only: \(material) transparency as get_panel lists it, which can be sent back as "
+                  + "listed; transparency sets the material's own.")
+    }
+
+    private static func bounds(_ range: ClosedRange<Double>?, step: Double? = nil) -> String {
         guard let range else { return "" }
-        return "\(HUDStyle.written(range.lowerBound)) to \(HUDStyle.written(range.upperBound))."
+        let steps = step.map { $0 == 1 ? " in whole steps" : " in steps of \(HUDStyle.written($0))" } ?? ""
+        return "\(HUDStyle.written(range.lowerBound)) to \(HUDStyle.written(range.upperBound))\(steps)."
     }
 
     private static func text(_ description: String, oneOf values: [String]) -> JSONValue {

@@ -87,13 +87,15 @@ extension PanelLayout {
     private static func misreadings(ofHUD value: JSONValue) -> [String] {
         if value == .null { return [] }
         guard let hud = value.objectValue else { return ["hud is an object."] }
+        let kept = HUDStyle.listed(HUDStyle.KeptTransparency.allCases.map(\.rawValue))
         var found: [String] = []
         for property in hud.keys.sorted() {
             let value = hud[property] ?? .null
             guard property == "agents" else {
                 found += HUDStyle.misreadings(ofField: property, value)
                     ?? ["hud has no property \"\(property)\"; the hud takes "
-                        + "\(HUDStyle.listed(["agents"] + HUDStyle.names + [HUDStyle.resetName]))."]
+                        + "\(HUDStyle.listed(["agents"] + HUDStyle.names + [HUDStyle.resetName])), and \(kept) as "
+                        + "get_panel lists them."]
                 continue
             }
             found += names(value, at: "hud.agents", among: nil)
