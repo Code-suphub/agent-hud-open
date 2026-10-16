@@ -186,7 +186,7 @@ public final class PanelLayoutStore {
     /// Proposes a screen's default look as its style draft: the placement its hardware is given and the default glow,
     /// as the HUD style's Reset to Default gives them, drawn whole and written back by Save as that reset writes them.
     /// Its layout draft is left as it is. Returns whether a style draft now waits, which it does not where the screen
-    /// already draws the defaults.
+    /// already draws the defaults whole, what no style field names included.
     @discardableResult
     func proposeDefaultLook(for screen: String, hasNotch: Bool) -> Bool {
         proposeLook(ScreenLook(), for: screen, hasNotch: hasNotch)
@@ -219,15 +219,19 @@ public final class PanelLayoutStore {
     }
 
     /// Shows a version's look as `screen`'s style draft: drawn as that look, listed as the fields an agent reads that
-    /// differ from what is saved, and written back by Save exactly as it was kept. Nil, a look that differs in none of
-    /// those fields, or a screen that is not attached (`hasNotch` nil) drops the style draft instead, so the proposal
-    /// is whole.
+    /// differ from what is saved, and written back by Save exactly as it was kept. Nil, a look the screen already draws,
+    /// or a screen that is not attached (`hasNotch` nil) drops the style draft instead, so the proposal is whole. The
+    /// whole placement and glow are weighed, as Revert to Previous and the HUD style's Reset to Default restore them, so
+    /// a look that differs only in what no style field names, the glass style, the glow's idle breath or grid, or the
+    /// transparency of the material not drawn, is a draft that lists no field.
     private func proposeLook(_ look: ScreenLook?, for screen: String, hasNotch: Bool?) {
         guard let look, let hasNotch, let settings = owner?.settings else { return discardStyle(screen) }
-        let style = HUDStyle(every: look.placement ?? .default(hasNotch: hasNotch), glow: look.glow ?? settings.glow)
-            .reduced(placement: settings.placement(on: screen, hasNotch: hasNotch), glow: settings.glow(on: screen))
+        let placement = look.placement ?? .default(hasNotch: hasNotch), glow = look.glow ?? settings.glow
+        let saved = settings.placement(on: screen, hasNotch: hasNotch), savedGlow = settings.glow(on: screen)
+        let draws = placement == saved && glow == savedGlow
+        let style = HUDStyle(every: placement, glow: glow).reduced(placement: saved, glow: savedGlow)
         set(screen: screen, screens[screen] ?? PanelScreenDocument(),
-            style: style.isEmpty ? nil : PanelStyleDraft(style: style, hasNotch: hasNotch, restoring: look))
+            style: draws ? nil : PanelStyleDraft(style: style, hasNotch: hasNotch, restoring: look))
     }
 
     // MARK: A person's choice

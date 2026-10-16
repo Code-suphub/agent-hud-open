@@ -107,6 +107,36 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertEqual(HUDStyle(json: ["transparency": .string("0.5")]), HUDStyle())
     }
 
+    /// A transparency proposed with a new material is that material's, so it is weighed against what that material has
+    /// saved: one equal to the old material's is kept, from solid to glass and from glass to solid, and one equal to the
+    /// new material's own is left out, the material kept. The style a draft draws, sent back whole, is that draft.
+    func testATransparencyBesideANewMaterialIsWeighedAgainstThatMaterial() {
+        let glow = GlowSettings()
+        let solid = ScreenPlacement(mode: .simple)
+        XCTAssertEqual(solid.solidTransparency, 0)
+        XCTAssertEqual(solid.glassTransparency, ScreenPlacement.standardGlassTransparency)
+        let toGlass = HUDStyle(material: .glass, transparency: 0)
+        XCTAssertEqual(toGlass.reduced(placement: solid, glow: glow), toGlass, "solid's 0 is not glass's")
+        XCTAssertEqual(toGlass.reduced(placement: solid, glow: glow).applied(to: solid),
+                       ScreenPlacement(mode: .simple, material: .glass, glassTransparency: 0))
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: ScreenPlacement.standardGlassTransparency)
+            .reduced(placement: solid, glow: glow), HUDStyle(material: .glass), "glass's own, as saved")
+        XCTAssertEqual(HUDStyle(every: toGlass.applied(to: solid), glow: glow).reduced(placement: solid, glow: glow), toGlass,
+                       "the style drawn, sent back whole")
+
+        let glass = ScreenPlacement(mode: .simple, material: .glass, glassTransparency: 0.4, solidTransparency: 0.1)
+        let toSolid = HUDStyle(material: .solid, transparency: 0.4)
+        XCTAssertEqual(toSolid.reduced(placement: glass, glow: glow), toSolid, "glass's 0.4 is not solid's")
+        XCTAssertEqual(toSolid.reduced(placement: glass, glow: glow).applied(to: glass).solidTransparency, 0.4)
+        XCTAssertEqual(HUDStyle(material: .solid, transparency: 0.1).reduced(placement: glass, glow: glow),
+                       HUDStyle(material: .solid), "solid's own, as saved")
+        XCTAssertEqual(HUDStyle(every: toSolid.applied(to: glass), glow: glow).reduced(placement: glass, glow: glow), toSolid)
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: 0.4).reduced(placement: glass, glow: glow), HUDStyle(),
+                       "the material as saved weighs its own")
+        XCTAssertEqual(HUDStyle(transparency: 0.1).reduced(placement: glass, glow: glow), HUDStyle(transparency: 0.1),
+                       "without a material, the one saved")
+    }
+
     /// What glass is made of, clear or regular Liquid Glass or a material, is chosen in Settings alone: no style field
     /// names it, a style keeps the screen's own whatever it sets, the material and its transparency included, and an
     /// agent reads the same style from a screen whatever glass it has, so a style sent back whole changes nothing.

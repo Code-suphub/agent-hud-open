@@ -141,9 +141,14 @@ public struct HUDStyle: Hashable, Sendable {
     }
 
     /// The style reduced to what it changes about a screen saved with `placement` and `glow`: a field set to the value
-    /// the screen has saved is left out, so a style that spells out what is saved is empty.
+    /// the screen has saved is left out, so a style that spells out what is saved is empty. The transparency is weighed
+    /// against the one saved for the material the style leaves the screen with, since that is the one it sets: with a
+    /// change of material, the other material's.
     func reduced(placement: ScreenPlacement, glow: GlowSettings) -> HUDStyle {
-        let saved = HUDStyle(every: placement, glow: glow)
+        var saved = HUDStyle(every: placement, glow: glow)
+        var drawn = placement
+        if let material { drawn.material = material }
+        saved.transparency = drawn.transparency
         var kept = self
         for field in Field.allCases where kept.value(field) == saved.value(field) { kept.set(field, .null) }
         for field in GlowField.allCases where kept.glow.value(field) == saved.glow.value(field) { kept.glow.set(field, .null) }
@@ -170,6 +175,14 @@ struct PanelStyleDraft: Equatable, Sendable {
     func glow(over saved: GlowSettings, defaultGlow: GlowSettings) -> GlowSettings {
         guard let restoring else { return style.applied(to: saved) }
         return restoring.glow ?? defaultGlow
+    }
+
+    /// Whether the draft draws more than its style lists over the `saved` placement and glow: a version it brings back
+    /// that differs in what no style field names, such as the glass style or the glow's idle breath.
+    func restoresUnlisted(over saved: ScreenPlacement, glow: GlowSettings, defaultGlow: GlowSettings) -> Bool {
+        guard restoring != nil else { return false }
+        return style.applied(to: saved) != placement(over: saved, hasNotch: hasNotch)
+            || style.applied(to: glow) != self.glow(over: glow, defaultGlow: defaultGlow)
     }
 
     /// The screen's own placement and glow once the draft is written over `look`: the version it restores, else the

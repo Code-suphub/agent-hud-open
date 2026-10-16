@@ -244,6 +244,47 @@ final class PanelToolsLookTests: PanelToolsCase {
         XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false).glassTransparency, 0.7, "glass's as saved")
     }
 
+    /// A transparency proposed beside a new material is the new material's, kept where it equals what the old one had:
+    /// solid at 0 made glass at 0 draws glass at 0, not glass's own 0.5, and glass made solid at glass's value draws solid
+    /// at it. The reply, get_panel and the note say what is drawn, the draft read back keeps it, and Save writes it.
+    func testATransparencyBesideANewMaterialIsKept() throws {
+        let key = "SECOND-UUID"
+        var panel = try call(MCPTools.setPanelLayout, ["screen": .string(key),
+                                                       "hud": .object(["material": .string("glass"),
+                                                                       "transparency": .integer(0)])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, transparency: 0))
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false),
+                       ScreenPlacement(material: .glass, glassTransparency: 0))
+        XCTAssertEqual(panel["layout"]?["hud"], .object(["material": .string("glass"), "transparency": .number(0)]))
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["transparency"], .number(0))
+        XCTAssertEqual(try listing(key, in: panel)["look"], look("dark", "glass", transparency: 0))
+        let note = try XCTUnwrap(panel["note"]?.stringValue)
+        XCTAssertTrue(note.contains("shows its style as an unsaved draft"), note)
+        XCTAssertFalse(note.contains("no hud field sets"), "the draft lists all it draws: \(note)")
+        let read = try call(MCPTools.getPanel, ["screen": .string(key)])
+        XCTAssertEqual(try listing(key, in: read)["look"], look("dark", "glass", transparency: 0))
+        XCTAssertEqual(read["layout"]?["hud"]["transparency"], .number(0))
+
+        let revision = layout.revision
+        var again = try XCTUnwrap(panel["layout"]?.objectValue)
+        again["screen"] = .string(key)
+        _ = try call(MCPTools.setPanelLayout, again)
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key),
+                                                "hud": try XCTUnwrap(try listing(key, in: panel)["hud"])])
+        XCTAssertEqual(layout.revision, revision, "the draft read back, and the style in effect sent back, keep it")
+        layout.savePanel(on: key)
+        XCTAssertEqual(settings.settings.screens[key], ScreenPlacement(material: .glass, glassTransparency: 0))
+
+        settings.update { $0.screens[key] = ScreenPlacement(material: .glass, glassTransparency: 0.4) }
+        panel = try call(MCPTools.setPanelLayout, ["screen": .string(key),
+                                                   "hud": .object(["material": .string("solid"),
+                                                                   "transparency": .number(0.4)])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .solid, transparency: 0.4))
+        XCTAssertEqual(try listing(key, in: panel)["look"], look("dark", "solid", transparency: drawn(0.4)))
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["transparency"], .number(0.4))
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false).glassTransparency, 0.4, "glass's as saved")
+    }
+
     // MARK: What is read
 
     /// get_panel says what each screen draws now: a notch at a notch in its look as any HUD, `system` as macOS is set,
