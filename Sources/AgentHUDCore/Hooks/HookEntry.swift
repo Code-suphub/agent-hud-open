@@ -42,6 +42,11 @@ public enum HookEntry {
             try? AttentionHooks.record(source: source, data: input())
             print("{}")
             return 0
+        case "--compaction-hook":
+            guard let source = CompactionHooks.Source(rawValue: name) else { return nil }
+            try? CompactionHooks.record(source: source, data: input())
+            print("{}")
+            return 0
         case "--permission-hook":
             // The client waits on this one: it holds the request open until the user answers on the HUD, and prints
             // nothing when it cannot be answered, which leaves the client's own permission prompt exactly as it was.
