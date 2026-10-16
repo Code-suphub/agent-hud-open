@@ -80,6 +80,50 @@ final class IslandHoverTests: XCTestCase {
         XCTAssertFalse(popup.isVisible || popup.parent != nil, "Collapsing the island must dismiss the forecast")
     }
 
+    /// A row's hover details cast a shadow on an opaque island and none on one the desktop shows through, glass or a
+    /// solid with a transparency, where a shadow under them would darken them, as the HUD keeps shadows from under its
+    /// own see-through shells. The details take a change of look where they are, the shadow with it.
+    @MainActor
+    func testHoverDetailsCastAShadowOnlyOnAnOpaqueIsland() throws {
+        _ = NSApplication.shared
+        let size = CGSize(width: 240, height: 40)
+        func shown(_ look: HUDLook) throws -> (anchor: IslandHoverAnchorView<Text>, popup: NSWindow, window: NSWindow) {
+            let window = OverlayPanel(frame: CGRect(origin: CGPoint(x: -20000, y: -20000), size: size), level: .statusBar,
+                                      acceptsMouse: true)
+            let anchor = IslandHoverAnchorView(content: Text("Details"), look: look)
+            anchor.frame = CGRect(origin: .zero, size: size)
+            let container = NSView(frame: CGRect(origin: .zero, size: size))
+            container.addSubview(anchor)
+            window.contentView = container
+            window.orderFrontRegardless()
+            anchor.mouseEntered(with: try event(.mouseEntered, window: window, at: CGPoint(x: 20, y: 20)))
+            anchor.update(content: Text("Details"), look: look, enabled: true, isHovered: true)
+            let popup = try XCTUnwrap(window.childWindows?.first, "hovering a row shows its details")
+            return (anchor, popup, window)
+        }
+        let looks: [(String, HUDLook)] = [
+            ("the standard look", .standard),
+            ("light and opaque", HUDLook(appearance: .light)),
+            ("solid with a transparency", HUDLook(appearance: .dark, transparency: 0.3)),
+            ("glass at 0", HUDLook(appearance: .light, material: .glass)),
+            ("glass at 0.5", HUDLook(appearance: .dark, material: .glass, transparency: 0.5, glassStyle: .regular)),
+        ]
+        for (name, look) in looks {
+            let (anchor, popup, window) = try shown(look)
+            defer {
+                anchor.dismiss()
+                window.orderOut(nil)
+            }
+            XCTAssertEqual(popup.hasShadow, !look.seeThrough, "\(name): made in it")
+            for (other, next) in looks {
+                anchor.update(content: Text("Details"), look: next, enabled: true, isHovered: true)
+                XCTAssertTrue(window.childWindows?.first === popup, "\(name) to \(other): the same details")
+                XCTAssertEqual(popup.hasShadow, !next.seeThrough, "\(name) to \(other)")
+            }
+        }
+        XCTAssertTrue(looks.contains { !$0.1.seeThrough } && looks.contains { $0.1.seeThrough }, "both kinds are tried")
+    }
+
     @MainActor
     private func enter<Content: View>(_ anchor: IslandHoverAnchorView<Content>, in window: NSWindow) async throws -> NSWindow {
         anchor.updateTrackingAreas()

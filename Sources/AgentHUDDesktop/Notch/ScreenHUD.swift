@@ -783,7 +783,10 @@ final class ScreenHUD {
     /// The look the island draws with: at a hardware notch the notch row's while it rests there or shows a reminder's
     /// wings, dark in the look's material (`HUDLook.inNotchRow`), and the screen's look once it opens into the panel or
     /// a card; everywhere else the screen's look. Opening and closing cross-fade between the two on the island's curve.
-    /// The glow keeps the screen's look, whose material, which alone decides what it cuts out, is the row's too.
+    /// The glow keeps the screen's look, which decides by whether the desktop shows through it, glass or a solid with a
+    /// transparency (`HUDLook.seeThrough`), what the glow cuts out and how the shells cast their shadows (`GlowCutout`,
+    /// `castsShellShadows`). The row's dark glass lets the desktop through as the screen's glass does; its opaque black
+    /// under a see-through Solid hides the glow beneath it whether that is cut out or not.
     private func islandLook(open: Bool) -> HUDLook {
         atHardwareNotch && !open ? look.inNotchRow : look
     }

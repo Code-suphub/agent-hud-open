@@ -117,6 +117,8 @@ public struct SettingRow<Control: View>: View {
     /// A word set beside the label, such as 实验 / Experimental for a setting still being tried.
     var tag: String? = nil
     @ViewBuilder let control: () -> Control
+    @Environment(\.colorScheme) private var scheme
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
 
     public init(label: String, subtitle: String? = nil, tag: String? = nil,
                 @ViewBuilder control: @escaping () -> Control) {
@@ -134,7 +136,9 @@ public struct SettingRow<Control: View>: View {
                     if let tag { SettingTag(text: tag) }
                 }
                 if let subtitle {
-                    Text(subtitle).font(.ui(11)).foregroundStyle(.secondary)
+                    // The window's grey on the ground its screen's look gives it, a grade darker on light glass, as the
+                    // section's subtitle is (`Theme.under(_:)`).
+                    Text(subtitle).font(.ui(11)).foregroundStyle(Theme.forScheme(scheme).under(surface?.look).secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -147,14 +151,17 @@ public struct SettingRow<Control: View>: View {
     }
 }
 
-/// The word beside a setting's label (`SettingRow.tag`): small and grey in a capsule, read with the label.
+/// The word beside a setting's label (`SettingRow.tag`): small and grey in a capsule, read with the label, the grey the
+/// row's subtitle has.
 struct SettingTag: View {
     let text: String
+    @Environment(\.colorScheme) private var scheme
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
 
     var body: some View {
         Text(text)
             .font(.ui(10, .medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.forScheme(scheme).under(surface?.look).secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 1.5)
             .background(.quaternary, in: Capsule())
@@ -230,9 +237,42 @@ struct CardModifier: ViewModifier {
     }
 }
 
+/// A box raised off the ground it shows over, a chart's hover details: in a window the window's colour with a hairline
+/// and a shadow, or under the look of the window's screen (`WindowSurface`) the HUD's surface in that look, as a box
+/// raised off the island is in the HUD's (`hud`). Glass is drawn as its stand-in there, the look's own colour, which
+/// sets the box off the glass it stands on: glass laid over glass sees nothing. A box the desktop shows through casts no
+/// shadow, which would darken it.
+struct RaisedBoxModifier: ViewModifier {
+    let theme: Theme
+    /// The HUD's look, for a box raised off the island, which takes the HUD's raised surface; nil for one in a window.
+    var hud: HUDLook?
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8), look = hud ?? surface?.look
+        content
+            .background {
+                if let look {
+                    HUDSurface(shape, look: look, fill: hud == nil ? theme.windowBackground : theme.raisedSurface,
+                               contact: nil)
+                        .environment(\.drawsGlassStandIn, true)
+                } else {
+                    shape.fill(theme.windowBackground)
+                }
+            }
+            .overlay(shape.stroke(theme.cardBorder))
+            .shadow(color: .black.opacity(look?.seeThrough == true ? 0 : 0.2), radius: 6, y: 2)
+    }
+}
+
 extension View {
     func card(_ theme: Theme, padding: EdgeInsets = EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16), radius: CGFloat = 10) -> some View {
         modifier(CardModifier(theme: theme, padding: padding, radius: radius))
+    }
+
+    /// Raises the view off the ground it shows over (`RaisedBoxModifier`): a window's, or with `hud` the island's.
+    func raisedBox(_ theme: Theme, hud: HUDLook? = nil) -> some View {
+        modifier(RaisedBoxModifier(theme: theme, hud: hud))
     }
 
     /// 1 px line along the top edge (CSS `border-top`). It sits under the content, so anything the section floats

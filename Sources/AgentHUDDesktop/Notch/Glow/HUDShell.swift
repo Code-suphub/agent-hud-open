@@ -32,8 +32,8 @@ struct HUDShells: Equatable, Sendable {
 extension HUDLook {
     /// A light or see-through HUD's shells cast shadows of their own (`HUDShells`): a light shell needs one to stand off a
     /// light desktop, and glass or a see-through solid needs its shadow round it rather than under it, where it would
-    /// show through. The standard
-    /// look keeps the one shadow it has always had, under the glow's island and only with the glow.
+    /// show through. The standard look keeps the one shadow it has always had, under the glow's island and only with the
+    /// glow.
     var castsShellShadows: Bool { appearance == .light || seeThrough }
 }
 

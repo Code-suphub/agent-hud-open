@@ -141,9 +141,8 @@ struct HeatmapModelDetails: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .foregroundStyle(theme.text)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.windowBackground))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.cardBorder))
-        .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+        // Raised off the window, in its screen's look with Match screen on.
+        .raisedBox(theme)
     }
 
 }

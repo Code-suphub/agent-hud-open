@@ -133,11 +133,13 @@ public enum MCPTools {
             "separateAgents": described("boolean", "Dynamic or simple: hovering a mark opens that agent's own panel."),
             "appearance": text("Its colours, its panel's and its cards' too: dark, light, or system to follow macOS's light "
                                + "or dark setting. \(housingStaysBlack)", oneOf: HUDAppearance.allCases.map(\.rawValue)),
-            "material": text("Solid, or glass that shows the desktop through it blurred, in the appearance's colours; "
-                             + "solid while Reduce Transparency is on. \(housingStaysBlack)",
+            "material": text("Solid, or the system's glass, which shows the desktop through it blurred, light or dark as "
+                             + "the appearance and the desktop make it; solid while Reduce Transparency is on. "
+                             + "\(housingStaysBlack)",
                              oneOf: HUDMaterial.allCases.map(\.rawValue)),
             "transparency": number("How much of the desktop shows through, glass's or solid's as the material is: glass "
-                                   + "thins its frost and its cover, solid its fill,", .transparency),
+                                   + "lays less of the appearance's colour beneath it, solid draws less of its fill, all of "
+                                   + "it at 0; Solid and Liquid Glass draw three fifths of it, 0.6 at 1;", .transparency),
             "glow": object([
                 "style": text("Glow style.", oneOf: GlowStyle.allCases.map(\.rawValue)),
                 "effect": text("What it plays.", oneOf: GlowEffect.allCases.map(\.rawValue)),
