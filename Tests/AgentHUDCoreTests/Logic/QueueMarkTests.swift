@@ -195,6 +195,22 @@ final class QueueMarkTests: XCTestCase {
         XCTAssertTrue(try limit(nil, at: 0).limited(at: now), "with no reset known, until the next prompt")
     }
 
+    func testGroksUsedUpWindowMarksEachOfItsClients() throws {
+        // Grok's account windows are drawn as the clients that ran on them, each a mark of its own.
+        let account = ProviderAccount.identified(provider: "Grok", user: "user", workspace: "team")!
+        let row = AgentDescriptor(id: account.windowID("grok"), vendor: "Grok", model: "grok", source: "", enabled: true,
+                                  account: account)
+        let sessions = ["Grok CLI", "Grok Bot"].map { client in
+            LiveSession(id: client, agentId: "grok-model:test", task: client, terminal: nil, startedAt: at(-60), pctOfWindow: nil,
+                        tokensIn: 1, tokensOut: 1, client: client, observedAt: now)
+        }
+        let report = UsageReport(generatedAt: now, snapshots: [.init(agentId: row.id, remainingPct: 0, resetAt: at(1800), updatedAt: now)],
+                                 sessions: sessions, accounts: ["Grok": [.init(account: account, observedAt: now)]])
+        let marks = ReportView(report: report, agents: [row], settings: Settings(), now: now).queueMarks
+        XCTAssertEqual(Set(marks.map(\.key)), ["Grok", "Grok Bot"])
+        for mark in marks { XCTAssertEqual(mark.exhaustedUntil, at(1800), mark.key) }
+    }
+
     func testANotificationOnlyWaitAndLiveStatusOff() throws {
         let consumer = agent("claude-model:opus", "Claude")
         // A turn waiting for approval with no request on the HUD: Claude Code's notification hook said so.

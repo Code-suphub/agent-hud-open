@@ -52,15 +52,17 @@ extension ReportView {
                   let reset = row.resetAt, reset > now else { continue }
             exhausted[key] = max(exhausted[key] ?? reset, reset)
         }
-        var sessions: [String: [SessionLiveFacts]] = [:]
+        // A session runs on its own vendor's windows, which for Grok's clients are the account's, drawn as the clients.
+        var sessions: [String: [SessionLiveFacts]] = [:], until: [String: Date] = exhausted
         for session in self.sessions where session.liveStatus && session.lastEventAt >= cutoff {
             guard let vendor = session.source.agentVendor else { continue }
-            let key = VendorMark.key(vendor)
-            sessions[key, default: []].append(facts(of: session, exhaustedUntil: exhausted[key], renewedAt: renewed[key]))
+            let key = VendorMark.key(vendor), windows = VendorMark.key(session.source.vendor ?? vendor)
+            sessions[key, default: []].append(facts(of: session, exhaustedUntil: exhausted[windows], renewedAt: renewed[windows]))
+            if let reset = exhausted[windows] { until[key] = max(until[key] ?? reset, reset) }
         }
         return order.map { key in
             QueueMark(key: key, vendor: vendors[key] ?? key, isWorking: working[key] ?? false, sessions: sessions[key] ?? [],
-                      exhaustedUntil: exhausted[key])
+                      exhaustedUntil: until[key])
         }
     }
 
