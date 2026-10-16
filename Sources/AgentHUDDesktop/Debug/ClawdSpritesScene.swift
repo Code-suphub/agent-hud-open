@@ -12,11 +12,19 @@ struct ClawdSpritesScene: View {
 
     /// What a row plays, from rest, at time 0.
     enum Shot: Hashable, CaseIterable {
-        case look(ClawdLook), subagents, badge, event(ClawdEvent), visit(ClawdVisit), greet, card(ClawdCard), pointing
+        case look(ClawdLook), subagents, badge, event(ClawdEvent), visit(ClawdVisit), greet, card(ClawdCard), pointing, standing
 
-        static let allCases: [Shot] = ClawdLook.allCases.map(Shot.look) + [.subagents, .badge]
-            + ClawdEvent.allCases.map(Shot.event) + ClawdVisit.allCases.map(Shot.visit) + [.greet]
-            + ClawdCard.allCases.map(Shot.card) + [.pointing]
+        // Built in steps: one sum of literals and maps this long is near what Xcode 16.4's type checker gives up on.
+        static let allCases: [Shot] = {
+            var shots: [Shot] = ClawdLook.allCases.map(Shot.look)
+            shots += [.subagents, .badge]
+            shots += ClawdEvent.allCases.map(Shot.event)
+            shots += ClawdVisit.allCases.map(Shot.visit)
+            shots.append(.greet)
+            shots += ClawdCard.allCases.map(Shot.card)
+            shots += [.pointing, .standing]
+            return shots
+        }()
 
         var name: String {
             switch self {
@@ -28,6 +36,7 @@ struct ClawdSpritesScene: View {
             case .greet: "greet"
             case .card(let card): "card \(card)"
             case .pointing: "at its card"
+            case .standing: "under its card"
             }
         }
 
@@ -43,6 +52,7 @@ struct ClawdSpritesScene: View {
             case .greet: player.greet(at: 0)
             case .card(let card): player.card(card, at: 0)
             case .pointing: player.pointAtCard(mirrored: true, at: 0)
+            case .standing: player.standAtCard(for: .permission, at: 0)
             }
         }
     }

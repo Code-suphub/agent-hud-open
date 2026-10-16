@@ -33,6 +33,7 @@ struct BotStatesScene: View {
         Moment(name: "question", state: BotState(look: .question), seconds: 1.7),
         Moment(name: "plan", state: BotState(look: .plan), seconds: 1.4),
         Moment(name: "at its card", state: BotState(look: .permission, facing: .left)),
+        Moment(name: "under its card", state: BotState(look: .permission, facing: .up)),
         Moment(name: "no news", state: BotState(look: .noNews)),
         Moment(name: "hover", state: BotState(look: .idle, hovered: true), seconds: 0.9),
         Moment(name: "asleep", state: BotState(look: .asleep), staysBot: true),
