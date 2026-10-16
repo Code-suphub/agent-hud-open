@@ -746,7 +746,7 @@ final class PermissionHookTests: XCTestCase, @unchecked Sendable {
         }
     }
 
-    func testAPlanIsShownToBeApprovedInClaudeCodeAndLeftToTheForksOwnDialog() throws {
+    func testAPlanIsShownForReadingAndLeftToTheForksOwnDialog() throws {
         let data = try JSONSerialization.data(withJSONObject: payload(tool: "ExitPlanMode", input: [
             "plan": "## Ship the question card\n\n1. Parse the questions\n2. Send the answers back"]))
         let plan = try XCTUnwrap(try PermissionRequest.parse(data, source: .claude, id: "p", now: now))
@@ -757,6 +757,45 @@ final class PermissionHookTests: XCTestCase, @unchecked Sendable {
         for source in [PermissionHooks.Source.qoder, .codebuddy, .workbuddy] {
             XCTAssertNil(try PermissionRequest.parse(data, source: source, id: "f", now: now), "\(source) keeps its plans in its own dialog")
         }
+    }
+
+    func testAClaudePlanIsApprovedWithItsOwnInputOrSentBackWithTheUsersWords() throws {
+        let input: [String: Any] = ["plan": "## Ship the question card\n\n1. Parse the questions", "planFilePath": "/tmp/p.md"]
+        let plan = try XCTUnwrap(try PermissionRequest.parse(JSONSerialization.data(withJSONObject: payload(tool: "ExitPlanMode", input: input)),
+                                                             source: .claude, id: "p", now: now))
+        XCTAssertTrue(plan.answersPlan)
+        XCTAssertEqual(plan.plan, "## Ship the question card\n\n1. Parse the questions", "the whole plan, to read before approving it")
+        func decision(_ answer: PermissionDecision) throws -> ProviderJSON {
+            try ProviderJSON.read(answer.response(for: plan))["hookSpecificOutput"]["decision"]
+        }
+
+        // Claude Code ignores a bare allow on a plan; it approves one whose input comes back with it.
+        let approve = try decision(.approvePlan(acceptEdits: false))
+        XCTAssertEqual(approve["behavior"].stringValue, "allow")
+        XCTAssertEqual(approve["updatedInput"], try ProviderJSON.read(JSONSerialization.data(withJSONObject: input)))
+        XCTAssertEqual(approve["updatedPermissions"], .null, "every edit is still asked about")
+        let edits = try decision(.approvePlan(acceptEdits: true))
+        XCTAssertEqual(edits["updatedInput"]["planFilePath"].stringValue, "/tmp/p.md")
+        XCTAssertEqual(edits["updatedPermissions"], .array([.object(["type": .string("setMode"), "mode": .string("acceptEdits"),
+                                                                     "destination": .string("session")])]))
+
+        // Sent back, Claude keeps planning; it is told the words are the user's, or it keeps the plan as it was.
+        let back = try decision(.keepPlanning("  Add a line saying bye. "))
+        XCTAssertEqual(back["behavior"].stringValue, "deny")
+        XCTAssertEqual(back["message"].stringValue,
+                       "The user reviewed this plan in Agent HUD and did not approve it. Their feedback: Add a line saying bye.")
+        XCTAssertEqual(try decision(.keepPlanning(nil))["message"].stringValue,
+                       "The user reviewed this plan in Agent HUD and did not approve it. They want to keep planning.")
+        XCTAssertEqual(PermissionDecision.allow.response(for: plan), PermissionDecision.allow.response(for: .claude),
+                       "a plain allow stays what it was, which Claude Code leaves to its own dialog")
+
+        // A plan answer means nothing to a call that is not a plan, nor to a client that takes no plan answer from its hook.
+        let shell = try XCTUnwrap(try PermissionRequest.parse(JSONSerialization.data(withJSONObject: payload()), source: .claude, id: "s", now: now))
+        XCTAssertFalse(shell.answersPlan)
+        XCTAssertEqual(PermissionDecision.approvePlan(acceptEdits: false).response(for: shell), PermissionDecision.noDecision)
+        XCTAssertEqual(PermissionDecision.keepPlanning("x").response(for: shell), PermissionDecision.noDecision)
+        XCTAssertEqual(PermissionDecision.approvePlan(acceptEdits: true).response(for: .claude), PermissionDecision.noDecision,
+                       "without the plan there is no input to send back")
     }
 
     func testACallAnsweredInTheClientShowsAsSettledInItsSessionRecord() throws {

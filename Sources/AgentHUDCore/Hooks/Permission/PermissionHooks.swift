@@ -79,6 +79,9 @@ public enum PermissionHooks {
         /// dialog. Qwen Code ignores an allow for both. Claude Code takes a question's answers back through this event and
         /// shows its own plan dialog while the hook waits; its forks are not known to do either. The HUD leaves these to
         /// the client's own dialog. DeepSeek Harness never passes this event: its questions arrive on its web host.
+        /// Whether the client takes a plan's answer from its hook: approved with the plan as the call's input, approved
+        /// with a mode to move to, or sent back with a message. Claude Code does (verified on 2.1.300).
+        var answersPlans: Bool { self == .claude }
         var unanswerableTools: Set<String> {
             switch self {
             case .zcode: return ["ExitPlanMode"]
