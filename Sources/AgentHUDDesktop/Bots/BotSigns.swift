@@ -68,15 +68,16 @@ enum BotSigns {
         max(1, min(Int((side / 20).rounded()), Int((0.3 * side / CGFloat(rows)).rounded())))
     }
 
-    /// Draws `sign` with its ink in `rect`, given in the context's current space and snapped to whole device pixels;
-    /// a cell is a fifth of the rect's width. On a dark `ground` the ink is white inside a device pixel of the island's
-    /// dark at 60%, which keeps it apart from a body of any colour; on a light ground it is that dark alone. `lit`
-    /// picks the dot of `…` drawn at full ink, 0 to 2 from the left.
+    /// Draws `sign` with its ink in `rect`, given in the context's current space and snapped to whole pixels of the
+    /// bitmap it lands in; a cell is a fifth of the rect's width. On a dark `ground` the ink is white inside a pixel of
+    /// the island's dark at 60%, which keeps it apart from a body of any colour; on a light ground it is that dark
+    /// alone. `lit` picks the dot of `…` drawn at full ink, 0 to 2 from the left.
     static func paint(_ sign: BotSign, lit: Int = 0, in rect: CGRect, on context: CGContext, ground: HUDLook.Appearance) {
-        let device = context.convertToDeviceSpace(rect).standardized
-        let cell = max(1, (device.width / CGFloat(columns)).rounded())
-        // Device space runs up from the bottom left: the top row is drawn highest.
-        let left = device.minX.rounded(), top = device.maxY.rounded()
+        // The bitmap's own space, a unit to a pixel and running up from its bottom left; its device space, which
+        // `convertToDeviceSpace` gives, runs down instead, so the transform is taken from the context's own.
+        let pixels = rect.applying(context.ctm).standardized
+        let cell = max(1, (pixels.width / CGFloat(columns)).rounded())
+        let left = pixels.minX.rounded(), top = pixels.maxY.rounded()
         let lit = max(0, min(2, lit)), bits = BotSign.bits[sign.rawValue]
         var ink: [CGRect] = [], dim: [CGRect] = []
         for row in 0..<rows {

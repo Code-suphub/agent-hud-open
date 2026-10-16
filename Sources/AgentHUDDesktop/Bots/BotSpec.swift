@@ -234,8 +234,9 @@ struct BotSpec: Sendable {
                                              rect(-0.24, -0.56, 0.16, -0.42), rect(0.58, -0.56, 1.0, -0.3)],
                                             grey, followsFace: false),
                                     .blocks([rect(-0.6, 0.36, 0.6, 0.6)], grey, followsFace: true)]),
+        // Its sign stands a little left of the usual place, clear of the dot it keeps, which grows while a request waits.
         "Kimi": BotSpec(radius: 0.32, center: CGPoint(x: 0.41, y: 0.59), shape: .outline(keep: 0.3, smooth: 22),
-                        keeps: CGRect(x: 0.78, y: 0.02, width: 0.215, height: 0.215)),
+                        keeps: CGRect(x: 0.78, y: 0.02, width: 0.215, height: 0.215), signAt: CGPoint(x: 0.44, y: 0.22)),
         "GLM": BotSpec(shape: .rect(width: 0.74, height: 0.74, round: 0.16), paint: .solid(RGBA(hex: 0x28282b)),
                        eyeColor: RGBA(hex: 0xffffff), stroke: RGBA(hex: 0xffffff)),
         // The letter itself, in one piece: a wide bar that holds the face, standing on two legs.
