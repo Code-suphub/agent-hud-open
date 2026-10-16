@@ -126,9 +126,9 @@ extension SnapshotRunner {
     /// The Simple panel with its bots on, as the island draws it at rest, and the bots of its agents at work beside it as
     /// stills on the look's surface: a bot is an animating layer, which a bitmap of the panel cannot see.
     private static func simpleWithBots(store: UsageStore, look: HUDLook) -> (view: some View, size: CGSize) {
-        let placement = ScreenPlacement(mode: .simple, simpleSize: 28, simpleBots: true)
+        let placement = ScreenPlacement(mode: .simple, simpleSize: 28)
         let config = SimpleMeterConfig(items: ScreenAgents(store: store, listed: [], mode: .simple).meterItems,
-                                       placement: placement)
+                                       placement: placement, bots: true)
         let side: CGFloat = 28
         let view = VStack(spacing: 14) {
             SimpleMeterView(config: config)
