@@ -3,17 +3,18 @@ import Foundation
 
 /// What Agent HUD's MCP tools do in the running application: read what the hover panel shows, draw a picture of it or
 /// of a screen's resting HUD, propose a layout for it, and drop a proposal, for the shared layout or for one screen's
-/// own, whose proposal can also change the style of that screen's resting HUD, or change that alone.
+/// own, whose proposal can also change the style of that screen's resting HUD, or change that alone. An edit of a
+/// layout, or a drop, holds a screen's panel open while the agent works (`PanelHolds`), until the agent says it is done.
 ///
 /// Every answer comes from what the application holds: the last report, the settings and the layout store, the
 /// attached screens, and the panel's own views, which the host measures and draws off screen through the closures it
-/// passes in. Nothing here starts a provider read, opens the panel or writes the agent list or the settings, and nothing
-/// here saves: a proposal is a draft, a screen's style one drawn over its settings, until a person presses Save in the
-/// panel. A proposal is checked as an agent sent it, and one the panel or the HUD cannot do as asked is refused whole,
-/// with every reason, so an agent never believes a change that fell back. What the layout already holds for a block, a
-/// row or an agent that is away may come back with it, so the layout that was read can be sent again, and a proposal is
-/// kept as what it changes, so one that draws what is saved leaves no draft. Screens are named by role and agents by
-/// vendor; nothing names an account.
+/// passes in. Nothing here starts a provider read, opens the panel itself or writes the agent list or the settings: a
+/// hold is a signal the host's panel follows, without a read. Nothing here saves: a proposal is a draft, a screen's
+/// style one drawn over its settings, until a person presses Save in the panel. A proposal is checked as an agent sent
+/// it, and one the panel or the HUD cannot do as asked is refused whole, with every reason, so an agent never believes a
+/// change that fell back. What the layout already holds for a block, a row or an agent that is away may come back with
+/// it, so the layout that was read can be sent again, and a proposal is kept as what it changes, so one that draws what
+/// is saved leaves no draft. Screens are named by role and agents by vendor; nothing names an account.
 @MainActor
 public struct PanelTools {
     let store: UsageStore
@@ -99,12 +100,26 @@ public struct PanelTools {
             }
             do {
                 let scope = try scope(of: arguments, among: attached)
-                let styled = layout.hasStyleDraft(scope.screenKey)
+                let styled = layout.hasStyleDraft(scope.screenKey), before = effective(scope)
+                // Dropping a screen's style draft alone restyles its resting HUD, which the panel would cover.
+                let styleAlone = styled && scope.screenKey.flatMap(layout.draft(of:)) == nil
                 layout.discard(scope)
+                if styleAlone, let key = scope.screenKey {
+                    holds.pause(key)
+                } else {
+                    holdForEdit(scope, before: before, among: attached)
+                }
                 var note = discardNote(scope, among: attached)
                 if styled { note += " Its resting HUD is back to the style it has saved." }
                 return .result(panel(scope, among: attached, note: note))
             } catch {
+                return .failure("Nothing was changed. " + Self.sentence(error))
+            }
+        case MCPTools.finishPanelEdit:
+            if let unknown = Self.unknown(arguments, taking: ["screen"]) {
+                return .failure("Nothing was changed. finish_panel_edit takes only screen. \(unknown)")
+            }
+            do { return .result(finish(try scope(of: arguments, among: attached), among: attached)) } catch {
                 return .failure("Nothing was changed. " + Self.sentence(error))
             }
         default:
@@ -178,6 +193,8 @@ public struct PanelTools {
                                 + "\(revision). Call get_panel again, then propose.")
             }
         }
+        // What the panel drew before, against which the edit's first agent is found.
+        let before = effective(scope)
         if let from = arguments["from"], from != .null {
             // A key given as null is not given, here as everywhere.
             guard Self.layoutKeys.allSatisfy({ (arguments[$0] ?? .null) == .null }) else {
@@ -213,6 +230,7 @@ public struct PanelTools {
             default:
                 return .failure("Nothing was changed. from is \"default\", \"previous\" or \"shared\".")
             }
+            holdForEdit(scope, before: before, among: attached)
             var note = proposalNote(scope, among: attached)
             if away {
                 note += " The placement and glow of its resting HUD in that version are not part of the draft while the "
@@ -250,6 +268,12 @@ public struct PanelTools {
         case .screen(let key):
             if !styleAlone { layout.propose(choice(asked, for: key, against: existing), for: key) }
             proposeStyle(style, for: key)
+        }
+        // A layout edit holds its screen's panel open; the style alone closes it, so the HUD it restyled shows.
+        if styleAlone, let key = scope.screenKey {
+            holds.pause(key)
+        } else {
+            holdForEdit(scope, before: before, among: attached)
         }
         var note = proposalNote(scope, among: attached)
         if style.placedClear {

@@ -26,7 +26,7 @@ final class ScreenHUD {
     private var failedListedSessionID: String?
     /// One expansion per screen, shared by its live panel and the fresh view used for measuring it.
     private var answeringSessionID: String?
-    private let mouseLocation: @MainActor () -> CGPoint
+    let mouseLocation: @MainActor () -> CGPoint
     /// Whether the Mac asks for reduced motion, where a separated dock's card moves and its shadow waits for it
     /// (`shadowedShells(_:card:moves:look:)`): the system's setting, or a test's, which runs both ways on any Mac.
     private let reduceMotion: @MainActor () -> Bool
@@ -43,12 +43,18 @@ final class ScreenHUD {
     private var dock = DockMemory()
     let glow: GlowWindowController
     let island: IslandWindowController
-    private var machine = HoverMachine() {
+    private(set) var machine = HoverMachine() {
         didSet { if !machine.isOpen { pinned = false } }
     }
     /// On a dock that separates its agents, hovering only peeks; a click asks for the agent's whole panel,
     /// which lasts until the HUD closes.
-    private var pinned = false
+    var pinned = false
+    /// What this screen's panel follows of an agent's hold on it (`ScreenHUD+Hold.swift`).
+    var panelHold = PanelHoldState()
+    /// The holds agents' edits put on the screens' panels, which this screen's panel follows.
+    var panelHolds: PanelHolds { settings.panelLayout.holds }
+    /// Set once the display is gone and the HUD's windows are off screen; a hold opens nothing then.
+    private(set) var isClosed = false
     /// A separated dock's cards move inside a window that waits for them: it takes in the old place and the new one
     /// at once, and shrinks to the new one when this fires.
     private var cardSettle: Task<Void, Never>?
@@ -77,7 +83,7 @@ final class ScreenHUD {
     /// The island's own shape while an event is showing: wider than the silhouette by the two wings it grew.
     private var alertFrame: CGRect?
     private let alerts = IslandAlertQueue()
-    private var activeAlert: IslandAlert? {
+    var activeAlert: IslandAlert? {
         guard let alert = alerts.current?.alert else { return nil }
         // A queued card keeps its reply, but the source's latest reading owns where its session now lives.
         if case .completion(var event) = alert,
@@ -91,7 +97,7 @@ final class ScreenHUD {
         failedNavigationAlertID != nil && failedNavigationAlertID == activeAlert?.id
     }
     private var showsAlertDetails: Bool { machine.isOpen && alerts.current?.inUsagePanel == false }
-    private var pointerInside = false
+    private(set) var pointerInside = false
     /// The hover region the pointer was last found inside; nil once it is found outside. See `hovers`.
     private var heldHoverRegion: CGRect?
     /// Whether the hover currently counts as one that opens the panel; see `reevaluateHover`.
@@ -101,11 +107,11 @@ final class ScreenHUD {
     private var modifierWatch: Timer?
     private let dragSurface = HUDDragWindowController()
     /// A drag is previewed without writing preferences on every mouse movement; mouse-up commits once.
-    private var previewPlacement: ScreenPlacement?
+    private(set) var previewPlacement: ScreenPlacement?
     /// The grip along the strip, kept when the queue turns onto another edge.
     private var dragGrabFraction: CGFloat = 0.5
     /// The mark the pointer was last over, on a dock that separates its agents.
-    private var hoveredMark: String?
+    var hoveredMark: String?
 
     /// One agent's mark on the dock: the vendor it is drawn for, and its centre along the edge on screen.
     struct AgentMark: Equatable {
@@ -115,7 +121,7 @@ final class ScreenHUD {
     }
 
     /// The marks an agent's own card can open from; none unless this dock separates its agents.
-    private var agentMarks: [AgentMark] {
+    var agentMarks: [AgentMark] {
         guard placement.separatesAgents, geometry.mode.isDocked else { return [] }
         let centres = simpleMeter?.markCentres ?? logoQueue?.markCentres ?? []
         return Self.agentMarks(centres: centres, strip: geometry.rect, edge: geometry.edge)
@@ -146,9 +152,10 @@ final class ScreenHUD {
         return marks.first { $0.key == hoveredMark }
     }
 
-    /// A click on a mark, or on its peek, opens that agent's whole panel.
+    /// A click on a mark, or on its peek, opens that agent's whole panel. It is the person's choice, so it ends a hold.
     func pinAgent() {
         guard !agentMarks.isEmpty, activeAlert == nil, previewPlacement == nil else { return }
+        personTookOver()
         if let mark = Self.mark(at: mouseLocation(), among: agentMarks, strip: geometry.rect, edge: geometry.edge) {
             hoveredMark = mark.key
         }
@@ -207,10 +214,12 @@ final class ScreenHUD {
         }
     }
 
-    /// Sliding along the strip moves the open panel from one agent to the next.
+    /// Sliding along the strip moves the open panel from one agent to the next. Opening another agent's card is the
+    /// person's choice, so it ends a hold.
     private func followHoveredMark(_ point: CGPoint) {
         guard let mark = Self.mark(at: point, among: agentMarks, strip: geometry.rect, edge: geometry.edge),
               mark.key != hoveredMark else { return }
+        if isHeld { endHold() }
         hoveredMark = mark.key
         guard activeAlert == nil else { return }
         if machine.isOpen {
@@ -331,6 +340,7 @@ final class ScreenHUD {
 
         apply(animated: false)
         island.show()
+        followHolds()
     }
 
     // MARK: Hover
@@ -350,6 +360,7 @@ final class ScreenHUD {
                 }
             }
         }
+        followHoldPointer(inside)
         // Moving within the HUD can reach the top while an ordinary hover is still waiting to open.
         reevaluateHover()
     }
@@ -403,7 +414,7 @@ final class ScreenHUD {
             && point.y <= geometry.screenFrame.maxY && containsPointer(point, in: geometry.rect)
     }
 
-    private var hoverRegion: CGRect {
+    var hoverRegion: CGRect {
         ScreenHUD.hoverRegion(open: machine.isOpen, panel: targetWindowFrame ?? island.panel.frame,
                               alert: alertFrame, marks: geometry.rect)
     }
@@ -451,7 +462,9 @@ final class ScreenHUD {
         transition(machine.reduce(.forceOpen, config: config))
     }
 
+    /// Closes the panel at once: a person's click that leads elsewhere, or the host's. It ends a hold first.
     func forceCollapse() {
+        endHold()
         transition(machine.reduce(.forceCollapse, config: config))
     }
 
@@ -504,8 +517,9 @@ final class ScreenHUD {
     }
 
     /// Brings a stacked request to the front, so the buttons act on the card the user is looking at. One that arrived
-    /// on another screen moves to this one first.
+    /// on another screen moves to this one first. Opening another card is the person's choice, so it ends a hold.
     func selectRequest(_ id: String) {
+        personTookOver()
         if !alerts.contains(id: id) { onClaimRequest?(id) }
         guard alerts.promote(id: id) else { return }
         stopTyping()
@@ -573,13 +587,15 @@ final class ScreenHUD {
     /// for the usage panel, and sliding the panel under it would answer a question nobody put. A card that was a row
     /// inside the panel leaves the panel exactly where it was.
     private func closeAfterLastAlert(wasInUsagePanel: Bool) {
-        if ScreenHUD.closesAfterLastAlert(wasInUsagePanel: wasInUsagePanel, pointerInside: pointerInside) {
+        // A panel a hold keeps open stays so, and one a hold waited to open opens.
+        if ScreenHUD.closesAfterLastAlert(wasInUsagePanel: wasInUsagePanel, pointerInside: pointerInside), !panelHold.open {
             machine = HoverMachine()
             materialPreparation = nil
             timer?.invalidate()
             timer = nil
         }
         apply(animated: true)
+        followHoldAfterAlert()
     }
 
     /// Whether the island collapses once the last card is answered.
@@ -587,9 +603,11 @@ final class ScreenHUD {
         !wasInUsagePanel || !pointerInside
     }
 
-    /// A compact reply opens its choices; quota events still open their usage page.
+    /// A compact reply opens its choices; quota events still open their usage page. Either is the person's choice, so
+    /// it ends a hold.
     func openAlert() {
         guard let alert = activeAlert else { return }
+        personTookOver()
         if case .completion = alert {
             forceOpen()
         } else {
@@ -677,11 +695,12 @@ final class ScreenHUD {
         open()
     }
 
-    private var config: HoverMachine.Config {
+    var config: HoverMachine.Config {
         HoverMachine.Config(hoverDelay: settings.settings.hoverDelay, collapseDelay: settings.settings.collapseDelay)
     }
 
-    private func transition(_ transition: HoverMachine.Transition) {
+    /// - reads: whether an opening reads the accounts again, which a hover's does and a hold's does not.
+    func transition(_ transition: HoverMachine.Transition, reads: Bool = true) {
         let wasOpen = machine.isOpen
         machine = transition.machine
         timer?.invalidate()
@@ -699,8 +718,9 @@ final class ScreenHUD {
             answeringSessionID = nil
         }
         if wasOpen != machine.isOpen {
-            // The panel opening is someone looking at the numbers, which is reason enough to read the accounts again.
-            if machine.isOpen { Task { await store.refreshAccounts() } }
+            // The panel opening is someone looking at the numbers, which is reason enough to read the accounts again. A
+            // hold opens it for an agent's edit, which is no such reason.
+            if machine.isOpen, reads { Task { await store.refreshAccounts() } }
             apply(animated: true)
         }
     }
@@ -861,8 +881,9 @@ final class ScreenHUD {
     }
 
     func beginMoving(at point: CGPoint? = nil) {
-        // A person moving the HUD wins over an agent's style draft: it is dropped first, and the move starts from the
-        // placement the screen has saved.
+        // A person moving the HUD wins over an agent's style draft and its hold: both are dropped first, and the move
+        // starts from the placement the screen has saved.
+        endHold()
         settings.panelLayout.discardStyle(key)
         materialPreparation = nil
         if let point {
@@ -951,6 +972,7 @@ final class ScreenHUD {
 
     /// Takes this HUD's windows off screen; the display it belonged to is gone.
     func close() {
+        isClosed = true
         cancelSessionNavigation()
         materialPreparation = nil
         modifierWatch?.invalidate()

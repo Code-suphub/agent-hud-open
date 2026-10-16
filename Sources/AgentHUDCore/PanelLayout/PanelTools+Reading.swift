@@ -80,14 +80,15 @@ extension PanelTools {
     }
 
     /// One attached screen as an agent reads it: its key and role, how it presents the HUD, which layout its panel
-    /// draws, the panel's width there and that of one agent's own panel on a dock that separates its agents, whether the
-    /// panel shows a draft, its resting HUD's style in effect, the look it draws now and whether a style draft waits, the
-    /// agents its resting HUD can show now, and those it shows under its layout. The width of an agent's own panel is told
-    /// whether or not the screen separates its agents, so that a proposal that turns that on can be weighed first.
+    /// draws, the panel's width there and that of one agent's own panel on a dock that separates its agents, whether
+    /// the panel shows a draft, its resting HUD's style in effect, the look it draws now and whether a style draft
+    /// waits, the agents its resting HUD can show now, those it shows under its layout, and whether an agent's edit
+    /// holds its panel open (`holdListing(_:)`). The width of an agent's own panel is told whether or not the screen
+    /// separates its agents, so that a proposal that turns that on can be weighed first.
     private func listing(_ screen: PanelScreen) -> JSONValue {
         let drawn = layout.effective(for: screen.key)
         let order = HUDAgentOrder(listed: drawn.hud.agents, available: screen.agents)
-        return .object([
+        let listed: [String: JSONValue] = [
             "key": .string(screen.key), "name": .string(screen.name), "mode": .string(screen.modeName),
             "edge": .string(screen.edge.rawValue), "hasNotch": .bool(screen.hasNotch),
             "layout": .string(layout.usesShared(screen.key) ? "shared" : "own"),
@@ -99,7 +100,8 @@ extension PanelTools {
             "styleUnsaved": .bool(layout.hasStyleDraft(screen.key)),
             "agents": .array(screen.agents.map(JSONValue.string)),
             "shows": .array(order.arrange(screen.agents) { $0 }.map(JSONValue.string)),
-        ])
+        ]
+        return .object(listed.merging(holdListing(screen.key)) { $1 })
     }
 
     /// What the whole app is set to that decides how a proposal is drawn, read only, as no tool changes a Settings

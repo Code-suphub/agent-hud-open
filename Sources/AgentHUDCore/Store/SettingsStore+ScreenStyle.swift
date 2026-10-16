@@ -21,9 +21,11 @@ public extension SettingsStore {
     }
 
     /// A person's own edit of one screen's placement or glow: the screen's style draft is dropped first, so a person
-    /// always wins over an agent, and the change is made to the settings as saved. An edit is no version of the
-    /// screen: it leaves its previous version as it was.
+    /// always wins over an agent, and so is an agent's hold on its panel, which would cover the HUD being changed; the
+    /// change is made to the settings as saved. An edit is no version of the screen: it leaves its previous version as
+    /// it was.
     func updateScreen(_ screen: String, _ change: (inout Settings) -> Void) {
+        panelLayout.holds.end(screen)
         panelLayout.discardStyle(screen)
         update(change)
     }
