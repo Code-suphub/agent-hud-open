@@ -3,8 +3,8 @@ import CoreGraphics
 import XCTest
 @testable import AgentHUDDesktop
 
-/// DeepSeek's bot is a fat fish: a fin on its back and a little hand low on each side, all standing behind the body. The
-/// hands flap on a tool's beats, at a start and over a reply's card, and one waves at a greeting; nothing else moves them,
+/// DeepSeek's bot is a fat fish: a fin on its back and a small triangular fin low on each side for hands, all standing
+/// behind the body. The hands flap on a tool's beats, at a start and over a reply's card, and one waves at a greeting; nothing else moves them,
 /// so the clock still rests where it did.
 @MainActor
 final class BotFinTests: XCTestCase {
@@ -84,8 +84,9 @@ final class BotFinTests: XCTestCase {
     /// Where a point given in body radii from the body's centre falls in a frame `side` pixels to the mark, in pixels
     /// from its top left.
     private static func pixel(_ point: CGPoint, spec: BotSpec, side: CGFloat) -> CGPoint {
-        CGPoint(x: (spec.center.x + point.x * spec.radius + BotRenderer.margin) * side,
-                y: (spec.center.y + point.y * spec.radius + BotRenderer.margin) * side)
+        let x: CGFloat = spec.center.x + point.x * spec.radius
+        let y: CGFloat = spec.center.y + point.y * spec.radius
+        return CGPoint(x: (x + BotRenderer.margin) * side, y: (y + BotRenderer.margin) * side)
     }
 
     /// Points round a fin's outline, in body radii.
@@ -114,7 +115,9 @@ final class BotFinTests: XCTestCase {
         XCTAssertGreaterThan(right.root.x, 0)
         XCTAssertGreaterThan(right.root.y, 0, "low on the side")
         XCTAssertTrue((10...60).contains(right.angle), "down and out: \(right.angle)")
-        XCTAssertGreaterThan(right.tip, right.base, "a round hand on a narrow wrist")
+        XCTAssertLessThan(right.tip * 3, right.base, "a small triangle: broad where it leaves the body, a point at its end")
+        XCTAssertGreaterThan(right.tip, 0.03, "its point rounded a little")
+        XCTAssertEqual(right.sweep, 0)
         // The fin on the back stands on top, a little back of the middle, and sweeps further back.
         XCTAssertLessThan(back.root.y, -0.5)
         XCTAssertLessThan(back.root.x, 0)
@@ -170,21 +173,37 @@ final class BotFinTests: XCTestCase {
                 XCTAssertGreaterThan(grown.outside, Int(side * side * 0.02), place)
                 XCTAssertLessThan(growing.outside, grown.outside, "\(place): the fins grow in with the morph")
 
-                // A hand's colour, at the middle of its round tip, is the body's blue, a little darker.
+                // A side fin's colour, on its middle line past the body's outline, is the body's blue, a little darker.
+                // The most opaque pixel round that point is taken, as the triangle is only a few pixels wide at 20 pt.
                 let motion = moment(BotState(look: .idle), at: 1.6, staysBot: true)
                 let bytes = try Self.pixels(fins, motion, side: side)
                 func color(_ point: CGPoint) -> (blue: Int, green: Int, red: Int, alpha: Int) {
-                    let at = Self.pixel(point, spec: spec, side: side), index = (Int(at.y) * extent + Int(at.x)) * 4
-                    return (Int(bytes[index]), Int(bytes[index + 1]), Int(bytes[index + 2]), Int(bytes[index + 3]))
+                    let at = Self.pixel(point, spec: spec, side: side)
+                    var best: Int = (Int(at.y) * extent + Int(at.x)) * 4
+                    for dy in -1...1 {
+                        for dx in -1...1 {
+                            let row: Int = Int(at.y) + dy, column: Int = Int(at.x) + dx
+                            let index: Int = (row * extent + column) * 4
+                            if bytes[index + 3] > bytes[best + 3] { best = index }
+                        }
+                    }
+                    return (Int(bytes[best]), Int(bytes[best + 1]), Int(bytes[best + 2]), Int(bytes[best + 3]))
+                }
+                func brightness(_ value: (blue: Int, green: Int, red: Int, alpha: Int)) -> Int {
+                    let sum: Int = value.red + value.green
+                    return sum + value.blue
                 }
                 let hand = try XCTUnwrap(Self.fins(of: spec).first { $0.hand > 0 })
-                let angle = hand.angle * .pi / 180, reach = hand.length - hand.tip
-                let tip = color(CGPoint(x: hand.root.x + cos(angle) * reach, y: hand.root.y + sin(angle) * reach))
+                let angle: CGFloat = hand.angle * .pi / 180, out: CGFloat = hand.length * 0.72
+                let middle = CGPoint(x: hand.root.x + cos(angle) * out, y: hand.root.y + sin(angle) * out)
+                let fin = color(middle)
                 let body = color(CGPoint(x: 0, y: -0.7))
-                XCTAssertEqual(tip.alpha, 255, place)
-                XCTAssertGreaterThan(tip.blue, tip.red + 100, "\(place): blue")
-                XCTAssertLessThan(tip.red + tip.green + tip.blue, body.red + body.green + body.blue, "\(place): darker")
-                XCTAssertGreaterThan(tip.red + tip.green + tip.blue, (body.red + body.green + body.blue) * 3 / 4, "\(place): a touch")
+                XCTAssertGreaterThan(hypot(middle.x, middle.y), 1.05, "\(place): past the body's outline")
+                XCTAssertEqual(fin.alpha, 255, place)
+                XCTAssertGreaterThan(fin.blue, fin.red + 100, "\(place): blue")
+                let finSum: Int = brightness(fin), bodySum: Int = brightness(body)
+                XCTAssertLessThan(finSum, bodySum, "\(place): darker")
+                XCTAssertGreaterThan(finSum * 4, bodySum * 3, "\(place): a touch")
             }
         }
     }
@@ -219,27 +238,37 @@ final class BotFinTests: XCTestCase {
             }
         }
 
-        // The copy: 0.4 of the body, its centre 0.42 of the side right of the body's and 0.18 below, a gap of 0.035 round
-        // it, all in body radii here. At every height the hands reach while it stands there, a beat's or a start's, the
-        // hand on its side stays behind the body, the copy and its gap, and the other fins keep clear of the gap.
-        let copy = CGPoint(x: 0.42 / spec.radius, y: 0.18 / spec.radius), covered = 0.4 + 0.035 / spec.radius
+        // The copy: 0.4 of the body, its centre 0.42 of the side right of the body's and 0.18 below, with a gap of 0.035
+        // round it and its own fins, all in body radii here. At every height the hands reach while it stands there, a
+        // beat's or a start's, what clears the body of the hand on its side lies under the copy, its fins or their gap,
+        // and the other fins keep clear of all of them.
+        let copy = CGPoint(x: 0.42 / spec.radius, y: 0.18 / spec.radius)
+        let gap: CGFloat = 0.035 / spec.radius, covered: CGFloat = 0.4 + gap
+        let small = CGAffineTransform(translationX: copy.x, y: copy.y).scaledBy(x: 0.4, y: 0.4)
+        let copyFins = CGMutablePath()
+        for fin in Self.fins(of: spec) { copyFins.addPath(BotFins.path(fin, grown: 1, raised: 0), transform: small) }
+        let copyGap = copyFins.copy(strokingWithWidth: 2 * gap, lineCap: .round, lineJoin: .round, miterLimit: 1)
+        func underCopy(_ point: CGPoint) -> Bool {
+            let fromCopy: CGFloat = hypot(point.x - copy.x, point.y - copy.y)
+            return fromCopy <= covered || copyFins.contains(point) || copyGap.contains(point)
+        }
         for fin in Self.fins(of: spec) {
             for raised in [0, BotMoves.paddle, 32] as [CGFloat] {
                 let path = BotFins.path(fin, grown: 1, raised: raised)
-                var shows: [CGPoint] = [], nearest = CGFloat.infinity
+                var shows = 0, beside = 0
                 for i in -160...160 {
                     for j in -160...160 {
                         let point = CGPoint(x: CGFloat(i) / 100, y: CGFloat(j) / 100)
                         guard hypot(point.x, point.y) > 1, path.contains(point) else { continue }
-                        let fromCopy = hypot(point.x - copy.x, point.y - copy.y)
-                        nearest = min(nearest, fromCopy)
-                        if fromCopy > covered { shows.append(point) }
+                        if !underCopy(point) { shows += 1 }
+                        let fromCopy: CGFloat = hypot(point.x - copy.x, point.y - copy.y)
+                        if fromCopy < covered + 0.1 || copyGap.contains(point) { beside += 1 }
                     }
                 }
                 if fin.hand > 0 {
-                    XCTAssertEqual(shows.count, 0, "the right hand raised \(raised)° shows beside the copy")
+                    XCTAssertEqual(shows, 0, "the right hand raised \(raised)° shows beside the copy")
                 } else {
-                    XCTAssertGreaterThan(nearest, covered + 0.1, "a fin at \(fin.angle)° raised \(raised)° by the copy")
+                    XCTAssertEqual(beside, 0, "a fin at \(fin.angle)° raised \(raised)° by the copy")
                 }
             }
         }

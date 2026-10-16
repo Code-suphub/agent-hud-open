@@ -21,8 +21,8 @@ struct BotFlap: Hashable, Sendable {
 
 /// The outline of a fin, in body radii from the body's centre.
 enum BotFins {
-    /// A rounded paddle: a disc at the root and a disc at the tip, wrapped by the two lines that touch both, so a narrow
-    /// root and a round tip make a little hand and a broad root and a small tip a fin on the back. `grown` is how far it
+    /// A rounded paddle: a disc at the root and a disc at the tip, wrapped by the two lines that touch both, so a broad
+    /// root and a small tip make a triangle with its corners rounded: a fish's side fin or the fin on its back. `grown` is how far it
     /// has grown out of its root, from 0 to 1; `raised` is how many degrees it has turned up about its root.
     static func path(_ fin: BotSpec.Fin, grown: CGFloat, raised: CGFloat) -> CGPath {
         // A hand on the right turns up against the clock, one on the left with it, with y running down.
