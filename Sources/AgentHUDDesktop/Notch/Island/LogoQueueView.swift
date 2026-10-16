@@ -144,6 +144,8 @@ struct LogoQueueView: NSViewRepresentable {
 
 /// Lays stationary marks out along the edge and follows their bots through the shared clock.
 final class LogoQueueLayerView: NSView {
+    /// The seed of the bots built from here on, fixed only to replay their acts in a test.
+    var seed: UInt64?
     private(set) var marks: [CALayer] = []
     /// One per mark, for the marks that have a bot. A bot's layer sits over its mark and takes its place
     /// while the bot is out; the mark comes back when the bot has settled into the logo again.
@@ -239,7 +241,8 @@ final class LogoQueueLayerView: NSView {
         }
         actors = config.items.map { item in
             guard config.bots, let form = BotForm.form(for: item.vendor, ground: light ? .light : .dark) else { return nil }
-            let actor = BotActor(form: form, staysBot: false, period: config.workingSeconds, awake: awake)
+            let actor = BotActor(form: form, staysBot: false, period: config.workingSeconds,
+                                 seed: seed ?? UInt64.random(in: 0...UInt64.max), awake: awake)
             actor.resize(side: config.logo, scale: scale, outline: outline)
             layer?.addSublayer(actor.layer)
             return actor

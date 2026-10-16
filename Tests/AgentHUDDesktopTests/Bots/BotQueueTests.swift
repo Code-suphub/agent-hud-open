@@ -117,6 +117,9 @@ final class BotQueueTests: XCTestCase {
     func testClawdMovesInWholeStepsAndComesBack() throws {
         let (view, window) = hosted()
         defer { BotClock.shared.drop(view); window.close() }
+        // A seed whose minute of random acts holds a scuttle and a jump: with any seed, about one minute in fifty has
+        // neither, and the test would fail for that alone.
+        view.seed = 7
         view.apply(config: queue([("Claude", true)]), light: false, scale: 2, animates: true)
         let actor = try XCTUnwrap(view.actors[0])
         // One step of the art at the queue's logo size: a quarter of the body's radius.
