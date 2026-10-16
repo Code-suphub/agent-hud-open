@@ -4,6 +4,9 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 ## Unreleased
 
+- A GLM Coding Plan whose key only WorkBuddy's clients carry is shown inside the WorkBuddy group, named with its provider beside it, instead of under GLM: the key comes from WorkBuddy's own model list, where an entry names Zhipu's coding endpoint, and the same key read from Pi or Claude Code still shows under GLM. A row follows the provider's current homing, so the display group moves when the credential that carries it is read under a different one.
+- Host API: `OpenAgentCredentials.discover` reads WorkBuddy's model list for a GLM Coding Plan entry whose URL is Zhipu's own coding endpoint; `AgentSettingsGroup` rows keep the vendor their provider's report grouped them under.
+
 - A plan Claude Code asks to have approved is answered on the island, and in the usage panel, on a card that shows the whole plan in a box that scrolls: Approve, after which Claude Code still asks about each edit; Approve, accept edits; or Keep planning, with a note on what should change if you write one. The card used to point to Claude Code and only put itself away. Claude Code's own dialog is still there, and whichever answer comes first counts. Plans from other clients stay in their own dialogs.
 - Host API: `PermissionDecision.approvePlan(acceptEdits:)` and `.keepPlanning(_:)`; `PermissionRequest.plan` (the whole plan) and `answersPlan`. A plan is approved with its own input as `updatedInput`, since Claude Code ignores a bare allow on one, and accepting edits as `updatedPermissions` `setMode` `acceptEdits` for the session; sending it back denies it with a message that names the user's feedback as theirs.
 
