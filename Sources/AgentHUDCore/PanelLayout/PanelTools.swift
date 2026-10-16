@@ -269,9 +269,10 @@ public struct PanelTools {
             if !styleAlone { layout.propose(choice(asked, for: key, against: existing), for: key) }
             proposeStyle(style, for: key)
         }
-        // A layout edit holds its screen's panel open; the style alone closes it, so the HUD it restyled shows.
-        if styleAlone, let key = scope.screenKey {
-            holds.pause(key)
+        // A layout edit holds its screen's panel open; the style alone holds none and closes the panel an edit of the
+        // scope would hold, so the HUD it restyled shows. For the shared layout, which takes no style, it sets nothing.
+        if styleAlone {
+            if let key = heldScreen(for: scope, among: attached) { holds.pause(key) }
         } else {
             holdForEdit(scope, before: before, among: attached)
         }

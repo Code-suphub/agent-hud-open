@@ -100,6 +100,9 @@ final class ScreenHUD {
     private(set) var pointerInside = false
     /// The hover region the pointer was last found inside; nil once it is found outside. See `hovers`.
     private var heldHoverRegion: CGRect?
+    /// Where the pointer was when the HUD last looked at it (`samplePointer()`), which tells the pointer moving onto the
+    /// HUD from the HUD opening or growing under a pointer at rest; nil before the first look.
+    private var sampledPointer: CGPoint?
     /// Whether the hover currently counts as one that opens the panel; see `reevaluateHover`.
     private var hoverOpens = false
     /// The user is typing into the island. It stays open under their hands, wherever the pointer goes, until they stop.
@@ -345,7 +348,9 @@ final class ScreenHUD {
 
     // MARK: Hover
 
-    func pointer(inside: Bool) {
+    /// - came: whether the pointer itself moved onto the HUD, from a place the HUD does not cover now, which a hold on
+    ///   the panel follows (`followHoldPointer(_:came:)`).
+    func pointer(inside: Bool, came: Bool = false) {
         guard previewPlacement == nil else { return }
         if pointerInside != inside {
             pointerInside = inside
@@ -360,7 +365,7 @@ final class ScreenHUD {
                 }
             }
         }
-        followHoldPointer(inside)
+        followHoldPointer(inside, came: came)
         // Moving within the HUD can reach the top while an ordinary hover is still waiting to open.
         reevaluateHover()
     }
@@ -379,11 +384,16 @@ final class ScreenHUD {
     func samplePointer() {
         let point = mouseLocation()
         if previewPlacement == nil, !dragSurface.isPressed { followHoveredMark(point) }
-        let region = hoverRegion
-        let inside = Self.hovers(point, region: region, held: heldHoverRegion,
-                                 usagePanelOpen: machine.isOpen && !showsAlertDetails)
+        let region = hoverRegion, usagePanelOpen = machine.isOpen && !showsAlertDetails
+        let inside = Self.hovers(point, region: region, held: heldHoverRegion, usagePanelOpen: usagePanelOpen)
+        // The pointer came onto the HUD where it was last found off what the HUD covers now: a panel that opened or grew
+        // under it while it rested, or that it then moves within, it did not come onto.
+        let came = inside && sampledPointer.map {
+            !Self.hovers($0, region: region, held: heldHoverRegion, usagePanelOpen: usagePanelOpen)
+        } == true
+        sampledPointer = point
         if Self.containsPointer(point, in: region) { heldHoverRegion = region } else if !inside { heldHoverRegion = nil }
-        pointer(inside: inside)
+        pointer(inside: inside, came: came)
     }
 
     /// Whether a pointer counts as on the HUD: inside its hover region, or, while the usage panel is open, still inside
@@ -445,6 +455,8 @@ final class ScreenHUD {
         }
         guard opens != hoverOpens else { return }
         hoverOpens = opens
+        // A panel a hold keeps open stays open when the hover ends: the hold ending closes it (`letGo()`).
+        if !opens, isHeldOpen { return }
         let now = Date()
         transition(machine.reduce(opens ? .pointerEntered(at: now) : .pointerExited(at: now), config: config))
     }

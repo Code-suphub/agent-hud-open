@@ -310,6 +310,62 @@ final class PanelHoldHUDTests: XCTestCase {
         }
     }
 
+    /// A held panel that opens under a pointer at rest is not the pointer coming onto it, as a person typing to the agent
+    /// may have left the pointer where the panel opens: the pointer moving off it again leaves the hold on and the panel
+    /// open, and only the pointer coming back onto it and leaving takes over. The same holds when the panel opens again
+    /// under the pointer after a style call closed it. A panel the pointer was on before the hold took it over is the
+    /// person's already, and the pointer leaving it takes over.
+    func testAPanelThatOpensUnderAPointerAtRestKeepsTheHold() throws {
+        for placement in modes {
+            let name = "\(placement.mode)"
+            let f = try make(placement)
+            defer { f.close() }
+            // Where the held panel opens, measured on a first hold and let go of before the pointer goes there.
+            try f.edit()
+            poll("\(name): the hold opens the panel") { f.isOpen }
+            let panel = f.hud.hoverRegion
+            try f.call(MCPTools.finishPanelEdit)
+            poll("\(name): finishing closes it") { !f.isOpen }
+            let resting = CGPoint(x: panel.midX, y: panel.midY)
+            f.pointer.point = resting
+            f.hud.samplePointer()
+            XCTAssertFalse(f.hud.pointerInside, "\(name): the pointer rests off the HUD at rest")
+
+            try f.edit()
+            poll("\(name): the hold opens the panel under the pointer") { f.isOpen }
+            // As the island's tracking area does when the window grows under the pointer.
+            f.hud.samplePointer()
+            XCTAssertTrue(f.hud.pointerInside, "\(name): the panel is under the pointer")
+            f.point(inside: false)
+            XCTAssertNotNil(f.holds.hold(on: f.key), "\(name): the pointer moving off the panel leaves the hold on")
+            turn()
+            XCTAssertTrue(f.hud.isHeldOpen, "\(name): and the panel open")
+
+            try f.call(MCPTools.setPanelLayout, ["hud": .object(["transparency": .number(0.2)])])
+            poll("\(name): the style closes it") { !f.isOpen }
+            f.pointer.point = resting
+            f.hud.samplePointer()
+            try f.edit(["Claude": ring])
+            poll("\(name): the next edit opens it under the pointer again") { f.isOpen }
+            f.hud.samplePointer()
+            f.point(inside: false)
+            XCTAssertNotNil(f.holds.hold(on: f.key), "\(name): the pointer moving off it again leaves the hold on")
+
+            f.point(inside: true)
+            f.point(inside: false)
+            XCTAssertNil(f.holds.hold(on: f.key), "\(name): coming onto it and leaving takes over")
+            poll("\(name): and the panel closes") { !f.isOpen }
+
+            f.hud.forceOpen()
+            f.point(inside: true)
+            try f.edit(["Claude": .object(["widget": .string("number")])])
+            poll("\(name): the hold takes the hovered panel over") { f.hud.isHeldOpen }
+            f.point(inside: false)
+            XCTAssertNil(f.holds.hold(on: f.key), "\(name): the pointer leaving a panel it was on takes over")
+            poll("\(name): and the panel closes as a hovered one") { !f.isOpen }
+        }
+    }
+
     /// A click off the held panel is the person at work elsewhere, which ends the hold and closes the panel; a click on
     /// it is the panel's own and leaves the hold. Escape, while Agent HUD has the keyboard, ends every hold.
     func testAClickOffThePanelOrEscapeEndsTheHold() throws {

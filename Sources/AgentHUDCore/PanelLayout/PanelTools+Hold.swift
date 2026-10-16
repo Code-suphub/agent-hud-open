@@ -30,15 +30,18 @@ extension PanelTools {
     }
 
     /// The agent an edit from `before` to `after` touches first, by vendor: the first block, in the order the panel
-    /// shows them after it, then the hidden ones, whose settings or place changed. Nil where no block did, as for a
-    /// change of the style, the sections, the session rows or the token chart alone.
+    /// shows them after it, then the hidden ones, whose settings or place changed. A block's place is where it is shown,
+    /// if at all, among the blocks shown both before and after, so a block that is hidden, or whose rows are all hidden,
+    /// is the one touched, not the blocks after it that move up into its place. Nil where no block did, as for a change
+    /// of the style, the sections, the session rows or the token chart alone.
     func touchedAgent(from before: PanelLayout, to after: PanelLayout) -> String? {
         let existing = store.view.panelBlocks
         let was = PanelLayoutPlan(layout: before, blocks: existing).blocks.map(\.key)
         let now = PanelLayoutPlan(layout: after, blocks: existing).blocks.map(\.key)
+        let wasAmongBoth = was.filter(now.contains), nowAmongBoth = now.filter(was.contains)
         let keys = now + existing.map(\.key).filter { !now.contains($0) }
         let touched = keys.first { key in
-            before.blocks[key] != after.blocks[key] || was.firstIndex(of: key) != now.firstIndex(of: key)
+            before.blocks[key] != after.blocks[key] || wasAmongBoth.firstIndex(of: key) != nowAmongBoth.firstIndex(of: key)
         }
         guard let touched else { return nil }
         // A quota block's key is its vendor; an API balance's is its provider's, whose accounts name their vendor.

@@ -333,6 +333,47 @@ final class PanelToolsHoldTests: PanelToolsCase {
         XCTAssertEqual(holds.hold(on: key)?.agent, "Claude")
     }
 
+    /// A block hidden, or with every row hidden, touches its own agent, not the agents after it that move up into its
+    /// place: a block's place is the one it has among the blocks shown both before and after the edit. Showing it again
+    /// touches it too.
+    func testHidingABlockTouchesItsOwnAgentNotTheOnesAfterIt() throws {
+        let key = second.key
+        let first = try XCTUnwrap(blocks(try call(MCPTools.getPanel, ["screen": .string(key)])).first)
+        XCTAssertEqual(first["key"], .string("Claude"), "the sample's first block")
+
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key),
+                                               "blocks": .object(["Claude": .object(["hidden": .bool(true)])])])
+        XCTAssertEqual(holds.hold(on: key)?.agent, "Claude", "Codex moved up into its place, and is not touched")
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "order": .array([])])
+        XCTAssertEqual(holds.hold(on: key)?.agent, "Claude", "shown again")
+
+        let rows = (first["rows"]?.arrayValue ?? []).compactMap { $0["key"] }
+        XCTAssertGreaterThan(rows.count, 1)
+        let panel = try call(MCPTools.setPanelLayout, ["screen": .string(key),
+                                                       "blocks": .object(["Claude": .object(["hiddenRows": .array(rows)])])])
+        XCTAssertEqual(try block("Claude", in: panel)["shown"], .bool(false), "every row hidden leaves the block out")
+        XCTAssertEqual(holds.hold(on: key)?.agent, "Claude")
+    }
+
+    /// A call for every screen with a hud that sets nothing, which is all a hud for the shared layout can be beside no
+    /// layout, holds no panel; where an edit of the shared layout holds one, it closes it for now, as a style alone does
+    /// for a screen.
+    func testAStyleAloneForEveryScreenHoldsNoPanel() throws {
+        for hud: JSONValue in [.object(["reset": .bool(false)]), .object(["glow": .object([:])])] {
+            let panel = try call(MCPTools.setPanelLayout, ["screen": .string("all"), "hud": hud])
+            XCTAssertTrue(held.isEmpty, "\(hud) opens no panel")
+            XCTAssertEqual(panel["note"]?.stringValue?.hasSuffix(
+                "The shared layout is unchanged: a call with only hud style fields leaves the layout as it is."), true)
+        }
+        try edit(nil)
+        XCTAssertEqual(held, [second.key])
+        now += 30
+        _ = try call(MCPTools.setPanelLayout, ["hud": .object(["reset": .bool(false)])])
+        XCTAssertEqual(holds.hold(on: second.key)?.paused, true, "the panel an edit of the shared layout holds closes")
+        XCTAssertEqual(holds.remaining(on: second.key), 90, "not renewed")
+        XCTAssertEqual(changes, 0)
+    }
+
     /// A person's choice about a layout ends the holds on the panels it reaches: Save and Discard in a panel's bar, and
     /// Settings' Revert to Previous, Reset to Default, Use Shared Layout and the HUD style's Reset to Default; so does a
     /// person's own change of that display's placement or glow in Settings. The shared draft's Save or Discard from any

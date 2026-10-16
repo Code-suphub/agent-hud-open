@@ -5,7 +5,9 @@ import Foundation
 struct PanelHoldState: Equatable {
     /// Whether the panel is open because the hold keeps it so.
     var open = false
-    /// Whether the pointer came onto the HUD while the hold was on: leaving it again is the person taking over.
+    /// Whether the pointer came onto the HUD while the hold was on, or was on the open panel the hold took over: leaving
+    /// it again is the person taking over. A panel that opens or grows under a pointer at rest is not the pointer coming
+    /// onto it.
     var entered = false
 }
 
@@ -60,12 +62,12 @@ extension ScreenHUD {
     }
 
     /// Opens the panel for `hold`, without reading the accounts: the hold's own way in, beside a hover's. A panel the
-    /// hover is closing, the pointer having left it, is kept open. On a dock that separates its agents it opens as the
-    /// whole card of the agent the edits touched first, else of the first agent the dock shows, unless the pointer is on
-    /// a mark the person chose.
+    /// hover is closing, the pointer having left it, is kept open, and one the pointer is on is the person's already, so
+    /// the pointer leaving it takes over. On a dock that separates its agents it opens as the whole card of the agent
+    /// the edits touched first, else of the first agent the dock shows, unless the pointer is on a mark the person chose.
     private func open(for hold: PanelHolds.Hold) {
         guard previewPlacement == nil, activeAlert == nil else { return }
-        if !panelHold.open { panelHold = PanelHoldState(open: true, entered: pointerInside) }
+        if !panelHold.open { panelHold = PanelHoldState(open: true, entered: pointerInside && machine.isOpen) }
         let marks = agentMarks
         var changed = false
         if let card = marks.first(where: { $0.key == hold.agent.map(AgentArtwork.markKey) }) ?? marks.first {
@@ -101,11 +103,14 @@ extension ScreenHUD {
     }
 
     /// The pointer's part in a hold: coming onto the HUD and leaving it again is the person taking over, which ends the
-    /// hold; the hover, which saw the pointer come and go, then closes the panel as it closes a hovered one.
-    func followHoldPointer(_ inside: Bool) {
+    /// hold; the hover, which saw the pointer come and go, then closes the panel as it closes a hovered one. `came` is
+    /// whether the pointer itself moved onto the HUD (`samplePointer()`): a held panel that opened or grew under a
+    /// pointer at rest, which a person typing to the agent may have left anywhere, is not the pointer coming onto it, so
+    /// the pointer moving off it again leaves the hold on.
+    func followHoldPointer(_ inside: Bool, came: Bool) {
         guard isHeld else { return }
         if inside {
-            panelHold.entered = true
+            if came { panelHold.entered = true }
         } else if panelHold.entered {
             endHold()
         }
