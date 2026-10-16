@@ -86,7 +86,7 @@ final class HUDStyleTests: XCTestCase {
 
     /// The glass's transparency takes part in a style as the look's other fields do: set over the settings' own
     /// `glassTransparency`, read back from them, listed beside the material whatever it is, and reduced to what it
-    /// changes; it is read up to glass's top of 1, the system's bare glass.
+    /// changes; it is read up to the top both materials share, 1, the slider's 100 %.
     func testTheTransparencyIsAStyleFieldLikeAnyOther() {
         let saved = ScreenPlacement(mode: .simple, material: .glass, glassTransparency: 0.4)
         XCTAssertEqual(HUDStyle(transparency: 0.1).applied(to: saved),
@@ -101,8 +101,8 @@ final class HUDStyleTests: XCTestCase {
                        HUDStyle(), "a transparency that repeats what is saved changes nothing")
         XCTAssertEqual(HUDStyle(json: ["transparency": .integer(0)]), HUDStyle(transparency: 0), "a whole number is a number")
         XCTAssertEqual(HUDStyle(json: ["transparency": .number(0.9)]).json, ["transparency": .number(0.9)])
-        XCTAssertEqual(HUDStyle(json: ["transparency": .number(0.95)]), HUDStyle(transparency: 0.95), "glass's range is read")
-        XCTAssertEqual(HUDStyle(json: ["transparency": .integer(1)]), HUDStyle(transparency: 1), "glass's top, the bare glass")
+        XCTAssertEqual(HUDStyle(json: ["transparency": .number(0.95)]), HUDStyle(transparency: 0.95))
+        XCTAssertEqual(HUDStyle(json: ["transparency": .integer(1)]), HUDStyle(transparency: 1), "the top is read")
         XCTAssertEqual(HUDStyle(json: ["transparency": .number(1.2)]), HUDStyle(), "nothing out of range is read")
         XCTAssertEqual(HUDStyle(json: ["transparency": .string("0.5")]), HUDStyle())
     }
@@ -172,9 +172,13 @@ final class HUDStyleTests: XCTestCase {
         }
         XCTAssertEqual(HUDStyle.misreadings(ofField: "logoSize", .number(37)), ["hud.logoSize is a number from 12 to 36."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "logoGap", .number(0.05)), ["hud.logoGap is a number from 0.1 to 0.6."])
-        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .number(1)), [], "glass's top is in range")
-        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .number(1.2)), ["hud.transparency is a number from 0 to 1."])
-        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .bool(true)), ["hud.transparency is a number from 0 to 1."])
+        XCTAssertEqual(ScreenPlacement.glassTransparencyRange, ScreenPlacement.solidTransparencyRange,
+                       "one range for glass and solid")
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .number(1)), [], "the top is in range")
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .number(1.2)),
+                       ["hud.transparency is a number from 0 to 1."])
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .bool(true)),
+                       ["hud.transparency is a number from 0 to 1."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .integer(0)), [])
 
         let glow: [(String, ClosedRange<Double>)] = [
@@ -295,8 +299,10 @@ final class HUDStyleTests: XCTestCase {
     }
 
     /// A transparency is taken on any screen and in any mode, for the material in effect, the style's own or the one
-    /// saved, as Settings offers it beside Solid and Glass alike: glass's up to 1, the system's bare glass, and solid's
-    /// up to its 0.9.
+    /// saved, as Settings offers it beside Solid and Glass alike, up to the 1 both share, the slider's 100 %: no HUD
+    /// refuses one within that range, solid included, and a number past it is the field's to refuse (`misreadings`), as
+    /// any number is. The style keeps the number sent, and the screen scales what it draws of it
+    /// (`ScreenPlacement.drawsTransparency(reducesTransparency:)`).
     func testATransparencyIsTakenForEitherMaterial() {
         let glow = GlowSettings()
         func issues(_ style: HUDStyle, _ placement: ScreenPlacement, hasNotch: Bool = false) -> [String] {
@@ -316,37 +322,22 @@ final class HUDStyleTests: XCTestCase {
         XCTAssertEqual(HUDStyle(material: .solid, transparency: 0.2).applied(to: glass).glassTransparency,
                        ScreenPlacement.standardGlassTransparency, "glass's kept as saved")
 
-        XCTAssertEqual(issues(HUDStyle(transparency: 1), glass), [], "glass's top, the bare glass")
-        XCTAssertEqual(HUDStyle(transparency: 1).applied(to: glass).glassTransparency, 1)
-        XCTAssertEqual(issues(HUDStyle(material: .glass, transparency: 1), solid), [], "where the style makes it glass")
-        XCTAssertEqual(HUDStyle(material: .glass, transparency: 1).applied(to: solid).glassTransparency, 1)
-        XCTAssertEqual(issues(HUDStyle(appearance: .light, material: .glass, transparency: 1), .default(hasNotch: true),
-                              hasNotch: true), [], "a notch HUD at a notch too")
-        XCTAssertEqual(issues(HUDStyle(transparency: 0.9), solid), [], "solid's top")
-        XCTAssertEqual(HUDStyle(transparency: 0.9).applied(to: solid).solidTransparency, 0.9)
-    }
-
-    /// A solid HUD sent a transparency past its 0.9 is refused rather than drawn at 0.9 unasked, solid as saved or as the
-    /// style makes it, with its top and the way to glass in the sentence; the same number on glass is taken.
-    func testASolidHUDRefusesATransparencyPastItsTop() {
-        let glow = GlowSettings()
-        func issues(_ style: HUDStyle, _ placement: ScreenPlacement, hasNotch: Bool = false) -> [String] {
-            style.issues(placement: placement, glow: glow, hasNotch: hasNotch, screen: "\"Display 2\"")
-                .map { "\($0.path): \($0.message)" }
+        let top = ScreenPlacement.glassTransparencyRange.upperBound
+        XCTAssertEqual(top, 1)
+        XCTAssertEqual(issues(HUDStyle(transparency: top), glass), [], "glass's top")
+        XCTAssertEqual(HUDStyle(transparency: top).applied(to: glass).glassTransparency, top)
+        XCTAssertEqual(issues(HUDStyle(material: .glass, transparency: top), solid), [], "where the style makes it glass")
+        XCTAssertEqual(HUDStyle(material: .glass, transparency: top).applied(to: solid).glassTransparency, top)
+        XCTAssertEqual(issues(HUDStyle(transparency: top), solid), [], "solid's top, the same")
+        XCTAssertEqual(HUDStyle(transparency: top).applied(to: solid).solidTransparency, top)
+        XCTAssertEqual(issues(HUDStyle(material: .solid, transparency: top), glass), [], "where the style makes it solid")
+        XCTAssertEqual(HUDStyle(material: .solid, transparency: top).applied(to: glass).solidTransparency, top)
+        for material in HUDMaterial.allCases {
+            XCTAssertEqual(issues(HUDStyle(appearance: .light, material: material, transparency: top),
+                                  .default(hasNotch: true), hasNotch: true), [], "\(material): a notch HUD at a notch too")
         }
-        let refusal = "hud.transparency: The HUD of \"Display 2\" would be solid, whose transparency goes to 0.9. Send 0.9 "
-            + "or less, or set material to glass."
-        let solid = ScreenPlacement(mode: .logos), glass = ScreenPlacement(mode: .logos, material: .glass, glassTransparency: 0.3)
-        for transparency in [1, 0.95] {
-            XCTAssertEqual(issues(HUDStyle(transparency: transparency), solid), [refusal], "\(transparency) on solid as saved")
-            XCTAssertEqual(issues(HUDStyle(material: .solid, transparency: transparency), glass), [refusal],
-                           "\(transparency) where the style makes it solid")
-            XCTAssertEqual(issues(HUDStyle(transparency: transparency), glass), [], "\(transparency) on glass")
-        }
-        XCTAssertEqual(issues(HUDStyle(transparency: 1), .default(hasNotch: true), hasNotch: true), [refusal],
-                       "a notch HUD at a notch, solid at first")
-        let bare = ScreenPlacement(mode: .logos, material: .glass, glassTransparency: 1)
-        XCTAssertEqual(issues(HUDStyle(material: .solid), bare), [], "glass's own 1 is kept apart, for when glass is back")
+        XCTAssertEqual(HUDStyle.misreadings(ofField: "transparency", .number(1.2)),
+                       ["hud.transparency is a number from 0 to 1."], "past the top, refused as any number is")
     }
 
     // MARK: The panel's width

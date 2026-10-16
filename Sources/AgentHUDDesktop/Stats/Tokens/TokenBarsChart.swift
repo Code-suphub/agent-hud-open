@@ -163,20 +163,10 @@ struct TokenBarsChart: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .foregroundStyle(theme.text)
-        .background {
-            // Over glass the details are glass's stand-in, the look's own colour, which sets them off the panel they
-            // stand on: glass shows nothing through glass. It takes the screen's whole look, as the hover details beside
-            // it do, the stand-in keeping a ground at any transparency (`HUDLook.glassStandIn`).
-            if context == .island {
-                HUDSurface(RoundedRectangle(cornerRadius: 8), look: look, fill: theme.raisedSurface, contact: nil)
-                    .environment(\.drawsGlassStandIn, true)
-            } else {
-                RoundedRectangle(cornerRadius: 8).fill(theme.windowBackground)
-            }
-        }
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.cardBorder))
-        // A shadow under a box the desktop shows through would darken it; on the island, the look decides.
-        .shadow(color: .black.opacity(context == .island && look.seeThrough ? 0 : 0.2), radius: 6, y: 2)
+        // Raised in the screen's whole look, the HUD's on the island and the window's with Match screen on, as the hover
+        // details beside it are; over glass as glass's stand-in, which keeps a ground at any transparency
+        // (`HUDLook.glassStandIn`).
+        .raisedBox(theme, hud: context == .island ? look : nil)
     }
 
     private func period(_ column: TokenColumn) -> String {

@@ -97,7 +97,7 @@ public final class DesktopApplication {
             _ = self.settings.settings
             _ = self.settings.panelLayout.styleDraft(of: "")
             _ = NSScreen.screens.map { self.settings.windowLook(on: $0) }
-        }, onChange: { WindowLook.refreshAll() })
+        }, onChange: { [weak self] in self?.refreshLooks() })
         observeWindowLooks()
         trackChanges({ [weak self] in
             self?.settings.settings.language
@@ -283,8 +283,8 @@ public final class DesktopApplication {
     /// Has the windows take their screen's look again whenever the Mac changes what it depends on. Each waits a turn of
     /// the run loop, so that the HUDs have taken a change of displays first and every screen is known by its key again.
     private func observeWindowLooks() {
-        let refresh: @Sendable (Notification) -> Void = { _ in
-            Task { @MainActor in WindowLook.refreshAll() }
+        let refresh: @Sendable (Notification) -> Void = { [weak self] _ in
+            Task { @MainActor in self?.refreshLooks() }
         }
         windowLookObservers = [
             NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -304,6 +304,12 @@ public final class DesktopApplication {
         case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
         case .light: NSApp.appearance = NSAppearance(named: .aqua)
         }
+        refreshLooks()
+    }
+
+    /// Every window and the open menu-bar menu take their screen's look again (`WindowLook`).
+    private func refreshLooks() {
         WindowLook.refreshAll()
+        statusItem?.refreshLook()
     }
 }

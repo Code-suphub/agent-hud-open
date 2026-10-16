@@ -40,18 +40,21 @@ extension HUDLook {
 /// Simple panel and the line that grows out of it, the body of a row's hover details. Every fill the HUD stands on is
 /// drawn here, so solid and glass part in one place.
 ///
-/// - Solid is `fill` in the shape, as the HUD has always been filled, thinned by the screen's transparency
-///   (`HUDLook.coverOpacity`), which is 0 for a solid surface until chosen otherwise.
-/// - Glass is Liquid Glass on macOS 26 in a build made with Xcode 26 or later, and a frosted blur of what is behind the
-///   window everywhere else (`FrostedGlass`): the system's own glass, always whole, with nothing of the HUD's laid over
-///   it. Beneath it lies a dimming layer in the look's own colour (`HUDLook.glassDimming`), as Apple asks of clear
-///   glass, which the glass blurs with the desktop: the screen's transparency thins it, from whole at 0 to none at 1,
-///   where the HUD is the system's bare glass, as a macOS menu's is. So the HUD stays frosted glass at any transparency.
-///   Glass turns light over a light desktop and dark over a dark one, and the HUD's text and status colours are fixed,
-///   so with little dimming they read less well over a desktop of the other shade. The frosted blur hides what lies
-///   beneath it in the window, so there the dimming lies over it.
+/// - Solid is `fill` in the shape, as the HUD has always been filled, thinned by the transparency drawn
+///   (`HUDLook.coverOpacity`): opaque at 0, which a solid surface has until chosen otherwise, and 40 % at the top.
+/// - Glass is the system's own, in one of the screen's three styles (`HUDGlassStyle`), always drawn whole, with a
+///   dimming layer in the look's own colour (`HUDLook.glassDimming`), as Apple asks of clear glass:
+///   - Clear or regular Liquid Glass, on macOS 26 in a build made with Xcode 26 or later, with the dimming beneath it,
+///     which the glass blurs with the desktop. Everywhere else both are a frosted blur of what is behind the window
+///     (`FrostedGlass`), which hides what lies beneath it in the window, so there the dimming lies over it.
+///   - SwiftUI's regular material, a blur of what is behind the window too, with the dimming over it.
+///   The transparency drawn thins the dimming, from whole at 0 to two fifths at Clear's and Regular's top, 60 % drawn,
+///   and to none at the material's, 100 %, where the HUD is the system's bare material. So the HUD stays frosted glass
+///   at any transparency. Glass turns light over a light desktop and dark over a dark one, and regular Liquid Glass
+///   also by the size of the piece it is drawn in, while the HUD's text and status colours are fixed, so with little
+///   dimming they read less well over a desktop of the other shade.
 /// - Where nothing is behind to blur (`drawsGlassStandIn`), glass is the look's own surface standing in for it
-///   (`HUDLook.glassStandIn`).
+///   (`HUDLook.glassStandIn`), and in a Settings preview a material is too (`drawsMaterialStandIn`).
 ///
 /// The surface is drawn behind what the HUD holds, never round it: glass that holds the HUD's content would turn that
 /// content's colour scheme with the desktop behind it, and glass drawn in a `GlassEffectContainer` with the content

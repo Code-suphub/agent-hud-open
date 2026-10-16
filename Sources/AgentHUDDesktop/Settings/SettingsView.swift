@@ -271,7 +271,8 @@ public struct SettingsSection<Content: View>: View {
 }
 
 /// The ground every settings group stands on, Settings → General's: the window theme's card with its hairline, light or
-/// dark as the window is, and thinned with the window's ground under a look the desktop shows through. Public so that the pages a host app adds to Settings stand on the same ground as the app's own.
+/// dark as the window is, and thinned with the window's ground under a look the desktop shows through (`Theme.under(_:)`).
+/// Public so that the pages a host app adds to Settings stand on the same ground as the app's own.
 public struct SettingsCard: ViewModifier {
     var cornerRadius: CGFloat = SettingsCard.cornerRadius
     @Environment(\.colorScheme) private var scheme

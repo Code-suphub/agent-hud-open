@@ -137,8 +137,9 @@ final class ScreenPlacementTests: XCTestCase {
 
     // MARK: The transparency
 
-    /// Glass lays half the look's colour beneath it unless chosen otherwise, on every display's starting point too, and
-    /// a transparency is held to 0 through 1, the system's bare glass, whether it is given or read back.
+    /// Glass's Transparency is 50 % unless chosen otherwise, on every display's starting point too, and a transparency
+    /// is the slider's, held to 0 through 1, 0 to 100 %, whether it is given or read back, and kept as chosen: what is
+    /// drawn of it is apart (`drawsTransparency(reducesTransparency:)`).
     func testGlassTransparencyStartsAtHalfAndIsHeldToItsRange() throws {
         XCTAssertEqual(ScreenPlacement.standardGlassTransparency, 0.5)
         XCTAssertEqual(ScreenPlacement.glassTransparencyRange, 0...1)
@@ -147,10 +148,10 @@ final class ScreenPlacementTests: XCTestCase {
         for hasNotch in [true, false] {
             XCTAssertEqual(ScreenPlacement.default(hasNotch: hasNotch).glassTransparency, 0.5)
         }
-        for (given, kept) in [(0.0, 0.0), (0.3, 0.3), (0.9, 0.9), (1.0, 1.0), (1.2, 1.0), (-0.2, 0.0), (Double.nan, 0.0)] {
+        for (given, kept) in [(0.0, 0.0), (0.3, 0.3), (0.95, 0.95), (1.0, 1.0), (1.2, 1.0), (-0.2, 0.0), (Double.nan, 0.0)] {
             XCTAssertEqual(ScreenPlacement(material: .glass, glassTransparency: given).glassTransparency, kept, "\(given)")
         }
-        for (saved, kept) in [(0.25, 0.25), (1, 1), (2, 1), (-1, 0)] {
+        for (saved, kept) in [(0.25, 0.25), (0.95, 0.95), (1, 1), (2, 1), (-1, 0)] {
             let placement = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
                 #"{"material":"glass","glassTransparency":\#(saved)}"#.utf8))
             XCTAssertEqual(placement.glassTransparency, kept, "\(saved)")
@@ -158,31 +159,32 @@ final class ScreenPlacementTests: XCTestCase {
         }
     }
 
-    /// A solid surface is opaque unless chosen otherwise, and its transparency is held to 0 through 0.9, the top short
-    /// of no surface at all, whether it is given or read back: glass's top of 1 is solid's 0.9.
-    func testSolidTransparencyStartsOpaqueAndIsHeldToItsOwnRange() throws {
+    /// A solid surface is opaque unless chosen otherwise, and its transparency is the slider's too, held to 0 through 1
+    /// as glass's is, whether it is given or read back.
+    func testSolidTransparencyStartsOpaqueAndIsHeldToTheSameRange() throws {
         XCTAssertEqual(ScreenPlacement.standardSolidTransparency, 0)
-        XCTAssertEqual(ScreenPlacement.solidTransparencyRange, 0...0.9)
+        XCTAssertEqual(ScreenPlacement.solidTransparencyRange, 0...1)
+        XCTAssertEqual(ScreenPlacement.solidTransparencyRange, ScreenPlacement.glassTransparencyRange, "one range for both")
         XCTAssertEqual(ScreenPlacement.transparencyRange(for: .solid), ScreenPlacement.solidTransparencyRange)
         for hasNotch in [true, false] {
             XCTAssertEqual(ScreenPlacement.default(hasNotch: hasNotch).solidTransparency, 0)
         }
-        for (given, kept) in [(0.0, 0.0), (0.3, 0.3), (0.9, 0.9), (1.0, 0.9), (-0.2, 0.0), (Double.nan, 0.0)] {
+        for (given, kept) in [(0.0, 0.0), (0.3, 0.3), (0.95, 0.95), (1.0, 1.0), (1.2, 1.0), (-0.2, 0.0), (Double.nan, 0.0)] {
             XCTAssertEqual(ScreenPlacement(solidTransparency: given).solidTransparency, kept, "\(given)")
         }
-        for (saved, kept) in [(0.25, 0.25), (1, 0.9), (-1, 0)] {
+        for (saved, kept) in [(0.25, 0.25), (1, 1), (2, 1), (-1, 0)] {
             let placement = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
-                #"{"material":"solid","glassTransparency":1,"solidTransparency":\#(saved)}"#.utf8))
+                #"{"material":"solid","glassTransparency":2,"solidTransparency":\#(saved)}"#.utf8))
             XCTAssertEqual(placement.solidTransparency, kept, "\(saved)")
             XCTAssertEqual(placement.glassTransparency, 1, "glass's read to its own top")
         }
     }
 
-    /// The transparency of the material chosen is held to that material's range, glass's to 1, the bare glass, and
-    /// solid's to 0.9, and leaves the other material's as it was.
+    /// The transparency of the material chosen is held to 0 through 1, glass's and solid's alike, and leaves the other
+    /// material's as it was.
     func testTheTransparencyIsHeldToTheRangeOfTheMaterialChosen() {
         var glass = ScreenPlacement(material: .glass, solidTransparency: 0.4)
-        for (given, kept) in [(1.0, 1.0), (1.2, 1.0), (0.6, 0.6), (-0.1, 0.0)] {
+        for (given, kept) in [(0.95, 0.95), (1.0, 1.0), (1.2, 1.0), (0.6, 0.6), (-0.1, 0.0)] {
             glass.transparency = given
             XCTAssertEqual(glass.glassTransparency, kept, "\(given)")
             XCTAssertEqual(glass.transparency, kept, "\(given)")
@@ -190,7 +192,7 @@ final class ScreenPlacementTests: XCTestCase {
         XCTAssertEqual(glass.solidTransparency, 0.4, "solid's kept")
 
         var solid = ScreenPlacement(material: .solid, glassTransparency: 0.3)
-        for (given, kept) in [(1.0, 0.9), (1.2, 0.9), (0.6, 0.6), (-0.1, 0.0)] {
+        for (given, kept) in [(0.95, 0.95), (1.0, 1.0), (1.2, 1.0), (0.6, 0.6), (-0.1, 0.0)] {
             solid.transparency = given
             XCTAssertEqual(solid.solidTransparency, kept, "\(given)")
             XCTAssertEqual(solid.transparency, kept, "\(given)")
@@ -198,9 +200,9 @@ final class ScreenPlacementTests: XCTestCase {
         XCTAssertEqual(solid.glassTransparency, 0.3, "glass's kept")
     }
 
-    /// A placement saved before glass had a transparency reads as the standard one, half the look's colour beneath the
-    /// glass, and costs no other field; a transparency is written under its own key and read back as it was, glass's top
-    /// of 1 too, kept while the material is solid.
+    /// A placement saved before glass had a transparency reads as the standard one, 50 %, and costs no other field; a
+    /// transparency is written under its own key and read back as it was, the top of 1 too, kept while the material is
+    /// solid.
     func testGlassTransparencyDecodesFromOlderSettingsAndRoundTrips() throws {
         let older = try JSONDecoder().decode(ScreenPlacement.self, from: Data(
             #"{"mode":"simple","appearance":"light","material":"glass"}"#.utf8))
@@ -213,14 +215,65 @@ final class ScreenPlacementTests: XCTestCase {
         let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: written) as? [String: Any])
         XCTAssertEqual(fields["glassTransparency"] as? Double, 0.2)
         XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: written), chosen)
-        let bare = ScreenPlacement(material: .glass, glassTransparency: 1)
-        XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: JSONEncoder().encode(bare)).glassTransparency, 1,
-                       "the bare glass, read back as it was")
+        let top = ScreenPlacement(material: .glass, glassTransparency: 1)
+        XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: JSONEncoder().encode(top)).glassTransparency, 1,
+                       "the top, read back as it was")
 
         let solid = ScreenPlacement(material: .solid, glassTransparency: 0.7)
         XCTAssertEqual(try JSONDecoder().decode(ScreenPlacement.self, from: JSONEncoder().encode(solid)).glassTransparency, 0.7,
                        "kept for when glass is chosen again")
         XCTAssertNotEqual(solid, ScreenPlacement(), "a placement is its fields, the transparency among them")
+    }
+
+    // MARK: The transparency drawn
+
+    /// Solid and Liquid Glass, clear or regular, draw three fifths of the Transparency chosen, and the material all of
+    /// it, the owner's choice: regular glass with little of the look's colour beneath it turns light or dark by itself,
+    /// piece by piece. The glass style a solid placement keeps for when glass is chosen again changes nothing.
+    func testSolidAndLiquidGlassDrawThreeFifthsAndTheMaterialAllOfIt() {
+        for style in HUDGlassStyle.allCases {
+            XCTAssertEqual(ScreenPlacement.transparencyScale(material: .solid, glassStyle: style), 0.6, "solid kept \(style)")
+        }
+        XCTAssertEqual(ScreenPlacement.transparencyScale(material: .glass, glassStyle: .clear), 0.6, "clear")
+        XCTAssertEqual(ScreenPlacement.transparencyScale(material: .glass, glassStyle: .regular), 0.6, "regular")
+        XCTAssertEqual(ScreenPlacement.transparencyScale(material: .glass, glassStyle: .material), 1, "the material")
+    }
+
+    /// What a placement draws is its material's Transparency times that share: at the top, 100 %, 60 % for Solid, Clear
+    /// and Regular and 100 % for the material; the standard glass's 50 %, on clear glass, 30 %; and none at all under
+    /// Reduce Transparency, whatever was chosen. The other material's Transparency changes nothing, and the value saved
+    /// stays the slider's.
+    func testTheTransparencyDrawnIsTheChosenOneScaled() {
+        for material in HUDMaterial.allCases {
+            for style in HUDGlassStyle.allCases {
+                let scale = material == .glass && style == .material ? 1.0 : 0.6
+                for chosen in [0.0, 0.25, 0.5, 0.95, 1] {
+                    var placement = ScreenPlacement(material: material, glassStyle: style)
+                    placement.transparency = chosen
+                    let what = "\(material) \(style) \(chosen)"
+                    XCTAssertEqual(placement.drawsTransparency(reducesTransparency: false), chosen * scale,
+                                   accuracy: 0.000_001, what)
+                    XCTAssertEqual(placement.drawsTransparency(reducesTransparency: true), 0, "\(what): Reduce Transparency")
+                    XCTAssertEqual(placement.transparency, chosen, "\(what): saved as chosen")
+                }
+            }
+        }
+        XCTAssertEqual(ScreenPlacement(material: .glass).drawsTransparency(reducesTransparency: false), 0.3,
+                       accuracy: 0.000_001, "the standard glass, clear")
+        XCTAssertEqual(ScreenPlacement(material: .glass, glassTransparency: 1).drawsTransparency(reducesTransparency: false),
+                       0.6, "clear's top")
+        XCTAssertEqual(ScreenPlacement(material: .glass, glassStyle: .regular, glassTransparency: 1)
+            .drawsTransparency(reducesTransparency: false), 0.6, "regular's top")
+        XCTAssertEqual(ScreenPlacement(material: .glass, glassStyle: .material, glassTransparency: 1)
+            .drawsTransparency(reducesTransparency: false), 1, "the material's top, the bare material")
+        XCTAssertEqual(ScreenPlacement(solidTransparency: 1).drawsTransparency(reducesTransparency: false), 0.6, "solid's top")
+        XCTAssertEqual(ScreenPlacement(solidTransparency: 0.5).drawsTransparency(reducesTransparency: false), 0.3,
+                       accuracy: 0.000_001)
+        XCTAssertEqual(ScreenPlacement().drawsTransparency(reducesTransparency: false), 0, "a solid HUD opaque at first")
+        XCTAssertEqual(ScreenPlacement(material: .glass, glassTransparency: 0.2, solidTransparency: 1)
+            .drawsTransparency(reducesTransparency: false), 0.12, accuracy: 0.000_001, "glass's own, solid's apart")
+        XCTAssertEqual(ScreenPlacement(material: .solid, glassStyle: .material, glassTransparency: 1, solidTransparency: 0.5)
+            .drawsTransparency(reducesTransparency: false), 0.3, accuracy: 0.000_001, "solid's own, at solid's share")
     }
 
     // MARK: What glass is made of

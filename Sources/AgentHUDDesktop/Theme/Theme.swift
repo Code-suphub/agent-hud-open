@@ -248,8 +248,10 @@ struct Theme {
     }()
 
     /// Light glass's tokens: the light HUD's, with its secondary and tertiary ink a grade darker, since glass over a dark
-    /// desktop is a greyer ground than the solid surface and the window's own greys fall to 2:1 there. Its cards thin
-    /// with the screen's transparency, as every light card does on a ground the desktop shows through (`under(_:)`).
+    /// desktop is a greyer ground than the solid surface and the window's own greys fall to 2:1 there. A window on light
+    /// glass, with Match screen on, takes the same two greys (`under(_:)`). Its cards, rows and inputs thin with the
+    /// transparency drawn, as every light box does on a ground the desktop shows through (`HUDLook.innerOpacity`): to
+    /// about half at Clear's and Regular's top, 60 % drawn, and to a fifth at the material's, 100 %.
     static let lightGlass: Theme = {
         var theme = Theme.lightIsland
         theme.secondary = Color(hex: 0x55555a)
@@ -267,7 +269,9 @@ struct Theme {
     ///   as the ground does (`HUDLook.innerOpacity`), so that a light card lets the glass or the desktop through as a dark
     ///   card does.
     /// - On light glass the secondary and tertiary ink are light glass's, a grade darker.
-    /// Under no look, or an opaque one, the tokens are as they are.
+    /// A selected segment (`segmentSelected`) stays opaque on purpose, white or grey whatever the ground: a selected
+    /// control is drawn opaque, as macOS draws it on glass too. Under no look, or an opaque one, the tokens are as they
+    /// are.
     func under(_ look: HUDLook?) -> Theme {
         guard let look else { return self }
         var theme = self

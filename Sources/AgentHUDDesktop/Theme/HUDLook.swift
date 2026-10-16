@@ -4,8 +4,8 @@ import AgentHUDCore
 
 /// What one screen's HUD looks like: its island, the panel that opens from it, and the cards and reminders on it. Each
 /// screen's HUD draws with a look of its own (`SettingsStore.effectiveLook(on:)`), which its settings choose: an
-/// appearance and a material. The standard look is the HUD as it has always been drawn, light ink on its black island,
-/// whatever the Mac or the app is set to.
+/// appearance, a material with its glass style, and a transparency. The standard look is the HUD as it has always been
+/// drawn, light ink on its black island, whatever the Mac or the app is set to.
 struct HUDLook: Equatable, Sendable {
     /// Light ink on a dark surface, or dark ink on a light one.
     enum Appearance: Equatable, Sendable {
@@ -22,9 +22,11 @@ struct HUDLook: Equatable, Sendable {
 
     var appearance: Appearance
     var material: Material = .solid
-    /// How much of the desktop the HUD lets through, what the screen's Transparency chooses for its material
-    /// (`ScreenPlacement.transparency`), 0 to 0.95: for glass how little of the look's own colour lies beneath the glass,
-    /// for a solid surface how little of its fill is drawn. None unless chosen otherwise.
+    /// How much of the desktop the HUD lets through as it is drawn, never the slider's own value: the screen's
+    /// Transparency for its material scaled for the surface (`ScreenPlacement.drawsTransparency(reducesTransparency:)`),
+    /// three fifths of it for Solid, Clear and Regular, 0.6 at the most, all of it for the material, up to 1, and none
+    /// under Reduce Transparency. For glass, how little of the look's own colour lies beneath it; for a solid surface,
+    /// how little of its fill is drawn. None unless chosen otherwise.
     var transparency: Double = 0
     /// What glass is made of (`HUDGlassStyle`): clear or regular Liquid Glass, or a frosted material.
     var glassStyle: HUDGlassStyle = .clear
@@ -62,8 +64,9 @@ struct HUDLook: Equatable, Sendable {
     }
 
     /// How much of a painted box on the look's ground is drawn, a card, a row or an input (`Theme.under(_:)`): all of it
-    /// on an opaque ground; on one the desktop shows through, thinned as the ground is, to a fifth at the most, so that
-    /// boxes on a light ground follow the look as the dark ground's tints of white do.
+    /// on an opaque ground; on one the desktop shows through, thinned as the ground is, to about half at the 0.6 Solid,
+    /// Clear and Regular draw at most and to a fifth at the material's 1, so that boxes on a light ground follow the look
+    /// as the dark ground's tints of white do.
     var innerOpacity: Double {
         seeThrough ? Self.innerFloor + (1 - Self.innerFloor) * (1 - transparency) : 1
     }
@@ -80,25 +83,27 @@ struct HUDLook: Equatable, Sendable {
         }
     }
 
-    /// The dimming layer beneath Liquid Glass (`HUDSurface`), as Apple asks of clear glass to keep what is on it legible: the
-    /// look's own colour, black beneath dark glass and near-white beneath light glass, at the opacity the screen's
-    /// transparency leaves it (`dimmingOpacity`). The glass blurs it with the desktop behind, so the HUD stays glass,
-    /// frosted and lit at its rim, at any transparency: whole at 0, where the glass shows the look's colour alone, and
-    /// none at 1, where it is the system's bare glass, as a macOS menu's is, its colours following the desktop, so that
-    /// the HUD's fixed ink reads less well over a desktop of the other shade. Laid over the glass or faded into it, as
-    /// before, it either hid the glass or lost its blur.
+    /// The dimming layer of glass (`HUDSurface`), as Apple asks of clear glass to keep what is on it legible: the look's
+    /// own colour, black for dark glass and near-white for light glass, at the opacity the transparency drawn leaves it
+    /// (`dimmingOpacity`). It lies beneath Liquid Glass, which blurs it with the desktop behind, so the HUD stays glass,
+    /// frosted and lit at its rim, at any transparency, and over a material, which hides what lies beneath it. It is
+    /// whole at 0, where the glass shows the look's colour alone, two fifths of itself at Clear's and Regular's top, and
+    /// gone at the material's, the system's bare material, its colours following the desktop, so that the HUD's fixed ink
+    /// reads less well over a desktop of the other shade. The glass itself is always drawn whole: Liquid Glass given an
+    /// opacity loses its blur, and a colour laid over it hides it.
     var glassDimming: Color {
         theme.glassTint.opacity(dimmingOpacity)
     }
 
-    /// How much of the dimming layer beneath glass is drawn: all of it with no transparency, none at 1.
+    /// How much of the dimming layer of glass is drawn: all of it with no transparency, 0.4 at Clear's and Regular's top,
+    /// none at the material's.
     var dimmingOpacity: Double {
         material == .glass ? 1 - transparency : 0
     }
 
-    /// How much of a solid surface's fill is drawn: what the transparency leaves of it, all of it at 0 and a twentieth at
-    /// the top, as glass's colour beneath it is (`dimmingOpacity`). How much is the user's choice; over a desktop of the
-    /// other shade the HUD's ink reads less well the thinner the fill.
+    /// How much of a solid surface's fill is drawn: what the transparency drawn leaves of it, all of it at 0 and 0.4 at
+    /// the top, where 0.6 is drawn, as Liquid Glass's colour beneath it is (`dimmingOpacity`). How much is the user's
+    /// choice; over a desktop of the other shade the HUD's ink reads less well the thinner the fill.
     var coverOpacity: Double {
         material == .solid ? 1 - transparency : 0
     }
@@ -140,7 +145,7 @@ struct HUDLook: Equatable, Sendable {
 extension HUDLook {
     /// The look of a HUD that draws `placement`, with macOS set to light or dark (`systemIsLight`) and Reduce
     /// Transparency on or off: the placement's appearance, `system` as macOS is set, and its material, glass drawn solid
-    /// under Reduce Transparency, at the placement's transparency.
+    /// under Reduce Transparency, at the transparency the placement draws (`drawsTransparency(reducesTransparency:)`).
     init(drawing placement: ScreenPlacement, systemIsLight: Bool, reducesTransparency: Bool) {
         self.init(appearance: placement.drawsLight(systemIsLight: systemIsLight) ? .light : .dark,
                   material: placement.drawsGlass(reducesTransparency: reducesTransparency) ? .glass : .solid,
@@ -157,7 +162,9 @@ extension SettingsStore {
     /// as a display without a notch, and from how the Mac is set now:
     /// - The screen's appearance, with `system` read from macOS's own light or dark setting (`SystemAppearance.isLight`),
     ///   never from the app's Appearance.
-    /// - And the screen's material, except that Reduce Transparency draws glass solid, at the screen's transparency.
+    /// - And the screen's material, except that Reduce Transparency draws glass solid, at the transparency the screen
+    ///   draws: three fifths of its Transparency for Solid, Clear and Regular, all of it for the material, and none under
+    ///   Reduce Transparency.
     ///
     /// Notch mode at a hardware notch takes the look too, in part: the island stays dark in the notch's row, black or
     /// black glass (`inNotchRow`), and the camera housing black in any look (`IslandRootView.inksNotch`), while the panel

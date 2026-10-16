@@ -65,7 +65,8 @@ final class IslandController {
                 self.apply(animated: true)
             }
         })
-        // Reduce Transparency draws a HUD of glass solid, and turning it off gives the glass back.
+        // Reduce Transparency draws a HUD of glass solid and a see-through solid one opaque, and turning it off gives
+        // the glass and the transparency back.
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in

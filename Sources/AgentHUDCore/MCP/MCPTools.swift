@@ -139,7 +139,7 @@ public enum MCPTools {
                              oneOf: HUDMaterial.allCases.map(\.rawValue)),
             "transparency": number("How much of the desktop shows through, glass's or solid's as the material is: glass "
                                    + "lays less of the appearance's colour beneath it, solid draws less of its fill, all of "
-                                   + "it at 0;", .transparency),
+                                   + "it at 0; Solid and Liquid Glass draw three fifths of it, 0.6 at 1;", .transparency),
             "glow": object([
                 "style": text("Glow style.", oneOf: GlowStyle.allCases.map(\.rawValue)),
                 "effect": text("What it plays.", oneOf: GlowEffect.allCases.map(\.rawValue)),

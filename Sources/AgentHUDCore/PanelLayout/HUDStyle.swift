@@ -33,8 +33,9 @@ public struct HUDStyle: Hashable, Sendable {
     public var appearance: HUDAppearance?
     /// Their surface, solid or glass.
     public var material: HUDMaterial?
-    /// How much of the desktop the HUD lets through, 0 to 0.95, as the material in effect is: glass's, how little of its
-    /// colour lies beneath the glass, or solid's, how little of its fill is drawn.
+    /// How much of the desktop the HUD lets through, 0 to 1, as the material in effect is: glass's, how little of its
+    /// colour lies beneath the glass, or solid's, how little of its fill is drawn; Solid and Liquid Glass draw three fifths
+    /// of it, the material all of it.
     public var transparency: Double?
     public var glow: Glow
 

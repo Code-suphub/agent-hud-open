@@ -74,18 +74,27 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     public static let simpleSizeRange: ClosedRange<Double> = 20...50
     /// Stroke of that ring, in points.
     public static let ringWidthRange: ClosedRange<Double> = 1...4
-    /// How much of the desktop glass lets through: at 0 the look's own colour lies whole beneath the glass, which shows
-    /// that colour alone; at the top a twentieth of it does, and the HUD is all but the system's bare glass, as a macOS
-    /// menu's is. The glass stays whole and frosted at every step.
-    public static let glassTransparencyRange: ClosedRange<Double> = 0...0.95
-    /// How much of the desktop a solid surface lets through, unblurred: the fill thins as glass's colour does, to a
-    /// twentieth at the top. The owner chose the same top for both, 95 %.
-    public static let solidTransparencyRange: ClosedRange<Double> = 0...0.95
+    /// The Transparency chosen for glass, the slider's 0 to 100 %: how little of the look's own colour lies beneath the
+    /// glass, as it is drawn (`drawsTransparency(reducesTransparency:)`), which Liquid Glass scales down. The glass stays
+    /// whole and frosted at every step.
+    public static let glassTransparencyRange: ClosedRange<Double> = 0...1
+    /// The Transparency chosen for a solid surface, the slider's 0 to 100 %: how little of its fill is drawn, scaled down
+    /// as Liquid Glass's is.
+    public static let solidTransparencyRange: ClosedRange<Double> = 0...1
+    /// How much of the Transparency chosen a surface draws: Solid and Liquid Glass, clear or regular, three fifths of it,
+    /// so that their top, 100 %, draws 60 %, and the material all of it. The owner chose it: a solid fill or clear glass
+    /// thinner than that leaves the HUD's ink on all but the bare desktop, and regular glass with little of the look's
+    /// colour beneath it turns light or dark by itself, piece by piece, by the size of each, so that a narrow strip came
+    /// out white beside a dark dock. The material frosts what is behind it evenly on its own.
+    public static func transparencyScale(material: HUDMaterial, glassStyle: HUDGlassStyle) -> Double {
+        material == .glass && glassStyle == .material ? 1 : 0.6
+    }
     /// The range of the transparency of `material`, glass's or solid's.
     public static func transparencyRange(for material: HUDMaterial) -> ClosedRange<Double> {
         material == .glass ? glassTransparencyRange : solidTransparencyRange
     }
-    /// Glass at first: half the look's colour beneath it, glass that is plainly dark or light and plainly glass.
+    /// Glass at first: the slider at half, which Clear and Regular draw at 0.3, 70 % of the look's colour beneath the
+    /// glass, glass that is plainly dark or light and plainly glass, and the material at 0.5.
     public static let standardGlassTransparency = 0.5
     /// A solid surface at first: opaque, as the HUD has always been.
     public static let standardSolidTransparency = 0.0
@@ -116,11 +125,13 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     /// What glass is made of when the material is glass: clear Liquid Glass unless chosen otherwise. Kept while the
     /// material is solid.
     public var glassStyle: HUDGlassStyle
-    /// How much of the desktop shows through glass, from 0, the look's colour whole beneath it, to 1, the bare glass
-    /// (`glassTransparencyRange`). Kept while the material is solid, for when glass is chosen again.
+    /// How much of the desktop shows through glass as the slider sets it, from 0, the look's colour whole beneath it, to
+    /// 1, which Clear and Regular draw at 0.6, 40 % of the colour left, and the material as its bare self
+    /// (`glassTransparencyRange`, `transparencyScale(material:glassStyle:)`). Kept while the material is solid, for when
+    /// glass is chosen again.
     public var glassTransparency: Double
-    /// How much of the desktop shows through a solid surface, unblurred, 0 to 0.95 (`solidTransparencyRange`); 0, opaque,
-    /// by default. Kept while the material is glass.
+    /// How much of the desktop shows through a solid surface, unblurred, as the slider sets it, 0 to 1
+    /// (`solidTransparencyRange`), drawn at three fifths of it; 0, opaque, by default. Kept while the material is glass.
     public var solidTransparency: Double
 
     public init(
@@ -231,9 +242,10 @@ extension ScreenPlacement {
         }
     }
 
-    /// How much of the desktop the HUD lets through as it is drawn: its material's transparency, and none at all while
-    /// Reduce Transparency is on, which draws glass solid and a see-through solid opaque.
+    /// How much of the desktop the HUD lets through as it is drawn: its material's Transparency scaled for the surface
+    /// (`transparencyScale(material:glassStyle:)`), 60 % at most for Solid, Clear and Regular, and none at all while Reduce
+    /// Transparency is on, which draws glass solid and a see-through solid opaque.
     public func drawsTransparency(reducesTransparency: Bool) -> Double {
-        reducesTransparency ? 0 : transparency
+        reducesTransparency ? 0 : transparency * Self.transparencyScale(material: material, glassStyle: glassStyle)
     }
 }

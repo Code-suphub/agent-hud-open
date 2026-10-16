@@ -6,7 +6,8 @@ import XCTest
 
 /// The look the app's own windows and the menu-bar menu take under Appearance → Match screen (`WindowLook`): the look of
 /// the HUD on the screen they are on, nothing under any other Appearance, a window that takes it, or gives it back, as
-/// the look it is given changes, and the grounds a window draws under a look of glass (`WindowGround`).
+/// the look it is given changes, the grounds a window draws under a look the desktop shows through (`WindowGround`), and
+/// the settings groups that stand on them.
 @MainActor
 final class WindowLookTests: XCTestCase {
     /// Sets where the windows' look comes from for one test, and when it ends gives back none, as a process without
@@ -63,6 +64,45 @@ final class WindowLookTests: XCTestCase {
         }
     }
 
+    /// With Match screen on a window takes the transparency its screen's HUD draws, not the slider's: three fifths of
+    /// it for Solid, clear glass and regular glass, 0.6 at the top, and all of it for the material, so that the windows
+    /// and the HUD on a screen are one surface; none under Reduce Transparency, which draws the window opaque. A window
+    /// under any of the others is cleared, the desktop showing through it.
+    func testAWindowTakesTheTransparencyItsScreenDraws() throws {
+        try XCTSkipIf(NSScreen.screens.isEmpty, "no display is attached to take a look from")
+        let settings = store()
+        settings.update { $0.appearanceFollowsScreen = true }
+        let controller = HostedWindowController(size: CGSize(width: 320, height: 200), title: "Transparency")
+        let window = try XCTUnwrap(controller.window)
+        giveLooks { settings.windowLook(on: $0) }
+        defer { WindowLook.source = nil }
+        let reduces = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let cases: [(String, ScreenPlacement, Double)] = [
+            ("glass as first chosen", ScreenPlacement(mode: .simple, material: .glass), 0.3),
+            ("clear glass at the top", ScreenPlacement(mode: .simple, material: .glass, glassTransparency: 1), 0.6),
+            ("regular glass at the top",
+             ScreenPlacement(mode: .simple, material: .glass, glassStyle: .regular, glassTransparency: 1), 0.6),
+            ("the material at the top",
+             ScreenPlacement(mode: .simple, material: .glass, glassStyle: .material, glassTransparency: 1), 1),
+            ("the material at 50 %",
+             ScreenPlacement(mode: .simple, material: .glass, glassStyle: .material, glassTransparency: 0.5), 0.5),
+            ("solid at the top", ScreenPlacement(mode: .simple, solidTransparency: 1), 0.6),
+            ("solid at 50 %", ScreenPlacement(mode: .simple, solidTransparency: 0.5), 0.3),
+        ]
+        for (name, placement, drawn) in cases {
+            settings.update {
+                for display in NSScreen.screens { $0.screens[ScreenIdentity.key(for: display)] = placement }
+            }
+            for display in NSScreen.screens {
+                XCTAssertEqual(settings.windowLook(on: display)?.transparency, reduces ? 0 : drawn,
+                               "\(name) on \(ScreenIdentity.key(for: display))")
+            }
+            controller.refreshLook()
+            XCTAssertEqual(WindowLook.look(on: window.screen)?.transparency, reduces ? 0 : drawn, name)
+            XCTAssertEqual(window.isOpaque, reduces, "\(name): cleared unless Reduce Transparency draws it opaque")
+        }
+    }
+
     // MARK: A window that takes it
 
     /// A hosted window takes the look its screen gives it as its appearance, light or dark, and again whenever it is
@@ -87,11 +127,12 @@ final class WindowLookTests: XCTestCase {
         XCTAssertNil(window.appearance, "under any other Appearance the window takes the app's")
     }
 
-    /// Under a look of glass a hosted window is cleared, not opaque and with no background of its own, so that the
-    /// glass of its grounds sees the desktop behind it, whatever the glass is made of and bare at the top of the
-    /// Transparency too; under a solid look, with a transparency or without, and under none, it is opaque on the window
-    /// background again.
-    func testAWindowIsClearedUnderGlassOnly() throws {
+    /// Under a look the desktop shows through a hosted window is cleared, not opaque and with no background of its own,
+    /// so that its grounds draw all of it: under glass, whatever the glass is made of, at 0 and at the top of what the
+    /// Transparency draws, 0.6 for Liquid Glass and 1 for the material, so that the glass sees the desktop behind it;
+    /// and under a solid look with a transparency, so that the thinned fill shows the desktop unblurred. Under a solid look with none, and under no look, it is opaque on
+    /// the window background again.
+    func testAWindowIsClearedWheneverTheDesktopShowsThrough() throws {
         let controller = HostedWindowController(size: CGSize(width: 320, height: 200), title: "Glass")
         let window = try XCTUnwrap(controller.window)
         XCTAssertTrue(window.isOpaque)
@@ -100,27 +141,68 @@ final class WindowLookTests: XCTestCase {
         var look: HUDLook? = HUDLook(appearance: .dark, material: .glass)
         giveLooks { _ in look }
         defer { WindowLook.source = nil }
+        func assertCleared(_ cleared: Bool, _ what: String, line: UInt = #line) {
+            XCTAssertEqual(window.isOpaque, !cleared, what, line: line)
+            XCTAssertEqual(window.backgroundColor, cleared ? .clear : .windowBackgroundColor, what, line: line)
+        }
         for style in HUDGlassStyle.allCases {
-            look = HUDLook(appearance: .dark, material: .glass, transparency: 0.5, glassStyle: style)
-            controller.refreshLook()
-            XCTAssertFalse(window.isOpaque, "\(style)")
-            XCTAssertEqual(window.backgroundColor, .clear, "\(style)")
+            for transparency in [0, 0.3, style == .material ? 1 : 0.6] {
+                look = HUDLook(appearance: .dark, material: .glass, transparency: transparency, glassStyle: style)
+                controller.refreshLook()
+                assertCleared(true, "\(style) \(transparency)")
+            }
         }
 
-        look = HUDLook(appearance: .light, material: .solid, transparency: 0.4)
+        look = HUDLook(appearance: .light, material: .solid)
         controller.refreshLook()
-        XCTAssertTrue(window.isOpaque, "a solid look keeps the window opaque whatever its transparency")
-        XCTAssertEqual(window.backgroundColor, .windowBackgroundColor, "solid")
+        assertCleared(false, "an opaque solid look")
 
-        look = HUDLook(appearance: .light, material: .glass, transparency: 1)
+        for transparency in [0.03, 0.3, 0.6] {
+            look = HUDLook(appearance: .light, material: .solid, transparency: transparency)
+            controller.refreshLook()
+            assertCleared(true, "solid at \(transparency)")
+        }
+
+        look = .standard
         controller.refreshLook()
-        XCTAssertFalse(window.isOpaque, "bare glass")
-        XCTAssertEqual(window.backgroundColor, .clear, "bare glass")
+        assertCleared(false, "the standard look, opaque again")
+
+        look = HUDLook(appearance: .light, material: .glass, transparency: 0.6)
+        controller.refreshLook()
+        assertCleared(true, "glass at the top")
 
         look = nil
         controller.refreshLook()
-        XCTAssertTrue(window.isOpaque, "under any other Appearance the window is a window again")
-        XCTAssertEqual(window.backgroundColor, .windowBackgroundColor, "no look")
+        assertCleared(false, "under any other Appearance the window is a window again")
+    }
+
+    /// A window's content reads the look the window takes, and reads it again on every change, so its grounds and its
+    /// cards follow; with no look, nothing.
+    func testAWindowsContentReadsTheLookItTakes() throws {
+        let controller = HostedWindowController(size: CGSize(width: 320, height: 200), title: "Surface")
+        let seen = SurfaceSeen()
+        controller.setContent(SurfaceProbe(seen: seen))
+        let hosting = try XCTUnwrap(controller.window?.contentView)
+        var look: HUDLook? = HUDLook(appearance: .light, transparency: 0.4)
+        giveLooks { _ in look }
+        defer { WindowLook.source = nil }
+        controller.refreshLook()
+        poll("the content reads the look") {
+            hosting.layoutSubtreeIfNeeded()
+            return seen.look == look
+        }
+        look = HUDLook(appearance: .dark, material: .glass, transparency: 0.6, glassStyle: .regular)
+        controller.refreshLook()
+        poll("and reads it again on a change") {
+            hosting.layoutSubtreeIfNeeded()
+            return seen.look == look
+        }
+        look = nil
+        controller.refreshLook()
+        poll("and none once the window takes the app's Appearance") {
+            hosting.layoutSubtreeIfNeeded()
+            return seen.look == nil
+        }
     }
 
     // MARK: Its ground
@@ -131,17 +213,18 @@ final class WindowLookTests: XCTestCase {
     /// frosted blur of what is behind the window, drawn the same whether the window is active or not; clear Liquid
     /// Glass is all but unblurred in the active window, as macOS draws it. A material is SwiftUI's regular material on
     /// any Mac, which SwiftUI draws itself, with no glass or blur view of AppKit's. Under a solid look, with a
-    /// transparency or without, the ground is its plain colour, with neither.
+    /// transparency or without, the ground is its colour, with neither.
     func testAWindowsGroundIsTheScreensGlassUnderGlassOnly() throws {
         let looks: [(String, HUDLook)] = [
             ("dark clear glass", HUDLook(appearance: .dark, material: .glass, glassStyle: .clear)),
             ("dark regular glass", HUDLook(appearance: .dark, material: .glass, glassStyle: .regular)),
             ("dark material", HUDLook(appearance: .dark, material: .glass, glassStyle: .material)),
-            ("light clear glass at the top", HUDLook(appearance: .light, material: .glass, transparency: 1)),
+            ("light clear glass at the top", HUDLook(appearance: .light, material: .glass, transparency: 0.6)),
             ("light regular glass at the top",
-             HUDLook(appearance: .light, material: .glass, transparency: 1, glassStyle: .regular)),
+             HUDLook(appearance: .light, material: .glass, transparency: 0.6, glassStyle: .regular)),
             ("light material at the top",
              HUDLook(appearance: .light, material: .glass, transparency: 1, glassStyle: .material)),
+            ("light solid at the top", HUDLook(appearance: .light, transparency: 0.6)),
             ("light solid", HUDLook(appearance: .light, transparency: 0.4)),
             ("standard", .standard),
         ]
@@ -216,24 +299,32 @@ final class WindowLookTests: XCTestCase {
         poll("glass brings it back") { Self.glass(in: settled()) != nil }
     }
 
-    /// A ground's dimming is the window's own colour at what the screen's Transparency leaves of it, all of it at 0,
-    /// half at 0.5 and none at 1, the bare glass: beneath Liquid Glass, which blurs it with the desktop, and over a
-    /// material or the frosted blur, which hide what lies beneath them. The glass itself is drawn whole at any setting:
-    /// nothing between it and the window is faded. Each ground is compared with its bare glass, drawn with no colour,
-    /// and the colour laid at its share beneath or over it as the ground lays it, in the same drawing, since glass off
-    /// screen has nothing behind it to show and draws as it does there. A solid ground is its plain colour, opaque,
-    /// whatever its transparency.
+    /// A ground's dimming is the window's own colour at what the transparency drawn leaves of it, all of it at 0, 0.7 at
+    /// the standard glass's 0.3, 0.4 at Liquid Glass's top of 0.6 and none at the material's top of 1, the bare
+    /// material: beneath Liquid Glass, which blurs it with the desktop, and over a material or the frosted blur, which
+    /// hide what lies beneath them. The glass itself is drawn
+    /// whole at any setting: nothing between it and the window is faded. Each ground is compared with its bare glass,
+    /// drawn with no colour, and the colour laid at its share beneath or over it as the ground lays it, in the same
+    /// drawing, since glass off screen has nothing behind it to show and draws as it does there. A solid ground is its
+    /// colour at what the transparency drawn leaves of its fill (`HUDLook.coverOpacity`), as the HUD's solid fill is:
+    /// whole at 0, 0.7 at 0.3 and 0.4 at its top of 0.6, over what is behind the window, unblurred.
     func testAWindowsGroundDimsWholeGlassWithItsColour() throws {
         for appearance in [HUDLook.Appearance.dark, .light] {
-            let solid = HUDLook(appearance: appearance, transparency: 0.4)
-            let plain = try drawn(in: solid) { Color.red }.middle, laidSolid = try ground(in: solid).middle
-            for channel in [\NSColor.redComponent, \.greenComponent, \.blueComponent] {
-                XCTAssertEqual(laidSolid[keyPath: channel], plain[keyPath: channel], accuracy: 0.01,
-                               "\(appearance): solid")
+            for (transparency, share) in [(0.0, 1.0), (0.3, 0.7), (0.6, 0.4)] {
+                let solid = HUDLook(appearance: appearance, transparency: transparency)
+                XCTAssertEqual(solid.coverOpacity, share, accuracy: 0.0001, "\(appearance) solid \(transparency)")
+                let plain = try drawn(in: solid) { Color.red.opacity(share) }.middle
+                let laidSolid = try ground(in: solid)
+                XCTAssertNil(laidSolid.glass, "\(appearance) solid \(transparency): no glass")
+                for channel in [\NSColor.redComponent, \.greenComponent, \.blueComponent] {
+                    XCTAssertEqual(laidSolid.middle[keyPath: channel], plain[keyPath: channel], accuracy: 0.01,
+                                   "\(appearance) solid \(transparency)")
+                }
             }
             for style in HUDGlassStyle.allCases {
                 let beneath = style != .material && HUDGlass.isLiquid
-                for (transparency, share) in [(0.0, 1.0), (0.5, 0.5), (1.0, 0.0)] {
+                let top = style == .material ? 1.0 : 0.6
+                for (transparency, share) in [(0.0, 1.0), (0.3, 0.7), (top, 1 - top)] {
                     let look = HUDLook(appearance: appearance, material: .glass, transparency: transparency,
                                        glassStyle: style)
                     let what = "\(appearance) \(style) \(transparency)"
@@ -254,6 +345,90 @@ final class WindowLookTests: XCTestCase {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: What stands on it
+
+    /// A settings group's card, Settings → General's and every page's, takes the window's tokens on the ground its look
+    /// gives it (`Theme.under(_:)`): on a light ground the desktop shows through, the white card is drawn at the share
+    /// the look leaves of it, 0.76 at the standard glass's 0.3 and a fifth at the material's top of 1, solid or glass,
+    /// so that the desktop shows through it as through the dark card's tint of white; on an opaque light ground it is white, and on a dark
+    /// ground it is the dark card, a tint of white, at any transparency. Each card is drawn in a hosted window over black,
+    /// and compared with the colour it should be drawn the same way.
+    func testASettingsCardThinsWithTheWindowsGround() throws {
+        let card = { Color.clear.frame(width: 160, height: 80).settingsCard() }
+        let cases: [(String, HUDLook, Color)] = [
+            ("light opaque", HUDLook(appearance: .light), Theme.light.card),
+            ("light solid at 0.3", HUDLook(appearance: .light, transparency: 0.3), Theme.light.card.opacity(0.76)),
+            ("light glass at 0.3", HUDLook(appearance: .light, material: .glass, transparency: 0.3),
+             Theme.light.card.opacity(0.76)),
+            ("light material at the top", HUDLook(appearance: .light, material: .glass, transparency: 1,
+                                                  glassStyle: .material), Theme.light.card.opacity(0.2)),
+            ("dark opaque", .standard, Theme.dark.card),
+            ("dark glass at 0.6", HUDLook(appearance: .dark, material: .glass, transparency: 0.6), Theme.dark.card),
+        ]
+        for (name, look, expected) in cases {
+            let drawn = try hosted(in: look) { ZStack { Color.black; card() } }
+            let should = try plainly { ZStack { Color.black; Color.clear.frame(width: 160, height: 80).background(expected) } }
+            for channel in [\NSColor.redComponent, \.greenComponent, \.blueComponent] {
+                XCTAssertEqual(drawn[keyPath: channel], should[keyPath: channel], accuracy: 0.02, name)
+            }
+        }
+        let opaque = try hosted(in: HUDLook(appearance: .light)) { ZStack { Color.black; card() } }
+        let thin = try hosted(in: HUDLook(appearance: .light, material: .glass, transparency: 0.3)) {
+            ZStack { Color.black; card() }
+        }
+        XCTAssertGreaterThan(opaque.redComponent, 0.95, "white, opaque")
+        XCTAssertLessThan(thin.redComponent, opaque.redComponent - 0.1, "the black behind shows through")
+    }
+
+    /// A settings group stands its rows on that same card, which follows the window's ground as a card alone does.
+    func testASettingsSectionStandsOnACardThatFollowsTheLook() throws {
+        let section = {
+            ZStack {
+                Color.black
+                SettingsSection(title: "Group", subtitle: "What it holds") { Color.clear.frame(width: 160, height: 80) }
+            }
+        }
+        for (look, share) in [(HUDLook(appearance: .light), 1.0),
+                              (HUDLook(appearance: .light, material: .glass, transparency: 0.3), 0.76),
+                              (HUDLook(appearance: .light, transparency: 0.6), 0.52)] {
+            let what = "\(look.material) at \(look.transparency)"
+            // The middle of the rows, below the title and the subtitle.
+            let drawn = try hosted(in: look, at: CGPoint(x: 0.5, y: 0.62), section)
+            let should = try plainly { ZStack { Color.black; Theme.light.card.opacity(share) } }
+            XCTAssertEqual(drawn.redComponent, should.redComponent, accuracy: 0.02, what)
+        }
+    }
+
+    /// A box raised off a window's ground, a chart's hover details, casts its shadow on an opaque ground, as it always
+    /// has with no look, and none on a ground the desktop shows through, glass or a thinned solid, where a shadow would
+    /// darken the box and the desktop round it. Measured on a white page just past the box's lower edge, where the
+    /// shadow falls.
+    func testARaisedBoxCastsAShadowOnAnOpaqueGroundOnly() throws {
+        func beneath(_ look: HUDLook?) throws -> CGFloat {
+            _ = NSApplication.shared
+            let surface = WindowSurface()
+            surface.look = look
+            let page = ZStack {
+                Color.white
+                Color.clear.frame(width: 120, height: 40).raisedBox(Theme.light)
+            }
+            .frame(width: 200, height: 120)
+            .environment(surface)
+            let hosting = NSHostingView(rootView: page)
+            hosting.frame = CGRect(x: 0, y: 0, width: 200, height: 120)
+            hosting.layoutSubtreeIfNeeded()
+            // The box's lower edge is 80 points down; 4 more is in its shadow.
+            return try color(of: hosting, at: CGPoint(x: 0.5, y: 84.0 / 120)).redComponent
+        }
+        XCTAssertLessThan(try beneath(nil), 0.98, "a shadow under no look")
+        XCTAssertLessThan(try beneath(HUDLook(appearance: .light)), 0.98, "and on an opaque ground")
+        for look in [HUDLook(appearance: .light, material: .glass, transparency: 0.3),
+                     HUDLook(appearance: .light, material: .glass, transparency: 1, glassStyle: .material),
+                     HUDLook(appearance: .light, transparency: 0.3)] {
+            XCTAssertEqual(try beneath(look), 1, accuracy: 0.005, "\(look.material) at \(look.transparency): no shadow")
         }
     }
 
@@ -280,6 +455,38 @@ final class WindowLookTests: XCTestCase {
         let deadline = Date().addingTimeInterval(2)
         while !condition(), Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
         XCTAssertTrue(condition(), what, line: line)
+    }
+
+    /// The colour at `point`, a share of the window's width and height from its top left, the middle by default, of
+    /// `content` in a hosted window that takes `look` as it does with Match screen on, never shown, drawn off screen.
+    private func hosted<Content: View>(in look: HUDLook, at point: CGPoint = CGPoint(x: 0.5, y: 0.5),
+                                       _ content: () -> Content) throws -> NSColor {
+        let controller = HostedWindowController(size: CGSize(width: 240, height: 200), title: "Card")
+        controller.setContent(content())
+        giveLooks { _ in look }
+        defer { WindowLook.source = nil }
+        controller.refreshLook()
+        let hosting = try XCTUnwrap(controller.window?.contentView)
+        // SwiftUI takes the window's new look on its next update.
+        hosting.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        return try color(of: hosting, at: point)
+    }
+
+    /// The colour in the middle of `content` drawn alone, in no window, as `hosted(in:at:_:)` draws.
+    private func plainly<Content: View>(_ content: () -> Content) throws -> NSColor {
+        let hosting = NSHostingView(rootView: content())
+        hosting.frame = CGRect(x: 0, y: 0, width: 240, height: 200)
+        hosting.layoutSubtreeIfNeeded()
+        return try color(of: hosting, at: CGPoint(x: 0.5, y: 0.5))
+    }
+
+    private func color(of view: NSView, at point: CGPoint) throws -> NSColor {
+        let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let x = Int(CGFloat(rep.pixelsWide) * point.x), y = Int(CGFloat(rep.pixelsHigh) * point.y)
+        return try XCTUnwrap(rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB))
     }
 
     /// A window's ground in `look`, of `color`, as a hosted window draws it (`drawn(in:_:)`).
@@ -320,5 +527,21 @@ final class WindowLookTests: XCTestCase {
         if #available(macOS 26, *) { return views.first { $0 is NSGlassEffectView } }
         #endif
         return views.first { ($0 as? NSVisualEffectView)?.material == .hudWindow }
+    }
+}
+
+/// What a probe last read of the look its window takes.
+@MainActor
+private final class SurfaceSeen {
+    var look: HUDLook?
+}
+
+private struct SurfaceProbe: View {
+    let seen: SurfaceSeen
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
+
+    var body: some View {
+        seen.look = surface?.look
+        return Color.clear
     }
 }

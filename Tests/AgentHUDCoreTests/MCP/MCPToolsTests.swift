@@ -154,7 +154,7 @@ final class MCPToolsTests: XCTestCase {
                        "Solid, or the system's glass, which shows the desktop through it blurred, light or dark as the appearance and the desktop make it; solid while Reduce Transparency is on. At a hardware notch a notch HUD stays dark in the notch's row, black or black glass; the panel and the cards it opens into take the look.")
         XCTAssertEqual(hud["properties"]["transparency"]["type"], .string("number"))
         XCTAssertEqual(hud["properties"]["transparency"]["description"].stringValue,
-                       "How much of the desktop shows through, glass's or solid's as the material is: glass lays the appearance's colour beneath it, whole at 0 and none at 1, the system's bare glass; solid thins its fill, its transparency held to 0.9; 0 to 1.")
+                       "How much of the desktop shows through, glass's or solid's as the material is: glass lays less of the appearance's colour beneath it, solid draws less of its fill, all of it at 0; Solid and Liquid Glass draw three fifths of it, 0.6 at 1; 0 to 1.")
         XCTAssertEqual(schema["properties"]["from"]["description"].stringValue,
                        "Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of the one described here. Only 'previous' brings a screen's HUD style with it.")
         XCTAssertEqual(hud["properties"]["agents"]["type"], .string("array"))
