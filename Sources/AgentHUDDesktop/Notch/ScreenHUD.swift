@@ -27,8 +27,9 @@ final class ScreenHUD {
     /// One expansion per screen, shared by its live panel and the fresh view used for measuring it.
     private var answeringSessionID: String?
     private let mouseLocation: @MainActor () -> CGPoint
-    /// Whether the Mac asks for reduced motion, where a separated dock's card moves and its shadow waits for it
-    /// (`shadowedShells(_:card:moves:look:)`): the system's setting, or a test's, which runs both ways on any Mac.
+    /// Whether the Mac asks for reduced motion, the one place this HUD reads it: whether it animates, whether a separated
+    /// dock's card moves and its shadow waits for it (`CardShadowHold`), and what its materials are made for. The
+    /// system's setting, or a test's, which runs both ways on any Mac.
     private let reduceMotion: @MainActor () -> Bool
     private let additionalHUDControls: @MainActor (@escaping @MainActor () -> Void) -> AnyView
     private let renderMaterials: @Sendable (GlowWindowController.PreparationInputs) async -> GlowWindowController.PreparedImages
@@ -60,18 +61,8 @@ final class ScreenHUD {
     private var targetWindowFrame: CGRect?
     /// The card whose geometry is still interpolating; canvas-only changes share its completion.
     private var geometryTransitionFrame: CGRect?
-    /// Where a detached card's shadow stands (`shadowedShells(_:card:moves:look:)`).
-    private enum CardShadow: Equatable {
-        case none
-        /// Held back until the card, growing out of its dock or moving to this place, has arrived.
-        case waiting(CGRect)
-        /// Under the card at this place.
-        case shown(CGRect)
-    }
-    private var cardShadow = CardShadow.none
-    private var cardShadowWait: Task<Void, Never>?
-    /// The shells a held-back card's shadow is given once the card has arrived, and the look they are cast in.
-    private var heldShells: (shells: HUDShells, look: HUDLook)?
+    /// A detached card's shadow, held back until the card has arrived.
+    private let cardShadow = CardShadowHold()
     /// The shells the glow was last given shadows for.
     private(set) var glowShells: HUDShells?
     /// The island's own shape while an event is showing: wider than the silhouette by the two wings it grew.
@@ -286,7 +277,7 @@ final class ScreenHUD {
                       pendingIDs: alerts.pendingIDs,
                       sessionNavigationFailed: sessionNavigationFailed, failedListedSessionID: failedListedSessionID,
                       answeringSessionID: answeringSessionID,
-                      reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                      reduceMotion: reduceMotion(),
                       colorSpace: glow.panel.screen?.colorSpace?.cgColorSpace)
     }
 
@@ -322,6 +313,7 @@ final class ScreenHUD {
         island = IslandWindowController(frame: geometry.islandFrame, rootView: IslandRootView.placeholder)
         island.onPointerChange = { [weak self] _ in self?.samplePointer() }
         alerts.onExpire = { [weak self] in self?.dismissAlert() }
+        cardShadow.onReveal = { [weak self] shells, look in self?.revealCardShadow(shells, look: look) }
         dragSurface.onPress = { [weak self] in self?.grabHUD() }
         dragSurface.onRelease = { [weak self] in self?.releaseHUD() }
         dragSurface.onBegin = { [weak self] point in self?.beginMoving(at: point) }
@@ -957,8 +949,7 @@ final class ScreenHUD {
         timer?.invalidate()
         cardSettle?.cancel()
         cardSettle = nil
-        cardShadowWait?.cancel()
-        cardShadowWait = nil
+        cardShadow.cancel()
         targetWindowFrame = nil
         geometryTransitionFrame = nil
         island.panel.orderOut(nil)
@@ -1134,12 +1125,13 @@ final class ScreenHUD {
         geometry = resolveGeometry()
         // A changed edge replaces the coordinate system; it is a repositioning, not an expansion.
         // A separated dock's card moves on its own, inside a window that holds both ends of the move.
+        let reducesMotion = reduceMotion()
         let cardMoves = !agentMarks.isEmpty && previewPlacement == nil && geometry.edge == previousGeometry.edge
             && geometry.mode == previousGeometry.mode && geometry.screenFrame == previousGeometry.screenFrame
-            && !reduceMotion()
+            && !reducesMotion
         let animated = animated && geometry.edge == previousGeometry.edge && agentMarks.isEmpty
             && geometry.mode == previousGeometry.mode && geometry.screenFrame == previousGeometry.screenFrame
-            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            && !reducesMotion
         var root = makeRoot(open: open, animated: animated)
         // A report can change the token legend without changing the coordinator's observed quota rows.
         // Validate at consumption as well as when the coordinator applies an update during the delay.
@@ -1153,9 +1145,9 @@ final class ScreenHUD {
         }
         let surface = surface(open: open, height: showsAlertDetails ? alertDetailHeight : panelHeight)
         if prepared?.surface != surface { prepared = nil }
-        let (shells, cardLeaves, cardSlides) = shadowedShells(surface.shells,
-                                                              card: focus != nil && surface.expanded ? surface.cardFrame : nil,
-                                                              moves: cardMoves, look: inputs.look)
+        let (shells, cardLeaves, cardSlides) = cardShadow.shells(surface.shells,
+                                                                 card: focus != nil && surface.expanded ? surface.cardFrame : nil,
+                                                                 moves: cardMoves, look: inputs.look)
         let captured = captureMaterials(inputs: inputs, surface: surface, shells: shells)
         let installed = glow.installedPreparation(matching: captured)
         let preparingFutureOpening: Bool = if case .opening = machine.state { true } else { false }
@@ -1291,54 +1283,11 @@ final class ScreenHUD {
         prepareOpening()
     }
 
-    /// The shells the glow gives shadows now: `shells`, less a detached card's until the card has arrived. The glow draws
-    /// a card's shadow where the card ends up, with the card cut out of it, while the card is still growing out of its
-    /// dock or sliding to that place; on a light desktop the cut would show there as a pale pill with a shadow round it,
-    /// ahead of the card. So the shadow waits for the card's motion to end, `IslandAnimation.duration` after it last
-    /// began, and then fades in, and the dock's shadow is cut by the card from then on too: cut while the card still
-    /// grows, it would show the same pale place beside the panel. A card that moves once its shadow shows keeps it, which
-    /// follows the card, and the dock's cut, which cannot follow it, fades to the card's new place as it goes there
-    /// (`cardSlides`). A card placed at once, under Reduce Motion, has its shadow at once. On its way back into the
-    /// dock, its shadow shown or still waiting, the card drops it at once, which `cardLeaves` tells the glow
-    /// (`GlowWindowController.update`); any other shell's shadow that goes fades out.
-    private func shadowedShells(_ shells: HUDShells, card: CGRect?, moves: Bool,
-                                look: HUDLook) -> (shells: HUDShells, cardLeaves: Bool, cardSlides: Bool) {
-        guard let card, moves else {
-            let leaves = card == nil && cardShadow != .none
-            cardShadowWait?.cancel()
-            cardShadowWait = nil
-            heldShells = nil
-            cardShadow = card.map(CardShadow.shown) ?? .none
-            return (shells, leaves, false)
-        }
-        switch cardShadow {
-        case .shown(let place):
-            cardShadow = .shown(card)
-            return (shells, false, place != card)
-        case .waiting(card):
-            break
-        case .none, .waiting:
-            cardShadow = .waiting(card)
-            cardShadowWait?.cancel()
-            cardShadowWait = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(IslandAnimation.duration))
-                guard !Task.isCancelled, let self, self.cardShadow == .waiting(card) else { return }
-                self.cardShadowWait = nil
-                self.revealCardShadow()
-            }
-        }
-        heldShells = (shells, look)
-        return (HUDShells(surface: nil, dock: shells.dock), false, false)
-    }
-
-    /// The card has arrived: its shadow fades in under it, and the dock's, cut by the card from now on, fades to its new
-    /// shape with it. Under Reduce Motion both change at once.
-    private func revealCardShadow() {
-        guard case .waiting(let card) = cardShadow, let held = heldShells else { return }
-        cardShadow = .shown(card)
-        heldShells = nil
-        glowShells = held.shells
-        glow.updateShells(held.shells, look: held.look, geometry: geometry, animates: !reduceMotion())
+    /// A detached card has arrived (`CardShadowHold`): its shadow fades in under it, and the dock's, cut by the card from
+    /// now on, fades to its new shape with it. Under Reduce Motion both change at once.
+    private func revealCardShadow(_ shells: HUDShells, look: HUDLook) {
+        glowShells = shells
+        glow.updateShells(shells, look: look, geometry: geometry, animates: !reduceMotion())
     }
 
     /// One agent's card: a peek, its whole panel, or an event it sent. It floats beside the agent's mark, and

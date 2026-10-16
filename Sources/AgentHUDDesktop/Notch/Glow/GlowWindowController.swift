@@ -507,8 +507,8 @@ final class GlowWindowController {
     // MARK: Shells
 
     /// Gives the shells their shadows, leaving everything else here as the last update left it: a detached card's, which
-    /// `ScreenHUD` holds back until the card has grown out of its dock. It fades in when `animates`, and the dock's,
-    /// cut by the card from now on under a see-through look, fades to its new cut with it.
+    /// `ScreenHUD` holds back until the card has grown out of its dock (`CardShadowHold`). It fades in when `animates`,
+    /// and the dock's, cut by the card from now on under a see-through look, fades to its new cut with it.
     func updateShells(_ shells: HUDShells, look: HUDLook, geometry: NotchGeometry, animates: Bool) {
         guard look.castsShellShadows else { return }
         updateShells(shells, look: look, geometry: geometry, frame: Self.panelFrame(for: geometry), prepared: nil,
