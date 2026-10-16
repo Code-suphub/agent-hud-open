@@ -290,7 +290,7 @@ public struct CodexDesktopPermissions: Sendable {
                     "question": .string(question.question), "answer": .string(text)])])
                 let encoded = String(decoding: try RecordCoding.encoder().encode(value), as: UTF8.self)
                 return .string("<send_user_message_question_reply>\n\(encoded)\n</send_user_message_question_reply>")
-            case .allow, .allowAlways, .deny: throw Failure.unsupportedDecision
+            case .allow, .allowAlways, .deny, .approvePlan, .keepPlanning: throw Failure.unsupportedDecision
             }
         }
         let persist: [String]
@@ -316,7 +316,7 @@ public struct CodexDesktopPermissions: Sendable {
             }
             return .object(["action": .string("accept"), "content": .object([:]), "_meta": update])
         case .deny: return .object(["action": .string("decline"), "content": .null, "_meta": .null])
-        case .answer: throw Failure.unsupportedDecision
+        case .answer, .approvePlan, .keepPlanning: throw Failure.unsupportedDecision
         }
     }
 

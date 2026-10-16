@@ -39,15 +39,25 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
     /// What the call asks, when it is a question put to the user rather than a tool waiting to run. A question is
     /// answered, not allowed: the answers travel back inside the call's own input, which is kept for that.
     public let questions: [PermissionQuestion]
-    let questionInput: JSONValue?
+    /// The call's own input, kept for a question or a plan: a question's answers travel back inside it, and Claude Code
+    /// approves a plan only when its input comes back with the allow.
+    let answerInput: JSONValue?
     public let nativeApproval: NativeApproval?
     public let at: Date
 
     public var isQuestion: Bool { !questions.isEmpty }
-    /// A plan Claude Code wants approved before it starts changing anything. The HUD points to Claude Code for it
-    /// rather than answering: a plan is read and approved there, with the choices only Claude Code offers.
+    /// A plan Claude Code wants approved before it starts changing anything.
     public var isPlan: Bool { toolName.map(Self.kind) == Self.planTool }
     static let planTool = "ExitPlanMode"
+    /// The whole plan as the agent wrote it, Markdown, for reading before it is approved.
+    public var plan: String? {
+        guard isPlan, let text = answerInput?["plan"].stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return nil }
+        return text
+    }
+    /// Whether this plan can be answered here: approved, approved with edits accepted, or sent back with a note. Only a
+    /// client that takes those answers from its hook qualifies; elsewhere the HUD points to the client's own dialog.
+    public var answersPlan: Bool { plan != nil && source.answersPlans && nativeApproval == nil }
 
     /// The folder the session runs in, which is how a user tells two sessions apart.
     public var project: String? {
@@ -59,7 +69,7 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
     public init(id: String, source: PermissionHooks.Source, vendor: String? = nil, sessionID: String, toolName: String?,
                 summary: String, detail: String?, cwd: String?, path: String? = nil,
                 removed: String? = nil, added: String? = nil, suggestions: [JSONValue] = [],
-                questions: [PermissionQuestion] = [], questionInput: JSONValue? = nil,
+                questions: [PermissionQuestion] = [], answerInput: JSONValue? = nil,
                 nativeApproval: NativeApproval? = nil, at: Date) {
         self.id = id
         self.source = source
@@ -74,7 +84,7 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
         self.added = added
         self.suggestions = suggestions
         self.questions = questions
-        self.questionInput = questionInput
+        self.answerInput = answerInput
         self.nativeApproval = nativeApproval
         self.at = at
     }
@@ -207,7 +217,7 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
             removed: lines(change["old_string"]),
             added: lines(change["new_string"]) ?? lines(change["content"]) ?? lines(change["new_source"]),
             suggestions: payload["permission_suggestions"].arrayValue ?? [],
-            questions: questions, questionInput: questions.isEmpty ? nil : input, at: now
+            questions: questions, answerInput: questions.isEmpty && kind != planTool ? nil : input, at: now
         )
     }
 
@@ -367,13 +377,20 @@ public enum PermissionDecision: Sendable, Equatable {
     case allowAlways(JSONValue)
     /// Each answer is filed under its question's answerKey. A question skipped has no entry.
     case answer([String: PermissionQuestion.Answer])
+    /// Approve a plan. With `acceptEdits` the session then accepts file edits without asking, as Claude Code's own
+    /// choice does; without it every edit is still asked about.
+    case approvePlan(acceptEdits: Bool)
+    /// Send a plan back to be worked on, with what the user wants changed, if they said.
+    case keepPlanning(String?)
     /// Say nothing: the request leaves the HUD and the client carries on with its own dialog, as though the HUD had
     /// never been asked.
     case leave
 
     var behavior: String {
-        if case .deny = self { return "deny" }
-        return "allow"
+        switch self {
+        case .deny, .keepPlanning: return "deny"
+        default: return "allow"
+        }
     }
 
     public func response(for source: PermissionHooks.Source) -> Data {
@@ -384,8 +401,8 @@ public enum PermissionDecision: Sendable, Equatable {
             // Codex rejects updatedPermissions. Leave unsupported decisions to the client's own approval flow.
             guard source.supportsPermissionUpdates else { return Self.noDecision }
             decision["updatedPermissions"] = .array([update])
-        case .answer, .leave:
-            // Answers travel inside the question they answer; without it there is nothing to send.
+        case .answer, .approvePlan, .keepPlanning, .leave:
+            // Answers travel inside the question or plan they answer; without it there is nothing to send.
             return Self.noDecision
         case .allow, .deny:
             break
@@ -398,14 +415,40 @@ public enum PermissionDecision: Sendable, Equatable {
     /// none answered Claude Code hears that its questions went unanswered.
     public func response(for request: PermissionRequest) -> Data {
         guard request.nativeApproval == nil else { return Self.noDecision }
-        guard case .answer(let answers) = self else { return response(for: request.source) }
-        guard var input = request.questionInput?.objectValue else { return Self.noDecision }
+        switch self {
+        case .approvePlan(let acceptEdits):
+            // Claude Code ignores a bare allow on a plan: the plan comes back as the call's input, and accepting edits
+            // is the mode the session moves to (verified on Claude Code 2.1.300).
+            guard request.answersPlan, let input = request.answerInput else { return Self.noDecision }
+            var decision: [String: JSONValue] = ["behavior": .string("allow"), "updatedInput": input]
+            if acceptEdits {
+                decision["updatedPermissions"] = .array([.object(["type": .string("setMode"), "mode": .string("acceptEdits"),
+                                                                  "destination": .string("session")])])
+            }
+            return Self.encode(decision)
+        case .keepPlanning(let note):
+            guard request.answersPlan else { return Self.noDecision }
+            return Self.encode(["behavior": .string("deny"), "message": .string(Self.planFeedback(note))])
+        case .answer:
+            break
+        default:
+            return response(for: request.source)
+        }
+        guard case .answer(let answers) = self, var input = request.answerInput?.objectValue else { return Self.noDecision }
         var written: [String: JSONValue] = [:]
         for question in request.questions {
             if let answer = answers[question.answerKey] { written[question.question] = .string(answer.text) }
         }
         input["answers"] = .object(written)
         return Self.encode(["behavior": .string("allow"), "updatedInput": .object(input)])
+    }
+
+    /// What Claude reads when its plan is sent back. It is told the words are the user's: a refusal's message on its own
+    /// reads as the hook's, and Claude then keeps the plan as it was.
+    static func planFeedback(_ note: String?) -> String {
+        let note = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let reviewed = "The user reviewed this plan in Agent HUD and did not approve it."
+        return note.isEmpty ? reviewed + " They want to keep planning." : reviewed + " Their feedback: " + note
     }
 
     private static func encode(_ decision: [String: JSONValue]) -> Data {
