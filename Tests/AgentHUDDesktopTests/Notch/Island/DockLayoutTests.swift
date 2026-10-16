@@ -29,18 +29,19 @@ final class DockLayoutTests: XCTestCase {
     }
 
     @MainActor
-    func testADockReminderIsAsTallAsOneOfTheDocksMarksAndTheNotchHasNoScale() {
+    func testADockReminderIsAsTallAsOneOfTheDocksMarksUpToItsMostAndTheNotchHasNoScale() {
         func pill(_ placement: ScreenPlacement) -> CGFloat {
             IslandRootView.dockCompactSize(edge: placement.edge, collapsedSize: CGSize(width: 216, height: 32),
                                            scale: IslandRootView.dockScale(mode: placement.mode, placement: placement)).height
         }
-        // A Simple panel's mark is its ring, drawn or not. A ring shorter than the default pill leaves the pill alone.
-        for (ring, height): (Double, CGFloat) in [(20, 26), (22, 26), (26, 26), (27, 27), (30, 30), (33, 33), (40, 40), (50, 50)] {
+        // A Simple panel's mark is its ring, drawn or not. A ring shorter than the default pill leaves the pill alone,
+        // and one taller than the most a pill grows leaves it at that.
+        for (ring, height): (Double, CGFloat) in [(20, 26), (22, 26), (26, 26), (27, 27), (30, 30), (32, 32), (33, 32), (40, 32), (50, 32)] {
             XCTAssertEqual(pill(ScreenPlacement(mode: .simple, simpleSize: ring)), height, "A \(ring) pt ring")
             XCTAssertEqual(pill(ScreenPlacement(mode: .simple, simpleSize: ring, showsRings: false)), height)
         }
         // A Dynamic dock's is its logo, whatever the Simple panel on the same screen was set to.
-        for (logo, height): (Double, CGFloat) in [(12, 26), (20, 26), (27, 27), (36, 36)] {
+        for (logo, height): (Double, CGFloat) in [(12, 26), (20, 26), (27, 27), (30, 30), (36, 32)] {
             XCTAssertEqual(pill(ScreenPlacement(mode: .logos, logoSize: logo, simpleSize: 40)), height, "A \(logo) pt logo")
         }
         // The notch has no size of its own to follow, so neither dock's setting reaches it.
@@ -49,7 +50,7 @@ final class DockLayoutTests: XCTestCase {
         let sizes = ScreenPlacement.simpleSizeRange
         for size in stride(from: sizes.lowerBound, through: sizes.upperBound, by: 1) {
             let row = IslandRootView.dockCompactRow(scale: IslandRootView.dockScale(mode: .simple, placement: ScreenPlacement(mode: .simple, simpleSize: size)))
-            XCTAssertEqual(row.height + 2 * row.inset, max(26, size), "A \(size) pt ring")
+            XCTAssertEqual(row.height + 2 * row.inset, min(32, max(26, size)), "A \(size) pt ring")
         }
     }
 

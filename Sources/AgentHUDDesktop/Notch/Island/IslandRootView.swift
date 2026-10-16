@@ -281,6 +281,9 @@ struct IslandRootView: View {
     /// A compact reminder on a dock is a slim pill, as tall as the Simple panel's hover line: 26 pt for a 17 pt mark
     /// and 13 pt text, where the notch's own height made it 48.
     nonisolated static let dockCompactHeight: CGFloat = 26
+    /// The tallest the pill grows beside a large mark. Past it the pill stays a slim line centred on the mark, and
+    /// its words stay the size of a menu's instead of a heading's.
+    nonisolated static let dockCompactMaxHeight: CGFloat = 32
     /// Above and below the pill's row. The row already keeps its own padding at each end, so the card adds none.
     static let dockCompactInsets = EdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
     /// This screen's `dockScale`. A compact reminder is the dock growing an arm, as the Simple panel's line is,
@@ -289,14 +292,15 @@ struct IslandRootView: View {
 
     /// How much larger than at its default a dock writes what it grows out of itself: enough for a compact
     /// reminder's pill and the hover line to be as tall as one of the dock's marks, a Simple panel's ring or a
-    /// Dynamic dock's logo. Never below 1, so beside a mark shorter than the default pill nothing is written
-    /// smaller than it was. The notch has no size to follow and keeps 1.
+    /// Dynamic dock's logo, up to `dockCompactMaxHeight`. Never below 1, so beside a mark shorter than the default
+    /// pill nothing is written smaller than it was. The notch has no size to follow and keeps 1.
     nonisolated static func dockScale(mode: HUDMode, placement: ScreenPlacement) -> CGFloat {
-        switch mode {
-        case .simple: max(1, CGFloat(placement.simpleSize) / dockCompactHeight)
-        case .logos: max(1, CGFloat(placement.logoSize) / dockCompactHeight)
-        case .notch: 1
+        let mark: Double = switch mode {
+        case .simple: placement.simpleSize
+        case .logos: placement.logoSize
+        case .notch: Double(dockCompactHeight)
         }
+        return min(dockCompactMaxHeight, max(dockCompactHeight, CGFloat(mark))) / dockCompactHeight
     }
 
     /// A compact reminder's row and the room above and below it, on a dock set to `scale`. The row is what the
