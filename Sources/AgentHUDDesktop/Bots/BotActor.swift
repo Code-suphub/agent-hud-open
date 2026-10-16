@@ -186,7 +186,7 @@ final class BotActor {
         clawd?.remove()
         clawd = sheet.map { sheet in
             let clawd = ClawdActor(sheet: sheet, form: form, staysBot: staysBot, arrivesAfter: arrivesAfter, seed: seed,
-                                   in: layer, showing: showing || resumes)
+                                   in: layer, showing: showing, resumes: resumes)
             // A staying Clawd arrives when the drawn one did; one that follows its agent takes up its look from now.
             if let firstSet {
                 if resumes { clawd.resume(motion.state, at: now) } else { clawd.set(motion.state, at: staysBot ? firstSet : now) }

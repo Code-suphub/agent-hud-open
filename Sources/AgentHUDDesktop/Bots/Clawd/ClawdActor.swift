@@ -36,6 +36,8 @@ final class ClawdActor {
     private var fadesUntil: TimeInterval?
     /// Since when the mark has rested as its logo.
     private var restingSince: TimeInterval?
+    /// The mark was out before this actor was built for it, and takes up its strength at once: nothing has changed.
+    private var resumes: Bool
     /// The logo's frames, by the sign they wear, for the size and colours they were drawn for.
     private var logos: [BotSign?: CGImage] = [:]
 
@@ -43,13 +45,16 @@ final class ClawdActor {
 
     /// - showing: whether the mark is shown in `layer` now, by the drawn bot. Otherwise what can be seen of it is its logo,
     ///   from which Clawd fades in.
+    /// - resumes: the mark was out before this actor was built for it, as a dock's are when it comes back after a card
+    ///   hid it: it shows as it was, with nothing to fade from.
     init(sheet: ClawdSheet, form: BotForm, staysBot: Bool, arrivesAfter: TimeInterval, seed: UInt64, in layer: CALayer,
-         showing: Bool) {
+         showing: Bool, resumes: Bool = false) {
         performer = ClawdPerformer(sheet: sheet, staysBot: staysBot, arrivesAfter: arrivesAfter, seed: seed)
         baker = ClawdBaker(sheet: sheet, paintSign: ClawdBaker.signs)
         self.form = form
         self.layer = layer
-        seen = showing ? nil : .logo
+        self.resumes = resumes
+        seen = showing || resumes ? nil : .logo
         for part in [back, front] {
             part.contentsGravity = .center
             part.magnificationFilter = .nearest
@@ -88,6 +93,7 @@ final class ClawdActor {
     /// - restsHidden: the mark's own logo is drawn under the layer, which hides while that is all there is to see.
     func step(to now: TimeInterval, side: CGFloat, scale: CGFloat, outline: Int, space: CGColorSpace?, restsHidden: Bool,
               aim: () -> CGPoint) -> TimeInterval? {
+        defer { resumes = false }
         performer.step(to: now, aim: aim)
         let picture = performer.picture
         let next = Seen(picture: picture, sign: picture == nil ? performer.logoSign : nil)
@@ -125,8 +131,10 @@ final class ClawdActor {
             seen = next
             stale = false
         }
-        // Shown afresh, the mark was its logo at full strength until now.
-        if layer.opacity != opacity { change(layer, opacity: opacity, from: appears ? 1 : nil, at: now) }
+        // Shown afresh, the mark was its logo at full strength until now; taken up as it was, it already had this strength.
+        if layer.opacity != opacity {
+            if resumes { layer.opacity = opacity } else { change(layer, opacity: opacity, from: appears ? 1 : nil, at: now) }
+        }
         return wait(from: now)
     }
 
