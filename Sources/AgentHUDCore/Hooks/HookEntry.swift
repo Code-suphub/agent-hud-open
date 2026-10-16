@@ -26,7 +26,12 @@ public enum HookEntry {
         case "--session-origin-hook":
             switch name {
             case "codex": try? CodexSessionOrigins.record(data: input())
-            case "claude": try? ClaudeSessionOrigins.record(data: input())
+            case "claude":
+                // Claude Code's PreCompact hook runs this command too (`CompactionHooks.arguments`); each record keeps
+                // only the events it is for.
+                let data = try? input()
+                try? data.map { try ClaudeSessionOrigins.record(data: $0) }
+                try? data.map { try CompactionHooks.record(source: .claude, data: $0) }
             default: return nil
             }
             print("{}")
@@ -40,11 +45,6 @@ public enum HookEntry {
         case "--attention-hook":
             guard let source = AttentionHooks.Source(rawValue: name) else { return nil }
             try? AttentionHooks.record(source: source, data: input())
-            print("{}")
-            return 0
-        case "--compaction-hook":
-            guard let source = CompactionHooks.Source(rawValue: name) else { return nil }
-            try? CompactionHooks.record(source: source, data: input())
             print("{}")
             return 0
         case "--permission-hook":

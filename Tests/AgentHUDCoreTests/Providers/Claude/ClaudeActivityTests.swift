@@ -276,9 +276,9 @@ final class ClaudeActivityTests: XCTestCase {
     func testOnlyAnAutomaticCompactionNewerThanTheLogCounts() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        try CompactionHooks.record(source: .claude, data: Data(#"{"session_id":"a","trigger":"auto"}"#.utf8), now: base, directory: directory)
-        try CompactionHooks.record(source: .claude, data: Data(#"{"session_id":"m","trigger":"manual"}"#.utf8), now: base, directory: directory)
-        try CompactionHooks.record(source: .claude, data: Data(#"{"trigger":"auto"}"#.utf8), now: base, directory: directory)
+        try CompactionHooks.record(source: .claude, data: Data(#"{"session_id":"a","hook_event_name":"PreCompact","trigger":"auto"}"#.utf8), now: base, directory: directory)
+        try CompactionHooks.record(source: .claude, data: Data(#"{"session_id":"m","hook_event_name":"PreCompact","trigger":"manual"}"#.utf8), now: base, directory: directory)
+        try CompactionHooks.record(source: .claude, data: Data(#"{"hook_event_name":"PreCompact","trigger":"auto"}"#.utf8), now: base, directory: directory)
         let read = CompactionHooks.read(source: .claude, now: base.addingTimeInterval(10), directory: directory)
         XCTAssertEqual(Set(read.keys), ["a", "m"], "a record without a session is dropped")
         XCTAssertEqual(CompactionHooks.since(read["a"], lastLineAt: base.addingTimeInterval(-1)), base)

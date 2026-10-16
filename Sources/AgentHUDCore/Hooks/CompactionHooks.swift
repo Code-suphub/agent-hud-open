@@ -47,7 +47,8 @@ public enum CompactionHooks {
     /// sub-agent too, with the session's id and the sub-agent's `agent_id`; that compaction ends in the sub-agent's log,
     /// which the session's record is never compared with, so it is not the session's.
     static func event(_ payload: ProviderJSON, now: Date) -> Event? {
-        guard let session = payload["session_id"].stringValue, !session.isEmpty, payload["agent_id"].stringValue == nil
+        guard payload["hook_event_name"].stringValue == "PreCompact",
+              let session = payload["session_id"].stringValue, !session.isEmpty, payload["agent_id"].stringValue == nil
         else { return nil }
         return Event(sessionID: session, at: now, trigger: payload["trigger"].stringValue)
     }
@@ -88,8 +89,15 @@ public enum CompactionHooks {
 
     // MARK: Installation
 
-    /// What follows the executable in Agent HUD's handler of the compaction hook.
-    static func arguments(_ source: Source) -> String { "--compaction-hook " + source.rawValue }
+    /// What follows the executable in Agent HUD's handler of the compaction hook: the session origin hook's own command,
+    /// which tells the events apart by name. Every build since that hook came hears a compaction there and does nothing
+    /// with it, so a hook this build installs never reaches an older copy at the same path as a flag it does not know,
+    /// which would start that copy whole.
+    static func arguments(_ source: Source) -> String {
+        switch source {
+        case .claude: ClaudeSessionOrigins.arguments
+        }
+    }
 
     static func installer(_ source: Source, home: URL) -> HookInstaller {
         HookInstaller(configuration: source.configuration(home: home), arguments: arguments(source))

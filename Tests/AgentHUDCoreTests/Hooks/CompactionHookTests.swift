@@ -36,10 +36,11 @@ final class CompactionHookTests: XCTestCase, @unchecked Sendable {
         // Only the last five minutes count, and every collection pass reads every record kept.
         let inbox = try directory()
         for hour in stride(from: 23, through: 1, by: -1) {
-            try compact(["session_id": "s\(hour)", "trigger": "auto"], at: now.addingTimeInterval(-Double(hour) * 3600), in: inbox)
+            try compact(["session_id": "s\(hour)", "hook_event_name": "PreCompact", "trigger": "auto"],
+                        at: now.addingTimeInterval(-Double(hour) * 3600), in: inbox)
         }
-        try compact(["session_id": "recent", "trigger": "auto"], at: now.addingTimeInterval(-60), in: inbox)
-        try compact(["session_id": "fresh", "trigger": "auto"], at: now, in: inbox)
+        try compact(["session_id": "recent", "hook_event_name": "PreCompact", "trigger": "auto"], at: now.addingTimeInterval(-60), in: inbox)
+        try compact(["session_id": "fresh", "hook_event_name": "PreCompact", "trigger": "auto"], at: now, in: inbox)
         XCTAssertEqual(try HookInbox(directory: inbox, source: "claude").files().count, 2)
         XCTAssertEqual(CompactionHooks.read(source: .claude, now: now, directory: inbox).keys.sorted(), ["fresh", "recent"])
     }
@@ -70,7 +71,7 @@ final class CompactionHookTests: XCTestCase, @unchecked Sendable {
         let groups = updated["hooks"]?["PreCompact"].arrayValue ?? []
         XCTAssertEqual(groups.count, 2)
         let ours = groups.first { group in
-            (group["hooks"].arrayValue ?? []).contains { $0["command"].stringValue == "'\(executable.path)' --compaction-hook claude" }
+            (group["hooks"].arrayValue ?? []).contains { $0["command"].stringValue == "'\(executable.path)' --session-origin-hook claude" }
         }
         XCTAssertEqual(ours?["matcher"].stringValue, "auto", "a /compact the user types runs while the session waits, and is not shown")
         XCTAssertEqual(ours?["hooks"].arrayValue?.first?["async"], .bool(true), "a report: the client compacts without waiting for the app")
@@ -79,7 +80,7 @@ final class CompactionHookTests: XCTestCase, @unchecked Sendable {
         let other = URL(fileURLWithPath: "/Applications/Agent HUD Open.app/Contents/MacOS/Agent HUD Open")
         try CompactionHooks.configure(.claude, enabled: true, executable: other, home: home)
         XCTAssertEqual(CompactionHooks.commands(in: try CompactionHooks.configuration(.claude, home: home), source: .claude),
-                       ["'\(other.path)' --compaction-hook claude"], "the copy that runs takes the handler over")
+                       ["'\(other.path)' --session-origin-hook claude"], "the copy that runs takes the handler over")
 
         try CompactionHooks.configure(.claude, enabled: false, executable: other, home: home)
         XCTAssertFalse(CompactionHooks.isActive(.claude, home: home))
@@ -103,7 +104,23 @@ final class CompactionHookTests: XCTestCase, @unchecked Sendable {
                        "a home without Claude Code is left alone")
     }
 
-    func testTheHookCommandIsHandled() {
-        XCTAssertNil(HookEntry.handle(arguments: ["/hud", "--compaction-hook", "nobody"]), "an unknown client starts the app")
+    func testTheHookRunsTheOriginCommandWhichEveryBuildWithItHandlesQuietly() throws {
+        // A hook names one executable path, and an older copy may sit at it. A flag that copy did not know would start it
+        // whole; the origin hook's command it knows, and it records nothing for an event that is not one of its own.
+        XCTAssertEqual(CompactionHooks.arguments(.claude), ClaudeSessionOrigins.arguments)
+        XCTAssertFalse(ClaudeSessionOrigins.events.contains(CompactionHooks.Source.claude.event))
+
+        let origins = try directory(), compactions = try directory()
+        let compaction = try JSONSerialization.data(withJSONObject: ["session_id": "s", "hook_event_name": "PreCompact", "trigger": "auto"])
+        try ClaudeSessionOrigins.record(data: compaction, target: nil, now: now, directory: origins)
+        XCTAssertEqual(ClaudeSessionOrigins.read(directory: origins), [:], "a compaction is no origin")
+        try CompactionHooks.record(source: .claude, data: compaction, now: now, directory: compactions)
+        XCTAssertEqual(CompactionHooks.read(source: .claude, now: now, directory: compactions).keys.sorted(), ["s"])
+
+        let start = try JSONSerialization.data(withJSONObject: ["session_id": "t", "hook_event_name": "SessionStart", "source": "startup"])
+        try CompactionHooks.record(source: .claude, data: start, now: now, directory: compactions)
+        XCTAssertEqual(CompactionHooks.read(source: .claude, now: now, directory: compactions).keys.sorted(), ["s"],
+                       "a session starting is no compaction")
+        XCTAssertNil(HookEntry.handle(arguments: ["/hud", "--compaction-hook", "claude"]), "no flag of its own")
     }
 }
