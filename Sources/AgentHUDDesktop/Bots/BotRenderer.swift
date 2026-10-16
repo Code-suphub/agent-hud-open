@@ -14,8 +14,11 @@ enum BotRenderer {
     /// What a frame depends on, in steps finer than the eye can tell apart. Two motions with the same look
     /// draw the same picture, so a bot that has not visibly changed is not drawn again.
     struct Look: Hashable {
-        var morph, turn, open, look, lookY, wide, happy, lean, lift, scale: Int
+        var morph, turn, open, look, lookY, wide, happy, lean, crossed, lift, scale: Int
         var limbs: BotLimbs
+        var sign: BotSign?
+        var lit: Int
+        var helper: Bool
     }
 
     static func look(of motion: BotMotion) -> Look {
@@ -23,8 +26,9 @@ enum BotRenderer {
         func step(_ value: CGFloat, _ steps: CGFloat) -> Int { Int((value * steps).rounded()) }
         return Look(morph: step(motion.morph, 60), turn: step(motion.turn, 0.5), open: step(face.open, 40),
                     look: step(face.look, 50), lookY: step(face.lookY, 50), wide: step(face.wide, 50),
-                    happy: step(face.happy, 30), lean: step(face.lean, 30),
-                    lift: step(motion.kept.lift, 300), scale: step(motion.kept.scale, 60), limbs: motion.limbs)
+                    happy: step(face.happy, 30), lean: step(face.lean, 30), crossed: step(face.crossed, 30),
+                    lift: step(motion.kept.lift, 300), scale: step(motion.kept.scale, 60), limbs: motion.limbs,
+                    sign: motion.sign, lit: motion.lit, helper: motion.helper)
     }
 
     /// The island's own dark: eyes drawn in it read as cut out of any body, on the island or over a wallpaper.
@@ -75,11 +79,23 @@ enum BotRenderer {
                 draw(form.stripped ?? form.artwork, in: box, on: context)
                 ownEyes(eyes, face: motion.face, ink: form.ink, on: context)
                 context.endTransparencyLayer()
+                context.setBlendMode(.normal)
+                if motion.helper { helper(form, strength: motion.morph, on: context) }
             }
         } else {
             body(form, motion: motion, on: context)
         }
         context.restoreGState()
+        if let sign = motion.sign {
+            // In the frame's own pixels, which run up from its bottom left, so every cell is whole.
+            let place = BotSigns.box(for: form, side: side, outline: outline)
+            let rect = CGRect(x: place.minX, y: CGFloat(extent) - place.maxY, width: place.width, height: place.height)
+            context.saveGState()
+            // A sign of the bot's own comes with it; a request's or a badge's stands on the logo too.
+            if sign == .ellipsis || sign == .z { context.setAlpha(Morph(motion.morph).dressed) }
+            BotSigns.paint(sign, lit: motion.lit, in: rect, on: context, ground: form.ground)
+            context.restoreGState()
+        }
         return context
     }
 
@@ -117,10 +133,10 @@ enum BotRenderer {
         // Everything drawn before a kept piece, or before a piece that rides with the face, moves with the morph
         // and the turn alone. A bot that does not spin draws that part once and then only what its face changes.
         let settled = spec.keeps == nil ? spec.decor.firstIndex { $0.followsFace } ?? spec.decor.count : 0
-        let still = BotStill(form: form, morph: morph.share, turn: motion.turn, on: context)
+        let still = BotStill(form: form, morph: morph.share, turn: motion.turn, helper: motion.helper, on: context)
         if !still.restore() {
             context.saveGState()
-            stillPart(form, morph: morph, turn: motion.turn, decor: settled, on: context)
+            stillPart(form, morph: morph, turn: motion.turn, decor: settled, helper: motion.helper, on: context)
             context.restoreGState()
             still.keep()
         }
@@ -152,9 +168,11 @@ enum BotRenderer {
     }
 
     /// The part of a body that only the morph and the turn change: the logo fading out, the body and its
-    /// paint, a ring, and what it wears up to the first piece that moves with its face. `decor` counts the
-    /// pieces of `spec.decor` drawn here; a body with a kept piece draws none here, as that piece comes first.
-    private static func stillPart(_ form: BotForm, morph: Morph, turn: CGFloat, decor: Int, on context: CGContext) {
+    /// paint, a ring, and what it wears up to the first piece that moves with its face; then the small copy of the body
+    /// that stands for its sub-agents, when they run. `decor` counts the pieces of `spec.decor` drawn here; a body with
+    /// a kept piece draws none here, as that piece comes first.
+    private static func stillPart(_ form: BotForm, morph: Morph, turn: CGFloat, decor: Int, helper: Bool = false,
+                                  on context: CGContext) {
         let spec = form.spec, share = morph.share, eased = morph.eased, solid = morph.solid, dressed = morph.dressed
         let center = spec.center, radius = spec.radius
         // The artwork fades into the colour field while the outline is still close to the logo's.
@@ -236,13 +254,64 @@ enum BotRenderer {
             context.restoreGState()
         }
 
-        guard spec.keeps == nil, dressed > 0 else { return }
-        wear(spec, outline: outline, strength: dressed, on: context)
-        for item in spec.decor.prefix(decor) { decorate(item, spec: spec, offset: .zero, strength: dressed, on: context) }
+        if spec.keeps == nil, dressed > 0 {
+            wear(spec, outline: outline, strength: dressed, on: context)
+            for item in spec.decor.prefix(decor) { decorate(item, spec: spec, offset: .zero, strength: dressed, on: context) }
+        }
+        if helper, dressed > 0 { self.helper(form, strength: dressed, on: context) }
     }
 
-    /// Arms and legs where the motion has put them, and the sign over the head, filled with the body's own paint. They
-    /// come with the eyes.
+    // MARK: Sub-agents
+
+    /// The copy's size, and where its centre stands from the body's, as shares of the side.
+    private static let helperScale: CGFloat = 0.4
+    private static let helperOffset = CGPoint(x: 0.42, y: 0.18)
+    /// The gap kept clear round the copy, as a share of the side, so the two bodies never run into one blob.
+    private static let helperGap: CGFloat = 0.035
+
+    /// A still copy of the finished bot at 0.4 of its size, to the lower right of the body, for sub-agents at work: its
+    /// body, paint and what it wears, its arms and legs at rest, and its eyes open and ahead. It never moves, so it is
+    /// drawn with the still part and kept with it.
+    private static func helper(_ form: BotForm, strength: CGFloat, on context: CGContext) {
+        let spec = form.spec, scale = helperScale
+        let center = CGPoint(x: spec.center.x + helperOffset.x, y: spec.center.y + helperOffset.y)
+        context.saveGState()
+        context.translateBy(x: center.x, y: center.y)
+        context.scaleBy(x: scale, y: scale)
+        context.translateBy(x: -spec.center.x, y: -spec.center.y)
+        context.setAlpha(strength)
+        if spec.ownEyes != nil {
+            // A mark that keeps its artwork is copied whole, with the gap cut by a larger copy of it.
+            context.saveGState()
+            context.translateBy(x: 0.5, y: 0.5)
+            context.scaleBy(x: 1 + helperGap * 2 / scale, y: 1 + helperGap * 2 / scale)
+            context.translateBy(x: -0.5, y: -0.5)
+            context.setBlendMode(.destinationOut)
+            draw(form.artwork, in: box, on: context)
+            context.restoreGState()
+            draw(form.artwork, in: box, on: context)
+        } else {
+            let outline = form.outline(eased: 1, turn: 0)
+            context.saveGState()
+            context.setBlendMode(.destinationOut)
+            context.setStrokeColor(.black)
+            context.setLineWidth(helperGap * 2 / scale)
+            context.setLineJoin(.round)
+            context.addPath(outline)
+            context.strokePath()
+            context.restoreGState()
+            // As one picture, so the copy's own parts do not show through each other at its strength. The still part
+            // settles the copy as the finished bot settles, and its limbs and eyes sit where that leaves them.
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            stillPart(form, morph: Morph(1), turn: 0, decor: spec.decor.count, on: context)
+            limbs(form, stance: BotLimbs(), strength: 1, on: context)
+            eyes(spec, face: BotFace(), yaw: 0, pitch: 0, awake: 1, on: context)
+            context.endTransparencyLayer()
+        }
+        context.restoreGState()
+    }
+
+    /// Arms and legs where the motion has put them, filled with the body's own paint. They come with the eyes.
     private static func limbs(_ form: BotForm, stance: BotLimbs, strength: CGFloat, on context: CGContext) {
         guard let limbs = form.spec.limbs else { return }
         let spec = form.spec, step = limbs.pixel
@@ -255,12 +324,6 @@ enum BotRenderer {
         for (index, leg) in limbs.legs.enumerated() {
             let lifted = stance.lifted == 3 || stance.lifted > 0 && index % 2 == stance.lifted - 1
             pieces.append(leg.offsetBy(dx: 0, dy: lifted ? -step / 2 : 0))
-        }
-        if stance.exclaims {
-            // An exclamation mark over the middle of the head, a step clear of it.
-            let half = step / 4
-            pieces += [CGRect(x: -half, y: -1 - 2.6 * step, width: 2 * half, height: 1.3 * step),
-                       CGRect(x: -half, y: -1 - 1.0 * step, width: 2 * half, height: 0.45 * step)]
         }
         // A path is kept in the space it was added in, so the pieces stay in body radii once the space is restored.
         context.saveGState()
@@ -422,8 +485,8 @@ enum BotRenderer {
             let height = spec.eye.height * radius * big * tall * max(0.08, face.open) * awake
             context.saveGState()
             context.translateBy(x: x, y: y)
-            if face.happy < 0.98 {
-                context.setAlpha(1 - face.happy)
+            if face.happy < 0.98, face.crossed < 0.98 {
+                context.setAlpha((1 - face.happy) * (1 - face.crossed))
                 context.setFillColor(paint)
                 context.addPath(pill(width, max(height, width * 0.16), round: spec.eye.round))
                 context.fillPath()
@@ -434,6 +497,20 @@ enum BotRenderer {
                                                    y: face.lookY * height * 0.2 - height * 0.06 - down,
                                                    width: across * 2, height: down * 2))
                 }
+            }
+            if face.crossed > 0.02 {
+                // Crossed out after a failed turn, across a square as wide as two thirds of the eye is tall, so a narrow
+                // eye still reads as a cross.
+                let reach = spec.eye.height * radius * size * 0.32 * (0.6 + 0.4 * awake)
+                context.setAlpha(face.crossed)
+                context.setStrokeColor(paint)
+                context.setLineWidth(spec.eye.width * radius * size * 0.55)
+                context.setLineCap(.round)
+                context.move(to: CGPoint(x: -reach, y: -reach))
+                context.addLine(to: CGPoint(x: reach, y: reach))
+                context.move(to: CGPoint(x: -reach, y: reach))
+                context.addLine(to: CGPoint(x: reach, y: -reach))
+                context.strokePath()
             }
             if face.happy > 0.02 {
                 let stroke = min(spec.eye.width * radius * 0.58 * size, apart * 0.2)

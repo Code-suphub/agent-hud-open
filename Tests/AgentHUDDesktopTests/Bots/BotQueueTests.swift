@@ -157,7 +157,7 @@ final class BotQueueTests: XCTestCase {
         // Work starting meanwhile is shown from the next frame, however long the mark meant to wait.
         view.apply(config: queue([("Claude", true), ("Cursor", false)]), light: false, scale: 2, animates: true)
         let working = try XCTUnwrap(view.stepBots(to: start + 6))
-        XCTAssertEqual(working, BotPace.lively, accuracy: 0.0001)
+        XCTAssertLessThanOrEqual(working, BotPace.lively + 0.0001, "no later than the next frame")
     }
 
     func testAWorkingBotThatOnlyBreathesIsSteppedAFewTimesASecond() throws {
@@ -166,9 +166,12 @@ final class BotQueueTests: XCTestCase {
         view.apply(config: queue([("Cursor", true)]), light: false, scale: 2, animates: true)
         let start = CACurrentMediaTime()
         var waits: [TimeInterval] = [], now = start
-        // Thirty seconds of a turn, stepped exactly when the queue asks.
+        // Thirty seconds of a turn, stepped exactly when the queue asks, from the first frame on the shared clock.
+        now += try XCTUnwrap(view.stepBots(to: now))
         while now < start + 30 {
             let wait = try XCTUnwrap(view.stepBots(to: now))
+            XCTAssertEqual((now + wait) / BotPace.lively, ((now + wait) / BotPace.lively).rounded(), accuracy: 0.001,
+                           "every frame falls on the shared clock's")
             waits.append(wait)
             now += wait
         }
@@ -239,7 +242,7 @@ final class BotMarkTests: XCTestCase {
 
     private func hosted<V: View>(_ view: V) -> (NSHostingView<V>, NSWindow) {
         let frame = CGRect(x: 0, y: 0, width: 60, height: 60)
-        let window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: true)
+        let window = SeenWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: true)
         window.isReleasedWhenClosed = false
         let host = NSHostingView(rootView: view)
         host.frame = frame
@@ -272,4 +275,13 @@ final class BotMarkTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         XCTAssertNil(stage(in: host))
     }
+}
+
+/// A window the clock takes for one on screen and uncovered, without putting one on the desktop: the display server may
+/// call any test's window covered.
+@MainActor
+final class SeenWindow: NSWindow {
+    var seen = true
+    override var isVisible: Bool { seen }
+    override var occlusionState: NSWindow.OcclusionState { seen ? [.visible] : [] }
 }
