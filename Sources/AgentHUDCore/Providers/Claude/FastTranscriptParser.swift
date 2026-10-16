@@ -172,7 +172,7 @@ public enum FastTranscriptParser {
         }
         let tailStart = max(0, line.count - tailLength)
         let tail = UnsafeRawBufferPointer(rebasing: line[tailStart...])
-        if role == .assistant, find(apiErrorMarker, in: tail, backwards: true) != nil {
+        if role == .assistant, find(apiErrorMarker, in: tail) != nil {
             apiError = find(errorKey, in: tail, backwards: true).flatMap { string(from: tailStart + $0 + errorKey.count, in: line) }
             if let limits = find(quotaLimitsKey, in: line, backwards: true) {
                 let rest = UnsafeRawBufferPointer(rebasing: line[limits...])

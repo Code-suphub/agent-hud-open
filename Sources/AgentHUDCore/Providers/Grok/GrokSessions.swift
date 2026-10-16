@@ -120,7 +120,7 @@ enum GrokSessions: LocalSessionLayout {
             if let turnID { session.turns.removeAll { $0.turnID == turnID } }
             session.turns.removeAll { $0.turnID == completedID }
             let succeeded = update["stop_reason"].stringValue == "end_turn"
-            // A cancelled turn is the user's stop; any other reason not to end the turn ends it without one.
+            // A cancelled turn is the user's stop; one that stopped for any other reason ends without one.
             session.turns.append(.init(provider: "Grok", sessionID: id, turnID: completedID, state: succeeded ? .completed : .ended,
                 startedAtMs: turnStart.map(RecordCoding.milliseconds), observedAtMs: RecordCoding.milliseconds(date),
                 outcome: succeeded ? .completed : update["stop_reason"].stringValue == "cancelled" ? .interrupted : nil))
