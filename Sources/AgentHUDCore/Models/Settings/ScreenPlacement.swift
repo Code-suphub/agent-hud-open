@@ -53,7 +53,8 @@ public enum HUDMaterial: String, Codable, Sendable, CaseIterable {
 /// windows on that screen: macOS 26's Liquid Glass in its clear or its regular variant, or the frosted blur of a SwiftUI
 /// regular material. Clear glass shows the most of the desktop; regular glass more of its own frost, and it is lighter
 /// or darker as the piece it is drawn in is small or large, so the HUD, whose pieces sit side by side, draws Regular as
-/// clear glass too, and only a window, one piece, the regular glass; the material blurs evenly, without glass's lit rim.
+/// clear glass too, and only a piece on its own, a window or the menu-bar menu, the regular glass; the material blurs
+/// evenly, without glass's lit rim.
 public enum HUDGlassStyle: String, Codable, Sendable, CaseIterable {
     case clear
     case regular
