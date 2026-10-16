@@ -98,10 +98,35 @@ final class ClawdPerformerTests: XCTestCase {
         performer.set(BotState(look: .permission), at: 12)
         performer.step(to: 12) { .zero }
         XCTAssertEqual(performer.picture?.frame, clips.clip(for: .permission).intro.first)
-        var below = self.performer()
-        below.set(BotState(look: .question, facing: .down), at: 10)
-        below.step(to: 10) { .zero }
-        XCTAssertEqual(below.picture?.mirrored, false)
+        var right = self.performer()
+        right.set(BotState(look: .question, facing: .right), at: 10)
+        right.step(to: 10) { .zero }
+        XCTAssertEqual(right.picture, ClawdPicture(frame: sheet.canonical(clips.pointsAtCard)), "toward a card on its right")
+    }
+
+    /// Pointing would aim past a card above or below the mark, on a top or bottom dock: there Clawd stands still with
+    /// the sign its wait wears.
+    func testAWaitByACardAboveOrBelowItStandsStillWithItsSign() throws {
+        let waits: [(BotFacing, BotLook, ClawdSign?)] = [(.down, .question, .question), (.up, .permission, .permission),
+                                                          (.up, .plan, nil)]
+        for (facing, look, sign) in waits {
+            var standing = performer()
+            standing.set(BotState(look: look, facing: facing), at: 10)
+            standing.step(to: 10) { .zero }
+            XCTAssertEqual(standing.picture, ClawdPicture(frame: sheet.canonical(.standing), sign: sign), "\(look) \(facing)")
+            XCTAssertNil(standing.due, "\(look): held, with no clock")
+            // The card goes: the wait plays its own clip.
+            standing.set(BotState(look: look), at: 12)
+            standing.step(to: 12) { .zero }
+            let clip = try XCTUnwrap(ClawdPerformer.look(for: BotState(look: look)).map(clips.clip(for:)))
+            XCTAssertEqual(standing.picture?.frame, clip.intro.first, "\(look)")
+        }
+        // Another wait by the same card wears its own sign.
+        var asking = performer()
+        asking.set(BotState(look: .permission, facing: .down), at: 10)
+        asking.set(BotState(look: .question, facing: .down), at: 11)
+        asking.step(to: 11) { .zero }
+        XCTAssertEqual(asking.picture?.sign, .question)
     }
 
     func testSubAgentsAndABadgeComeWithTheLook() {

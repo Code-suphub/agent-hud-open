@@ -79,6 +79,20 @@ final class ClawdActorTests: XCTestCase {
         }
     }
 
+    /// By a card above or below it, on a top or bottom dock, Clawd stands still with its wait's sign, baked from the
+    /// sprites as any frame is.
+    func testClawdByACardAboveOrBelowItStandsWithItsWaitsSign() throws {
+        let actor = try actor()
+        actor.set(BotState(look: .question, facing: .down), at: 10)
+        run(actor, from: 10, until: 12)
+        let clawd = try XCTUnwrap(actor.clawd)
+        XCTAssertEqual(clawd.performer.picture, ClawdPicture(frame: sheet.canonical(.standing), sign: .question))
+        let front = try XCTUnwrap(clawd.front.contents as! CGImage?)
+        XCTAssertTrue(front === baked(clawd), "the baked frame, as it is")
+        let bare = clawd.baker.image(ClawdPicture(frame: sheet.canonical(.standing)), side: 20, scale: 2, outline: 1, ground: .dark)
+        XCTAssertNotEqual(bytes(front), bytes(bare), "the sign is drawn over it")
+    }
+
     /// A dock built again after a card hid it: Clawd is out from the first frame, at its look's loop, with no fade.
     func testAnAwakeActorShowsClawdsLoopAtOnce() throws {
         let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))

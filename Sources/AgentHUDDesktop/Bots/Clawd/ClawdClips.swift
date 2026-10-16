@@ -13,7 +13,8 @@ struct ClawdClips: Sendable {
     /// Frames of LookingAroundEyesOnly looking toward each 45° sector, counter-clockwise from the right.
     var gaze: [Int]
     var cards: [ClawdCard: ClawdShot]
-    /// Held still on a dock that separates its agents while this agent's card is up, turned toward the card.
+    /// Held still on a dock that separates its agents while this agent's card is up beside it, turned toward the card.
+    /// By a card above or below, Clawd stands instead.
     var pointsAtCard: ClawdFrame
     /// Where a sprite's sign sits, in sprite pixels from where every sign sits, for a sprite whose art is in the way.
     var signShifts: [ClawdSpriteName: ClawdOffset]

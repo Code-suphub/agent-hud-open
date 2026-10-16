@@ -132,10 +132,14 @@ struct ClawdPerformer: Sendable {
         letGoOfStaleEvent(at: now)
         if state.look == .done {
             if before?.look != .done || before?.card != state.card { player.card(ClawdCard(state.card), at: now) }
-        } else if state.look.isAttention, let facing = state.facing {
-            // Its card says what it waits for: Clawd points at it, held still, and the next look asked for ends it.
+        } else if state.look.isAttention, let facing = state.facing, let look = Self.look(for: state) {
+            // Its card says what it waits for: Clawd turns to it, held still, and the next look asked for ends it. It
+            // points at a card beside it; pointing would aim past one above or below, so there it stands with its sign.
             if before?.facing != facing || before?.look != state.look {
-                player.pointAtCard(mirrored: facing == .left, at: now)
+                switch facing {
+                case .left, .right: player.pointAtCard(mirrored: facing == .left, at: now)
+                case .up, .down: player.standAtCard(for: look, at: now)
+                }
             }
         } else {
             player.show(Self.look(for: state), subagents: state.subagents, at: now)

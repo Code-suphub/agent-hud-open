@@ -190,6 +190,12 @@ final class BotStateTests: XCTestCase {
         drive(&clawd, from: 0, for: 5)
         XCTAssertEqual(clawd.limbs, BotLimbs(left: 2), "the drawn Clawd holds up the hand on the card's side")
         XCTAssertNil(clawd.wait)
+        var below = bot()
+        below.limbed = true
+        below.set(BotState(look: .permission, facing: .down), at: 0)
+        drive(&below, from: 0, for: 5)
+        XCTAssertEqual(below.limbs, BotLimbs(), "and none for a card below it, which a hand would point past")
+        XCTAssertEqual(below.sign, .exclamation)
         XCTAssertEqual(BotFacing(cardFrom: .top), .down)
         XCTAssertEqual(BotFacing(cardFrom: .right), .left)
     }

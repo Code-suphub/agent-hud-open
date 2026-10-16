@@ -151,7 +151,8 @@ struct BotState: Hashable, Sendable {
     /// The news a `.done` look stands for.
     var card = BotCard.done
     /// The card a waiting request asks from stands beside the mark, this way. The bot stays raised and still with its
-    /// eyes on the card, which says the rest, and Clawd points at it. Only a waiting request's look turns to it.
+    /// eyes on the card, which says the rest; Clawd points at a card to its side and stands by one above or below it.
+    /// Only a waiting request's look turns to it.
     var facing: BotFacing? = nil
 
     /// The phase that tells the same story, for callers that still speak in phases.

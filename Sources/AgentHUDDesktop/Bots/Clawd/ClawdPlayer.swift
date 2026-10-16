@@ -82,12 +82,12 @@ struct ClawdPlayer: Sendable {
     mutating func show(_ look: ClawdLook?, subagents: Bool = false, at time: TimeInterval) {
         let now = step(to: time)
         self.subagents = subagents
-        let pointing = if case .pointing = activity { true } else { false }
-        guard look != target || pointing else { return settle() }
+        let atCard = if case .atCard = activity { true } else { false }
+        guard look != target || atCard else { return settle() }
         target = look
         switch activity {
-        case .resting, .visit, .greeting, .gazing, .card, .pointing:
-            guard let look else { if pointing { rest(at: now) }; break }
+        case .resting, .visit, .greeting, .gazing, .card, .atCard:
+            guard let look else { if atCard { rest(at: now) }; break }
             cameInAt = now
             enter(look, from: nil, at: now)
         case .entering(let shown), .looping(let shown):
@@ -129,7 +129,7 @@ struct ClawdPlayer: Sendable {
     mutating func play(_ event: ClawdEvent, at time: TimeInterval) {
         let now = step(to: time)
         switch activity {
-        case .resting, .visit, .greeting, .gazing, .card, .pointing:
+        case .resting, .visit, .greeting, .gazing, .card, .atCard:
             playShot(event, resume: nil, at: now)
         case .entering(let shown) where cameInAt == now && !shown.look.isAttention:
             // Asked for together with the look it starts: the event plays, then the look comes in.
@@ -201,13 +201,16 @@ struct ClawdPlayer: Sendable {
         settle()
     }
 
-    /// Holds Clawd still pointing at its agent's card, facing left when the card is to its left. The next look asked
-    /// for ends it.
+    /// Holds Clawd still pointing at its agent's card beside it, facing left when the card is to its left. The next look
+    /// asked for ends it.
     mutating func pointAtCard(mirrored: Bool, at time: TimeInterval) {
-        let now = step(to: time)
-        activity = .pointing
-        begin([Step(frame: clips.pointsAtCard, ticks: .max, holds: true, mirrored: mirrored)], at: now)
-        settle()
+        holdAtCard(Step(frame: clips.pointsAtCard, ticks: .max, holds: true, mirrored: mirrored), at: time)
+    }
+
+    /// Holds Clawd standing still by its agent's card above or below it, which pointing would aim past, wearing the sign
+    /// of `look`'s clip: a request's, or none for a plan, whose bulb is its sign. The next look asked for ends it.
+    mutating func standAtCard(for look: ClawdLook, at time: TimeInterval) {
+        holdAtCard(Step(frame: .standing, ticks: .max, sign: clips.clip(for: look).sign, holds: true), at: time)
     }
 
     /// The badge every picture carries, unless it carries a sign that comes before it.
@@ -250,7 +253,7 @@ struct ClawdPlayer: Sendable {
 
     private var switchTick: Int64 {
         switch activity {
-        case .resting, .visit, .greeting, .gazing, .card, .pointing: return now
+        case .resting, .visit, .greeting, .gazing, .card, .atCard: return now
         case .looping(let shown):
             if script[0].holds || shown.clip.exit == .anyFrame || picture?.frame == (sheet?.canonical(.standing) ?? .standing) {
                 return now + 1
@@ -274,7 +277,9 @@ struct ClawdPlayer: Sendable {
         case looping(Shown)
         case leaving(Shown)
         case event(ClawdEvent, resume: Shown?)
-        case visit, greeting, gazing, card, pointing
+        case visit, greeting, gazing, card
+        /// Held still at its agent's card, pointing or standing.
+        case atCard
     }
 
     /// A look on screen, and the clip it plays.
@@ -392,7 +397,7 @@ struct ClawdPlayer: Sendable {
             if hovered { gaze(at: tick) } else { rest(at: tick) }
         case .visit, .card:
             if let target { enter(target, from: nil, at: tick) } else { rest(at: tick) }
-        case .resting, .gazing, .pointing:
+        case .resting, .gazing, .atCard:
             rest(at: tick)
         }
     }
@@ -410,6 +415,13 @@ struct ClawdPlayer: Sendable {
     private mutating func rest(at tick: Int64) {
         activity = .resting
         begin([Self.restStep(rest)], at: tick)
+    }
+
+    private mutating func holdAtCard(_ held: Step, at time: TimeInterval) {
+        let now = step(to: time)
+        activity = .atCard
+        begin([held], at: now)
+        settle()
     }
 
     private mutating func gaze(at tick: Int64) {
