@@ -107,6 +107,12 @@ public struct SessionActivity: Hashable, Codable, Sendable {
         latest = nil
     }
 
+    /// The turn is over: none of its calls waits for a result any more.
+    public mutating func endTurn() {
+        calls = []
+        latest = nil
+    }
+
     /// A call made at `at`.
     public mutating func open(_ id: String, work: Work?, at: Date) {
         calls.removeAll { $0.id == id }
