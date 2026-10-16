@@ -268,7 +268,7 @@ final class BotFrameTests: XCTestCase {
 
     /// Not a benchmark unless asked for: `AGENT_HUD_BENCH_BOTS=1 swift test --filter BotFrameTests`, in a debug or
     /// a release build. A typical Dynamic-mode queue on two displays, timed in thread CPU time: a minute of its
-    /// drawing alone, then two minutes of the clock ticking 30 times a second as `BotClock` runs it.
+    /// drawing alone, then two minutes of the clock ticking every lively frame, as `BotClock` would at its busiest.
     func testFrameCost() throws {
         guard ProcessInfo.processInfo.environment["AGENT_HUD_BENCH_BOTS"] == "1" else {
             throw XCTSkip("Set AGENT_HUD_BENCH_BOTS=1 to time a bot's frames")
@@ -323,7 +323,7 @@ final class BotFrameTests: XCTestCase {
             ticks += 1
             now += BotPace.lively
         }
-        print(String(format: "bot clock: %.1f µs a tick, %.2f ms a second at 30 ticks a second",
-                     busy / Double(ticks) * 1e6, busy / now * 1000))
+        print(String(format: "bot clock: %.1f µs a tick, %.2f ms a second at %.0f ticks a second",
+                     busy / Double(ticks) * 1e6, busy / now * 1000, 1 / BotPace.lively))
     }
 }

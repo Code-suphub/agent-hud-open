@@ -131,7 +131,8 @@ struct BotMotion: Sendable {
     private var nextAct: TimeInterval = 0
     private var blinks: [TimeInterval] = [-1, -1]
     private var nextBlink: TimeInterval = 2
-    /// The eyes are still on their way to where they should look, or a lid is still moving; the look blinks at all.
+    /// The eyes are still on their way to where they should look, or a lid is still moving; and whether the look
+    /// blinks at all.
     private var following = false, blinking = false, blinksOn = true
     /// The next brief bot visit while idle or asleep, between longer stretches as the original logo.
     private var botInterval: Range<TimeInterval>?
