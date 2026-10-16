@@ -55,6 +55,8 @@ enum BotMoves {
 
     /// Seconds a wait is acted out in full; after them a bot is still between its moves.
     static let fullWait: TimeInterval = 8
+    /// Seconds into a wait its first move comes, once the hop and the raise are over: where its loop begins.
+    static let firstMove: TimeInterval = 1.2
 
     /// One of a waiting request's moves: which one it is, when the latest began, and when the next one begins, in seconds
     /// from the start of the look.
@@ -67,7 +69,7 @@ enum BotMoves {
     /// The moves of a waiting request: the first once the hop is over, then one every 2.6 s; once the request has
     /// waited two minutes, one every 8 s.
     static func move(at age: TimeInterval) -> Move {
-        let first = 1.2, often = 2.6, rarely = 8.0
+        let first = firstMove, often = 2.6, rarely = 8.0
         guard age >= first else { return Move(index: -1, start: nil, next: first) }
         // The moves that start before two minutes come often, the rest rarely.
         let frequent = Int(((120 - first) / often).rounded(.up)), late = first + Double(frequent) * often

@@ -167,6 +167,51 @@ final class BotStateTests: XCTestCase {
         }
     }
 
+    /// On a dock that keeps its marks beside the card, a waiting bot whose card is up hops and rises as ever, then keeps
+    /// still with its eyes on the card, and its clock stops.
+    func testAWaitingBotTurnedToItsCardStaysRaisedAndStillWithEyesOnIt() {
+        for (facing, look) in [(BotFacing.left, BotLook.permission), (.down, .question), (.right, .plan)] {
+            var motion = bot("Grok Bot")
+            motion.set(BotState(look: look, facing: facing), at: 0)
+            let frames = drive(&motion, from: 0, for: 30)
+            XCTAssertNil(motion.wait, "\(look): at rest once raised")
+            XCTAssertLessThan(frames.last?.now ?? 30, 2)
+            XCTAssertTrue(frames.filter { $0.now > 0.5 }.allSatisfy { $0.motion.pose.rotation == 0 }, "\(look): no knock or tilt")
+            XCTAssertGreaterThan(motion.pose.scaleX, 1.05, "\(look): raised")
+            XCTAssertEqual(motion.face.look, facing.aim.x, accuracy: 0.02)
+            XCTAssertEqual(motion.face.lookY, facing.aim.y, accuracy: 0.02)
+            // The card goes and the moves come back.
+            motion.set(BotState(look: look), at: 40)
+            XCTAssertNotNil(drive(&motion, from: 40, for: 5).last?.motion.wait)
+        }
+        var clawd = bot()
+        clawd.limbed = true
+        clawd.set(BotState(look: .permission, facing: .left), at: 0)
+        drive(&clawd, from: 0, for: 5)
+        XCTAssertEqual(clawd.limbs, BotLimbs(left: 2), "the drawn Clawd holds up the hand on the card's side")
+        XCTAssertNil(clawd.wait)
+        XCTAssertEqual(BotFacing(cardFrom: .top), .down)
+        XCTAssertEqual(BotFacing(cardFrom: .right), .left)
+    }
+
+    /// A bot built again where it was showing takes up its look at once: no morph from the logo, no hop, no blend.
+    func testAResumedBotTakesUpItsLookWithNoMorphOrIntro() {
+        for look in [BotLook.tool(.command), .thinking, .permission] {
+            var motion = bot("Grok Bot")
+            motion.set(BotState(look: look), at: 100)
+            motion.resume(at: 100)
+            motion.step(to: 100)
+            XCTAssertEqual(motion.morph, 1, "\(look)")
+            XCTAssertEqual(motion.pose.y, 0, accuracy: 0.0001, "\(look): no hop")
+            if look.isAttention { XCTAssertEqual(motion.pose.scaleX, 1.12, accuracy: 0.01, "raised already") }
+        }
+        var idle = bot()
+        idle.set(BotState(look: .idle), at: 100)
+        idle.resume(at: 100)
+        idle.step(to: 100)
+        XCTAssertEqual(idle.morph, 0, "a resting mark is its logo")
+    }
+
     // MARK: Working
 
     func testThinkingLooksUpAndAsideTiltsAndLightsItsDots() {

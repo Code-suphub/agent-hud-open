@@ -79,6 +79,24 @@ final class ClawdActorTests: XCTestCase {
         }
     }
 
+    /// A dock built again after a card hid it: Clawd is out from the first frame, at its look's loop, with no fade.
+    func testAnAwakeActorShowsClawdsLoopAtOnce() throws {
+        let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))
+        let actor = BotActor(form: form, staysBot: false, period: 3, seed: 5, sprites: ClawdSprites(sheet: sheet), awake: true)
+        actor.resize(side: 20, scale: 2, outline: 1)
+        let host = CALayer()
+        host.addSublayer(actor.layer)
+        hosts.append(host)
+        actor.set(BotState(look: .tool(.edit)), at: 10)
+        _ = step(actor, 10)
+        let clawd = try XCTUnwrap(actor.clawd)
+        XCTAssertEqual(clawd.performer.picture?.frame, ClawdClips.standard.clip(for: .edit).loopFrames.first)
+        XCTAssertFalse(actor.layer.isHidden)
+        XCTAssertTrue(clawd.back.isHidden, "nothing to fade from")
+        XCTAssertNil(clawd.front.animationKeys())
+        XCTAssertNil(actor.layer.animationKeys())
+    }
+
     func testWithoutSpritesOrBelowTheirSizeClawdIsDrawn() throws {
         for actor in [try actor(ClawdSprites()), try actor(side: 12)] {
             actor.set(BotState(look: .tool(.edit)), at: 10)

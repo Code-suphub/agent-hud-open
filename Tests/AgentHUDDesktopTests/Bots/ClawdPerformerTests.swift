@@ -70,6 +70,40 @@ final class ClawdPerformerTests: XCTestCase {
         }
     }
 
+    func testAResumedLookStartsAtItsLoopWithNoIntro() {
+        for state in [BotState(look: .tool(.edit)), BotState(look: .thinking), BotState(look: .question)] {
+            var performer = performer()
+            performer.resume(state, at: 10)
+            performer.step(to: 10) { .zero }
+            let look = ClawdPerformer.look(for: state)!
+            XCTAssertEqual(performer.picture?.frame, clips.clip(for: look).loopFrames.first, "\(state.look)")
+        }
+        var resting = performer()
+        resting.resume(BotState(look: .idle), at: 10)
+        resting.step(to: 10) { .zero }
+        XCTAssertNil(resting.picture)
+    }
+
+    func testAWaitWhoseCardIsUpPointsAtItHeldStill() {
+        var performer = performer()
+        performer.set(BotState(look: .permission, facing: .left), at: 10)
+        performer.step(to: 10) { .zero }
+        XCTAssertEqual(performer.picture?.frame, sheet.canonical(clips.pointsAtCard))
+        XCTAssertEqual(performer.picture?.mirrored, true, "toward a card on its left")
+        XCTAssertNil(performer.due, "held, with no clock")
+        performer.set(BotState(look: .permission, badge: .failed, facing: .left), at: 11)
+        performer.step(to: 11) { .zero }
+        XCTAssertEqual(performer.picture?.frame, sheet.canonical(clips.pointsAtCard), "still pointing")
+        // The card goes: the wait plays its own clip.
+        performer.set(BotState(look: .permission), at: 12)
+        performer.step(to: 12) { .zero }
+        XCTAssertEqual(performer.picture?.frame, clips.clip(for: .permission).intro.first)
+        var below = self.performer()
+        below.set(BotState(look: .question, facing: .down), at: 10)
+        below.step(to: 10) { .zero }
+        XCTAssertEqual(below.picture?.mirrored, false)
+    }
+
     func testSubAgentsAndABadgeComeWithTheLook() {
         var performer = performer()
         performer.set(BotState(look: .thinking, subagents: true, badge: .failed), at: 10)

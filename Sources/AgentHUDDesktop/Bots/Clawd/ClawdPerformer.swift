@@ -67,6 +67,14 @@ struct ClawdPerformer: Sendable {
         apply(from: before, at: now)
     }
 
+    /// Takes up `next` as a Clawd already showing it would be: a mark built again while Clawd was out, as a dock is when
+    /// it comes back after a card hid it, starts its look's loop with no intro. Anything else is told as `set` tells it.
+    mutating func resume(_ next: BotState, at now: TimeInterval) {
+        set(next, at: now)
+        guard onStage, next.facing == nil || !next.look.isAttention, let look = Self.look(for: next) else { return }
+        player.resume(look, subagents: next.subagents, at: now)
+    }
+
     /// Plays `event` once the look allows, unless it has waited too long by then. The newest event wins, but never over
     /// one waiting that outranks it.
     mutating func play(_ event: BotEvent, at now: TimeInterval) {
@@ -124,6 +132,11 @@ struct ClawdPerformer: Sendable {
         letGoOfStaleEvent(at: now)
         if state.look == .done {
             if before?.look != .done || before?.card != state.card { player.card(ClawdCard(state.card), at: now) }
+        } else if state.look.isAttention, let facing = state.facing {
+            // Its card says what it waits for: Clawd points at it, held still, and the next look asked for ends it.
+            if before?.facing != facing || before?.look != state.look {
+                player.pointAtCard(mirrored: facing == .left, at: now)
+            }
         } else {
             player.show(Self.look(for: state), subagents: state.subagents, at: now)
         }

@@ -24,8 +24,12 @@ final class BotActor {
     /// Claude's mark played from Clawd's sprites; nil while it is drawn.
     private(set) var clawd: ClawdActor?
     private let staysBot: Bool, arrivesAfter: TimeInterval, seed: UInt64
+    /// The bot was out before this actor was built for it: its first look starts where its loop begins (`resume`).
+    private let awake: Bool
     /// When the bot was first given a state: a staying Clawd that takes over later arrives when the drawn one did.
     private var firstSet: TimeInterval?
+    /// The actor has shown a frame.
+    private var stepped = false
     private var shown: BotRenderer.Look?
     private var placed: CGAffineTransform?
     private var faded: CGFloat = 1
@@ -44,12 +48,15 @@ final class BotActor {
     /// - arrivesAfter: seconds a staying bot keeps its logo before it turns into the bot.
     /// - seed: the bot's random acts, fixed only to replay them in a test.
     /// - sprites: where Claude's mark finds Clawd's sprites.
+    /// - awake: the bot was already out where this one is built, as a dock's are when it comes back after a card hid it.
+    ///   Its first look is taken up at its loop's start, with no morph from the logo and no intro.
     init(form: BotForm, staysBot: Bool, period: TimeInterval, arrivesAfter: TimeInterval = 0,
-         seed: UInt64 = UInt64.random(in: 0...UInt64.max), sprites: ClawdSprites = .shared) {
+         seed: UInt64 = UInt64.random(in: 0...UInt64.max), sprites: ClawdSprites = .shared, awake: Bool = false) {
         self.form = form
         self.staysBot = staysBot
         self.arrivesAfter = arrivesAfter
         self.seed = seed
+        self.awake = awake
         self.sprites = form.isClawd ? sprites : nil
         self.sprites?.want()
         motion = BotMotion(seed: seed)
@@ -101,9 +108,11 @@ final class BotActor {
 
     /// A state is acted out from the next frame, however long the bot meant to wait.
     func set(_ state: BotState, at now: TimeInterval) {
-        if firstSet == nil { firstSet = now }
+        let first = firstSet == nil
+        if first { firstSet = now }
         motion.set(state, at: now)
-        clawd?.set(state, at: now)
+        if first, awake { motion.resume(at: now) }
+        if first, awake { clawd?.resume(state, at: now) } else { clawd?.set(state, at: now) }
         due = 0
     }
 
@@ -128,6 +137,7 @@ final class BotActor {
             let wait = clawd.step(to: now, side: side, scale: scale, outline: outline, space: space, restsHidden: restsHidden,
                                   aim: aim)
             self.due = wait.map { now + $0 }
+            stepped = true
             return wait
         }
         motion.step(to: now, aim: motion.morph > 0 || motion.staysBot ? aim() : .zero)
@@ -153,6 +163,7 @@ final class BotActor {
             placed = transform
             layer.setAffineTransform(transform)
         }
+        stepped = true
         return wait
     }
 
@@ -164,13 +175,17 @@ final class BotActor {
         let sheet = side > 0 && ClawdBaker.drawsSprites(side: side, scale: scale) ? sprites.sheet : nil
         guard sheet !== clawd?.sheet else { return }
         let showing = !layer.isHidden && (layer.contents != nil || clawd != nil)
-        if showing { IslandAnimation.fadeLook(of: layer, duration: ClawdActor.fade) }
+        // A bot built awake that has shown nothing yet is Clawd from its first frame: nothing to fade from.
+        let resumes = awake && !stepped
+        if showing, !resumes { IslandAnimation.fadeLook(of: layer, duration: ClawdActor.fade) }
         clawd?.remove()
         clawd = sheet.map { sheet in
             let clawd = ClawdActor(sheet: sheet, form: form, staysBot: staysBot, arrivesAfter: arrivesAfter, seed: seed,
-                                   in: layer, showing: showing)
+                                   in: layer, showing: showing || resumes)
             // A staying Clawd arrives when the drawn one did; one that follows its agent takes up its look from now.
-            if let firstSet { clawd.set(motion.state, at: staysBot ? firstSet : now) }
+            if let firstSet {
+                if resumes { clawd.resume(motion.state, at: now) } else { clawd.set(motion.state, at: staysBot ? firstSet : now) }
+            }
             return clawd
         }
         if clawd != nil {
@@ -356,40 +371,58 @@ struct BotMark: View {
     /// The newest event, played once if it is still fresh when the mark is told of it.
     var cue: BotCue? = nil
     var staysBot = true
+    /// The mark was showing its bot before this view was made, as a dock's are when it comes back after a card hid it.
+    var resumes = false
     @Environment(\.botLogos) private var botLogos
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.hudLook) private var look
-    @Environment(\.displayScale) private var displayScale
 
     init(vendor: String, size: CGFloat = 17, phase: BotPhase, staysBot: Bool = true) {
         self.init(vendor: vendor, size: size, state: phase.state, staysBot: staysBot)
     }
 
-    init(vendor: String, size: CGFloat = 17, state: BotState, cue: BotCue? = nil, staysBot: Bool = true) {
+    init(vendor: String, size: CGFloat = 17, state: BotState, cue: BotCue? = nil, staysBot: Bool = true,
+         resumes: Bool = false) {
         self.vendor = vendor
         self.size = size
         self.state = state
         self.cue = cue
         self.staysBot = staysBot
+        self.resumes = resumes
     }
 
     var body: some View {
-        let form = BotForm.form(for: vendor, ground: look.appearance)
-        if botLogos, !reduceMotion, form != nil {
-            BotStage(vendor: vendor, size: size, state: state, cue: cue, staysBot: staysBot, ground: look.appearance)
+        if botLogos, !reduceMotion, BotForm.form(for: vendor, ground: look.appearance) != nil {
+            BotStage(vendor: vendor, size: size, state: state, cue: cue, staysBot: staysBot, resumes: resumes,
+                     ground: look.appearance)
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
         } else {
-            AgentLogo(vendor: vendor, size: size)
-                .overlay(alignment: .topLeading) {
-                    if let sign = state.stillSign,
-                       let still = BotSigns.still(sign, form: form, side: size, scale: displayScale, ground: look.appearance) {
-                        Image(decorative: still.image, scale: max(1, displayScale))
-                            .offset(x: still.frame.minX, y: still.frame.minY)
-                            .accessibilityHidden(true)
-                    }
-                }
+            StillMark(vendor: vendor, size: size, sign: state.stillSign)
         }
+    }
+}
+
+/// An agent's logo, still, wearing a sign over it that never moves: a waiting request's or a badge's, where its bot
+/// would carry it, with bots off or motion reduced, or on a card that shows the logo.
+struct StillMark: View {
+    let vendor: String
+    var size: CGFloat = 17
+    let sign: BotSign?
+    @Environment(\.hudLook) private var look
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
+        AgentLogo(vendor: vendor, size: size)
+            .overlay(alignment: .topLeading) {
+                if let sign,
+                   let still = BotSigns.still(sign, form: BotForm.form(for: vendor, ground: look.appearance), side: size,
+                                              scale: displayScale, ground: look.appearance) {
+                    Image(decorative: still.image, scale: max(1, displayScale))
+                        .offset(x: still.frame.minX, y: still.frame.minY)
+                        .accessibilityHidden(true)
+                }
+            }
     }
 }
 
@@ -399,6 +432,7 @@ private struct BotStage: NSViewRepresentable {
     let state: BotState
     let cue: BotCue?
     let staysBot: Bool
+    let resumes: Bool
     let ground: HUDLook.Appearance
     @Environment(\.displayScale) private var displayScale
 
@@ -406,7 +440,7 @@ private struct BotStage: NSViewRepresentable {
 
     func updateNSView(_ view: BotStageView, context: Context) {
         view.show(vendor: vendor, size: size, scale: displayScale, state: state, cue: cue, staysBot: staysBot,
-                  ground: ground)
+                  resumes: resumes, ground: ground)
     }
 
     static func dismantleNSView(_ view: BotStageView, coordinator: ()) { BotClock.shared.drop(view) }
@@ -437,9 +471,13 @@ final class BotStageView: NSView {
         show(vendor: vendor, size: size, scale: scale, state: phase.state, staysBot: staysBot, ground: ground)
     }
 
+    /// - resumes: the mark was showing its bot before this stage was built, as a dock's are when it comes back after a
+    ///   card hid it: a new bot takes up its look at once, with no morph and no intro.
     func show(vendor: String, size: CGFloat, scale: CGFloat, state: BotState, cue: BotCue? = nil, staysBot: Bool = true,
-              ground: HUDLook.Appearance) {
+              resumes: Bool = false, ground: HUDLook.Appearance) {
         if vendor != self.vendor || staysBot != self.staysBot || ground != self.ground || actor == nil {
+            // Only the first bot of a stage picks up where the mark was; one built again for another ground fades in.
+            let awake = resumes && actor == nil
             if actor != nil, vendor == self.vendor, staysBot == self.staysBot, let layer {
                 IslandAnimation.fadeLook(of: layer)
             }
@@ -448,7 +486,8 @@ final class BotStageView: NSView {
             self.ground = ground
             actor?.layer.removeFromSuperlayer()
             actor = BotForm.form(for: vendor, ground: ground).map {
-                let actor = BotActor(form: $0, staysBot: staysBot, period: 3, arrivesAfter: staysBot ? BotMark.arrival : 0)
+                let actor = BotActor(form: $0, staysBot: staysBot, period: 3, arrivesAfter: staysBot ? BotMark.arrival : 0,
+                                     awake: awake)
                 // Nothing else draws this mark, so the actor draws its logo too.
                 actor.restsHidden = false
                 return actor

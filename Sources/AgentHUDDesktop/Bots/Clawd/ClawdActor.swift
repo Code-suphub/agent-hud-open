@@ -71,6 +71,9 @@ final class ClawdActor {
 
     func set(_ state: BotState, at now: TimeInterval) { performer.set(state, at: now) }
 
+    /// Takes up `state` at its loop's start, as a Clawd that was already out (`ClawdPerformer.resume`).
+    func resume(_ state: BotState, at now: TimeInterval) { performer.resume(state, at: now) }
+
     func play(_ event: BotEvent, at now: TimeInterval) { performer.play(event, at: now) }
 
     /// The frames already drawn are for another size or other colours.

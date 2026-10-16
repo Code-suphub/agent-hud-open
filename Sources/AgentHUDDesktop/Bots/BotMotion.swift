@@ -83,6 +83,8 @@ enum BotPace {
 /// sits. It is stepped with a clock and nothing else, so the same seed and the same times give the same bot.
 struct BotMotion: Sendable {
     private static let morphSeconds: TimeInterval = 0.5
+    /// How long a new look takes to move from the pose the last one left.
+    private static let blendSeconds: TimeInterval = 0.3
     /// The most time one step moves the bot by: a calm frame.
     private static let longestStep: TimeInterval = BotPace.calm
     /// How long after a turn ended its mark rests as the logo again.
@@ -231,6 +233,17 @@ struct BotMotion: Sendable {
         pending = (next, now)
     }
 
+    /// Takes up the look as a bot that is already up: a mark built again while its bot was out, as a dock is when it
+    /// comes back after a card hid it, starts its look where the loop begins, with no morph from the logo, no hop and
+    /// no blend from a pose it never had. A look the logo rests in is left as it is.
+    mutating func resume(at now: TimeInterval) {
+        guard look.isWorking || look.isAttention else { return }
+        morph = 1
+        leaving = nil
+        since = now - (look.isAttention ? BotMoves.firstMove : Self.blendSeconds)
+        beatsFrom = ((since - BotPace.slack) / BotMoves.beat).rounded(.up) * BotMoves.beat
+    }
+
     /// Advances to `now`. `aim` is where the bot should look, as returned by `BotMotion.aim(from:to:)`.
     mutating func step(to time: TimeInterval, aim: CGPoint = .zero, hasFace: Bool = true) {
         let now = BotPace.onFrame(time)
@@ -297,7 +310,9 @@ struct BotMotion: Sendable {
         signs(at: now, arrived: arrived, dozing: dozing)
 
         pose = arrived ? sitting(age: age, progress: progress, swell: swell, dozing: dozing) : BotPose()
-        if let leaving, arrived, age < 0.3 { pose = leaving.mixed(with: pose, Self.easeOut(CGFloat(age / 0.3))) }
+        if let leaving, arrived, age < Self.blendSeconds {
+            pose = leaving.mixed(with: pose, Self.easeOut(CGFloat(age / Self.blendSeconds)))
+        }
         if actsInPlace {
             // Keep the centre fixed, even when returning from an alert's raised pose. The original logo
             // is still while it is shown; breathing and turns arrive with the bot again.
@@ -318,7 +333,8 @@ struct BotMotion: Sendable {
         if arrived, !actsInPlace || morph > 0 { look(age: age, now: now, dt: dt, aim: aim, swell: swell, dozing: dozing) }
         else { (following, blinking) = (false, false) }
         if arrived { keep(age: age, now: now, dt: dt) }
-        settled = state.holds && look.isWorking && !state.hovered && morph == wanted && !following && !blinking
+        let stills = state.holds && look.isWorking || turnsToCard && age >= Self.hopSeconds
+        settled = stills && !state.hovered && morph == wanted && !following && !blinking
             && act == nil && event == nil && pending == nil && greeting == nil
         // Counted from the time the bot was stepped at, so that it lands on the frame meant.
         wait = nextFrame(now: now, age: age, wanted: wanted, dozing: dozing).map { $0 + now - time }
@@ -349,7 +365,7 @@ struct BotMotion: Sendable {
             if look == .done { return at(since + Self.doneSeconds + 0.01) }
             return every(BotPace.lively)
         }
-        if morph != wanted || act != nil || blinking || age < 0.3 || event != nil || pending != nil || greeting != nil {
+        if morph != wanted || act != nil || blinking || age < Self.blendSeconds || event != nil || pending != nil || greeting != nil {
             return every(BotPace.lively)
         }
         var pace: TimeInterval? = following ? BotPace.following
@@ -360,10 +376,13 @@ struct BotMotion: Sendable {
         if let after = greetAfter { next = min(next, after) }
         if visits, let visit = botInterval { next = min(next, visit.upperBound) }
         switch look {
+        case _ where turnsToCard:
+            // The hop and the raise, and then nothing until something changes.
+            if age < Self.hopSeconds { return every(BotPace.lively) }
         case .permission, .question, .plan:
             // The hop and every move are drawn whole. A kept piece pulses for the first seconds of a wait, and after
             // them the bot is still until its next move.
-            if age < 1.2 || moving(at: age) { return every(BotPace.lively) }
+            if age < BotMoves.firstMove || moving(at: age) { return every(BotPace.lively) }
             if pulses, age < BotMoves.fullWait { pace = BotPace.following }
             next = min(next, since + BotMoves.move(at: age).next)
         case .done:
@@ -403,6 +422,13 @@ struct BotMotion: Sendable {
     /// A mark under the pointer greets when it was resting or wears a badge; a busy one only watches.
     private var greetsOnHover: Bool { state.hovered && !look.isAttention && (look.isCalm || state.badge != nil) }
 
+    /// A waiting request whose card stands beside the mark: the bot hops and rises as ever, then keeps still with its
+    /// eyes on the card, making none of its moves.
+    private var turnsToCard: Bool { state.facing != nil && look.isAttention }
+
+    /// Seconds a waiting request's hop lasts.
+    private static let hopSeconds: TimeInterval = 0.45
+
     /// The body breathes: a bot that is not pixel art, in a look that sits in place, unless it dozes or holds still.
     private func breathes(_ dozing: Bool) -> Bool { !limbed && look.staysInPlace && !state.holds && !dozing }
 
@@ -415,7 +441,7 @@ struct BotMotion: Sendable {
     }
 
     private func moving(at age: TimeInterval) -> Bool {
-        guard let start = BotMoves.move(at: age).start else { return false }
+        guard !turnsToCard, let start = BotMoves.move(at: age).start else { return false }
         return age - start < BotMoves.moveLength(look)
     }
 
@@ -450,8 +476,8 @@ struct BotMotion: Sendable {
         let t = CGFloat(age)
         switch look {
         case .permission, .question, .plan:
-            if t < 0.45 {
-                let x = t / 0.45, arc = sin(.pi * x)
+            if t < Self.hopSeconds {
+                let x = t / Self.hopSeconds, arc = sin(.pi * x)
                 pose.y = -0.26 * 4 * x * (1 - x)
                 pose.scaleY = 1 + 0.08 * arc
                 pose.scaleX = 1 - 0.05 * arc
@@ -460,7 +486,8 @@ struct BotMotion: Sendable {
             pose.scaleX *= raised
             pose.scaleY *= raised
             // A move every few seconds, until it is answered: a knock, a tilt to the other side, two nods. A body with
-            // limbs jumps for its knock instead (`stance`).
+            // limbs jumps for its knock instead (`stance`). A bot turned to its card makes none.
+            guard !turnsToCard else { break }
             let start = BotMoves.move(at: age).start
             switch look {
             case .permission where !limbed: pose.rotation = start.map { BotMoves.knock(age - $0) } ?? 0
@@ -533,13 +560,16 @@ struct BotMotion: Sendable {
             // Straight at the user, wide open, and no blinking until the stare has landed; under the pointer, at the
             // pointer. A long wait is still between its moves, eyes too.
             target.wide = 1.22
-            if state.hovered {
+            if let facing = state.facing {
+                target.look = facing.aim.x
+                target.lookY = facing.aim.y
+            } else if state.hovered {
                 target.look = aim.x
                 target.lookY = aim.y
             }
             // Down at the plan as it nods.
             if look == .plan, moving(at: age) { target.lookY = 0.5 }
-            every = age < 1.5 || age >= BotMoves.fullWait ? nil : 4...7
+            every = age < 1.5 || age >= BotMoves.fullWait || turnsToCard ? nil : 4...7
         case .done:
             if age < 1.25 {
                 target.happy = 1
@@ -641,7 +671,7 @@ struct BotMotion: Sendable {
             // Up and swollen while a request waits; pulsing for its first seconds, then only with each move.
             lift = 0.03
             scale = 1.22
-            if age < BotMoves.fullWait || moving(at: age) { scale += 0.08 * CGFloat(sin(2 * .pi * now / 0.8)) }
+            if !turnsToCard, age < BotMoves.fullWait || moving(at: age) { scale += 0.08 * CGFloat(sin(2 * .pi * now / 0.8)) }
         } else if look == .done, age < 0.6 {
             lift = 0.22 * CGFloat(sin(.pi * age / 0.6))
         }
@@ -700,9 +730,12 @@ struct BotMotion: Sendable {
             }
         case .compacting:
             (limbs.left, limbs.right, limbs.lifted) = (1, 1, 3)
+        case _ where turnsToCard:
+            // A hand up on the card's side, held.
+            if state.facing == .left { limbs.left = 2 } else { limbs.right = 2 }
         case .permission, .question, .plan:
             let move = BotMoves.move(at: age), into = move.start.map { age - $0 }
-            if age < 1.2 || moving(at: age) {
+            if age < BotMoves.firstMove || moving(at: age) {
                 limbs.left = 1 + beat(clock, BotMoves.beat) % 2
                 limbs.right = 3 - limbs.left
                 if let into, beat(into, BotMoves.beat) % 2 == 0 {

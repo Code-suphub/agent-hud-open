@@ -1,3 +1,5 @@
+import AgentHUDCore
+import CoreGraphics
 import Foundation
 
 /// The looping state a mark shows: what its agents are doing, as far as its bot acts it out. Cases run from the
@@ -105,6 +107,31 @@ enum BotCard: Hashable, Sendable, CaseIterable {
     }
 }
 
+/// Which way a mark's agent's card stands from the mark, on a dock that keeps its marks beside the card it opens.
+enum BotFacing: Hashable, Sendable {
+    case left, right, up, down
+
+    /// The card's side for a dock on `edge`: it opens on the dock's inner side.
+    init(cardFrom edge: HUDEdge) {
+        switch edge {
+        case .top: self = .down
+        case .bottom: self = .up
+        case .left: self = .right
+        case .right: self = .left
+        }
+    }
+
+    /// The way to look, as a gaze `BotMotion.aim(from:to:)` gives: y runs down, and a card beside the mark is near.
+    var aim: CGPoint {
+        switch self {
+        case .left: CGPoint(x: -0.6, y: 0)
+        case .right: CGPoint(x: 0.6, y: 0)
+        case .up: CGPoint(x: 0, y: -0.6)
+        case .down: CGPoint(x: 0, y: 0.6)
+        }
+    }
+}
+
 /// Everything a mark is told about its agents at one moment.
 struct BotState: Hashable, Sendable {
     var look: BotLook = .idle
@@ -118,6 +145,9 @@ struct BotState: Hashable, Sendable {
     var holds = false
     /// The news a `.done` look stands for.
     var card = BotCard.done
+    /// The card a waiting request asks from stands beside the mark, this way. The bot stays raised and still with its
+    /// eyes on the card, which says the rest, and Clawd points at it. Only a waiting request's look turns to it.
+    var facing: BotFacing? = nil
 
     /// The phase that tells the same story, for callers that still speak in phases.
     var phase: BotPhase {
