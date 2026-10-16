@@ -28,8 +28,13 @@ enum BotLook: Hashable, Sendable, CaseIterable {
     /// A reminder card's good news, a reply or a reset (`BotState.card`): the bot smiles. A dock never shows it.
     case done
 
-    static let allCases: [BotLook] = [.permission, .question, .plan, .compacting, .thinking]
-        + BotTool.allCases.map { .tool($0) } + [.plain, .noNews, .idle, .asleep, .done]
+    // Built in steps: as one sum of literals and a map, Xcode 16.4's type checker gives up on it.
+    static let allCases: [BotLook] = {
+        let tools: [BotLook] = BotTool.allCases.map { BotLook.tool($0) }
+        let before: [BotLook] = [.permission, .question, .plan, .compacting, .thinking]
+        let after: [BotLook] = [.plain, .noNews, .idle, .asleep, .done]
+        return before + tools + after
+    }()
 
     /// A request waits on the user.
     var isAttention: Bool { self == .permission || self == .question || self == .plan }

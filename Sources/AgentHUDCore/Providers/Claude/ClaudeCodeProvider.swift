@@ -65,8 +65,13 @@ public struct ClaudeCodeProvider: UsageProvider, LedgerRecording {
     }
 
     public var watchedDirectories: [URL]? {
-        transcripts.roots + [AttentionHooks.directory] + (sessionOriginsDirectory.map { [$0] } ?? [])
-            + (compactionsDirectory.map { [$0] } ?? []) + (desktopSessions?.roots ?? [])
+        // Built in steps: as one sum of optionals, Xcode 16.4's type checker gives up on it.
+        var directories: [URL] = transcripts.roots
+        directories.append(AttentionHooks.directory)
+        if let sessionOriginsDirectory { directories.append(sessionOriginsDirectory) }
+        if let compactionsDirectory { directories.append(compactionsDirectory) }
+        directories += desktopSessions?.roots ?? []
+        return directories
     }
     public func fileChanges(_ paths: Set<String>?) async { await transcripts.fileChanges(paths) }
 

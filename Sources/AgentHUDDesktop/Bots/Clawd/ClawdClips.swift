@@ -45,7 +45,13 @@ struct ClawdClips: Sendable {
     /// Every frame any clip shows.
     var frames: Set<ClawdFrame> {
         let clips = ClawdLook.allCases.map(clip(for:))
-        var frames = Set(clips.flatMap { $0.intro + ($0.entry ?? []) + $0.loopFrames + $0.outro })
+        var frames = Set<ClawdFrame>()
+        for clip in clips {
+            frames.formUnion(clip.intro)
+            frames.formUnion(clip.entry ?? [])
+            frames.formUnion(clip.loopFrames)
+            frames.formUnion(clip.outro)
+        }
         for clip in clips {
             guard case .replaying(_, let hold, let replay, _) = clip.pace else { continue }
             frames.formUnion(clip.sprite[replay] + [ClawdFrame(clip.sprite, hold)])
