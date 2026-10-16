@@ -18,7 +18,7 @@ final class BotFrameTests: XCTestCase {
     private static func motions(of form: BotForm, seed: UInt64, until end: TimeInterval,
                                 phases: [(TimeInterval, BotPhase)]) -> [BotMotion] {
         var motion = BotMotion(seed: seed)
-        motion.spin = form.spec.spin
+        motion.fit(form.spec)
         var drawn: [BotMotion] = [], shown: BotRenderer.Look?, next = 0, frame = 0
         while Double(frame) / 30 < end {
             let now = Double(frame) / 30

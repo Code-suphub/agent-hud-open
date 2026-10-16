@@ -92,7 +92,7 @@ final class LogoImagesTests: XCTestCase {
                 placements.append((view, canvas, edge))
             }
             var motion = BotMotion(seed: 3)
-            motion.spin = form.spec.spin
+            motion.fit(form.spec)
             motion.set(.working, at: 0)
             for frame in 0...900 {
                 motion.step(to: Double(frame) / 30)

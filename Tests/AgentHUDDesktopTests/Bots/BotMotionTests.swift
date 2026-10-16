@@ -40,6 +40,52 @@ final class BotMotionTests: XCTestCase {
         XCTAssertEqual(busy.morph, 1)
     }
 
+    /// Clawd's arms and legs over a few seconds of one phase, after another, with a pointer to the right.
+    private func limbs(_ phases: [(BotPhase, TimeInterval)], for seconds: TimeInterval, seed: UInt64 = 3) -> [(TimeInterval, BotLimbs)] {
+        var motion = BotMotion(seed: seed)
+        motion.limbed = true
+        var seen: [(TimeInterval, BotLimbs)] = [], now: TimeInterval = 0, next = 0
+        while now <= seconds {
+            while next < phases.count, phases[next].1 <= now { motion.set(phases[next].0, at: now); next += 1 }
+            motion.step(to: now, aim: CGPoint(x: 0.6, y: 0.2))
+            seen.append((now, motion.limbs))
+            now += 1.0 / 30
+        }
+        return seen
+    }
+
+    func testABotWithArmsWavesAtWhoeverOpensItsCard() throws {
+        let seen = limbs([(.idle, 0), (.opened, 2)], for: 4)
+        XCTAssertTrue(seen.filter { $0.0 < 2 }.allSatisfy { $0.1 == BotLimbs() }, "a resting logo keeps still")
+        // Once it has turned into its bot, the arm on the pointer's side goes up and out, and waves.
+        let up = try XCTUnwrap(seen.first { $0.1.right == 2 })
+        XCTAssertLessThan(up.0, 2.8)
+        XCTAssertEqual(up.1.left, 0)
+        let wave = seen.filter { $0.0 > up.0 && $0.0 < up.0 + 1 }.map(\.1.right)
+        XCTAssertTrue(wave.contains(1) && wave.contains(2))
+        // A bot without arms keeps them at rest whatever it does.
+        var plain = BotMotion(seed: 3)
+        plain.set(.opened, at: 0)
+        for frame in 0...90 { plain.step(to: Double(frame) / 30, aim: CGPoint(x: 0.6, y: 0.2)) }
+        XCTAssertEqual(plain.limbs, BotLimbs())
+    }
+
+    func testABotWithArmsTypesAndStepsWhileItsAgentWorks() {
+        let seen = limbs([(.working, 0)], for: 60).map(\.1)
+        XCTAssertTrue(seen.contains(BotLimbs(left: 1, right: 0)) && seen.contains(BotLimbs(left: 0, right: 1)), "typing, a hand at a time")
+        XCTAssertTrue(seen.contains { $0.lifted == 1 } && seen.contains { $0.lifted == 2 }, "stepping, a pair of legs at a time")
+        XCTAssertFalse(seen.contains { $0.left > 0 && $0.lifted > 0 }, "one thing at a time")
+    }
+
+    func testABotWithArmsRaisesAHandWhileAskingAndBothForAReply() {
+        let asking = limbs([(.asking, 0)], for: 6)
+        XCTAssertTrue(asking.filter { $0.0 > 1.25 }.allSatisfy { $0.1.right >= 1 && $0.1.left == 0 }, "a hand up until it is answered")
+        XCTAssertTrue(asking.filter { $0.0 > 2 && $0.0 < 3.5 }.allSatisfy { $0.1.right == 2 }, "held still between knocks")
+        let reply = limbs([(.working, 0), (.done, 1)], for: 4)
+        XCTAssertTrue(reply.contains { $0.0 > 1 && $0.1.left == 2 && $0.1.right == 2 }, "both arms up")
+        XCTAssertTrue(reply.filter { $0.0 > 2.3 }.allSatisfy { $0.1 == BotLimbs() }, "and down again")
+    }
+
     func testAMarkFollowsItsAgentUnlessItsCardIsBeingLookedAt() {
         XCTAssertEqual(MarkAttention.none.phase(working: true), .working)
         XCTAssertEqual(MarkAttention.none.phase(working: false), .idle)

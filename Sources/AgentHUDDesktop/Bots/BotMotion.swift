@@ -48,6 +48,14 @@ struct BotPose: Equatable, Sendable {
     }
 }
 
+/// Where a bot's arms and legs are, in whole steps of its pixel art (`BotSpec.Limbs`). Bots without limbs keep it at rest.
+struct BotLimbs: Hashable, Sendable {
+    /// How far each arm is raised: 0 at its side, 1 a step up, 2 up and out.
+    var left = 0, right = 0
+    /// The pair of legs lifted: 0 neither, 1 the first and third, 2 the second and fourth.
+    var lifted = 0
+}
+
 /// How long a bot can go without a frame. Every frame it is drawn costs a picture or at least a move of its
 /// layer, so it asks for no more of them than its motion can show.
 enum BotPace {
@@ -76,6 +84,8 @@ struct BotMotion: Sendable {
     var period: TimeInterval = 3
     /// Degrees per second the body turns under the face while awake.
     var spin: CGFloat = 0
+    /// The body has arms and legs to move.
+    var limbed = false
 
     private(set) var phase: BotPhase = .idle
     private(set) var since: TimeInterval = -10
@@ -87,6 +97,7 @@ struct BotMotion: Sendable {
     private(set) var turn: CGFloat = 0
     /// The piece a mark keeps above its body: how far it has hopped, and how big it is.
     private(set) var kept = (lift: CGFloat(0), scale: CGFloat(1))
+    private(set) var limbs = BotLimbs()
     /// Seconds from the last step until the bot next needs a frame: a frame's length while it moves, the time to
     /// its next visit while it waits as its logo, and nothing once it rests as the logo for good.
     private(set) var wait: TimeInterval? = BotPace.lively
@@ -101,10 +112,16 @@ struct BotMotion: Sendable {
     private var following = false, blinking = false
     /// The next brief bot visit while idle, between longer stretches as the original logo.
     private var botInterval: Range<TimeInterval>?
+    /// The next act is a wave at whoever just opened the agent's card.
+    private var greets = false
     private var random: SplitMix
 
     private struct Act {
-        enum Kind: CaseIterable { case glance, blinkTwice, squint, widen, smile, inspect, tilt, stretch, wiggle, turn }
+        enum Kind: CaseIterable {
+            case glance, blinkTwice, squint, widen, smile, inspect, tilt, stretch, wiggle, turn
+            /// For a body with limbs: one arm up and waving; both arms tapping in turn; the legs stepping in place.
+            case wave, type, scuttle
+        }
         var kind: Kind
         var start: TimeInterval
         var length: TimeInterval
@@ -114,6 +131,12 @@ struct BotMotion: Sendable {
     }
 
     init(seed: UInt64 = UInt64.random(in: 0...UInt64.max)) { random = SplitMix(state: seed) }
+
+    /// Takes on what a body's spec says about how it moves.
+    mutating func fit(_ spec: BotSpec) {
+        spin = spec.spin
+        limbed = spec.limbs != nil
+    }
 
     /// Nothing left to draw or wait for: the logo is back and at rest.
     var isAtRest: Bool {
@@ -137,6 +160,12 @@ struct BotMotion: Sendable {
             nextAct = now + 0.9 + random.unit() * 1.2
         } else if next == .opened {
             nextAct = now + 0.9 + random.unit() * 1.2
+        }
+        // A body with arms greets whoever opened its card: a wave as soon as it has turned into its bot.
+        greets = limbed && next == .opened
+        if greets {
+            act = nil
+            nextAct = now
         }
         botInterval = nil
         if next == .idle, !staysBot { scheduleBot(after: now + Double(morph) * Self.morphSeconds) }
@@ -170,7 +199,9 @@ struct BotMotion: Sendable {
         let actsInPlace = phase.staysInPlace
         if actsInPlace {
             if awake || staysBot, morph > 0.9 || !hasFace, act == nil, now >= nextAct {
-                let chosen = pick(at: now)
+                var chosen = pick(at: now)
+                // A wave is made with the arm on the pointer's side.
+                if chosen.kind == .wave, aim.x != 0 { chosen.side = aim.x > 0 ? 1 : -1 }
                 act = chosen
                 nextAct = now + chosen.length + 0.5 + random.unit() * 1.9
                 if chosen.kind == .blinkTwice { blinks = [now, now + 0.24] }
@@ -201,6 +232,7 @@ struct BotMotion: Sendable {
         if arrived, !actsInPlace || morph > 0 { look(age: age, now: now, dt: dt, aim: aim, swell: swell) }
         else { (following, blinking) = (false, false) }
         if arrived { keep(age: age, now: now, dt: dt) }
+        limbs = limbed && arrived ? stance(age: age, now: now) : BotLimbs()
         wait = nextFrame(now: now, age: age, wanted: wanted)
     }
 
@@ -380,17 +412,65 @@ struct BotMotion: Sendable {
         kept.scale += (scale - kept.scale) * ease
     }
 
+    /// Where the arms and legs are now, in whole steps, as pixel art moves: a hand up while a request waits, waved
+    /// through the hop and each knock; both arms up for a reply; and whatever the act in hand moves.
+    private func stance(age: TimeInterval, now: TimeInterval) -> BotLimbs {
+        var limbs = BotLimbs()
+        func beat(_ seconds: TimeInterval, _ every: TimeInterval) -> Int { Int(max(0, seconds) / every) }
+        switch phase {
+        case .asking:
+            let knock = (age - 1.2).truncatingRemainder(dividingBy: 2.6)
+            limbs.right = age < 1.2 || knock < 0.55 ? 2 - beat(age, 0.15) % 2 : 2
+        case .done:
+            if age < 1.25 {
+                limbs.left = 2 - (age < 0.3 ? 0 : beat(age - 0.3, 0.2) % 2)
+                limbs.right = limbs.left
+            }
+        case .working, .idle, .opened:
+            break
+        }
+        guard let act, phase.staysInPlace else { return limbs }
+        let since = now - act.start, ending = since > act.length - 0.15
+        switch act.kind {
+        case .wave:
+            let arm = since < 0.12 || ending ? 1 : 2 - beat(since - 0.12, 0.16) % 2
+            if act.side < 0 { limbs.left = arm } else { limbs.right = arm }
+        case .type:
+            if !ending {
+                limbs.left = beat(since, 0.12) % 2
+                limbs.right = 1 - limbs.left
+            }
+        case .scuttle:
+            if !ending { limbs.lifted = 1 + beat(since, 0.12) % 2 }
+        default:
+            break
+        }
+        return limbs
+    }
+
     // MARK: Acts
 
     private mutating func pick(at now: TimeInterval) -> Act {
         var pool: [(Act.Kind, Double)] = [(.glance, 5), (.blinkTwice, 2), (.squint, 2), (.widen, 2), (.smile, 2),
                                           (.inspect, 2), (.tilt, 3), (.stretch, 2), (.wiggle, 2)]
         if spin != 0 { pool.append((.turn, 3)) }
+        if limbed {
+            // Busy hands while its agent works, a wave for whoever looks, a few steps now and then.
+            switch phase {
+            case .working: pool += [(.type, 9), (.scuttle, 3), (.wave, 1)]
+            case .opened: pool += [(.wave, 4), (.scuttle, 2), (.type, 1)]
+            case .idle, .asking, .done: pool += [(.wave, 3), (.scuttle, 3)]
+            }
+        }
         var roll = random.unit() * pool.reduce(0) { $0 + $1.1 }
         var kind = pool[0].0
         for (candidate, weight) in pool {
             roll -= weight
             if roll < 0 { kind = candidate; break }
+        }
+        if greets {
+            greets = false
+            kind = .wave
         }
         let length: TimeInterval
         switch kind {
@@ -404,6 +484,9 @@ struct BotMotion: Sendable {
         case .stretch: length = 0.55
         case .wiggle: length = 0.6
         case .turn: length = 0.7
+        case .wave: length = 1.4
+        case .type: length = 1.6 + random.unit() * 0.8
+        case .scuttle: length = 1.1
         }
         let angle = random.unit() * 2 * .pi
         return Act(kind: kind, start: now, length: length, side: random.unit() < 0.5 ? -1 : 1,

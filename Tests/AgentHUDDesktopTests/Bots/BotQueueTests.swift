@@ -165,7 +165,7 @@ final class BotQueueTests: XCTestCase {
     func testDrawingAQueueBotIsCheap() throws {
         let form = try XCTUnwrap(BotForm.form(for: "Claude", ground: .dark))
         var motion = BotMotion(seed: 2)
-        motion.spin = form.spec.spin
+        motion.fit(form.spec)
         motion.set(.working, at: 0)
         var now: TimeInterval = 0
         while now < 1 { motion.step(to: now); now += 1.0 / 30 }

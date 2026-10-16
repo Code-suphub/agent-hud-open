@@ -13,8 +13,6 @@ struct BotSpec: Sendable {
         /// The mark's own outline, averaged over `smooth` degrees and pulled in to `keep` of its relief.
         case outline(keep: CGFloat, smooth: Int)
         case circle
-        /// Evenly spaced heads. `puff` below 1 broadens each head and leaves a crease between two.
-        case star(points: Int, depth: CGFloat, puff: CGFloat)
         case polygon(sides: Int, rotation: CGFloat, round: CGFloat)
         case rect(width: CGFloat, height: CGFloat, round: CGFloat)
         case slant(width: CGFloat, height: CGFloat, skew: CGFloat, round: CGFloat)
@@ -40,6 +38,20 @@ struct BotSpec: Sendable {
         var round: CGFloat = 1
         /// How far each eye sits from the middle of the face, as an angle round the body in radians.
         var spread: CGFloat = 0.34
+        /// Set for a flat face, in place of `spread`: how far each eye sits from the middle, in body radii. The eyes
+        /// keep their shape and slide across together when the bot looks around, as on a box rather than a ball.
+        var across: CGFloat? = nil
+    }
+
+    /// Arms and legs the motion moves, in the body's own paint: boxes in body radii from the body's centre, as the
+    /// limbs of pixel art are, and moved in whole steps of `pixel`. A raised arm climbs a step; raised further it
+    /// takes another step up and out, one arm's width. A lifted leg rises half a step into the body.
+    struct Limbs: Sendable {
+        /// The arm on the left, then the one on the right.
+        var arms: [CGRect]
+        /// Left to right; the first and third step together, then the second and fourth.
+        var legs: [CGRect]
+        var pixel: CGFloat
     }
 
     /// A second colour laid inside the body: the face panel of a head.
@@ -95,6 +107,7 @@ struct BotSpec: Sendable {
     var ring: Ring? = nil
     var stroke: RGBA? = nil
     var decor: [Decor] = []
+    var limbs: Limbs? = nil
     /// Degrees per second the body turns under a still face while its agent works.
     var spin: CGFloat = 0
     /// A piece of the artwork that stays as drawn and hops above the body.
@@ -175,7 +188,16 @@ struct BotSpec: Sendable {
     private static let hair = RGBA(hex: 0xb7b6c2)
 
     static let table: [String: BotSpec] = [
-        "Claude": BotSpec(radius: 0.375, reach: 0.9, shape: .star(points: 12, depth: 0.085, puff: 0.7), spin: 9),
+        // Clawd, Claude Code's own creature, as its pixel art draws it: a wide block of the logo's orange, an arm out of
+        // each side, four short legs and two upright bars for eyes. A pixel of the art is half a body radius; the
+        // body is six pixels by four.
+        "Claude": BotSpec(radius: 0.22, center: CGPoint(x: 0.5, y: 0.445), reach: 0.3,
+                          shape: .rect(width: 0.66, height: 0.44, round: 0.008), face: CGPoint(x: 0, y: -0.25),
+                          eye: Eye(height: 0.64, width: 0.32, round: 0, across: 0.875),
+                          limbs: Limbs(arms: [rect(-2, 0, -1.5, 0.5), rect(1.5, 0, 2, 0.5)],
+                                       legs: [rect(-1.25, 1, -1, 1.5), rect(-0.75, 1, -0.5, 1.5),
+                                              rect(0.5, 1, 0.75, 1.5), rect(1, 1, 1.25, 1.5)],
+                                       pixel: 0.5)),
         // The knot's own six lobes, deepened: a body that is nearly round turns without anyone seeing it turn.
         "ChatGPT": BotSpec(radius: 0.37, shape: .outline(keep: 1.1, smooth: 5), spin: 7),
         // The arch gives a dome that runs from 0.05 to 0.77 down the mark, where a ball beside it runs from
