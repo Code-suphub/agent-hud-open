@@ -32,6 +32,13 @@ struct IslandPane: View {
                                                + ", which they leave as it is.")
     }
 
+    /// What the hover delay and the collapse delay are set in, in milliseconds, as an agent's draft of them is held to.
+    private var delayRange: ClosedRange<Double> {
+        let range = AgentHUDCore.Settings.hoverDelayRange
+        return Double(range.lowerBound)...Double(range.upperBound)
+    }
+    private let delayStep = Double(AgentHUDCore.Settings.hoverDelayStep)
+
     var body: some View {
         let screens = ScreensPane.attached()
         VStack(alignment: .leading, spacing: 28) {
@@ -78,9 +85,9 @@ struct IslandPane: View {
                     isOn: settings.binding(\.openImmediatelyAtTop)
                 )
                 SettingsDivider(theme: theme)
-                SliderRow(label: L10n.text("展开延迟", "Hover delay"), value: settings.doubleBinding(\.hoverDelayMs), range: 0...1500, step: 50, format: { "\(Int($0)) ms" }, theme: theme)
+                SliderRow(label: L10n.text("展开延迟", "Hover delay"), value: settings.doubleBinding(\.hoverDelayMs), range: delayRange, step: delayStep, format: { "\(Int($0)) ms" }, theme: theme)
                 SettingsDivider(theme: theme)
-                SliderRow(label: L10n.text("收起延迟", "Collapse delay"), value: settings.doubleBinding(\.collapseDelayMs), range: 0...1500, step: 50, format: { "\(Int($0)) ms" }, theme: theme)
+                SliderRow(label: L10n.text("收起延迟", "Collapse delay"), value: settings.doubleBinding(\.collapseDelayMs), range: delayRange, step: delayStep, format: { "\(Int($0)) ms" }, theme: theme)
             }
         }
     }

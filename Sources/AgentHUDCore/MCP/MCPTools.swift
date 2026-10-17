@@ -1,10 +1,10 @@
 import AgentHUDSupport
 
 /// The tools Agent HUD's MCP server offers: a fixed list, the same for every client and in the same order, so a
-/// client may cache it. Four act on the hover panel's layouts, the shared one or a screen's own, and on one screen's
-/// resting HUD style, and the fifth says an edit is done, which lets go of the panel an edit held open; none of them
-/// saves: saving is the user's click in the panel. What a tool does with its arguments is the running application's
-/// business; only the names and the shapes are known here.
+/// client may cache it. Four act on the hover panel's layouts, the shared one or a screen's own, on one screen's
+/// resting HUD style and on the app's own settings the user asks for, and the fifth says an edit is done, which lets go
+/// of the panel an edit held open; none of them saves: saving is the user's click in the panel. What a tool does with
+/// its arguments is the running application's business; only the names and the shapes are known here.
 public enum MCPTools {
     /// The tools' names, as a client calls them and as the application is handed them.
     public static let getPanel = "get_panel"
@@ -18,12 +18,13 @@ public enum MCPTools {
     static let instructions = """
         Agent HUD shows AI coding agents' quota, usage and sessions at the Mac's notch. \
         These tools read what its hover panel shows and rearrange it, for every screen or for one, \
-        and restyle one screen's resting HUD. A change is a draft until the user presses Save in the panel. \
+        restyle one screen's resting HUD, and change an app setting the user asks for by name. \
+        A change is a draft until the user presses Save in the panel. \
         A layout edit holds the panel open for two minutes; call finish_panel_edit when you are done.
         """
 
-    /// The app's own settings are told so that an agent can foresee what its draft does beyond the HUD, and are told
-    /// read only, since no tool writes the settings.
+    /// The app's own settings are told so that an agent can foresee what its draft does beyond the HUD, as the app draws
+    /// them now, an app draft included, and with the rule that they are changed only on the user's word.
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API provider), each block's \
         accounts, with the id a layout names one by, its email or name and its plan, and its rows in the order shown \
@@ -33,12 +34,13 @@ public enum MCPTools {
         name; its token chart's period, the agents and models it can draw and its total; the attached screens, each \
         with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one \
         agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the \
-        whole app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's \
-        style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn \
-        into bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are \
-        written in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call \
-        it before changing the layout; block, row, account and screen keys and project ids come from here. Names are \
-        written as the panel shows them, in the application's language.
+        whole app's settings as drawn now, with appUnsaved, whether an unsaved draft of them waits: appearance; \
+        matchScreen, with which a screen's style draft also restyles the app's windows and the menu-bar menu on that \
+        screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and reminders; \
+        showMenuBarIcon; language, and writtenIn, the language names are written in, both read only; and hover: \
+        pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the \
+        layout; block, row, account and screen keys and project ids come from here. Names are written as the panel \
+        shows them, in the application's language.
         """
 
     /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in, the
@@ -61,12 +63,16 @@ public enum MCPTools {
         layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, \
         or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style. A \
         layout edit holds the panel open on screen for two minutes from the call, and a call with only hud style \
-        fields closes it so the HUD shows; call finish_panel_edit when you are done.
+        fields closes it so the HUD shows; call finish_panel_edit when you are done. app changes the whole app's own \
+        settings, its appearance, matchScreen, botLogos, showMenuBarIcon and hover, for every screen, as a draft the \
+        same Save keeps: name it only when the user explicitly asks for one of those settings, never as a side effect \
+        of arranging the panel. A call that leaves app out leaves them as they are, and a call with only app changes \
+        them alone and opens nothing.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
-        + "layout and, for a screen, its resting HUD to its saved style. Like a layout edit it holds the panel open, "
-        + "unless it drops a HUD style alone."
+        + "layout and, for a screen, its resting HUD to its saved style; a draft of the app's own settings stays. Like a "
+        + "layout edit it holds the panel open, unless it drops a HUD style alone."
 
     private static let finishPanelEditDescription = "Say your edit of the Agent HUD panel is done, so the panel an edit "
         + "held open closes unless the user's pointer is on it. Drafts stay as they are, waiting for the user's Save."
@@ -219,6 +225,31 @@ public enum MCPTools {
                                           + "field."),
         ], description: "The resting HUD: the marks of a Dynamic dock, the items of a Simple panel, the glow, its colours "
             + "and its material; a style field left out stays as saved.")
+        let delays = Settings.hoverDelayRange, step = Settings.hoverDelayStep
+        let delay = "milliseconds, \(delays.lowerBound) to \(delays.upperBound) in steps of \(step)."
+        let app = object([
+            "appearance": text("The Appearance of the app's windows and the menu-bar menu: system follows macOS. Not "
+                               + "while matchScreen is on, as Settings greys it out then.",
+                               oneOf: AppearanceMode.allCases.map(\.rawValue)),
+            "matchScreen": described("boolean", "Each window and the menu-bar menu take the look of the HUD on the screen "
+                                     + "they are on, a screen's style draft included, in place of appearance."),
+            "botLogos": described("boolean", "Marks turn into bots on a Dynamic dock, a Simple panel and reminders; one "
+                                  + "switch for every screen."),
+            "showMenuBarIcon": described("boolean", "The menu-bar icon and its menu; false hides them, and the HUD's "
+                                         + "panel keeps the draft's Save and Discard."),
+            "hover": object([
+                "pressOptionToOpen": described("boolean", "Hovering opens the panel only with Option pressed."),
+                "openAtTopEdge": described("boolean", "Reaching the screen's top edge above the HUD opens the panel "
+                                           + "without the hover delay."),
+                "delayMs": described("integer", "How long hovering waits before it opens the panel, in " + delay),
+                "collapseDelayMs": described("integer", "How long the panel stays after the pointer leaves it, in " + delay),
+            ], description: "Hover behavior, for every screen."),
+            "language": described("string", "Read only, as get_panel lists it; only Settings changes the Language."),
+            "writtenIn": described("string", "Read only, as get_panel lists it."),
+        ], description: "The whole app's own settings, for every screen whatever screen is named, as get_panel lists them "
+            + "under app. Name app only when the user explicitly asks for one of these settings, never as a side effect of "
+            + "arranging the panel. It is a draft until the user presses Save in the panel; a field left out stays as "
+            + "saved, so an app that sets nothing drops the draft.")
         return object([
             "screen": described("string", screenDescription),
             "blocks": .object(blocks),
@@ -232,6 +263,7 @@ public enum MCPTools {
             "sessions": sessions,
             "tokens": tokens,
             "hud": hud,
+            "app": app,
             "from": text("Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of "
                          + "the one described here. Only 'previous' brings a screen's HUD style with it.",
                          oneOf: ["default", "previous", "shared"]),

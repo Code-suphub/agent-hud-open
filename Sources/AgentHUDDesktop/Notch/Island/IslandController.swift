@@ -97,6 +97,8 @@ final class IslandController {
         let isPaused: Bool
         let glowHidden: Bool
         let appearance: GlowAppearance
+        /// The settings as the app draws them, the app's draft included: a change of it, Bot logos among them,
+        /// re-applies every screen's HUD at once.
         let settings: AgentHUDCore.Settings
         let agents: [AgentDescriptor]
         /// The agents each screen's layout lists for its resting HUD, by screen key, a draft included: a change
@@ -116,7 +118,8 @@ final class IslandController {
     private var inputs: Inputs {
         let layout = settings.panelLayout
         return Inputs(rows: store.rows, sessions: store.sessions, isPaused: store.isPaused, glowHidden: store.glowHidden,
-                      appearance: store.glowAppearance(light: systemIsLight), settings: settings.settings, agents: settings.agents,
+                      appearance: store.glowAppearance(light: systemIsLight), settings: settings.effectiveSettings,
+                      agents: settings.agents,
                       hudAgents: Dictionary(order.map { ($0, layout.effective(for: $0).hud.agents) },
                                             uniquingKeysWith: { first, _ in first }),
                       styles: Dictionary(order.compactMap { key in layout.styleDraft(of: key).map { (key, $0) } },

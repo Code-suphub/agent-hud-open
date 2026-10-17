@@ -90,6 +90,10 @@ public struct Settings: Hashable, Codable, Sendable {
     public var openImmediatelyAtTop: Bool = false
     public var hoverDelayMs: Int = 400
     public var collapseDelayMs: Int = 200
+    /// The milliseconds Settings sets the hover delay and the collapse delay in, and the step its sliders move them by.
+    /// A stored value is read as it was written, outside them too.
+    public static let hoverDelayRange = 0...1500
+    public static let hoverDelayStep = 50
     /// A mark turns into its bot while its agent works, asks for approval or has just replied, and while its own card
     /// is open on a dock that separates its agents. It covers the Dynamic dock, the Simple panel and reminders. Off,
     /// marks stay logos and a working one keeps still.

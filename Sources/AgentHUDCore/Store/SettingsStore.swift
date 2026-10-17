@@ -10,9 +10,10 @@ public final class SettingsStore {
     public private(set) var agents: [AgentDescriptor]
     public private(set) var hasCompletedOnboarding: Bool
     /// The hover panel's layouts, the shared one and each screen's own, kept in the same defaults under their own key,
-    /// and each screen's style draft. They change apart from the settings and the agent list: `onChange` hears nothing
-    /// of them, so a layout change never wakes collection. Only a person's Save, revert or reset of a screen's version
-    /// writes its style into the settings, as one settings change.
+    /// each screen's style draft and the app's draft of its own settings. They change apart from the settings and the
+    /// agent list: `onChange` hears nothing of them, so a layout change never wakes collection. Only a person's Save,
+    /// revert or reset of a screen's version writes its style into the settings, as one settings change, and only a
+    /// person's Save writes the app's draft.
     public let panelLayout: PanelLayoutStore
 
     public enum Change { case settings, agents, discovery }

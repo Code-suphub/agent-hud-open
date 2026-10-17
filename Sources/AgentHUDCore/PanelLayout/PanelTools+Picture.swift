@@ -24,14 +24,9 @@ extension PanelTools {
             note = "The hover panel as \(layout.hasDraft ? "the unsaved draft" : "the saved layout") draws it"
         case .screen(let key):
             note = "The hover panel on \(name(of: key, among: attached)) as \(drawing(key)) draws it"
-            // The bar above the footer says what waits unsaved, the screen's style too, and counts in the height.
-            if layout.hasStyleDraft(key) {
-                note += layout.draftScope(on: key) == nil
-                    ? ", with the bar above its footer that says its resting HUD's style is unsaved"
-                    : ", with the bar above its footer for the unsaved layout and its resting HUD's unsaved style"
-            }
             if attached.contains(where: { $0.key == key }) { display = "That display" }
         }
+        note += barNote(scope.screenKey)
         note += ", \(Self.points(drawn.width)) by \(Self.points(fit.height)) points, with account names masked, session titles "
             + "left out and any reading's reason or client's notice drawn as grey bars."
         if fit.scrolls {
@@ -53,6 +48,29 @@ extension PanelTools {
             "scrolls": .bool(fit.scrolls), "pixelsPerPoint": .number(Self.hundredths(drawn.scale)), "note": .string(note),
         ]
         return .result(result, images: [MCPImage(mimeType: "image/png", data: drawn.png)])
+    }
+
+    /// What the bar above the panel's footer says waits unsaved beside the layout, which counts in the height, as the note
+    /// names it after the layout the panel draws: a screen's style, and the app's settings, which every panel's bar shows.
+    /// Nothing where nothing but a layout waits, which the layout named says, or nothing waits.
+    /// - key: the screen's; nil for the shared layout's panel.
+    private func barNote(_ key: String?) -> String {
+        let style = key.map(layout.hasStyleDraft) ?? false, app = layout.appDraft != nil
+        let laid = key.map { layout.draftScope(on: $0) != nil } ?? layout.hasDraft
+        switch (style, app) {
+        case (false, false):
+            return ""
+        case (true, false):
+            return laid ? ", with the bar above its footer for the unsaved layout and its resting HUD's unsaved style"
+                : ", with the bar above its footer that says its resting HUD's style is unsaved"
+        case (true, true):
+            return laid ? ", with the bar above its footer for the unsaved layout, its resting HUD's unsaved style and "
+                + "the app's unsaved settings"
+                : ", with the bar above its footer that says its resting HUD's style and the app's settings are unsaved"
+        case (false, true):
+            return laid ? ", with the bar above its footer for the unsaved layout and the app's unsaved settings"
+                : ", with the bar above its footer that says the app's settings are unsaved"
+        }
     }
 
     /// Which layout a screen's panel draws, in words.

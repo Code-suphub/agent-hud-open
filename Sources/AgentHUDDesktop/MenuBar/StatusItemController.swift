@@ -51,7 +51,7 @@ final class StatusItemController: NSObject {
             _ = self.store.rows
             _ = self.store.pausedUntil
             _ = self.store.isAccessAllowed
-            _ = self.settings.settings.showMenuBarIcon
+            _ = self.settings.effectiveSettings.showMenuBarIcon
             _ = self.settings.settings.language
         }, onChange: { [weak self] in
             self?.refreshButton()
@@ -60,8 +60,13 @@ final class StatusItemController: NSObject {
 
     // MARK: Button
 
+    /// Whether the item is in the menu bar now.
+    var showsItem: Bool { item.isVisible }
+
+    /// Shows or hides the item as the app draws its settings, an agent's unsaved draft of them included: a draft that hides
+    /// it leaves its Save and Discard in the HUD's panel (`PanelLayoutStore.hasDraft(on:)`).
     func refreshButton() {
-        item.isVisible = !store.isAccessAllowed || settings.settings.showMenuBarIcon
+        item.isVisible = !store.isAccessAllowed || settings.effectiveSettings.showMenuBarIcon
         if !item.isVisible { closeMenu() }
         guard let button = item.button else { return }
         let stops = store.isPaused || !store.isAccessAllowed ? GlowGradient.idleStops : GlowGradient.stops(levels: store.levels, light: SystemAppearance.isLight)

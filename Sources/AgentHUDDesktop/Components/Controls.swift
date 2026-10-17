@@ -309,19 +309,21 @@ extension View {
 }
 
 extension SettingsStore {
-    /// Two-way binding into one `Settings` field.
+    /// Two-way binding into one `Settings` field, as the app draws it: an agent's unsaved draft of the app's settings
+    /// drawn over what is saved (`effectiveSettings`). A person's edit drops that field of the draft first, so a person
+    /// always wins, and is made to the settings as saved (`updateSetting(_:_:)`).
     func binding<T: Equatable>(_ keyPath: WritableKeyPath<AgentHUDCore.Settings, T>) -> Binding<T> {
         Binding(
-            get: { self.settings[keyPath: keyPath] },
-            set: { value in self.update { $0[keyPath: keyPath] = value } }
+            get: { self.effectiveSettings[keyPath: keyPath] },
+            set: { value in self.updateSetting(keyPath) { $0[keyPath: keyPath] = value } }
         )
     }
 
-    /// Binding for integer settings driven by a `Slider`.
+    /// Binding for integer settings driven by a `Slider`, as `binding(_:)` reads and writes them.
     func doubleBinding(_ keyPath: WritableKeyPath<AgentHUDCore.Settings, Int>) -> Binding<Double> {
         Binding(
-            get: { Double(self.settings[keyPath: keyPath]) },
-            set: { value in self.update { $0[keyPath: keyPath] = Int(value.rounded()) } }
+            get: { Double(self.effectiveSettings[keyPath: keyPath]) },
+            set: { value in self.updateSetting(keyPath) { $0[keyPath: keyPath] = Int(value.rounded()) } }
         )
     }
 }

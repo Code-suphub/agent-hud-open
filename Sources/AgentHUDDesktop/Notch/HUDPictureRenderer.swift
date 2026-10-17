@@ -114,7 +114,7 @@ struct HUDPictureRenderer {
 
     /// A Dynamic dock's marks over their backdrop, as Settings previews them.
     private var dock: some View {
-        let config = LogoQueueConfig(items: agents.queueItems, placement: laidAlongTop, settings: settings.settings)
+        let config = LogoQueueConfig(items: agents.queueItems, placement: laidAlongTop, settings: settings.effectiveSettings)
         let margin = GlowWindowController.logoEdgeMargin(stripThickness: config.stripThickness)
         let glow = settings.effectiveGlow(on: screen)
         let reach = glow.geometry(islandWidth: 2, islandHeight: 2, islandRadius: 0)
@@ -127,7 +127,7 @@ struct HUDPictureRenderer {
     /// The Simple panel as the picture lays it out, along a top edge, with its marks following Bot logos as the
     /// dock's do (`LogoQueueConfig.bots`).
     var simpleMeter: SimpleMeterConfig {
-        SimpleMeterConfig(items: agents.meterItems, placement: laidAlongTop, bots: settings.settings.botLogos)
+        SimpleMeterConfig(items: agents.meterItems, placement: laidAlongTop, bots: settings.effectiveSettings.botLogos)
     }
 
     /// The Simple panel, with its own fill and hairline, as Settings previews it.

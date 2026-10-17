@@ -18,15 +18,17 @@ public enum PanelLayoutScope: Hashable, Sendable {
 /// is a document in three states: the saved layout (`current`), the one saved before it (`previous`), and a change an
 /// agent proposed that no person has saved yet (`draft`). A screen's draft can also be to use the shared layout again.
 /// A screen can also have a style draft (`HUDStyle`): an agent's change to its resting HUD, drawn over that screen's
-/// settings, which stay the saved truth.
+/// settings, which stay the saved truth. The app has one draft of its own beside them (`AppDraft`): an agent's change to
+/// the app's own settings, drawn over them for every screen.
 ///
 /// A screen's panel draws `effective(for:)`, so a draft shows at once. Only a person keeps one: `save(_:)` makes the
 /// draft the saved layout and the saved one the previous, and writes a screen's style draft into the settings. A
 /// screen's versions cover its whole look: the previous version keeps the screen's own placement and glow where they
 /// differ from the saved version's, and going back to it restores those too, as an agent's proposal of it does as a
 /// draft of the layout and the style. Going to the default is two things, the layout's (`reset(_:)`) and the look's
-/// (`resetLook(_:)`), each a version of its own, so going back after either undoes it. Drafts live in memory, so a
-/// relaunch drops them. The saved layouts are one value in the defaults the store was given (`PanelLayoutStorage`),
+/// (`resetLook(_:)`), each a version of its own, so going back after either undoes it. The app's draft has no versions:
+/// the bar's Save writes it into the settings and its Discard drops it, with the drafts that panel shows. Drafts live in
+/// memory, so a relaunch drops them. The saved layouts are one value in the defaults the store was given (`PanelLayoutStorage`),
 /// written when any of them changes, and a screen that is not attached keeps its own layout for when it returns.
 /// Nothing here reads a provider or touches the agent list, and only a person's action writes the settings. A person's
 /// choice ends the agents' holds on the panels it reaches (`holds`): Save, Revert to Previous and both resets here, and
@@ -46,8 +48,12 @@ public final class PanelLayoutStore {
     private(set) var screens: [String: PanelScreenDocument]
     /// The screens' style drafts, by screen key, each changing something.
     private(set) var styles: [String: PanelStyleDraft] = [:]
+    /// The app's draft: an agent's change to the app's own settings, drawn over them for every screen
+    /// (`SettingsStore.effectiveSettings`), changing something; nil without one.
+    public private(set) var appDraft: AppDraft?
     /// Counts the changes since launch, from 0, across every document: one more each time a saved layout, a previous
-    /// one, a draft or a style draft changes, so a caller can tell that something changed since it last read.
+    /// one, a draft, a style draft or the app's draft changes, so a caller can tell that something changed since it last
+    /// read.
     private(set) var revision = 0
     /// The holds agents' edits put on the screens' panels, which a person's choice about a layout ends (`PanelHolds`).
     public let holds = PanelHolds()
@@ -112,8 +118,12 @@ public final class PanelLayoutStore {
         return usesShared(screen) && draft != nil ? .shared : nil
     }
 
-    /// Whether the panel on `screen` shows a draft and the bar that says so: a layout draft, or the screen's style draft.
-    public func hasDraft(on screen: String?) -> Bool { draftScope(on: screen) != nil || hasStyleDraft(screen) }
+    /// Whether the panel on `screen` shows a draft and the bar that says so: a layout draft, the screen's style draft, or
+    /// the app's draft, which every screen's panel shows, so that its Save and Discard stay on the HUD whatever the draft
+    /// hides, the menu-bar icon included.
+    public func hasDraft(on screen: String?) -> Bool {
+        draftScope(on: screen) != nil || hasStyleDraft(screen) || appDraft != nil
+    }
 
     /// Whether a scope has a draft of its own: for a screen, a layout draft or a style draft.
     func hasDraft(_ scope: PanelLayoutScope) -> Bool {
@@ -175,6 +185,23 @@ public final class PanelLayoutStore {
     public func discardStyle(_ screen: String) {
         guard styles[screen] != nil else { return }
         set(screen: screen, screens[screen] ?? PanelScreenDocument(), style: nil)
+    }
+
+    /// Shows a change as the app's draft, without saving it, drawn over the app's settings at once for every screen; an
+    /// empty change drops the app's draft instead. The change is taken as given: an agent's proposal is reduced to what it
+    /// changes first (`PanelTools`). Returns whether an app draft now waits.
+    @discardableResult
+    public func proposeApp(_ draft: AppDraft) -> Bool {
+        set(app: draft.isEmpty ? nil : draft)
+        return appDraft != nil
+    }
+
+    /// Drops `field` from the app's draft, and the draft with it where that was all it set: what a person's own change of
+    /// that setting in Settings does first, so a person always wins (`SettingsStore.updateSetting(_:_:)`).
+    public func discardApp(_ field: AppDraft.Field) {
+        guard let appDraft else { return }
+        let left = appDraft.leaving(field)
+        set(app: left.isEmpty ? nil : left)
     }
 
     /// Proposes the default view as a scope's layout: the shared layout's, or a screen's own, as the layout's Reset to
@@ -423,6 +450,23 @@ public final class PanelLayoutStore {
             persist()
         }
     }
+
+    /// Takes the app's draft: one revision when it differs.
+    private func set(app draft: AppDraft?) {
+        guard draft != appDraft else { return }
+        appDraft = draft
+        revision += 1
+    }
+
+    /// Writes the app's draft into the settings in one change and drops it; without settings it is dropped alone.
+    func saveApp() {
+        guard let appDraft else { return }
+        if let owner { owner.update { $0 = appDraft.applied(to: $0) } }
+        set(app: nil)
+    }
+
+    /// Drops the app's draft; the app draws its saved settings again.
+    func discardApp() { set(app: nil) }
 
     /// Takes a screen's document and keeps its style draft.
     private func set(screen key: String, _ document: PanelScreenDocument) {
