@@ -302,7 +302,7 @@ final class PanelToolsAppTests: PanelToolsCase {
     /// made to the settings as saved; the draft's other fields wait as they were. A setting no field sets leaves the draft.
     func testAPersonsEditInSettingsDropsThatFieldAlone() throws {
         _ = try call(["app": .object(["botLogos": .bool(false), "hover": .object(["delayMs": .integer(800)])])])
-        settings.updateSetting(\.showIslandTokens) { $0.showIslandTokens = false }
+        settings.updateSetting(\.glowOutwardOnly) { $0.glowOutwardOnly.toggle() }
         XCTAssertEqual(layout.appDraft, AppDraft(botLogos: false, delayMs: 800), "a setting the draft does not set")
 
         settings.updateSetting(\.hoverDelayMs) { $0.hoverDelayMs = 100 }

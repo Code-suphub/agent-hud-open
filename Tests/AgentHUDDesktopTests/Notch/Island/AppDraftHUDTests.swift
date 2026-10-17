@@ -21,11 +21,8 @@ final class AppDraftHUDTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
         addTeardownBlock { defaults.removePersistentDomain(forName: domain) }
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
-        settings.update {
-            $0.screens[key] = ScreenPlacement(mode: .logos, edge: .top)
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
-        }
+        settings.update { $0.screens[key] = ScreenPlacement(mode: .logos, edge: .top) }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false; $0.sessionList = false }
         settings.onChange = { [weak self] _ in self?.changes += 1 }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))
