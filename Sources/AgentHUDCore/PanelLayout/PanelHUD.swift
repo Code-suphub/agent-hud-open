@@ -3,8 +3,9 @@ import Foundation
 
 public extension PanelLayout {
     /// Which agents the resting HUD of a screen that draws the layout shows: the Dynamic dock's marks, the Simple
-    /// panel's items, and the colours and alert pulse of that screen's glow. `HUD()` shows every agent, as it comes, and
-    /// is not written.
+    /// panel's items, and the colours and alert pulse of that screen's glow; and with them the menu bar where it follows
+    /// that HUD, the menu that opens on the screen and, on the main display, the status item's figure and colours.
+    /// `HUD()` shows every agent, as it comes, and is not written.
     struct HUD: Hashable, Codable, Sendable {
         /// The agents shown, by vendor, in that order, each matched by the mark it is drawn with (`VendorMark`), so
         /// "Codex" names the mark Codex and ChatGPT share. Empty for every agent.

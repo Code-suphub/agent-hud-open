@@ -163,8 +163,15 @@ public struct ReportView: Sendable {
     /// the same part their colours take.
     public var alertPulseVendors: [String] { glowSegments.map(\.vendor) }
 
-    /// The most consumed window among those whose readings show a level, shown in the menu bar.
-    public var maxUsedPct: Double? { rows.filter(\.assessment.showsLevel).compactMap(\.usedPct).max() }
+    /// The most consumed window among those whose readings show a level, of every agent: the menu bar's figure while the
+    /// main display's HUD shows every agent.
+    public var maxUsedPct: Double? { maxUsedPct(shownBy: HUDAgentOrder(listed: [], available: [])) }
+
+    /// The most consumed window among those whose readings show a level, of the agents a screen's resting HUD shows
+    /// under its layout's list (`HUDAgentOrder`): the menu bar's figure, which follows the main display's HUD.
+    public func maxUsedPct(shownBy order: HUDAgentOrder) -> Double? {
+        rows.filter { $0.assessment.showsLevel && order.shows($0.agent.vendor) }.compactMap(\.usedPct).max()
+    }
 
     /// Whether a window's reading enters calculations: only the reading of a row that shows a level does. Any other is
     /// shown greyed, without a forecast.

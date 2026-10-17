@@ -111,8 +111,8 @@ public enum MCPTools {
             "span": text("The whole line, the default, or half of it beside the next block if that is half too. Not for bar "
                          + "rows.", oneOf: PanelSpan.allCases.map(\.rawValue)),
             "period": text("For the chart widget, the last 24 hours, 7 days or 30 days its bars cover, day if left out; for an "
-                           + "API balance, what its estimated cost covers, the token chart's period if left out. For no other "
-                           + "block.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
+                           + "API balance, what its estimated cost covers, in the menu bar's tooltip too, the token chart's "
+                           + "period if left out. For no other block.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
         ])
         let blocks: [String: JSONValue] = [
             "type": .string("object"),
@@ -146,7 +146,9 @@ public enum MCPTools {
                            + "any are; none for every model.", of: key),
         ], description: "The token chart's period, agents and models.")
         let hud = object([
-            "agents": list("Agents it shows, in order, by name from get_panel's screens; none shows every agent.", of: key),
+            "agents": list("Agents it shows, in order, by name from get_panel's screens; none shows every agent. The menu "
+                           + "bar follows it where the layout is drawn: the menu opened on that screen, and the status "
+                           + "item's figure and colours on the first screen get_panel lists.", of: key),
             "mode": text("For one screen only, as is every field but agents. notch needs a screen with a notch.",
                          oneOf: HUDMode.allCases.map(\.agentName)),
             "edge": text("Dynamic or simple: the edge it is parked on.", oneOf: HUDEdge.allCases.map(\.rawValue)),

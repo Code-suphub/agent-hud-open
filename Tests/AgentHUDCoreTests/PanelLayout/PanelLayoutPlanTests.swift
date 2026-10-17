@@ -172,6 +172,24 @@ final class PanelLayoutPlanTests: XCTestCase {
         XCTAssertEqual(planned("Claude", PanelLayout.Block(widget: .ring)).ringSize, .medium)
     }
 
+    /// A balance's estimated cost covers one period wherever it is said, on its card in the panel and in the menu-bar
+    /// menu's tooltip: its block's, else the one the token chart starts from, else a day, whether the panel shows the
+    /// block or hides it.
+    func testABalancesCostCoversThePeriodItsBlockIsPlannedWith() {
+        let billing = APIBilling(vendor: "DeepSeek", balances: [], isAvailable: true, updatedAt: nil, notice: nil)
+        let layouts = [
+            PanelLayout(),
+            PanelLayout(tokens: PanelLayout.Tokens(period: .week)),
+            PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(period: .day)], tokens: PanelLayout.Tokens(period: .month)),
+            PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(period: .month)]),
+        ]
+        XCTAssertEqual(layouts.map { $0.costPeriod(of: billing) }, [.day, .week, .day, .month])
+        XCTAssertEqual(layouts.map { block("api:DeepSeek", in: $0)?.period }, [.day, .week, .day, .month])
+        let hidden = PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(hidden: true, period: .week)])
+        XCTAssertNil(block("api:DeepSeek", in: hidden))
+        XCTAssertEqual(hidden.costPeriod(of: billing), .week, "the menu lists a balance the panel hides")
+    }
+
     func testThePlanCarriesTheLayoutsStyle() {
         let style = PanelStyle(spacing: .roomy, separators: false)
         XCTAssertEqual(plan(PanelLayout(style: style)).style, style)

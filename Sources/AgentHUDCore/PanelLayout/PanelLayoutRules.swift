@@ -96,6 +96,15 @@ public extension APIBilling {
     var panelBlockKey: String { "api:" + (billingPool?.provider ?? vendor) }
 }
 
+public extension PanelLayout {
+    /// The period an API account's estimated cost covers under the layout, on its card in the hover panel and in the
+    /// menu-bar menu's tooltip alike: its block's `period`, else the period the token chart starts from, else the latest
+    /// 24 hours (`PanelBlockKind.defaultPeriod(tokens:)`).
+    func costPeriod(of billing: APIBilling) -> PanelTokenPeriod {
+        blocks[billing.panelBlockKey]?.period ?? PanelBlockKind.billing.defaultPeriod(tokens: tokens.chartPeriod)
+    }
+}
+
 public extension ReportView {
     /// The blocks the panel has, in default order: a quota block for each vendor's rows in row order, then a billing
     /// block for each API provider whose balance is shown, in the order of the balances.
