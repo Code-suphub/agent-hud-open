@@ -133,7 +133,7 @@ final class HUDToolsTests: HUDToolsCase {
                        [.string("Current session"), .string("Weekly limit · All models"), .string("Weekly limit · Fable")])
         let keys = try claude().map { $0["key"] }
         L10n.setLanguage(.zhHans)
-        XCTAssertEqual(try claude().map { $0["name"] }, [.string("当前会话"), .string("每周限制 · 所有模型"), .string("每周限制 · Fable")])
+        XCTAssertEqual(try claude().map { $0["name"] }, [.string("Current session"), .string("Weekly limit · All models"), .string("Weekly limit · Fable")])
         XCTAssertEqual(try claude().map { $0["key"] }, keys)
         XCTAssertEqual(try claude().compactMap { $0["name"]?.stringValue },
                        (store.rowGroups.first { $0.vendor == "Claude" }?.rows ?? []).map(\.agent.name), "as the panel's rows are named")
