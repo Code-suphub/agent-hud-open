@@ -123,9 +123,8 @@ final class HUDToolsTests: HUDToolsCase {
         XCTAssertEqual(changes, 0, "no tool writes the settings")
     }
 
-    /// A window's name is how the person who looks at the panel calls the row, so it follows the application's
-    /// language as the panel does; keys, notes and refusals do not.
-    func testARowIsNamedAsThePanelNamesItInTheApplicationsLanguage() throws {
+    /// Quota rows keep the panel's English names under either interface language; keys, notes and refusals stay stable.
+    func testQuotaRowsKeepEnglishNamesWhenTheInterfaceLanguageChanges() throws {
         func claude() throws -> [[String: JSONValue]] {
             (try block("Claude", in: try result(MCPTools.getHUD))["rows"]?.arrayValue ?? []).compactMap(\.objectValue)
         }
