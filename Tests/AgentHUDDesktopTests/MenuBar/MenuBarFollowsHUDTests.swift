@@ -187,16 +187,26 @@ final class MenuBarFollowsHUDTests: XCTestCase {
 
     // MARK: On screen
 
-    /// The menu opened from the status item lists what the HUD of the screen it opens on shows, and the item's figure
-    /// follows the main display's HUD; each attached display is given the same list, so either is the one asked for.
-    func testTheOpenMenuAndTheFigureFollowTheirDisplays() throws {
+    /// The menu opened from the status item lists what the HUD of the screen it opens on shows, and the item writes the
+    /// figure of the main display's HUD, a draft at once and the saved layout again after Discard; each attached display
+    /// is given the same list, so the menu's screen is one asked for whichever it opens on.
+    func testTheOpenMenuAndTheItemFollowTheirDisplays() async throws {
         let (controller, _, settings) = try make()
         defer { controller.closeMenu() }
-        let screens = NSScreen.screens.map(StatusItemController.Screen.init)
-        XCTAssertFalse(screens.isEmpty)
-        for screen in screens { XCTAssertTrue(settings.panelLayout.propose(.own(hud(["Claude"])), for: screen.key)) }
-        XCTAssertEqual(StatusItemController.Screen.primary, screens.first)
-        XCTAssertEqual(controller.figure(on: .primary).usedPct, 70)
+        let primary = try XCTUnwrap(StatusItemController.Screen.primary)
+        func written(_ title: String) async {
+            for _ in 0..<100 where controller.title != title { await Task.yield() }
+            XCTAssertEqual(controller.title, title)
+        }
+        await written(" 90%")
+        XCTAssertTrue(settings.panelLayout.propose(.own(hud(["Claude"])), for: primary.key))
+        await written(" 70%")
+        settings.panelLayout.discard(.screen(primary.key))
+        await written(" 90%")
+
+        for screen in NSScreen.screens.map(StatusItemController.Screen.init) {
+            XCTAssertTrue(settings.panelLayout.propose(.own(hud(["Claude"])), for: screen.key))
+        }
         controller.openMenu()
         let panel = try XCTUnwrap(controller.panel)
         XCTAssertEqual(vendors(panel.model.entries), ["Claude"])

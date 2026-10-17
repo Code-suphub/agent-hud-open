@@ -6,30 +6,41 @@ struct IslandPane: View {
     let theme: Theme
     /// The look of the HUD whose panel the samples show, which they are drawn with.
     let look: HUDLook
+    /// The key of the display chosen in Screens above, whose saved layout the switches show and set.
+    var screen: String? = nil
 
     /// The tokens the samples are drawn with: the look's, as the island's are.
     private var island: Theme { look.theme }
 
-    /// The switches as the saved shared layout sets them, which they are fields of.
-    private var switches: PanelSwitches { settings.panelLayout.switches }
+    /// The switches as the layout the chosen display keeps saved sets them, its own or the shared one, which they are
+    /// fields of.
+    private var switches: PanelSwitches { settings.panelLayout.switches(on: screen) }
 
-    /// A switch, which sets the saved shared layout at once, and a waiting shared draft with it (`setSwitches(_:)`).
+    /// A switch, which sets that layout at once, and a waiting draft of it with it (`setSwitches(on:_:)`).
     private func binding(_ field: WritableKeyPath<PanelSwitches, Bool>) -> Binding<Bool> {
         Binding(get: { switches[keyPath: field] },
-                set: { value in settings.panelLayout.setSwitches { $0[keyPath: field] = value } })
+                set: { value in settings.panelLayout.setSwitches(on: screen) { $0[keyPath: field] = value } })
     }
 
-    /// What the samples are, and where an attached display has a layout of its own, that the switches set the shared
-    /// layout, which that display does not draw.
+    /// What the samples are, and which layout the switches set: the chosen display's own, where it keeps one, or else
+    /// the shared one, with the attached displays that keep a layout of their own, which it leaves, and how to set theirs.
     private func subtitle(_ screens: [ScreensPane.Screen]) -> String {
         let samples = L10n.text("每项展示一个简短示例，开关控制对应内容。", "A small sample for each part. Choose what appears in the panel.")
-        let own = screens.filter { !settings.panelLayout.usesShared($0.key) }.map(\.name)
+        let layout = settings.panelLayout
+        if let screen, layout.ownLayout(of: screen) != nil, let name = screens.first(where: { $0.key == screen })?.name {
+            return samples + "\n" + L10n.text("开关改的是 \(name) 自己的布局，其他显示器不受影响。",
+                                               "The switches set the layout of its own that \(name) uses, which no other "
+                                                   + "display draws.")
+        }
+        let own = screens.filter { layout.ownLayout(of: $0.key) != nil }.map(\.name)
         guard !own.isEmpty else { return samples }
         let names = own.joined(separator: L10n.text("、", ", "))
-        return samples + "\n" + L10n.text("开关改的是共用布局；\(names) 使用自己的布局，不受影响。",
+        return samples + "\n" + L10n.text("开关改的是共用布局；\(names) 使用自己的布局，不受影响，在上方选中它即可改它的开关。",
                                            "The switches set the shared layout; \(names) "
                                                + (own.count == 1 ? "uses a layout of its own" : "use layouts of their own")
-                                               + ", which they leave as it is.")
+                                               + ", which they leave as it is. Choose "
+                                               + (own.count == 1 ? "it" : "one")
+                                               + " above to set its switches.")
     }
 
     /// What the hover delay and the collapse delay are set in, in milliseconds, as an agent's draft of them is held to.
@@ -59,9 +70,9 @@ struct IslandPane: View {
                         tokenSample
                     }
                     SettingsDivider(theme: theme)
-                    // The switches above are the shared layout's, and so are these buttons: a person's click takes
-                    // effect at once, where an agent's change waits in the panel to be saved. A screen with a layout of
-                    // its own says so in its part of Screens above.
+                    // The switches above set the layout the display chosen in Screens keeps saved, and these buttons
+                    // the shared layout: a person's click takes effect at once, where an agent's change waits in the
+                    // panel to be saved. A screen with a layout of its own says so in its part of Screens above.
                     SharedLayoutRow(layout: settings.panelLayout, screens: screens)
                 }
             SettingsSection(title: L10n.text("Logo", "Logos"), theme: theme) {

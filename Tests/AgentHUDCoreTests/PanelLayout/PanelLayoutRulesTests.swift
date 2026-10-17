@@ -336,7 +336,7 @@ final class PanelLayoutRulesTests: XCTestCase {
     /// the default.
     func testALayoutThatSpellsOutTheDefaultViewIsTheDefaultLayout() {
         let spelled = PanelLayout(blocks: [
-            "Claude": PanelLayout.Block(widget: .bar, measures: [.quota, .burnRate, .tokens, .cost], countdown: true),
+            "Claude": PanelLayout.Block(widget: .bar, measures: [.quota, .burnRate, .tokens, .cost]),
             "Codex": PanelLayout.Block(widget: .bar),
             "api:DeepSeek": PanelLayout.Block(widget: .number, measures: [.quota, .burnRate, .cost]),
         ], order: ["Claude", "Codex", "api:DeepSeek"], sections: [.blocks, .tokens, .sessions],

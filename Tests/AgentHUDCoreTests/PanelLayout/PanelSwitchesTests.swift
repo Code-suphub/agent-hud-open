@@ -73,6 +73,38 @@ final class PanelSwitchesTests: XCTestCase {
         XCTAssertEqual(store.current, PanelLayout(), "Revert to Previous goes back to the version before, switches and all")
     }
 
+    /// Settings sets the switches of the display chosen there: of its own layout where it keeps one, at once and in a
+    /// waiting draft of its own with it, as no version, and of the shared layout where it keeps none.
+    func testASwitchForADisplayWithALayoutOfItsOwnSetsThatLayout() {
+        let store = PanelLayoutStore(defaults: makeDefaults())
+        store.propose(.own(PanelLayout(order: ["Codex"])), for: "A")
+        store.save(.screen("A"))
+        store.propose(.own(PanelLayout(order: ["Codex"], hiddenSections: [.blocks])), for: "A")
+        let revision = store.revision
+
+        store.setSwitches(on: "A") { $0.tokenUsage = false }
+        XCTAssertEqual(store.ownLayout(of: "A"), PanelLayout(order: ["Codex"], hiddenSections: [.tokens]))
+        XCTAssertEqual(store.draft(of: "A"), .own(PanelLayout(order: ["Codex"], hiddenSections: [.blocks, .tokens])),
+                       "the draft takes the switch too, and keeps its own sections")
+        XCTAssertEqual(store.previous(of: "A"), .shared, "a person's switch is no version")
+        XCTAssertEqual(store.current, PanelLayout(), "the shared layout keeps its own")
+        XCTAssertEqual(store.switches(on: "A"), PanelSwitches(tokenUsage: false), "Settings reads the display's saved layout")
+        XCTAssertEqual(store.switches, PanelSwitches())
+        XCTAssertEqual(store.revision, revision + 1)
+
+        store.setSwitches(on: "A") { $0.quotaDetails = false }
+        XCTAssertNil(store.draft(of: "A"), "a draft the switch makes the saved layout is no draft")
+        store.propose(.shared, for: "A")
+        store.setSwitches(on: "A") { $0.sessionList = false }
+        XCTAssertEqual(store.draft(of: "A"), .shared, "a draft to use the shared layout has no switches to set")
+        XCTAssertEqual(store.switches(on: "A"), PanelSwitches(sessionList: false, quotaDetails: false, tokenUsage: false))
+
+        store.setSwitches(on: "B") { $0.resetCountdown = false }
+        XCTAssertFalse(store.current.countdown, "a display without a layout of its own sets the shared one")
+        XCTAssertEqual(store.switches(on: "B"), PanelSwitches(resetCountdown: false))
+        XCTAssertEqual(store.switches(on: nil), store.switches)
+    }
+
     // MARK: Before the switches joined the layout
 
     /// Settings an earlier version wrote, with the four switches among them as it wrote them.
@@ -132,6 +164,12 @@ final class PanelSwitchesTests: XCTestCase {
         XCTAssertEqual(relaunched.ownLayout(of: "A"), PanelLayout(hiddenSections: [.sessions], countdown: false,
                                                                   style: PanelStyle(spacing: .compact)),
                        "the person's switch is the shared layout's alone")
+
+        // With A chosen in Settings → Display, the switches are those of its own layout, which turns the list on there.
+        XCTAssertEqual(relaunched.switches(on: "A"), PanelSwitches(sessionList: false, resetCountdown: false))
+        relaunched.setSwitches(on: "A") { $0.sessionList = true }
+        XCTAssertEqual(relaunched.ownLayout(of: "A"), PanelLayout(countdown: false, style: PanelStyle(spacing: .compact)))
+        XCTAssertEqual(relaunched.switches, PanelSwitches(resetCountdown: false), "and leaves the shared layout's")
     }
 
     /// Switches an earlier version kept on, as they were by default, change no layout, and settings this version
@@ -167,14 +205,19 @@ final class PanelSwitchesTests: XCTestCase {
                        PanelSwitches(sessionList: false))
     }
 
-    /// Settings the app cannot read whole are not written over: the switches are carried, and the rest stays for a
-    /// person's own change to replace, as before.
+    /// Settings the app cannot read whole are not written over: the switches are carried once and left out of them,
+    /// and the rest stays as it was written for a person's own change to replace, as before.
     func testUnreadableSettingsAreNotWrittenOver() {
         let defaults = makeDefaults()
-        let unreadable = Data(#"{"showIslandQuota": false, "hoverDelayMs": "slow"}"#.utf8)
+        let unreadable = Data(#"{"showIslandQuota": false, "hoverDelayMs": "slow", "glowRange": 20}"#.utf8)
         defaults.set(unreadable, forKey: SettingsStore.Keys.settings)
         let settings = SettingsStore(defaults: defaults)
         XCTAssertEqual(settings.panelLayout.switches, PanelSwitches(quotaDetails: false))
-        XCTAssertEqual(defaults.data(forKey: SettingsStore.Keys.settings), unreadable)
+        XCTAssertEqual(stored(defaults, SettingsStore.Keys.settings), ["hoverDelayMs": .string("slow"), "glowRange": .integer(20)],
+                       "the rest as it was written")
+
+        // The person turns Quota details on again; the next launch has nothing to carry, so it stays on.
+        settings.panelLayout.setSwitches { $0.quotaDetails = true }
+        XCTAssertEqual(SettingsStore(defaults: defaults).panelLayout.switches, PanelSwitches())
     }
 }

@@ -371,24 +371,41 @@ public final class PanelLayoutStore {
     /// The four switches of Settings → Display → Expanded panel as the saved shared layout sets them.
     public var switches: PanelSwitches { current.switches }
 
-    /// A person's switch in Settings → Display → Expanded panel: sets the saved shared layout at once, and a waiting
-    /// shared draft with it, so that the panel shows the change either way, the switch that changed and nothing else.
-    /// Like a person's own edit of a display, it is no version: the previous layout stays as it is, and Revert to
-    /// Previous still goes back to it. A screen with a layout of its own keeps it.
-    public func setSwitches(_ change: (inout PanelSwitches) -> Void) {
-        let was = switches
+    /// The switches as the layout `screen` keeps saved sets them, which Settings shows for the display chosen in
+    /// Settings → Display: its own layout where it keeps one, else the shared one. Nil is the shared layout.
+    public func switches(on screen: String?) -> PanelSwitches {
+        (screen.flatMap(ownLayout(of:)) ?? current).switches
+    }
+
+    /// A person's switch in Settings → Display → Expanded panel, for the display chosen there: sets the layout that
+    /// display keeps saved at once, its own where it keeps one, else the shared one, and a waiting draft of that layout
+    /// with it, so that the panel shows the change either way, the switch that changed and nothing else. Like a person's
+    /// own edit of a display, it is no version: the previous layout stays as it is, and Revert to Previous still goes back
+    /// to it. Every other layout keeps its own switches; nil, or a display that uses the shared layout, sets the shared
+    /// one, which every display without a layout of its own draws.
+    public func setSwitches(on screen: String? = nil, _ change: (inout PanelSwitches) -> Void) {
+        let was = switches(on: screen)
         var now = was
         change(&now)
         guard now != was else { return }
-        let saved = current.switching(from: was, to: now).normalized()
-        let drafted = draft.map { $0.switching(from: was, to: now).normalized() }
-        set(current: saved, previous: previous, draft: drafted == saved ? nil : drafted)
+        guard let screen, let own = ownLayout(of: screen), var document = screens[screen] else {
+            let saved = current.switching(from: was, to: now).normalized()
+            let drafted = draft.map { $0.switching(from: was, to: now).normalized() }
+            return set(current: saved, previous: previous, draft: drafted == saved ? nil : drafted)
+        }
+        let saved = own.switching(from: was, to: now).normalized()
+        document.current = .own(saved)
+        if let drafted = document.draft?.layout.map({ $0.switching(from: was, to: now).normalized() }) {
+            document.draft = drafted == saved ? nil : .own(drafted)
+        }
+        set(screen: screen, document)
     }
 
     /// Carries the switches as settings an earlier version wrote kept them into every saved layout, the shared one and
     /// each screen's own, and the ones saved before them, so that each draws the panel it drew under those settings: a
-    /// switch that was off hides its section, or the countdown, in each. Written once, at launch, before any panel reads
-    /// a layout; the settings are then written without the switches, so it is not carried again.
+    /// switch that was off hides its section, or the countdown, in each, which Settings turns on again for the display
+    /// chosen there (`setSwitches(on:_:)`). Written once, at launch, before any panel reads a layout; the settings are
+    /// then written without the switches, those it cannot read whole too, so it is not carried again.
     func carry(_ stored: PanelSwitches) {
         func carried(_ layout: PanelLayout) -> PanelLayout { layout.carrying(stored).normalized() }
         func carried(_ choice: PanelScreenLayout) -> PanelScreenLayout { choice.layout.map { .own(carried($0)) } ?? .shared }

@@ -5,8 +5,9 @@ import Foundation
 /// list, its quota details, the agents' blocks with their balances, the blocks' reset countdowns, and its token chart.
 /// They are no settings of their own but fields of the layout, its hidden sections and its `countdown`, so an agent's
 /// draft, Save, a screen's own layout, Revert to Previous and Reset to Default reach them as they reach the rest of it.
-/// Settings shows and sets them on the saved shared layout (`PanelLayoutStore.switches`). `PanelSwitches()`, every
-/// switch on, is the default view's.
+/// Settings shows and sets them on the layout the display chosen in Settings → Display keeps saved, its own where it
+/// keeps one, else the shared one (`PanelLayoutStore.switches(on:)`). `PanelSwitches()`, every switch on, is the default
+/// view's.
 public struct PanelSwitches: Hashable, Sendable {
     /// The session rows: the `sessions` section shown.
     public var sessionList: Bool
@@ -45,6 +46,16 @@ public struct PanelSwitches: Hashable, Sendable {
         var switches = PanelSwitches()
         for (key, field) in storedKeys { switches[keyPath: field] = fields[key]?.boolValue ?? true }
         return switches
+    }
+
+    /// Settings an earlier version wrote, without the switches and with every other field as it was written: what is
+    /// written back where they cannot be read whole, so that the switches are carried once and the rest stays for a
+    /// person's own change to replace. Nil where they keep no switch.
+    static func leftOut(of settings: Data?) -> Data? {
+        guard var fields = settings.flatMap({ try? JSONValue.parse($0) })?.objectValue,
+              storedKeys.contains(where: { fields[$0.0] != nil }) else { return nil }
+        for (key, _) in storedKeys { fields[key] = nil }
+        return try? RecordCoding.encoder().encode(JSONValue.object(fields))
     }
 }
 

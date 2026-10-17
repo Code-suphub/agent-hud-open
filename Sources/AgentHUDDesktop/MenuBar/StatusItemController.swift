@@ -107,6 +107,9 @@ final class StatusItemController: NSObject {
     /// Whether the item is in the menu bar now.
     var showsItem: Bool { item.isVisible }
 
+    /// What the item writes beside its icon now, as `refreshButton()` last wrote it: its figure, with a space before it.
+    var title: String? { item.button?.attributedTitle.string }
+
     /// Shows or hides the item as the app draws its settings, an agent's unsaved draft of them included: a draft that hides
     /// it leaves its Save and Discard in the HUD's panel (`PanelLayoutStore.hasDraft(on:)`).
     func refreshButton() {

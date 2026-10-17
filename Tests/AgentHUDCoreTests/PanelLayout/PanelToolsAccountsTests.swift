@@ -110,8 +110,28 @@ final class PanelToolsAccountsTests: XCTestCase {
         _ = try result(MCPTools.setPanelLayout, read["layout"]?.objectValue ?? [:])
         XCTAssertEqual(layout.revision, revision, "the layout that was read, sent back, keeps the draft as it is")
 
-        _ = try result(MCPTools.setPanelLayout, claudeChange(["accounts": .array([.string(work), .string(DemoData.claudeAccount.id)])]))
-        XCTAssertNil(layout.draft, "every account the block has is the saved layout")
+        let every = [DemoData.claudeAccount.id, work].sorted()
+        _ = try result(MCPTools.setPanelLayout, claudeChange(["accounts": .array(every.map(JSONValue.string))]))
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(accounts: every)]),
+                       "every account the block has now still leaves out one that joins later")
+        _ = try result(MCPTools.setPanelLayout, claudeChange(["accounts": .array([])]))
+        XCTAssertNil(layout.draft, "no account named is every account, the saved layout")
+    }
+
+    /// The accounts a saved layout chooses stay chosen while one the block left out is away: the layout that was read,
+    /// sent back with another change, keeps them, so that Save does not bring the account back with the change.
+    func testTheAccountsChosenStayChosenWhileAnotherIsAway() throws {
+        let work = Self.work.id
+        layout.propose(PanelLayout(blocks: ["Claude": PanelLayout.Block(accounts: [work])]))
+        layout.save()
+        store.settings.setAccount(id: DemoData.claudeAccount.id, visible: false)
+        XCTAssertEqual(store.view.panelBlocks.first { $0.key == "Claude" }?.accounts.map(\.id), [work],
+                       "Personal is switched off in Settings, so Work is all the block has now")
+        var arguments = try XCTUnwrap(try result(MCPTools.getPanel)["layout"]?.objectValue)
+        arguments["style"] = .object(["width": .integer(600)])
+        _ = try result(MCPTools.setPanelLayout, arguments)
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(accounts: [work])],
+                                                 style: PanelStyle(width: 600)))
     }
 
     func testAnAccountTheBlockDoesNotHaveIsRefusedWithTheAccountsItHas() throws {
@@ -172,6 +192,21 @@ final class PanelToolsAccountsTests: XCTestCase {
 
         let refused = try refusal(["countdown": .string("no")])
         XCTAssertTrue(refused.contains("countdown is true or false."), refused)
+    }
+
+    /// A block's own countdown is kept as written, the one the layout has now included, so it holds whichever way the
+    /// person turns Settings' Reset countdown later.
+    func testABlocksOwnCountdownHoldsWhenTheSwitchTurns() throws {
+        _ = try result(MCPTools.setPanelLayout, claudeChange(["countdown": .bool(true)]))
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: true)]))
+        layout.save()
+        layout.setSwitches { $0.resetCountdown = false }
+        let read = try result(MCPTools.getPanel)
+        XCTAssertEqual(read["countdown"], .bool(false))
+        XCTAssertEqual(try claude(read)["countdown"], .bool(true), "Claude's reset times still show")
+        let revision = layout.revision
+        _ = try result(MCPTools.setPanelLayout, read["layout"]?.objectValue ?? [:])
+        XCTAssertEqual(layout.revision, revision, "the layout that was read, sent back, is the saved one")
     }
 
     func testAScreensOwnLayoutKeepsItsOwnSwitches() throws {

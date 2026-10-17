@@ -5,7 +5,7 @@ import AgentHUDCore
 /// token chart lays them out, in one colour: the balance's level, as its figures are drawn, so the bars tell how the
 /// balance stands and their heights what each column cost. Hovering a column raises its period and its amount on the
 /// HUD's own surface, as the token chart's columns do; a column with a request that had no price in the currency is
-/// drawn empty and says it is unpriced.
+/// drawn empty and says it is unpriced, and a chart with no bar says why (`emptyText(_:isLoading:)`).
 struct CostBarsChart: View {
     let columns: [CostColumn]
     let interval: DateInterval
@@ -58,8 +58,8 @@ struct CostBarsChart: View {
                         barContext.fill(Path(roundedRect: bar, cornerRadius: 2), with: .color(color))
                     }
                 }
-                if peak == 0 && !isLoading {
-                    Text(L10n.text("此时间窗口内没有费用", "No cost in this range"))
+                if let empty = Self.emptyText(columns, isLoading: isLoading) {
+                    Text(empty)
                         .font(.ui(11))
                         .foregroundStyle(theme.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -89,6 +89,16 @@ struct CostBarsChart: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.text("费用估算图表", "Estimated cost chart"))
         .accessibilityValue(inspectedColumn.map(description) ?? L10n.text("悬停查看时间段", "Hover to inspect a period"))
+    }
+
+    /// What the chart says where it draws no bar: nothing while it loads or where a column cost something; that its
+    /// requests have no price where a column holds one without a price in the currency, as the estimate above the chart
+    /// then says Unpriced; else that nothing was spent.
+    static func emptyText(_ columns: [CostColumn], isLoading: Bool) -> String? {
+        guard !isLoading, !columns.contains(where: { ($0.amount ?? 0) > 0 }) else { return nil }
+        return columns.contains { $0.amount == nil }
+            ? L10n.text("此时间窗口内的请求暂无价格", "No price for the requests in this range")
+            : L10n.text("此时间窗口内没有费用", "No cost in this range")
     }
 
     private func xBounds(_ column: CostColumn, width: CGFloat) -> ClosedRange<CGFloat> {

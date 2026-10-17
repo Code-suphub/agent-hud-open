@@ -251,4 +251,23 @@ final class BalanceMeasuresViewTests: XCTestCase {
         XCTAssertEqual(store.balanceCostColumns(account, currency: "CNY", period: .week).compactMap(\.amount).reduce(0, +),
                        Decimal(string: "0.7"))
     }
+
+    /// A chart with no bar says why, as the figure above it does: no price where a request in its period had none in the
+    /// currency, which the figure calls Unpriced, else no cost; one that draws a bar, or still loads, says nothing.
+    func testAChartWithNoBarSaysWhy() throws {
+        L10n.setLanguage(.en)
+        let unpriced = try store(costs: [(1, ["USD": "0.3"])])
+        let account = try XCTUnwrap(unpriced.enabledBilling.first)
+        let columns = unpriced.balanceCostColumns(account, currency: "CNY", period: .day)
+        XCTAssertEqual(try metrics(unpriced, period: .day).figure(.first, of: .cost).value, "Unpriced")
+        XCTAssertEqual(CostBarsChart.emptyText(columns, isLoading: false), "No price for the requests in this range")
+        XCTAssertNil(CostBarsChart.emptyText(columns, isLoading: true))
+
+        let quiet = try store(costs: [(72, ["CNY": "0.4"])])
+        let none = quiet.balanceCostColumns(try XCTUnwrap(quiet.enabledBilling.first), currency: "CNY", period: .day)
+        XCTAssertEqual(CostBarsChart.emptyText(none, isLoading: false), "No cost in this range")
+        let spent = try store(costs: [(1, ["CNY": "0.3"]), (2, ["USD": "0.3"])])
+        let drawn = spent.balanceCostColumns(try XCTUnwrap(spent.enabledBilling.first), currency: "CNY", period: .day)
+        XCTAssertNil(CostBarsChart.emptyText(drawn, isLoading: false), "a bar is drawn; the unpriced column says so on hover")
+    }
 }

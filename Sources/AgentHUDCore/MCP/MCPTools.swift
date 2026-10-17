@@ -59,14 +59,14 @@ public enum MCPTools {
         token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one \
         screen, its mode, edge, sizes, appearance, material, glass style and glow. Send the whole layout you want; \
         anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style \
-        fields leaves the layout as it is. What the layout from get_panel holds for a block, a row, an account or an \
-        agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with \
-        Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in \
-        layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, \
-        or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style. A \
-        layout edit holds the panel open on screen for two minutes from the call, and a call with only hud style \
-        fields closes it so the HUD shows; call finish_panel_edit when you are done. app changes the whole app's own \
-        settings, its appearance, matchScreen, botLogos, showMenuBarIcon and hover, for every screen, as a draft the \
+        fields leaves the layout as it is. What the layout from get_panel holds for a block, a row, an account, an \
+        agent, a project or a model not listed now can be sent back as it is. It shows at once as an unsaved draft: the \
+        user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose \
+        the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went \
+        with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD \
+        style. A layout edit holds the panel open on screen for two minutes from the call, and a call with only hud \
+        style fields closes it so the HUD shows; call finish_panel_edit when you are done. app changes the whole app's \
+        own settings, its appearance, matchScreen, botLogos, showMenuBarIcon and hover, for every screen, as a draft the \
         same Save keeps: name it only when the user explicitly asks for one of those settings, never as a side effect \
         of arranging the panel. A call that leaves app out leaves them as they are, and a call with only app changes \
         them alone and opens nothing.
@@ -125,8 +125,8 @@ public enum MCPTools {
             "hiddenRows": list("Keys of the block's rows to hide, from get_panel.", of: key),
             "rows": list("Keys of the block's rows, from get_panel, in the order to show them; rows left out keep their "
                          + "order after them.", of: key),
-            "accounts": list("Ids of the accounts to show, from the block's accounts in get_panel; none for every account.",
-                             of: key),
+            "accounts": list("Ids of the accounts to show, from the block's accounts in get_panel; none for every account. "
+                             + "A list of every account the block has now still hides one that joins later.", of: key),
             "countdown": described("boolean", "Whether this quota block shows its reset times, whatever the layout's "
                                    + "countdown says; the layout's if left out."),
             "columns": described("integer", "Cells on a line for the ring and number widgets, 2 to 6; 4 if left out."),

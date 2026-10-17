@@ -313,15 +313,16 @@ extension PanelLayout {
     /// The layout reduced to what it changes about the blocks the panel has now, so that two layouts that draw those
     /// blocks alike are the same layout. For a block the panel has, its widget is left out where it is its kind's
     /// default; its measures are kept to those its widget offers and left out where that is none or every one in the
-    /// widget's own order; a countdown, columns or a ring size is left out where the block has none to set, a countdown
-    /// where it is the layout's `countdown`, and columns or a ring size where it is the default; a span is left out
-    /// where it is the whole line or the block cannot take half of one; a period where the block covers none or it is
-    /// the one the block covers by default, on a balance the token chart's (`PanelBlockKind.defaultPeriod(tokens:)`); a
-    /// row's key at the end of the block's `rows` where the row would come there anyway; and the block's accounts where
-    /// they name every account it has now and it has no rows of no account, which any choice leaves out. A block's key is
-    /// left out at the end of `order` where the block would come there anyway. What it holds for a block, a row or an account that is away
-    /// stays as written. A proposal that spells out the default view is then the default layout, and one that spells out
-    /// the saved layout is the saved one.
+    /// widget's own order; a countdown, columns or a ring size is left out where the block has none to set, and columns
+    /// or a ring size where it is the default; a span is left out where it is the whole line or the block cannot take
+    /// half of one; a period where the block covers none or it is the one the block covers by default, on a balance the
+    /// token chart's (`PanelBlockKind.defaultPeriod(tokens:)`); and a row's key at the end of the block's `rows` where the
+    /// row would come there anyway. A block's key is left out at the end of `order` where the block would come there
+    /// anyway. What it holds for a block, a row or an account that is away stays as written, and so do a block's accounts
+    /// and its own countdown, which are no defaults of the panel as it is now: accounts that name every account a block
+    /// has now still leave out one that comes back or joins later, and a countdown that is the layout's now still holds
+    /// once the layout's `countdown`, Settings' Reset countdown, is turned the other way. A proposal that spells out the
+    /// default view is then the default layout, and one that spells out the saved layout is the saved one.
     func reduced(against existing: [PanelBlockInfo]) -> PanelLayout {
         var known: [String: PanelBlockInfo] = [:]
         for block in existing where known[block.key] == nil { known[block.key] = block }
@@ -335,10 +336,8 @@ extension PanelLayout {
             let measures: [PanelMeasure] = kind.measures(change.measures, under: widget)
             change.measures = measures
             if measures == kind.measures(under: widget) { change.measures = [] }
-            if !kind.takesCountdown || change.countdown == layout.countdown { change.countdown = nil }
+            if !kind.takesCountdown { change.countdown = nil }
             change.rows = Self.reduced(change.rows, among: block.rowKeys)
-            // Rows of no account come under an empty id, which no layout names, so a block that has them keeps its choice.
-            if !block.accounts.isEmpty, block.accounts.allSatisfy({ change.accounts.contains($0.id) }) { change.accounts = [] }
             if !kind.takesColumns(under: widget) || change.columns == Block.defaultColumns { change.columns = nil }
             if !kind.takesRingSize(under: widget) || change.ringSize == .medium { change.ringSize = nil }
             if change.span == .full || !kind.takesHalf(under: widget) { change.span = nil }

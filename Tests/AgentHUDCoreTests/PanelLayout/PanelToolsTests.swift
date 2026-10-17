@@ -184,13 +184,14 @@ final class PanelToolsTests: PanelToolsCase {
     }
 
     /// An agent reads every block's widget and measure and may send them all back. Spelled out, the saved layout is
-    /// still the saved layout: nothing waits to be saved, and a default view that is saved is the default layout.
+    /// still the saved layout: nothing waits to be saved, and a default view that is saved is the default layout. A
+    /// block's own countdown is no such spelling: it holds whichever way the layout's is turned later, so it is kept.
     func testAProposalThatDrawsWhatIsSavedLeavesNoDraft() throws {
         let everyKey = JSONValue.array(["Claude", "Codex", "api:DeepSeek"].map(JSONValue.string))
         let spelled = try result(MCPTools.setPanelLayout, [
             "order": everyKey,
             "blocks": .object(["Claude": .object(["widget": .string("bar"), "measures": .array(["quota", "burn", "tokens", "cost"].map(JSONValue.string)),
-                                                  "hidden": .bool(false), "countdown": .bool(true)]),
+                                                  "hidden": .bool(false)]),
                                "api:DeepSeek": .object(["widget": .string("number")])]),
             "style": .object(["spacing": .string("regular"), "separators": .bool(true)]),
         ])
@@ -198,6 +199,9 @@ final class PanelToolsTests: PanelToolsCase {
         XCTAssertTrue(spelled["note"]?.stringValue?.contains("already saved") == true)
         XCTAssertFalse(layout.hasDraft)
         XCTAssertEqual(layout.revision, 0)
+        _ = try result(MCPTools.setPanelLayout, ["blocks": .object(["Claude": .object(["countdown": .bool(true)])])])
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: true)]))
+        layout.discard()
 
         _ = try result(MCPTools.setPanelLayout, ["blocks": .object(["Codex": .object(["widget": .string("ring")])]),
                                                  "order": .array([.string("Codex"), .string("Claude")])])

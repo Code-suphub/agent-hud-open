@@ -15,9 +15,15 @@ public extension SettingsStore {
 
     /// A person's own edit of one setting in Settings, `setting`: the field of the app's draft that sets it, if any, is
     /// dropped first, so a person always wins over an agent, and the change is made to the settings as saved. The rest of
-    /// the draft waits as it was. These settings are no one screen's, so an agent's hold on a panel stays on.
+    /// the draft waits as it was, but for an appearance that the edit leaves to Match screen: with Match screen on the
+    /// windows and the menu take their screen's look, which is why Settings greys the Appearance out, so the draft's
+    /// appearance would draw nothing, and a proposal that repeats it would be refused. These settings are no one screen's,
+    /// so an agent's hold on a panel stays on.
     func updateSetting(_ setting: PartialKeyPath<Settings>, _ change: (inout Settings) -> Void) {
         if let field = AppDraft.Field(setting: setting) { panelLayout.discardApp(field) }
         update(change)
+        if panelLayout.appDraft?.appearance != nil, effectiveSettings.appearanceFollowsScreen {
+            panelLayout.discardApp(.appearance)
+        }
     }
 }

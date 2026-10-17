@@ -92,17 +92,22 @@ final class PanelBlockRowsTests: XCTestCase {
         XCTAssertNotNil(block("api:Moonshot", in: PanelLayout(blocks: ["api:Moonshot": PanelLayout.Block(accounts: ["pool:second"])])))
     }
 
-    func testAccountsAreAFilterAndEveryAccountIsNoChange() {
+    /// Accounts are a filter, kept as written: one that names every account the block has now still leaves out an
+    /// account that comes back or joins later, so it is no default of the panel as it is now.
+    func testAccountsAreAFilterKeptAsWritten() {
         XCTAssertEqual(claude(PanelLayout.Block(accounts: ["b", "", "a", "b"])).normalized().blocks["Claude"]?.accounts, ["a", "b"],
                        "each once, in id order, since a filter has no order")
         func reduced(_ key: String, _ accounts: [String]) -> [String]? {
             PanelLayout(blocks: [key: PanelLayout.Block(accounts: accounts)]).reduced(against: blocks).blocks[key]?.accounts
         }
-        XCTAssertNil(reduced("Claude", ["account:work", "account:personal"]), "every account the block has is every account")
-        XCTAssertNil(reduced("Claude", ["account:work", "account:personal", "account:away"]))
+        XCTAssertEqual(reduced("Claude", ["account:work", "account:personal"]), ["account:personal", "account:work"],
+                       "every account the block has now leaves out one that joins later")
+        XCTAssertEqual(reduced("Claude", ["account:work", "account:personal", "account:away"]),
+                       ["account:away", "account:personal", "account:work"])
         XCTAssertEqual(reduced("Claude", ["account:work"]), ["account:work"])
         XCTAssertEqual(reduced("Codex", ["account:away"]), ["account:away"], "rows of no account leave a filter something to change")
-        XCTAssertNil(reduced("api:Moonshot", ["pool:first", "pool:second"]))
+        XCTAssertEqual(reduced("api:Moonshot", ["pool:first", "pool:second"]), ["pool:first", "pool:second"])
+        XCTAssertNil(reduced("Claude", []), "no account named is every account")
     }
 
     func testAnAccountTheBlockDoesNotHaveIsAnIssueThatNamesItsAccounts() {
@@ -129,9 +134,15 @@ final class PanelBlockRowsTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(block("Claude", in: shown)).countdown, true)
         XCTAssertEqual(try XCTUnwrap(block("Codex", in: shown)).countdown, false)
         XCTAssertEqual(try XCTUnwrap(block("api:Moonshot", in: shown)).countdown, true, "a balance has no countdown to hide")
-        XCTAssertNil(PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: false)], countdown: false).reduced(against: blocks)
-            .blocks["Claude"], "a block's countdown that is the layout's changes nothing")
+        let hidden = PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: false)], countdown: false)
+        XCTAssertEqual(hidden.reduced(against: blocks), hidden,
+                       "a block's countdown that is the layout's now still holds once Reset countdown is turned on")
+        XCTAssertEqual(try XCTUnwrap(block("Claude", in: PanelLayout(blocks: hidden.blocks))).countdown, false)
+        let kept = PanelLayout(blocks: ["Codex": PanelLayout.Block(countdown: true)])
+        XCTAssertEqual(kept.reduced(against: blocks), kept, "and one that shows the countdown, once it is turned off")
         XCTAssertEqual(shown.reduced(against: blocks), shown)
+        XCTAssertEqual(PanelLayout(blocks: ["api:Moonshot": PanelLayout.Block(countdown: true)]).reduced(against: blocks), PanelLayout(),
+                       "a balance has no countdown to set")
         XCTAssertEqual(PanelLayout(blocks: ["api:Moonshot": PanelLayout.Block(countdown: true)]).issues(against: blocks).map(\.path),
                        ["blocks.api:Moonshot.countdown"])
     }

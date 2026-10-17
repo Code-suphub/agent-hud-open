@@ -105,7 +105,7 @@ public struct PanelStyle: Hashable, Codable, Sendable {
 /// a block is a quota window, under its `AgentDescriptor.windowKey`, and an account of a block is one of its sections,
 /// under the id `PanelBlockInfo.Account` gives it. A key or an id that names nothing the panel has now stays in the
 /// document and applies again when its block, row or account returns. The four switches of Settings → Display →
-/// Expanded panel are fields of the shared layout (`PanelSwitches`): its hidden sections and its `countdown`.
+/// Expanded panel are fields of every layout (`PanelSwitches`): its hidden sections and its `countdown`.
 ///
 /// The JSON is also what an agent sends, so reading forgives field by field: a widget, ring size, span, period, sort or
 /// spacing name this build does not know leaves that field unset, a session period the build before named is the period

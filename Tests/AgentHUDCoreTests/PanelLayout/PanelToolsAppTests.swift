@@ -319,6 +319,26 @@ final class PanelToolsAppTests: PanelToolsCase {
         XCTAssertNil(AppDraft.Field(setting: \Settings.language), "the language is no field")
     }
 
+    /// A person who turns Match screen on leaves the windows to their screen's look, which Settings greys the Appearance
+    /// out for, so the draft's appearance goes with it: get_panel never lists an app that a proposal would refuse, and the
+    /// app listed, sent back, is taken.
+    func testMatchScreenTurnedOnInSettingsDropsTheDraftsAppearance() throws {
+        _ = try call(["app": .object(["appearance": .string("dark"), "botLogos": .bool(false)])])
+        settings.updateSetting(\.appearanceFollowsScreen) { $0.appearanceFollowsScreen = true }
+        XCTAssertEqual(layout.appDraft, AppDraft(botLogos: false))
+        let listed = try XCTUnwrap(try call(MCPTools.getPanel, [:])["app"])
+        XCTAssertEqual(listed["appearance"], .string("system"))
+        XCTAssertEqual(listed["matchScreen"], .bool(true))
+        _ = try call(["app": listed])
+        XCTAssertEqual(layout.appDraft, AppDraft(botLogos: false), "the app listed, sent back, keeps the draft as it is")
+
+        // A draft that turns Match screen off allows an appearance; the person's switch drops both.
+        _ = try call(["app": .object(["appearance": .string("light"), "matchScreen": .bool(false)])])
+        settings.updateSetting(\.appearanceFollowsScreen) { $0.appearanceFollowsScreen = true }
+        XCTAssertNil(layout.appDraft)
+        XCTAssertTrue(settings.effectiveSettings.appearanceFollowsScreen)
+    }
+
     // MARK: Holds
 
     /// A call with only app opens nothing, and leaves a hold as it is: it neither starts one, renews one nor pauses one,

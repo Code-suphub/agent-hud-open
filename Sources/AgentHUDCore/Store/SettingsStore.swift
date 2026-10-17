@@ -53,10 +53,16 @@ public final class SettingsStore {
         // A screen's style draft is drawn over these settings, and a person's Save writes it into them.
         panelLayout.owner = self
         // The Expanded panel's switches were settings until they joined the panel's layouts. Those an earlier version
-        // kept are carried into every saved layout once, and the settings, read whole, are written again without them.
+        // kept are carried into every saved layout once, and the settings are written again without them: read whole,
+        // as this version writes them; otherwise with every other field as it was written, which a person's own change
+        // replaces, as before.
         if let switches = PanelSwitches.stored(in: stored) {
             panelLayout.carry(switches)
-            if decoded != nil { persist(preferences, key: Keys.settings) }
+            if decoded != nil {
+                persist(preferences, key: Keys.settings)
+            } else if let rest = PanelSwitches.leftOut(of: stored) {
+                defaults.set(rest, forKey: Keys.settings)
+            }
         }
         let normalized = applyingAccountVisibility(to: agents)
         if normalized != agents {
