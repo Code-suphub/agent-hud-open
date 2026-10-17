@@ -339,6 +339,46 @@ public final class PanelLayoutStore {
                                                 previousLook: unchanged ? document.previousLook : nil), style: nil)
     }
 
+    // MARK: The Expanded panel's switches
+
+    /// The four switches of Settings → Display → Expanded panel as the saved shared layout sets them.
+    public var switches: PanelSwitches { current.switches }
+
+    /// A person's switch in Settings → Display → Expanded panel: sets the saved shared layout at once, and a waiting
+    /// shared draft with it, so that the panel shows the change either way, the switch that changed and nothing else.
+    /// Like a person's own edit of a display, it is no version: the previous layout stays as it is, and Revert to
+    /// Previous still goes back to it. A screen with a layout of its own keeps it.
+    public func setSwitches(_ change: (inout PanelSwitches) -> Void) {
+        let was = switches
+        var now = was
+        change(&now)
+        guard now != was else { return }
+        let saved = current.switching(from: was, to: now).normalized()
+        let drafted = draft.map { $0.switching(from: was, to: now).normalized() }
+        set(current: saved, previous: previous, draft: drafted == saved ? nil : drafted)
+    }
+
+    /// Carries the switches as settings an earlier version wrote kept them into every saved layout, the shared one and
+    /// each screen's own, and the ones saved before them, so that each draws the panel it drew under those settings: a
+    /// switch that was off hides its section, or the countdown, in each. Written once, at launch, before any panel reads
+    /// a layout; the settings are then written without the switches, so it is not carried again.
+    func carry(_ stored: PanelSwitches) {
+        func carried(_ layout: PanelLayout) -> PanelLayout { layout.carrying(stored).normalized() }
+        func carried(_ choice: PanelScreenLayout) -> PanelScreenLayout { choice.layout.map { .own(carried($0)) } ?? .shared }
+        let shared = (carried(current), previous.map(carried))
+        let screens = self.screens.mapValues { document in
+            var document = document
+            document.current = carried(document.current)
+            document.previous = document.previous.map(carried)
+            return document
+        }
+        guard shared.0 != current || shared.1 != previous || screens != self.screens else { return }
+        current = shared.0
+        previous = shared.1
+        self.screens = screens
+        persist()
+    }
+
     // MARK: The settings
 
     /// The screen's own placement and glow as the settings keep them; nil without settings to read.

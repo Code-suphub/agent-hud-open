@@ -69,17 +69,15 @@ extension HoverPanelView {
         var id: String { blocks.count == 1 ? blocks[0].id : blocks.map(\.plan.key).joined(separator: "+") }
     }
 
-    /// The plan's lines with what each block draws, where a Settings switch leaves the blocks.
+    /// The plan's lines with what each block draws: a quota block's rows, and the API accounts its layout keeps.
     func blockLines(_ plan: PanelLayoutPlan) -> [BlockLine] {
-        guard store.settings.settings.showIslandQuota else { return [] }
         let groups = Dictionary(quotaGroups.map { ($0.vendor, $0.rows) }, uniquingKeysWith: { first, _ in first })
         let accounts = Dictionary(grouping: billing, by: \.panelBlockKey)
         return plan.lines.compactMap { line in
             let blocks: [Block] = line.compactMap { block in
-                switch block.kind {
-                case .quota: groups[block.key].map { .quota(block, rows: $0) }
-                case .billing: accounts[block.key].map { .billing(block, accounts: $0) }
-                }
+                guard block.kind == .billing else { return groups[block.key].map { .quota(block, rows: $0) } }
+                let kept = (accounts[block.key] ?? []).filter { block.shows(account: $0.id) }
+                return kept.isEmpty ? nil : .billing(block, accounts: kept)
             }
             return blocks.isEmpty ? nil : BlockLine(blocks: blocks)
         }

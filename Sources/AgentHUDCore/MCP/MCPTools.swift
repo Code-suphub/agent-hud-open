@@ -23,21 +23,22 @@ public enum MCPTools {
         """
 
     /// The app's own settings are told so that an agent can foresee what its draft does beyond the HUD, and are told
-    /// read only, since no tool changes a Settings switch.
+    /// read only, since no tool writes the settings.
     private static let getPanelDescription = """
-        Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
-        with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
-        widgets and measures each block accepts; how many sessions it lists, over what period and in what order, and \
-        the agents and projects it can narrow them to, each project with its id and name; its token chart's period, \
-        the agents and models it can draw and its total; the attached screens, each with its resting \
-        HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own \
-        panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the whole app's \
-        settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style draft \
-        also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into bots \
-        on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are written in; \
-        and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before \
-        changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in \
-        the application's language.
+        Read what the Agent HUD hover panel shows now: its blocks (one per agent or API provider), each block's \
+        accounts, with the id a layout names one by, its email or name and its plan, and its rows in the order shown \
+        with their latest readings, the layout in effect, whether reset countdowns show, the panel's width and height \
+        and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists, over what \
+        period and in what order, and the agents and projects it can narrow them to, each project with its id and \
+        name; its token chart's period, the agents and models it can draw and its total; the attached screens, each \
+        with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one \
+        agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the \
+        whole app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's \
+        style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn \
+        into bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are \
+        written in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call \
+        it before changing the layout; block, row, account and screen keys and project ids come from here. Names are \
+        written as the panel shows them, in the application's language.
         """
 
     /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in, the
@@ -49,17 +50,18 @@ public enum MCPTools {
         """
 
     private static let setPanelLayoutDescription = """
-        Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its \
-        width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, \
-        appearance, material, glass style and glow. Send the whole layout you want; anything left out uses the \
-        default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as \
-        it is. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as \
-        it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when \
-        Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved \
-        one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared \
-        layout again; hud.reset proposes a screen's default HUD style. A layout edit holds the panel open on screen \
-        for two minutes from the call, and a call with only hud style fields closes it so the HUD shows; call \
-        finish_panel_edit when you are done.
+        Propose a layout for the Agent HUD hover panel: its blocks, their rows' order and the accounts each shows, its \
+        sections and reset countdowns, which are also the switches of Settings' Expanded panel, its session rows, \
+        token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one \
+        screen, its mode, edge, sizes, appearance, material, glass style and glow. Send the whole layout you want; \
+        anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style \
+        fields leaves the layout as it is. What the layout from get_panel holds for a block, a row, an account or an \
+        agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with \
+        Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in \
+        layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, \
+        or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style. A \
+        layout edit holds the panel open on screen for two minutes from the call, and a call with only hud style \
+        fields closes it so the HUD shows; call finish_panel_edit when you are done.
         """
 
     private static let discardPanelDraftDescription = "Drop the unsaved draft so the Agent HUD panel returns to the saved "
@@ -106,7 +108,12 @@ public enum MCPTools {
                              + "tokens, cost. One means no picker; none means all its widget offers.", of: measure),
             "hidden": described("boolean", "True hides the block."),
             "hiddenRows": list("Keys of the block's rows to hide, from get_panel.", of: key),
-            "countdown": described("boolean", "False hides a quota block's reset times."),
+            "rows": list("Keys of the block's rows, from get_panel, in the order to show them; rows left out keep their "
+                         + "order after them.", of: key),
+            "accounts": list("Ids of the accounts to show, from the block's accounts in get_panel; none for every account.",
+                             of: key),
+            "countdown": described("boolean", "Whether this quota block shows its reset times, whatever the layout's "
+                                   + "countdown says; the layout's if left out."),
             "columns": described("integer", "Cells on a line for the ring and number widgets, 2 to 6; 4 if left out."),
             "ringSize": text("Ring size for the ring widget; medium if left out.", oneOf: ["small", "medium", "large"]),
             "span": text("The whole line, the default, or half of it beside the next block if that is half too. Not for bar "
@@ -217,7 +224,10 @@ public enum MCPTools {
             "blocks": .object(blocks),
             "order": list("Block keys from get_panel, in the order the panel shows them.", of: key),
             "sections": list("The panel's sections, in the order it shows them.", of: section),
-            "hiddenSections": list("The panel's sections to hide.", of: section),
+            "hiddenSections": list("The panel's sections to hide; Settings' Session list, Quota details and Token usage "
+                                   + "switch sessions, blocks and tokens.", of: section),
+            "countdown": described("boolean", "Whether the quota blocks show their reset times where a block gives no "
+                                   + "countdown of its own; Settings' Reset countdown. True if left out."),
             "style": style,
             "sessions": sessions,
             "tokens": tokens,

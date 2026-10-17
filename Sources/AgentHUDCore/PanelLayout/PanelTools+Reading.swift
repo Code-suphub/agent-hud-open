@@ -19,9 +19,10 @@ extension PanelTools {
 
     /// The panel as an agent reads it: which screen, the layout in effect there, with a screen's style draft in its
     /// hud, and the style it sets, its width among it, the panel's height on that display and whether it scrolls there,
-    /// whether Settings shows reset countdowns, every section and every block the panel has, shown or hidden, with the
-    /// span each takes there and the readings of its rows, the session rows and the token chart as the layout filters
-    /// them, the attached screens, and what the app is set to that a proposal is drawn under.
+    /// whether the quota blocks show reset countdowns, every section and every block the panel has, shown or hidden,
+    /// with the span each takes there, its accounts and the readings of its rows in the order shown, the session rows
+    /// and the token chart as the layout filters them, the attached screens, and what the app is set to that a proposal
+    /// is drawn under.
     /// - proposed: whether the note answers a proposal, after which it says which blocks the layout gives half a line
     ///   take the whole one there, and why.
     func panel(_ scope: PanelLayoutScope, among attached: [PanelScreen], note: String? = nil,
@@ -29,14 +30,9 @@ extension PanelTools {
         let effective = effective(scope), existing = store.view.panelBlocks
         let measured = fit?(scope)
         let plan = PanelLayoutPlan(layout: effective, blocks: existing, contentWidth: measured?.contentWidth)
-        let settings = store.settings.settings
-        let switches: [PanelSection: Bool] = [.blocks: settings.showIslandQuota, .tokens: settings.showIslandTokens,
-                                              .sessions: settings.showIslandSessions]
         let sections = plan.sections + PanelSection.allCases.filter { !plan.sections.contains($0) }
         let shown = Set(plan.blocks.map(\.key))
-        let drawn = plan.blocks + existing.filter { !shown.contains($0.key) }
-            .map { PanelBlockPlan($0, changed: effective.blocks[$0.key] ?? PanelLayout.Block(),
-                                  tokenPeriod: effective.tokens.chartPeriod) }
+        let drawn = plan.blocks + existing.filter { !shown.contains($0.key) }.map { PanelBlockPlan($0, in: effective) }
         let style: [String: JSONValue] = ["spacing": .string(plan.style.spacing.rawValue), "separators": .bool(plan.style.separators),
                                           "width": .integer(Int64(plan.style.panelWidth))]
         var result: [String: JSONValue] = [
@@ -46,10 +42,9 @@ extension PanelTools {
             "hasPrevious": .bool(layout.canRevert(scope)),
             "layout": layoutJSON(scope),
             "style": .object(style),
-            "countdownOnInSettings": .bool(settings.showResetCountdown),
+            "countdown": .bool(effective.countdown),
             "sections": .array(sections.map { section in
-                .object(["key": .string(section.rawValue), "shown": .bool(plan.sections.contains(section)),
-                         "onInSettings": .bool(switches[section] ?? true)])
+                .object(["key": .string(section.rawValue), "shown": .bool(plan.sections.contains(section))])
             }),
             "blocks": .array(drawn.map { block(of: $0, shown: shown.contains($0.key)) }),
             "sessions": sessions(plan.sessions, listing: effective.sessions.normalized()),
@@ -127,9 +122,10 @@ extension PanelTools {
         ])
     }
 
-    /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns,
-    /// the ring size and the period are told only where the block has them to set, and the columns and the span as the
-    /// panel sets the block in its line.
+    /// One block as an agent reads it: how it is drawn, what it offers, its accounts and its readings. The countdown,
+    /// the columns, the ring size and the period are told only where the block has them to set, and the columns and the
+    /// span as the panel sets the block in its line. A quota block's rows are told in the order it draws them, account
+    /// by account, each account's windows in the block's order, each with the account it belongs to.
     private func block(of plan: PanelBlockPlan, shown: Bool) -> JSONValue {
         var block: [String: JSONValue] = [
             "key": .string(plan.key), "kind": .string(plan.kind.rawValue), "shown": .bool(shown),
@@ -138,9 +134,7 @@ extension PanelTools {
             "measures": .array(plan.measures.map { .string($0.rawValue) }),
             "offeredMeasures": .array(plan.kind.measures(under: plan.widget).map { .string($0.rawValue) }),
         ]
-        if plan.kind.takesCountdown {
-            block["countdown"] = .bool(plan.countdown && store.settings.settings.showResetCountdown)
-        }
+        if plan.kind.takesCountdown { block["countdown"] = .bool(plan.countdown) }
         if plan.kind.takesColumns(under: plan.widget) { block["columns"] = .integer(Int64(plan.columns)) }
         if plan.kind.takesRingSize(under: plan.widget) { block["ringSize"] = .string(plan.ringSize.rawValue) }
         if plan.kind.takesPeriod(under: plan.widget) { block["period"] = .string(plan.period.rawValue) }
@@ -148,14 +142,35 @@ extension PanelTools {
         switch plan.kind {
         case .quota:
             block["name"] = .string(VendorCatalog.name(plan.key))
-            let rows = store.rowGroups.first { $0.vendor == plan.key }?.rows ?? []
-            block["rows"] = .array(rows.map { reading(of: $0, shown: !plan.hiddenRows.contains($0.agent.windowKey)) })
+            let sections = store.accountSections(store.rowGroups.first { $0.vendor == plan.key }?.rows ?? [])
+            // Rows of no account come under an empty id, which no layout names.
+            block["accounts"] = .array(sections.filter { !$0.id.isEmpty }.map { section in
+                var entry: [String: JSONValue] = [
+                    "id": .string(section.id), "current": .bool(section.isCurrent), "shown": .bool(plan.shows(account: section.id)),
+                ]
+                if let account = section.account {
+                    entry["name"] = .string(account.displayName)
+                    if let label = account.planLabel { entry["plan"] = .string(label) }
+                }
+                return .object(entry)
+            })
+            block["rows"] = .array(sections.flatMap { section in
+                plan.ordered(section.rows, key: \.agent.windowKey).map { row in
+                    reading(of: row, account: section.id.isEmpty ? nil : section.id,
+                            shown: !plan.hiddenRows.contains(row.agent.windowKey) && plan.shows(account: section.id))
+                }
+            })
         case .billing:
             let accounts = store.enabledBilling.filter { $0.panelBlockKey == plan.key }
             block["name"] = .string(accounts.first?.displayName ?? plan.key)
+            block["accounts"] = .array(accounts.map { account in
+                .object(["id": .string(account.id), "name": .string(account.displayName),
+                         "shown": .bool(plan.shows(account: account.id))])
+            })
             block["balances"] = .array(accounts.flatMap { account in
                 account.balances.map { balance -> JSONValue in
-                    var entry: [String: JSONValue] = ["currency": .string(balance.currency), "amount": .string("\(balance.total)"),
+                    var entry: [String: JSONValue] = ["account": .string(account.id), "currency": .string(balance.currency),
+                                                      "amount": .string("\(balance.total)"),
                                                       "state": .string(Self.state(store.view.assessment(of: account)))]
                     if let level = store.balanceLevel(balance, billing: account) { entry["level"] = .string(level.rawValue) }
                     if let date = balance.runsOutAt { entry["runsOutAt"] = .string(Self.time(date)) }
@@ -211,15 +226,16 @@ extension PanelTools {
         ])
     }
 
-    /// One quota window's reading: numbers and times only, with no account name. Its name is the window's as the panel
-    /// writes it, in the application's language: its provider worded it when it was read, and it is how the person
-    /// who looks at the panel will call the row. A reading that shows no level has no burn rate, run-out time or token
-    /// rate, as in the panel.
-    private func reading(of row: AgentRow, shown: Bool) -> JSONValue {
+    /// One quota window's reading: the id of the account it belongs to, where it belongs to one, numbers and times. Its
+    /// name is the window's as the panel writes it, in the application's language: its provider worded it when it was
+    /// read, and it is how the person who looks at the panel will call the row. A reading that shows no level has no
+    /// burn rate, run-out time or token rate, as in the panel.
+    private func reading(of row: AgentRow, account: String?, shown: Bool) -> JSONValue {
         var reading: [String: JSONValue] = [
             "key": .string(row.agent.windowKey), "name": .string(row.agent.name), "shown": .bool(shown),
             "state": .string(Self.state(row.assessment)),
         ]
+        if let account { reading["account"] = .string(account) }
         if let used = row.usedPct { reading["usedPercent"] = .number(Self.tenths(used)) }
         if let level = row.level { reading["level"] = .string(level.rawValue) }
         if let reset = row.resetAt { reading["resetsAt"] = .string(Self.time(reset)) }

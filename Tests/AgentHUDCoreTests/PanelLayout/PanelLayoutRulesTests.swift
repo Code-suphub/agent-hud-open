@@ -79,10 +79,14 @@ final class PanelLayoutRulesTests: XCTestCase {
     func testTheDemoHasABlockForEachAccountsWindowsAndOneForItsBalance() {
         let report = DemoUsageProvider.report(agents: DemoData.agents, historyHours: 24, now: now, stage: nil)
         let view = ReportView(report: report, agents: DemoData.agents, settings: Settings(), now: now)
+        let claude = ["claude-session", "claude-weekly", "claude-weekly-fable"]
+        let codex = ["codex", "codex:spark:primary", "codex:spark:secondary"]
         XCTAssertEqual(view.panelBlocks, [
-            PanelBlockInfo(key: "Claude", kind: .quota, rowKeys: ["claude-session", "claude-weekly", "claude-weekly-fable"]),
-            PanelBlockInfo(key: "Codex", kind: .quota, rowKeys: ["codex", "codex:spark:primary", "codex:spark:secondary"]),
-            PanelBlockInfo(key: "api:DeepSeek", kind: .billing, rowKeys: []),
+            PanelBlockInfo(key: "Claude", kind: .quota, rowKeys: claude,
+                           accounts: [.init(id: DemoData.claudeAccount.id, name: "Personal", rowKeys: claude)]),
+            PanelBlockInfo(key: "Codex", kind: .quota, rowKeys: codex,
+                           accounts: [.init(id: DemoData.codexAccount.id, name: "Personal", rowKeys: codex)]),
+            PanelBlockInfo(key: "api:DeepSeek", kind: .billing, rowKeys: [], accounts: [.init(id: "DeepSeek", name: "DeepSeek · API")]),
         ])
         XCTAssertEqual(view.panelBlocks.filter { $0.kind == .quota }.map(\.key), view.rowGroups.map(\.vendor))
     }
@@ -118,10 +122,12 @@ final class PanelLayoutRulesTests: XCTestCase {
         XCTAssertEqual(view.billing.map(\.panelBlockKey), ["api:Moonshot", "api:DeepSeek", "api:Moonshot"],
                        "a pool's balance is keyed by the provider that bills it, any other by its vendor")
         XCTAssertEqual(view.panelBlocks, [
-            PanelBlockInfo(key: "Codex", kind: .quota, rowKeys: ["codex", "codex:spark"]),
-            PanelBlockInfo(key: "Claude", kind: .quota, rowKeys: ["claude-session"]),
-            PanelBlockInfo(key: "api:Moonshot", kind: .billing),
-            PanelBlockInfo(key: "api:DeepSeek", kind: .billing),
+            PanelBlockInfo(key: "Codex", kind: .quota, rowKeys: ["codex", "codex:spark"], accounts: [
+                .init(id: accounts[0].id, rowKeys: ["codex", "codex:spark"]), .init(id: accounts[1].id, rowKeys: ["codex"]),
+            ]),
+            PanelBlockInfo(key: "Claude", kind: .quota, rowKeys: ["claude-session"], accounts: [.init(id: "", rowKeys: ["claude-session"])]),
+            PanelBlockInfo(key: "api:Moonshot", kind: .billing, accounts: pools.map { .init(id: $0.id, name: "Moonshot · API") }),
+            PanelBlockInfo(key: "api:DeepSeek", kind: .billing, accounts: [.init(id: "DeepSeek", name: "DeepSeek · API")]),
         ])
         XCTAssertEqual(ReportView(report: nil, agents: agents, settings: Settings(), now: now).panelBlocks.map(\.key), ["Codex", "Claude"],
                        "before any report there are rows and no balances")
@@ -136,7 +142,7 @@ final class PanelLayoutRulesTests: XCTestCase {
             "Claude": PanelLayout.Block(widget: .ring, measures: [.burnRate, .cost, .burnRate], hiddenRows: ["claude-weekly"],
                                         countdown: false, columns: 6, ringSize: .small),
             "Codex": PanelLayout.Block(widget: .chart, measures: [.tokens], hidden: true, countdown: false),
-            "api:DeepSeek": PanelLayout.Block(widget: .number, measures: [.quota], countdown: true),
+            "api:DeepSeek": PanelLayout.Block(widget: .number, measures: [.quota]),
         ], order: ["api:DeepSeek", "Codex", "Codex"], sections: [.sessions], hiddenSections: [.tokens],
            style: PanelStyle(spacing: .compact, separators: false))
         XCTAssertEqual(layout.issues(against: blocks), [])

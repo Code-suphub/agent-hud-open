@@ -10,33 +10,52 @@ struct IslandPane: View {
     /// The tokens the samples are drawn with: the look's, as the island's are.
     private var island: Theme { look.theme }
 
+    /// The switches as the saved shared layout sets them, which they are fields of.
+    private var switches: PanelSwitches { settings.panelLayout.switches }
+
+    /// A switch, which sets the saved shared layout at once, and a waiting shared draft with it (`setSwitches(_:)`).
+    private func binding(_ field: WritableKeyPath<PanelSwitches, Bool>) -> Binding<Bool> {
+        Binding(get: { switches[keyPath: field] },
+                set: { value in settings.panelLayout.setSwitches { $0[keyPath: field] = value } })
+    }
+
+    /// What the samples are, and where an attached display has a layout of its own, that the switches set the shared
+    /// layout, which that display does not draw.
+    private func subtitle(_ screens: [ScreensPane.Screen]) -> String {
+        let samples = L10n.text("每项展示一个简短示例，开关控制对应内容。", "A small sample for each part. Choose what appears in the panel.")
+        let own = screens.filter { !settings.panelLayout.usesShared($0.key) }.map(\.name)
+        guard !own.isEmpty else { return samples }
+        let names = own.joined(separator: L10n.text("、", ", "))
+        return samples + "\n" + L10n.text("开关改的是共用布局；\(names) 使用自己的布局，不受影响。",
+                                           "The switches set the shared layout; \(names) "
+                                               + (own.count == 1 ? "uses a layout of its own" : "use layouts of their own")
+                                               + ", which they leave as it is.")
+    }
+
     var body: some View {
+        let screens = ScreensPane.attached()
         VStack(alignment: .leading, spacing: 28) {
-                SettingsSection(
-                    title: L10n.text("展开面板", "Expanded panel"),
-                    subtitle: L10n.text("每项展示一个简短示例，开关控制对应内容。", "A small sample for each part. Choose what appears in the panel."),
-                    theme: theme
-                ) {
-                    SettingsToggleRow(label: L10n.text("会话列表", "Session list"), isOn: settings.binding(\.showIslandSessions))
-                    IslandPartSample(height: 56, look: look, enabled: settings.settings.showIslandSessions) {
+                SettingsSection(title: L10n.text("展开面板", "Expanded panel"), subtitle: subtitle(screens), theme: theme) {
+                    SettingsToggleRow(label: L10n.text("会话列表", "Session list"), isOn: binding(\.sessionList))
+                    IslandPartSample(height: 56, look: look, enabled: switches.sessionList) {
                         sessionSample
                     }
                     SettingsDivider(theme: theme)
-                    SettingsToggleRow(label: L10n.text("额度明细", "Quota details"), isOn: settings.binding(\.showIslandQuota))
-                    IslandPartSample(height: 64, look: look, enabled: settings.settings.showIslandQuota) {
+                    SettingsToggleRow(label: L10n.text("额度明细", "Quota details"), isOn: binding(\.quotaDetails))
+                    IslandPartSample(height: 64, look: look, enabled: switches.quotaDetails) {
                         quotaSample
                     }
-                    SettingsToggleRow(label: L10n.text("重置倒计时", "Reset countdown"), isOn: settings.binding(\.showResetCountdown))
+                    SettingsToggleRow(label: L10n.text("重置倒计时", "Reset countdown"), isOn: binding(\.resetCountdown))
                     SettingsDivider(theme: theme)
-                    SettingsToggleRow(label: L10n.text("Token 消耗", "Token usage"), isOn: settings.binding(\.showIslandTokens))
-                    IslandPartSample(height: 64, look: look, enabled: settings.settings.showIslandTokens) {
+                    SettingsToggleRow(label: L10n.text("Token 消耗", "Token usage"), isOn: binding(\.tokenUsage))
+                    IslandPartSample(height: 64, look: look, enabled: switches.tokenUsage) {
                         tokenSample
                     }
                     SettingsDivider(theme: theme)
-                    // The layout arranges what the switches above leave. A person's click here takes effect at once,
-                    // where an agent's change waits in the panel to be saved. A screen with a layout of its own says so
-                    // in its part of Screens above.
-                    SharedLayoutRow(layout: settings.panelLayout, screens: ScreensPane.attached())
+                    // The switches above are the shared layout's, and so are these buttons: a person's click takes
+                    // effect at once, where an agent's change waits in the panel to be saved. A screen with a layout of
+                    // its own says so in its part of Screens above.
+                    SharedLayoutRow(layout: settings.panelLayout, screens: screens)
                 }
             SettingsSection(title: L10n.text("Logo", "Logos"), theme: theme) {
                 SettingsToggleRow(
@@ -81,7 +100,7 @@ struct IslandPane: View {
                 ProgressTrack(fraction: 0.28, fill: island.status(.ok), track: island.track)
                     .frame(height: 4)
                 Text("28%").font(.tabular(12, .semibold)).foregroundStyle(island.status(.ok))
-                if settings.settings.showResetCountdown {
+                if switches.resetCountdown {
                     Text(L10n.text("2 小时 14 分", "2h 14m"))
                         .font(.tabular(11)).foregroundStyle(island.secondary)
                         .frame(width: 78, alignment: .trailing)

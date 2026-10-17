@@ -14,7 +14,8 @@ final class IslandAnimationTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
         defer { defaults.removePersistentDomain(forName: domain) }
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
-        settings.update { $0.collapseDelayMs = 5000; $0.showIslandQuota = true; $0.showIslandTokens = false }
+        settings.update { $0.collapseDelayMs = 5000 }
+        settings.panelLayout.setSwitches { $0.quotaDetails = true; $0.tokenUsage = false }
         // This measures the island against its glow, which is the notch's shape. A screen left on its own
         // default would run the logo queue instead, which draws no silhouette to measure.
         for screen in NSScreen.screens {
@@ -67,7 +68,7 @@ final class IslandAnimationTests: XCTestCase {
         await settle(0.5)
         XCTAssertEqual(window.frame.height, expectedHeight, "Reopening must cancel the pending canvas shrink")
 
-        settings.update { $0.showIslandQuota = false }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false }
         await settle(0.1)
         let shorterHeight = max(80, measure())
         XCTAssertEqual(window.frame.height, animates ? expectedHeight : shorterHeight,

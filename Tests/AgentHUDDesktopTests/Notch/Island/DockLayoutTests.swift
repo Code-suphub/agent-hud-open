@@ -155,11 +155,7 @@ final class DockLayoutTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
         defer { defaults.removePersistentDomain(forName: domain) }
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
-        settings.update {
-            $0.showIslandQuota = false
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
-        }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = false }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
         for edge in [HUDEdge.left, .right] {
             var root = IslandRootView(store: store, isOpen: true, collapsedSize: CGSize(width: 32, height: 80),
@@ -231,11 +227,7 @@ final class DockLayoutTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
         defer { defaults.removePersistentDomain(forName: domain) }
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
-        settings.update {
-            $0.showIslandQuota = false
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
-        }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = false }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
         let canvas = CGSize(width: 540, height: 400)
         let card = CGRect(x: 0, y: 200, width: 540, height: 120)

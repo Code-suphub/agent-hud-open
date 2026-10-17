@@ -76,18 +76,43 @@ extension PanelBlockKind {
 
 /// One block the hover panel has now. A list of them is in the panel's default order.
 public struct PanelBlockInfo: Hashable, Sendable {
+    /// One account of a block: a section of a quota block's rows, or one API account's balance.
+    public struct Account: Hashable, Sendable {
+        /// The id a layout names the account by: a quota account's `ProviderAccount.id`, an API account's `APIBilling.id`,
+        /// the ids Settings → Agents keeps an account's switch under. Empty for rows that belong to no account, which no
+        /// layout names.
+        public let id: String
+        /// The account's email or name as the panel writes it; nil for rows that belong to no account.
+        public let name: String?
+        /// The keys of the account's rows, in row order. A balance has none.
+        public let rowKeys: [String]
+
+        public init(id: String, name: String? = nil, rowKeys: [String] = []) {
+            self.id = id
+            self.name = name
+            self.rowKeys = rowKeys
+        }
+    }
+
     /// A quota block's vendor id (`AgentDescriptor.displayVendor`), an API account's `APIBilling.panelBlockKey`.
     public let key: String
     public let kind: PanelBlockKind
     /// The block's rows in default order: each quota window's `AgentDescriptor.windowKey`, once however many accounts
     /// have that window. A balance has no rows.
     public let rowKeys: [String]
+    /// The block's accounts in the order the panel draws them: a quota block's sections, rows of no account among them
+    /// under an empty id, and a balance block's accounts.
+    public let accounts: [Account]
 
-    public init(key: String, kind: PanelBlockKind, rowKeys: [String] = []) {
+    public init(key: String, kind: PanelBlockKind, rowKeys: [String] = [], accounts: [Account] = []) {
         self.key = key
         self.kind = kind
         self.rowKeys = rowKeys
+        self.accounts = accounts
     }
+
+    /// The accounts a layout can name, without the rows of no account.
+    var namedAccounts: [Account] { accounts.filter { !$0.id.isEmpty } }
 }
 
 public extension APIBilling {
@@ -97,15 +122,24 @@ public extension APIBilling {
 }
 
 public extension ReportView {
-    /// The blocks the panel has, in default order: a quota block for each vendor's rows in row order, then a billing
-    /// block for each API provider whose balance is shown, in the order of the balances.
+    /// The blocks the panel has, in default order: a quota block for each vendor's rows in row order, with its accounts'
+    /// sections, then a billing block for each API provider whose balance is shown, in the order of the balances, with
+    /// its accounts.
     var panelBlocks: [PanelBlockInfo] {
         var blocks = rowGroups.map { group in
-            PanelBlockInfo(key: group.vendor, kind: .quota, rowKeys: group.rows.map(\.agent.windowKey).withoutRepeats)
+            let accounts = accountSections(group.rows).map { section in
+                PanelBlockInfo.Account(id: section.id, name: section.account?.displayName,
+                                       rowKeys: section.rows.map(\.agent.windowKey).withoutRepeats)
+            }
+            return PanelBlockInfo(key: group.vendor, kind: .quota, rowKeys: group.rows.map(\.agent.windowKey).withoutRepeats,
+                                  accounts: accounts)
         }
         var keys = Set(blocks.map(\.key))
         for account in billing where keys.insert(account.panelBlockKey).inserted {
-            blocks.append(PanelBlockInfo(key: account.panelBlockKey, kind: .billing))
+            let accounts = billing.filter { $0.panelBlockKey == account.panelBlockKey }.map {
+                PanelBlockInfo.Account(id: $0.id, name: $0.displayName)
+            }
+            blocks.append(PanelBlockInfo(key: account.panelBlockKey, kind: .billing, accounts: accounts))
         }
         return blocks
     }
@@ -123,14 +157,15 @@ struct PanelLayoutIssue: Hashable, Sendable {
 extension PanelLayout {
     /// Every issue of the layout against the blocks the panel has now, blocks by key and then `order` by position: a
     /// block key or an order entry that names no block, a widget its block's kind does not accept, a measure that is
-    /// not offered under the widget the block is drawn with, a countdown hidden on a balance, columns or a ring size
-    /// where the block has no cells or no rings, half a line for bar rows, a period where the block draws no chart and
-    /// is no balance, and a hidden row its block does not have. A
-    /// layout with issues still resolves (`PanelLayoutPlan`): what cannot be done as asked falls back or waits.
+    /// not offered under the widget the block is drawn with, a countdown on a balance, columns or a ring size where the
+    /// block has no cells or no rings, half a line for bar rows, a period where the block draws no chart and is no
+    /// balance, a hidden row or a row of its order its block does not have, and an account it does not have. A layout
+    /// with issues still resolves (`PanelLayoutPlan`): what cannot be done as asked falls back or waits.
     ///
-    /// What one of the `held` layouts already holds for a block or a row that is away is no issue when it comes back
-    /// as it is held: the block's own entry unchanged, its key in `order`, the row among its block's hidden rows. A
-    /// layout keeps those until the block or row returns, so a proposal built on a layout that was read may carry them.
+    /// What one of the `held` layouts already holds for a block, a row or an account that is away is no issue when it
+    /// comes back as it is held: the block's own entry unchanged, its key in `order`, the row among its block's hidden
+    /// rows or in its order, the account among its accounts. A layout keeps those until the block, the row or the
+    /// account returns, so a proposal built on a layout that was read may carry them.
     func issues(against existing: [PanelBlockInfo], holding held: [PanelLayout] = []) -> [PanelLayoutIssue] {
         var known: [String: PanelBlockInfo] = [:]
         for block in existing where known[block.key] == nil { known[block.key] = block }
@@ -141,9 +176,12 @@ extension PanelLayout {
             let change = blocks[key] ?? Block()
             let heldAs: [Block] = held.compactMap { $0.blocks[key]?.normalized() }
             if let block = known[key] {
-                var heldRows = Set<String>()
-                for kept in heldAs { heldRows.formUnion(kept.hiddenRows) }
-                issues += Self.issues(of: change, in: block, holding: heldRows)
+                var heldRows = Set<String>(), heldAccounts = Set<String>()
+                for kept in heldAs {
+                    heldRows.formUnion(kept.hiddenRows + kept.rows)
+                    heldAccounts.formUnion(kept.accounts)
+                }
+                issues += Self.issues(of: change, in: block, holding: heldRows, accounts: heldAccounts)
             } else if heldAs.isEmpty {
                 issues.append(PanelLayoutIssue(path: "blocks.\(key)", message: "No block has the key \"\(key)\". \(unknownKey)"))
             } else if !heldAs.contains(change.normalized()) {
@@ -163,7 +201,8 @@ extension PanelLayout {
         return issues
     }
 
-    private static func issues(of change: Block, in block: PanelBlockInfo, holding heldRows: Set<String>) -> [PanelLayoutIssue] {
+    private static func issues(of change: Block, in block: PanelBlockInfo, holding heldRows: Set<String>,
+                               accounts heldAccounts: Set<String>) -> [PanelLayoutIssue] {
         let kind = block.kind, path = "blocks.\(block.key)"
         var issues: [PanelLayoutIssue] = []
         if let widget = change.widget, !kind.widgets.contains(widget) {
@@ -180,7 +219,7 @@ extension PanelLayout {
             issues.append(PanelLayoutIssue(path: path + ".measures[\(index)]",
                                            message: "\(message) It offers: \(quoted(offered.map(\.rawValue)))."))
         }
-        if !change.countdown && !kind.takesCountdown {
+        if change.countdown != nil && !kind.takesCountdown {
             issues.append(PanelLayoutIssue(path: path + ".countdown",
                                            message: "\(balance), which has no reset to count down to. countdown applies to quota blocks."))
         }
@@ -210,6 +249,19 @@ extension PanelLayout {
             issues.append(PanelLayoutIssue(path: path + ".hiddenRows[\(index)]",
                                            message: "\"\(block.key)\" has no row \"\(row)\". \(rows)"))
         }
+        let order = block.rowKeys.isEmpty ? "It has no rows to order." : "Its rows: \(quoted(block.rowKeys))."
+        for (index, row) in change.rows.enumerated() where !block.rowKeys.contains(row) && !heldRows.contains(row) {
+            issues.append(PanelLayoutIssue(path: path + ".rows[\(index)]",
+                                           message: "\"\(block.key)\" has no row \"\(row)\". \(order)"))
+        }
+        let named = block.namedAccounts
+        let accounts = named.isEmpty ? "It has no account to choose now."
+            : "Its accounts: " + named.map { "\"\($0.id)\"" + ($0.name.map { " (\($0))" } ?? "") }.joined(separator: ", ") + "."
+        let ids = Set(named.map(\.id)).union(heldAccounts)
+        for (index, id) in change.accounts.enumerated() where !ids.contains(id) {
+            issues.append(PanelLayoutIssue(path: path + ".accounts[\(index)]",
+                                           message: "\"\(block.key)\" has no account \"\(id)\". \(accounts)"))
+        }
         return issues
     }
 
@@ -235,26 +287,32 @@ extension PanelLayout {
     /// The layout reduced to what it changes about the blocks the panel has now, so that two layouts that draw those
     /// blocks alike are the same layout. For a block the panel has, its widget is left out where it is its kind's
     /// default; its measures are kept to those its widget offers and left out where that is none or every one in the
-    /// widget's own order; a countdown, columns or a ring size is left out where the block has none to set, and
-    /// columns or a ring size where it is the default; a span is left out where it is the whole line or the block
-    /// cannot take half of one; and a period where the block covers none or it is the one the block covers by default,
-    /// on a balance the token chart's (`PanelBlockKind.defaultPeriod(tokens:)`). A block's key is left out at the end of
-    /// `order` where the block would come there anyway. What it holds for a block that is away stays as written. A
-    /// proposal that spells out the default view is then the default layout, and one that spells out the saved layout
-    /// is the saved one.
+    /// widget's own order; a countdown, columns or a ring size is left out where the block has none to set, a countdown
+    /// where it is the layout's `countdown`, and columns or a ring size where it is the default; a span is left out
+    /// where it is the whole line or the block cannot take half of one; a period where the block covers none or it is
+    /// the one the block covers by default, on a balance the token chart's (`PanelBlockKind.defaultPeriod(tokens:)`); a
+    /// row's key at the end of the block's `rows` where the row would come there anyway; and the block's accounts where
+    /// they name every account it has now and it has no rows of no account, which any choice leaves out. A block's key is
+    /// left out at the end of `order` where the block would come there anyway. What it holds for a block, a row or an account that is away
+    /// stays as written. A proposal that spells out the default view is then the default layout, and one that spells out
+    /// the saved layout is the saved one.
     func reduced(against existing: [PanelBlockInfo]) -> PanelLayout {
         var known: [String: PanelBlockInfo] = [:]
         for block in existing where known[block.key] == nil { known[block.key] = block }
         var layout = normalized()
         for (key, change) in layout.blocks {
-            guard let kind = known[key]?.kind else { continue }
+            guard let block = known[key] else { continue }
+            let kind = block.kind
             var change = change
             if change.widget == kind.defaultWidget { change.widget = nil }
             let widget = kind.widget(for: change.widget)
             let measures: [PanelMeasure] = kind.measures(change.measures, under: widget)
             change.measures = measures
             if measures == kind.measures(under: widget) { change.measures = [] }
-            if !kind.takesCountdown { change.countdown = true }
+            if !kind.takesCountdown || change.countdown == layout.countdown { change.countdown = nil }
+            change.rows = Self.reduced(change.rows, among: block.rowKeys)
+            // Rows of no account come under an empty id, which no layout names, so a block that has them keeps its choice.
+            if !block.accounts.isEmpty, block.accounts.allSatisfy({ change.accounts.contains($0.id) }) { change.accounts = [] }
             if !kind.takesColumns(under: widget) || change.columns == Block.defaultColumns { change.columns = nil }
             if !kind.takesRingSize(under: widget) || change.ringSize == .medium { change.ringSize = nil }
             if change.span == .full || !kind.takesHalf(under: widget) { change.span = nil }
@@ -263,12 +321,19 @@ extension PanelLayout {
             }
             layout.blocks[key] = change
         }
-        let inDefaultOrder = existing.map(\.key)
-        func shown(_ order: [String]) -> [String] { (order.filter { known[$0] != nil } + inDefaultOrder).withoutRepeats }
-        let asAsked = shown(layout.order)
-        while let last = layout.order.last, known[last] != nil, shown(Array(layout.order.dropLast())) == asAsked {
-            layout.order.removeLast()
-        }
+        layout.order = Self.reduced(layout.order, among: existing.map(\.key))
         return layout.normalized()
+    }
+
+    /// An order of keys left without the keys at its end that come there anyway: those `present` has, in its order,
+    /// that the keys before them would leave in the same place. A key `present` does not have stays, as written.
+    private static func reduced(_ order: [String], among present: [String]) -> [String] {
+        func shown(_ order: [String]) -> [String] { (order.filter(present.contains) + present).withoutRepeats }
+        let asAsked = shown(order)
+        var order = order
+        while let last = order.last, present.contains(last), shown(Array(order.dropLast())) == asAsked {
+            order.removeLast()
+        }
+        return order
     }
 }

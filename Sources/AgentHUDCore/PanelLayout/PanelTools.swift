@@ -14,8 +14,9 @@ import Foundation
 /// it, and one the panel or the HUD cannot do as asked is refused whole, with every reason, so an agent never believes a
 /// change that fell back. What the layout already holds for a block, a row or an agent that is away may come back with
 /// it, so the layout that was read can be sent again, and a proposal is kept as what it changes, so one that draws what
-/// is saved leaves no draft. Screens are named by role, agents by vendor and projects by their folder; nothing names an
-/// account.
+/// is saved leaves no draft. Screens are named by role, agents by vendor and projects by their folder, and a block's
+/// accounts by their id, with the email or name the panel writes, since the app and the agent it answers are the
+/// person's own.
 @MainActor
 public struct PanelTools {
     let store: UsageStore
@@ -171,7 +172,8 @@ public struct PanelTools {
 
     // MARK: Proposing
 
-    private static let layoutKeys = ["blocks", "order", "sections", "hiddenSections", "style", "hud", "sessions", "tokens"]
+    private static let layoutKeys = ["blocks", "order", "sections", "hiddenSections", "countdown", "style", "hud", "sessions",
+                                     "tokens"]
     private static let draftNote = "Shown in the panel as an unsaved draft. The user keeps it by hovering the Agent HUD and "
         + "pressing Save in the panel; it is dropped when Agent HUD restarts."
     private static let savedNote = "This is the layout already saved, so there is no draft."

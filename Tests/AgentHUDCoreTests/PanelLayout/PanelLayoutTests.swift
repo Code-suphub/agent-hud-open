@@ -78,8 +78,11 @@ final class PanelLayoutTests: XCTestCase {
         XCTAssertEqual(try encode(PanelLayout(blocks: blocks)),
                        #"{"blocks":{"a":{"widget":"chart"},"b":{},"c":{"hidden":true},"d":{"hiddenRows":["x"]}}}"#)
         XCTAssertEqual(try encode(PanelLayout(hiddenSections: [.tokens])), #"{"hiddenSections":["tokens"]}"#)
-        XCTAssertEqual(try encode(PanelLayout(blocks: ["a": PanelLayout.Block(measures: [], countdown: true)])), #"{"blocks":{"a":{}}}"#,
-                       "every measure, and the countdown as Settings has it, are what an absent field says")
+        XCTAssertEqual(try encode(PanelLayout(blocks: ["a": PanelLayout.Block(measures: [], rows: [], accounts: [])])),
+                       #"{"blocks":{"a":{}}}"#, "every measure, the rows' own order and every account are what an absent field says")
+        XCTAssertEqual(try encode(PanelLayout(countdown: true)), "{}", "reset countdowns shown are the default view's")
+        XCTAssertEqual(try encode(PanelLayout(blocks: ["a": PanelLayout.Block(countdown: true)], countdown: false)),
+                       #"{"blocks":{"a":{"countdown":true}},"countdown":false}"#, "a block's own countdown overrides the layout's")
         XCTAssertEqual(try encode(PanelLayout(style: PanelStyle(spacing: .regular, separators: true))), "{}",
                        "the default view's style is not written")
         XCTAssertEqual(try encode(PanelLayout(style: PanelStyle(spacing: .roomy))), #"{"style":{"spacing":"roomy"}}"#)
@@ -173,8 +176,8 @@ final class PanelLayoutTests: XCTestCase {
             "columns-out": PanelLayout.Block(columns: 7), "ring": PanelLayout.Block(ringSize: .medium),
         ])
         XCTAssertEqual(layout.normalized().blocks.keys.sorted(),
-                       ["columns", "countdown-off", "hidden", "measures", "ring", "rows", "widget"],
-                       "a widget, measures, columns or a ring size that is its block's default is still a recorded choice")
+                       ["columns", "countdown-off", "countdown-on", "hidden", "measures", "ring", "rows", "widget"],
+                       "a widget, measures, columns, a ring size or a countdown that is its block's default is still a recorded choice")
     }
 
     func testNormalizingNamesEachMeasureOnceInTheOrderFirstNamed() {
@@ -225,12 +228,13 @@ final class PanelLayoutTests: XCTestCase {
         XCTAssertTrue(PanelLayout(blocks: ["Claude": PanelLayout.Block(), "Codex": PanelLayout.Block(hiddenRows: [""])], order: [""]).isDefault)
         XCTAssertTrue(PanelLayout(sections: [.blocks, .tokens, .sessions]).isDefault, "the default order, written out")
         XCTAssertTrue(PanelLayout(sections: [.blocks]).isDefault)
-        XCTAssertTrue(PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: true)], style: PanelStyle(spacing: .regular)).isDefault,
-                      "the countdown as Settings has it, and regular spacing with separators, are the default view")
+        XCTAssertTrue(PanelLayout(countdown: true, style: PanelStyle(spacing: .regular)).isDefault,
+                      "reset countdowns shown, and regular spacing with separators, are the default view")
         let changes = [
             PanelLayout(blocks: ["Claude": PanelLayout.Block(hidden: true)]), PanelLayout(order: ["Claude"]),
-            PanelLayout(sections: [.tokens]), PanelLayout(hiddenSections: [.tokens]),
-            PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: false)]), PanelLayout(style: PanelStyle(spacing: .compact)),
+            PanelLayout(sections: [.tokens]), PanelLayout(hiddenSections: [.tokens]), PanelLayout(countdown: false),
+            PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: false)]),
+            PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: true)]), PanelLayout(style: PanelStyle(spacing: .compact)),
             PanelLayout(style: PanelStyle(separators: false)),
         ]
         for layout in changes { XCTAssertFalse(layout.isDefault, "\(layout)") }
