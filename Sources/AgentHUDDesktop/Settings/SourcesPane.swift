@@ -21,6 +21,7 @@ struct SourcesPane: View {
         let groups = AgentSettingsGroup.make(sources: detected, agents: settings.agents, report: store.report,
                                              providerOrder: settings.settings.providerOrder)
         let selected = groups.first { $0.id == selectedProviderID } ?? groups.first
+        let groupIDs = groups.map(\.id), movableGroups = Set(groups.filter(\.isDetected).map(\.id))
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(L10n.text("\(groups.count) 个智能体", "\(groups.count) agents"))
@@ -29,8 +30,8 @@ struct SourcesPane: View {
                 ScrollView {
                     LazyVStack(spacing: 3) {
                         ForEach(groups) { group in
-                            AgentProviderRow(group: group, settings: settings, theme: theme,
-                                selected: group.id == selected?.id, dragging: $dragging, groupIDs: groups.map(\.id)) {
+                            AgentProviderRow(group: group, settings: settings, theme: theme, selected: group.id == selected?.id,
+                                dragging: $dragging, groupIDs: groupIDs, movableGroups: movableGroups) {
                                 selectedProviderID = group.id
                             }
                         }
@@ -90,19 +91,26 @@ private struct AgentProviderRow: View {
     @Binding var dragging: AgentOrderDrag?
     /// Every group id this page lists, in the order it lists them: a drag rebuilds the recorded order from them.
     var groupIDs: [String] = []
+    /// The groups a drag can move and land on, those detected on this Mac.
+    var movableGroups: Set<String> = []
     let onSelect: () -> Void
 
     var body: some View {
-        let undetected = group.source?.state == .notDetected
+        let undetected = !group.isDetected
         HStack(spacing: 4) {
-            OrderDragHandle(theme: theme)
-                .padding(.vertical, 12)
-                .contentShape(Rectangle())
-                .onDrag {
-                    dragging = .group(group.id)
-                    return NSItemProvider(object: group.id as NSString)
-                }
-                .help(L10n.text("拖动以调整分组顺序", "Drag to reorder this group"))
+            // A group not detected keeps its place after the others, so it has no handle.
+            if undetected {
+                Color.clear.frame(width: 16)
+            } else {
+                OrderDragHandle(theme: theme)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                    .onDrag {
+                        dragging = .group(group.id)
+                        return NSItemProvider(object: group.id as NSString)
+                    }
+                    .help(L10n.text("拖动以调整分组顺序", "Drag to reorder this group"))
+            }
             Button(action: onSelect) {
                 HStack(spacing: 8) {
                     AgentLogo(vendor: group.id, size: 20)
@@ -135,8 +143,8 @@ private struct AgentProviderRow: View {
         }
         .padding(.horizontal, 6)
         .background(selected ? theme.selectedRowBackground : .clear, in: RoundedRectangle(cornerRadius: 7))
-        .onDrop(of: [UTType.text], delegate: ReorderDropDelegate(target: .group(group.id), dragging: $dragging,
-                                                                 settings: settings, knownGroups: groupIDs))
+        .onDrop(of: [UTType.text], delegate: ReorderDropDelegate(target: .group(group.id), dragging: $dragging, settings: settings,
+                                                                 knownGroups: groupIDs, movableGroups: movableGroups))
     }
 }
 

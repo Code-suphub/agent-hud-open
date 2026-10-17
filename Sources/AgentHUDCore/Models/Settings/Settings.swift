@@ -127,9 +127,10 @@ public struct Settings: Hashable, Codable, Sendable {
     /// `ScreenPlacement.default(hasNotch:)` for its hardware, so a newly attached display needs no setup.
     public var screens: [String: ScreenPlacement] = [:]
 
-    /// Manual ordering of provider groups in Settings → Agents, applied to every group including those
-    /// without quota windows. Providers absent from the list keep their discovery order after the ordered
-    /// ones. Entries that no longer exist are ignored.
+    /// The order of the provider groups, recorded by a drag in Settings → Agents for every group the page lists, those
+    /// without quota windows included. The page, the Tokens page and the agent rows follow it, and through the rows the
+    /// HUD, the glow and the menu bar. Providers absent from the list keep their order after the ordered ones, and
+    /// entries that no longer exist are ignored. Until the first drag it is empty, and the groups follow the rows' order.
     public private(set) var providerOrder: [String] = []
 
     /// This screen's placement, or the default its hardware deserves. The companion to `glow(on:)`: both
@@ -278,8 +279,9 @@ public struct Settings: Hashable, Codable, Sendable {
         else { hiddenAccountIDs.insert(id) }
     }
 
-    /// Records a manual swap of two provider groups. Both must already appear in the list the settings page
-    /// shows, so `providerOrder` stays a permutation of known providers rather than a growing stash.
+    /// Records a manual move of a provider group to the place of another, as a live drag moves it. Both must already
+    /// appear in the list the settings page shows, so `providerOrder` stays a permutation of known providers rather than
+    /// a growing stash.
     public mutating func moveProvider(id: String, to targetID: String, known: [String]) {
         var order = providerOrder.filter { known.contains($0) }
         for provider in known where !order.contains(provider) { order.append(provider) }
