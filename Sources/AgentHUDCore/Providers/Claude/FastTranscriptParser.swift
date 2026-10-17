@@ -48,6 +48,9 @@ public enum FastTranscriptParser {
     private static let blockNameKey = Array("\"name\":\"".utf8)
     /// A result's call; a failed command's result writes it after the output, so it is searched for past the prefix.
     private static let toolUseIdKey = Array("\"tool_use_id\":\"".utf8)
+    /// A thinking block's signature, which says whether it is a narration, and its text.
+    private static let signatureKey = Array("\"signature\":\"".utf8)
+    private static let thinkingKey = Array("\"thinking\":\"".utf8)
     /// A call's input, read only for the calls that ask the user something in the desktop app's own window.
     private static let inputKey = Array("\"input\":{".utf8)
     /// The mark a tool's result carries when the tool ended the turn, written after the result, close to the end.
@@ -165,7 +168,7 @@ public enum FastTranscriptParser {
             stopReason = stringValue(after: stopReasonKey, in: line)
         }
         var toolName: String?, toolUseID: String?, toolResultID: String?, isThinking = false
-        var apiError: String?, limitResetsAt: Date?, retryAttempt: Int?, ask: SessionActivity.Ask?
+        var apiError: String?, limitResetsAt: Date?, retryAttempt: Int?, ask: SessionActivity.Ask?, narration: String?
         if role == .assistant, let block = find(blockTypeKey, in: head) {
             let start = block + blockTypeKey.count
             switch value(after: [], in: line, head: head, from: start) {
@@ -178,7 +181,15 @@ public enum FastTranscriptParser {
                    let input = object(at: start + key + inputKey.count - 1, in: line) {
                     ask = ClaudeDesktopAsks.ask(tool: toolName, input: input, id: toolUseID, response: messageId, at: timestamp)
                 }
-            case "thinking", "redacted_thinking": isThinking = true
+            case "thinking":
+                // A narration is the agent speaking, which the desktop app shows as its words; any other is its reasoning.
+                let block = UnsafeRawBufferPointer(rebasing: line[start...])
+                if let signature = value(after: signatureKey, in: block), ClaudeNarration.isNarration(signature: signature) {
+                    narration = value(after: thinkingKey, in: block, limit: messageLength)
+                } else {
+                    isThinking = true
+                }
+            case "redacted_thinking": isThinking = true
             default: break
             }
         }
@@ -208,8 +219,8 @@ public enum FastTranscriptParser {
             isPrompt = find(metaMarker, in: line, backwards: true) == nil && find(summaryMarker, in: line, backwards: true) == nil
                 && !ClaudeTranscriptParser.isLocalCommand(text)
         } else if role == .assistant {
-            // A visible answer. A thinking or tool-use block is a different type and never matches this key.
-            text = value(after: contentTextKey, in: line, keyIn: head, limit: messageLength)
+            // A visible answer, or a narration. A thinking or tool-use block is a different type and never matches this key.
+            text = narration ?? value(after: contentTextKey, in: line, keyIn: head, limit: messageLength)
         }
         // The line's own field is its last occurrence near the end, or, from older builds, the first one near the start.
         func field(_ key: [UInt8]) -> String? {

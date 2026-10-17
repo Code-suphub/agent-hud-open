@@ -56,6 +56,9 @@ public final class UsageStore {
     /// (`hudTokenColumns(consumerIDs:period:)`).
     @ObservationIgnored private var hudColumns: (generation: Int, end: Date, columns: [HUDColumnsKey: [TokenColumn]])?
 
+    /// The project of each working directory the current report's sessions name, as `sessionProject(_:)` found it.
+    @ObservationIgnored private var projects: (generation: Int, byDirectory: [String: SessionProject])?
+
     /// What one set of the HUD's token columns is built for.
     struct HUDColumnsKey: Hashable {
         let period: PanelTokenPeriod
@@ -177,6 +180,18 @@ public final class UsageStore {
         let columns = build()
         hudColumns?.columns[key] = columns
         return columns
+    }
+
+    /// The project a session belongs to (`SessionProject`): found once for each working directory the report shown
+    /// names, then kept for that report, since finding one reads Git's pointers on disk and the panel's body, evaluated on
+    /// every pass, asks for the project of each session its layout's projects weigh.
+    func sessionProject(_ session: LiveSession) -> SessionProject {
+        guard let directory = session.workingDirectory, !directory.isEmpty else { return .unassigned }
+        if projects?.generation != reportGeneration { projects = (reportGeneration, [:]) }
+        if let project = projects?.byDirectory[directory] { return project }
+        let project = SessionProject(session)
+        projects?.byDirectory[directory] = project
+        return project
     }
 
     /// `view.visibleAgents`.

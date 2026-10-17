@@ -102,7 +102,9 @@ public actor DeepSeekUsageProvider: UsageProvider, LedgerRecording {
         let discovered = consumers.isEmpty
             ? (agents.contains { $0.id.hasPrefix("deepseek-model:") } ? [] : [descriptor]) : consumers
         let notice = [indexed.notice, balanceNotice].compactMap { $0 }.joined(separator: " · ")
-        let costs = await transcripts.costs(since: cutoff)
+        // Costs reach back as far as the ledger keeps them, over the month a balance's estimated cost, burn rate and chart
+        // can cover, as the report's token history does; the logs themselves are read for `historyHours`.
+        let costs = await transcripts.costs(since: min(cutoff, now.addingTimeInterval(-UsageLedger.retention)))
         var sessionCosts: [String: [String: Decimal]] = [:]
         for session in recent {
             if let estimate = costs.logs[session.path] { sessionCosts["deepseek:\(session.transcript.id!)"] = estimate }

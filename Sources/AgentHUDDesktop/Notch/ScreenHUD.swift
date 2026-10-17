@@ -295,7 +295,7 @@ final class ScreenHUD {
     }
 
     private var panelInputs: PanelInputs {
-        PanelInputs(report: store.report, settings: settings.settings, agents: settings.agents,
+        PanelInputs(report: store.report, settings: settings.effectiveSettings, agents: settings.agents,
                       layout: settings.panelLayout.effective(for: key), draft: settings.panelLayout.hasDraft(on: key),
                       now: store.now, dataDate: store.dataDate,
                       error: store.lastError, loading: store.isLoading, range: store.statsRange,
@@ -368,7 +368,7 @@ final class ScreenHUD {
             // modifier is watched. A global keyboard monitor would ask for accessibility; this does not.
             modifierWatch?.invalidate()
             modifierWatch = nil
-            if inside, settings.settings.requiresOptionToOpen {
+            if inside, settings.effectiveSettings.requiresOptionToOpen {
                 modifierWatch = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                     Task { @MainActor in self?.reevaluateHover() }
                 }
@@ -448,7 +448,7 @@ final class ScreenHUD {
     private func reevaluateHover() {
         guard !dragSurface.isPressed, previewPlacement == nil else { return }
         let opens = ScreenHUD.opensOnHover(counted: hoverOpens, open: machine.isOpen, pointerInside: pointerInside,
-                                           typing: typing, requiresOption: settings.settings.requiresOptionToOpen,
+                                           typing: typing, requiresOption: settings.effectiveSettings.requiresOptionToOpen,
                                            optionDown: NSEvent.modifierFlags.contains(.option))
         let canFinishOpening = switch machine.state {
         case .opening: true
@@ -456,7 +456,7 @@ final class ScreenHUD {
         case .collapsed: !hoverOpens
         default: false
         }
-        if opens, canFinishOpening, settings.settings.openImmediatelyAtTop,
+        if opens, canFinishOpening, settings.effectiveSettings.openImmediatelyAtTop,
            Self.pointerTouchesTop(mouseLocation(), geometry: geometry) {
             hoverOpens = true
             transition(machine.reduce(.forceOpen, config: config))
@@ -716,8 +716,10 @@ final class ScreenHUD {
         open()
     }
 
+    /// The hover's timing, as the app draws its settings, an agent's unsaved draft of them included.
     var config: HoverMachine.Config {
-        HoverMachine.Config(hoverDelay: settings.settings.hoverDelay, collapseDelay: settings.settings.collapseDelay)
+        let settings = settings.effectiveSettings
+        return HoverMachine.Config(hoverDelay: settings.hoverDelay, collapseDelay: settings.collapseDelay)
     }
 
     /// - reads: whether an opening reads the accounts again, which a hover's does and a hold's does not.
@@ -971,7 +973,7 @@ final class ScreenHUD {
     /// What a docked HUD takes along its edge: the logo queue, or the Simple panel with its margin.
     private func dockSize(for placement: ScreenPlacement) -> CGSize {
         if placement.mode == .simple { return SimpleMeterConfig(items: meterItems, placement: placement).stripSize }
-        return queueSize(LogoQueueConfig(items: queueItems, placement: placement, settings: settings.settings))
+        return queueSize(LogoQueueConfig(items: queueItems, placement: placement, settings: settings.effectiveSettings))
     }
 
     /// The agents with a quota row, each with its tightest window, then those with only a balance, as its layout lists
@@ -980,14 +982,14 @@ final class ScreenHUD {
 
     private var simpleMeter: SimpleMeterConfig? {
         guard geometry.mode == .simple else { return nil }
-        return SimpleMeterConfig(items: meterItems, placement: placement, bots: settings.settings.botLogos)
+        return SimpleMeterConfig(items: meterItems, placement: placement, bots: settings.effectiveSettings.botLogos)
     }
 
     private var logoQueue: LogoQueueConfig? {
         // The geometry still measures the queue when the marks are hidden, so the backdrop keeps the place
         // and the width it had; only the drawing stops.
         guard geometry.mode == .logos, placement.showsLogos else { return nil }
-        let config = LogoQueueConfig(items: queueItems, placement: placement, settings: settings.settings)
+        let config = LogoQueueConfig(items: queueItems, placement: placement, settings: settings.effectiveSettings)
         return config.items.isEmpty ? nil : config
     }
 
@@ -1077,7 +1079,7 @@ final class ScreenHUD {
         root.peek = focus.map(peek)
         root.pinned = pinned
         root.onPin = { [weak self] in self?.pinAgent() }
-        root.botLogos = settings.settings.botLogos
+        root.botLogos = settings.effectiveSettings.botLogos
         root.edge = geometry.edge
         // The mode decides the silhouette, not whether there are marks to draw.
         root.hidesSilhouette = geometry.mode.isDocked

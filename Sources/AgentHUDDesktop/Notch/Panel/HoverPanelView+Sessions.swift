@@ -5,8 +5,9 @@ import AgentHUDCore
 /// questions and its usage.
 extension HoverPanelView {
     /// What is waiting, running and recently ended: the sessions with work in flight first — those waiting for the
-    /// user ahead of those still running — then those last active in the layout's period, the past day by default, up
-    /// to the layout's limit, five by default, of the agents and states it lists. The remaining count includes every
+    /// user ahead of those still running — then those last active in the layout's period, the past day by default, or
+    /// every one by its last event where the layout orders them by date, up to the layout's limit, five by default, of
+    /// the agents, projects and states it lists. The remaining count includes every
     /// other session the filter keeps in that summary, and a filter that keeps none says so in one line under the
     /// header. The statistics window's range never applies here — that range belongs to the session card, which
     /// answers a different question. The header
@@ -221,13 +222,13 @@ extension HoverPanelView {
     }
 
     /// The island's summary: local work in flight and sessions last active in the filter's period, the past day by
-    /// default, with waiting before running, newest created first, then the most recently ended, of the agents and
-    /// states `filter` keeps and as many as it allows (`ReportView.panelSessions(_:vendor:)`). The full session list
-    /// holds any hidden rows. `vendor` keeps only the sessions of the agents drawn with that vendor's mark, and the
-    /// filter applies among them.
+    /// default, with waiting before running, newest created first, then the most recently ended, or every one by its
+    /// last event where the filter orders them by date, of the agents, projects and states `filter` keeps and as many as
+    /// it allows (`UsageStore.panelSessions(_:vendor:)`). The full session list holds any hidden rows. `vendor` keeps
+    /// only the sessions of the agents drawn with that vendor's mark, and the filter applies among them.
     static func sessionRows(_ store: UsageStore, vendor: String? = nil,
                             filter: PanelSessionFilter = PanelSessionFilter()) -> PanelSessionRows {
-        store.view.panelSessions(filter, vendor: vendor)
+        store.panelSessions(filter, vendor: vendor)
     }
 
     /// What the header says beside its name: how many of the listed sessions are in flight, or that those listed have

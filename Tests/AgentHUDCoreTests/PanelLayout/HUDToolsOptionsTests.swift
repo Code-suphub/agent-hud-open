@@ -62,11 +62,12 @@ final class HUDToolsOptionsTests: HUDToolsCase {
         XCTAssertNil(codex["ringSize"], "numbers have no rings")
         XCTAssertEqual(codex["countdown"], .bool(true))
 
-        // Settings decides: with the switch off no block shows a countdown, whatever the layout says.
-        settings.update { $0.showResetCountdown = false }
-        let off = try result(MCPTools.getHUD)
-        XCTAssertEqual(off["countdownOnInSettings"], .bool(false))
+        // The layout's own countdown is Settings' Reset countdown: off, the blocks that set none of their own show none.
+        let off = try result(MCPTools.draftHUD, ["countdown": .bool(false),
+                                                       "blocks": .object(["Claude": .object(["countdown": .bool(true)])])])
+        XCTAssertEqual(off["countdown"], .bool(false))
         XCTAssertEqual(try block("Codex", in: off)["countdown"], .bool(false))
-        XCTAssertEqual(try block("Claude", in: off)["countdown"], .bool(false))
+        XCTAssertEqual(try block("Claude", in: off)["countdown"], .bool(true), "a block's own countdown overrides the layout's")
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: true)], countdown: false))
     }
 }

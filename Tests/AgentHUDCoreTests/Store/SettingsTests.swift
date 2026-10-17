@@ -27,7 +27,6 @@ final class SettingsTests: XCTestCase {
         XCTAssertTrue(s.launchAtLogin)
         XCTAssertTrue(s.showMenuBarIcon)
         XCTAssertEqual(s.appearance, .system)
-        XCTAssertTrue(s.showIslandTokens)
         XCTAssertEqual(s.hoverDelay, 0.4, accuracy: 1e-9)
     }
 
@@ -37,7 +36,6 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(decoded.glowBlur, 8)
         XCTAssertTrue(decoded.glowOutwardOnly)
         XCTAssertEqual(decoded.appearance, .system)
-        XCTAssertTrue(decoded.showIslandTokens)
         XCTAssertFalse(decoded.openImmediatelyAtTop)
         XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: Data("{}".utf8)), Settings())
     }
@@ -68,8 +66,6 @@ final class SettingsTests: XCTestCase {
         let original = Settings().with {
             $0.appearance = .light
             $0.glowOutwardOnly = false
-            $0.showIslandQuota = false; $0.showIslandTokens = false
-            $0.showIslandSessions = false
             $0.botLogos = false
             $0.openImmediatelyAtTop = true
         }
@@ -384,7 +380,6 @@ final class SettingsStoreTests: XCTestCase {
         store.update {
             $0.glowRange = 18
             $0.glowOutwardOnly = false
-            $0.showIslandTokens = false
             $0.openImmediatelyAtTop = true
         }
         store.setAgent(id: "chatgpt", enabled: false)
@@ -394,7 +389,6 @@ final class SettingsStoreTests: XCTestCase {
         let reloaded = SettingsStore(defaults: defaults)
         XCTAssertEqual(reloaded.settings.glowRange, 18)
         XCTAssertFalse(reloaded.settings.glowOutwardOnly)
-        XCTAssertFalse(reloaded.settings.showIslandTokens)
         XCTAssertTrue(reloaded.settings.openImmediatelyAtTop)
         XCTAssertEqual(reloaded.agents.first?.id, "codex")
         XCTAssertFalse(reloaded.agents.first { $0.id == "chatgpt" }!.enabled)
@@ -648,7 +642,7 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(store.quotaForecastHint(for: "claude-sonnet")), "记录不足",
                       "a row without its own samples must not use the selected row or global forecast")
         XCTAssertNil(store.quotaForecastHint(for: "missing"))
-        store.settings.update { $0.showResetCountdown = false }
+        store.settings.panelLayout.setSwitches { $0.resetCountdown = false }
         XCTAssertEqual(try XCTUnwrap(store.quotaForecastHint(for: "codex")), "耗尽 ~2小时30分",
                       "hiding the reset column does not hide the hover forecast")
     }

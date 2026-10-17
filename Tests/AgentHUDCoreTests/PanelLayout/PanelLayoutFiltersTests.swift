@@ -80,6 +80,57 @@ final class PanelLayoutFiltersTests: XCTestCase {
                       "what a layout holds for an agent that is away may come back, matched by mark")
     }
 
+    /// A project is named by its id, or by a path inside it, as written, through a link or as Git places a worktree, the
+    /// innermost project first; a path or a name that names none is an issue, by its place in the list.
+    func testAProjectIsNamedByItsIdOrByAPathInsideIt() throws {
+        let fixture = try Worktree()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let main = SessionProject.directory(fixture.main.path), plain = SessionProject.directory(fixture.plain.path)
+        let offered = [main, plain, .directory("/agent-hud-tests/outer"), .directory("/agent-hud-tests/outer/inner"), .unassigned]
+        let entries: [JSONValue] = [
+            .string(main.id), .string(fixture.worktree.appendingPathComponent("Sources").path),
+            .string(fixture.link.appendingPathComponent("docs").path), .string(fixture.plain.path + "/"),
+            .string("plain"), .string("/agent-hud-tests/other"), .string("unassigned"), .integer(3), .string(""),
+            .string("relative/path"), .string("/agent-hud-tests/outer/inner/x"), .string("/agent-hud-tests/outer/x"),
+        ]
+        let match = PanelLayout.projectMatch(.array(entries), among: offered)
+        XCTAssertEqual(match.ids, [main.id, main.id, plain.id, plain.id, "unassigned", "/agent-hud-tests/outer/inner",
+                                   "/agent-hud-tests/outer"])
+        XCTAssertEqual(match.paths.map(\.given), [fixture.worktree.appendingPathComponent("Sources").path,
+                                                   fixture.link.appendingPathComponent("docs").path, fixture.plain.path + "/",
+                                                   "/agent-hud-tests/outer/inner/x", "/agent-hud-tests/outer/x"],
+                       "every entry not given by its id, which the reply tells")
+        XCTAssertEqual(match.issues.map(\.path), ["sessions.projects[4]", "sessions.projects[5]", "sessions.projects[9]"],
+                       "an entry that is no string or is empty is the reading's to tell")
+        let listed = "Projects with sessions now: \(PanelLayout.quoted(offered.map(\.id)))."
+        XCTAssertEqual(match.issues.map(\.message), [
+            "\"plain\" is a project's name, not its id. Name it by its id: \"\(plain.id)\".",
+            "\"/agent-hud-tests/other\" is no project's id from get_hud's sessions.offeredProjects, nor a path inside one. \(listed)",
+            "\"relative/path\" is no project's id from get_hud's sessions.offeredProjects, nor a path inside one. \(listed)",
+        ])
+    }
+
+    func testAProjectWithNoSessionsIsAnIssueUnlessTheLayoutHoldsIt() {
+        let home = NSHomeDirectory()
+        let match = PanelLayout.projectMatch(.array([.string("~/work/alpha/Sources"), .string("unassigned")]),
+                                             among: [.directory(home + "/work/alpha")])
+        XCTAssertEqual(match.ids, ["~/work/alpha"], "a path written with ~ names the project too")
+        XCTAssertEqual(match.issues.map(\.message), ["\"unassigned\" is no project's id from get_hud's "
+                                                    + "sessions.offeredProjects, nor a path inside one. Projects with sessions now: "
+                                                    + "\"~/work/alpha\"."])
+        XCTAssertEqual(PanelLayout.projectMatch(.array([.string("/work/x")]), among: []).issues.map(\.message),
+                       ["\"/work/x\" is no project's id from get_hud's sessions.offeredProjects, nor a path inside one. "
+                        + "No project has a session now."])
+
+        // Saved while it had sessions; a layout that was read can be sent back with it, and a path inside it names it.
+        let held = PanelLayout(sessions: PanelLayout.Sessions(projects: ["/agent-hud-tests/away", "unassigned"]))
+        let kept = PanelLayout.projectMatch(.array([.string("/agent-hud-tests/away"), .string("/agent-hud-tests/away/sub"),
+                                                    .string("unassigned")]), among: [], holding: [held])
+        XCTAssertTrue(kept.issues.isEmpty, "\(kept.issues)")
+        XCTAssertEqual(kept.ids, ["/agent-hud-tests/away", "/agent-hud-tests/away", "unassigned"])
+        XCTAssertTrue(PanelLayout.projectMatch(.null, among: []).ids.isEmpty)
+    }
+
     // MARK: The plan
 
     func testThePlanResolvesTheFiltersAndTheDefaultViewNarrowsNothing() {
@@ -109,14 +160,14 @@ final class PanelLayoutFiltersTests: XCTestCase {
     // MARK: The sessions' period and the chart's models
 
     func testThePeriodAndTheModelsReadAndWriteBack() throws {
-        let json = #"{"sessions":{"period":"7d"},"tokens":{"models":["claude-model:claude-opus-5-5","codex-model:gpt-6.1-sol"]}}"#
+        let json = #"{"sessions":{"period":"week"},"tokens":{"models":["claude-model:claude-opus-5-5","codex-model:gpt-6.1-sol"]}}"#
         let layout = PanelLayout(sessions: PanelLayout.Sessions(period: .week),
                                  tokens: PanelLayout.Tokens(models: ["claude-model:claude-opus-5-5", "codex-model:gpt-6.1-sol"]))
         XCTAssertEqual(try decode(json), layout)
         XCTAssertEqual(try encode(layout), json)
         XCTAssertEqual(try encode(PanelLayout(sessions: PanelLayout.Sessions(period: .day))), "{}", "a day is the default view's")
         XCTAssertEqual(try decode("{}").sessions.listedPeriod, .day)
-        XCTAssertEqual(try decode(#"{"sessions": {"period": "1h"}}"#).sessions.period, .hour)
+        XCTAssertEqual(try decode(#"{"sessions": {"period": "day"}}"#).sessions.period, .day)
 
         // A stored layout from a newer build still loads.
         let stored = try decode(#"{"sessions": {"period": "30d"}, "tokens": {"models": ["claude-model:a", 4, null]}}"#)
@@ -133,10 +184,93 @@ final class PanelLayoutFiltersTests: XCTestCase {
     }
 
     func testTheSessionPeriodsReachAsFarBackAsSessionsAreReported() {
-        XCTAssertEqual(PanelSessionPeriod.allCases.map(\.rawValue), ["1h", "2h", "6h", "12h", "24h", "3d", "7d"])
-        XCTAssertEqual(PanelSessionPeriod.allCases.map(\.duration), [1, 2, 6, 12, 24, 72, 168].map { Double($0) * 3600 })
+        XCTAssertEqual(PanelSessionPeriod.allCases.map(\.rawValue), ["day", "week"], "named as the token chart's periods")
+        XCTAssertEqual(PanelSessionPeriod.allCases.map(\.duration), [86400, 7 * 86400] as [TimeInterval])
         XCTAssertEqual(PanelSessionPeriod.week.duration, SessionWindow.recency, "no older session is reported")
         XCTAssertEqual(PanelSessionPeriod.day.duration, PanelTokenPeriod.day.duration)
+        XCTAssertEqual(PanelSessionPeriod.week.duration, PanelTokenPeriod.week.duration)
+    }
+
+    /// A layout saved by the build before, whose rows reached back from an hour to seven days, loads with the period that
+    /// covers most of its own: a week for three days and seven, a day for the rest.
+    func testThePeriodsOfTheBuildBeforeAreReadAsTheDayOrTheWeek() throws {
+        for (name, period) in [("1h", PanelSessionPeriod.day), ("2h", .day), ("6h", .day), ("12h", .day), ("24h", .day),
+                               ("3d", .week), ("7d", .week), ("day", .day), ("week", .week)] {
+            XCTAssertEqual(try decode(#"{"sessions": {"period": "\#(name)", "limit": 7}}"#).sessions,
+                           PanelLayout.Sessions(limit: 7, period: period), name)
+            XCTAssertEqual(PanelSessionPeriod(stored: name), period, name)
+        }
+        XCTAssertEqual(try encode(try decode(#"{"sessions": {"period": "3d"}}"#)), #"{"sessions":{"period":"week"}}"#,
+                       "written back by this build's name")
+        XCTAssertTrue(try decode(#"{"sessions": {"period": "6h"}}"#).isDefault, "a day is the default view's")
+        for name in ["30d", "month", "1d", ""] {
+            XCTAssertNil(PanelSessionPeriod(stored: name), name)
+            XCTAssertNil(try decode(#"{"sessions": {"period": "\#(name)"}}"#).sessions.period, name)
+        }
+    }
+
+    // MARK: The sessions' order and projects
+
+    func testTheSortAndTheProjectsReadAndWriteBack() throws {
+        let json = #"{"sessions":{"projects":["/work/beta","unassigned","~/work/alpha"],"sort":"date"}}"#
+        let layout = PanelLayout(sessions: PanelLayout.Sessions(sort: .date, projects: ["/work/beta", "unassigned", "~/work/alpha"]))
+        XCTAssertEqual(try decode(json), layout)
+        XCTAssertEqual(try encode(layout), json, "keys are sorted and nothing unset is written")
+        XCTAssertEqual(try encode(PanelLayout(sessions: PanelLayout.Sessions(sort: .active, projects: []))), "{}",
+                       "the active order and every project are the default view's")
+        XCTAssertEqual(try decode("{}").sessions.rowSort, .active)
+        XCTAssertEqual(PanelSessionSort.allCases.map(\.rawValue), ["active", "date"])
+
+        // A stored layout from a newer build still loads.
+        let stored = try decode(#"{"sessions": {"sort": "title", "projects": ["~/work/alpha", 3, null, ""]}}"#)
+        XCTAssertNil(stored.sessions.sort, "a sort this build does not know is not given")
+        XCTAssertEqual(stored.sessions.projects, ["~/work/alpha", ""], "an id that is not a string is left out")
+        XCTAssertEqual(stored.normalized().sessions, PanelLayout.Sessions(projects: ["~/work/alpha"]), "and an empty one too")
+        XCTAssertTrue(try decode(#"{"sessions": {"projects": "~/work/alpha", "sort": 1}}"#).isDefault)
+    }
+
+    func testTheSameProjectsAreTheSameLayout() {
+        let spelled = PanelLayout(sessions: PanelLayout.Sessions(sort: .active, projects: ["~/b", "unassigned", "~/a", "~/b", ""]))
+        XCTAssertEqual(spelled.normalized().sessions, PanelLayout.Sessions(projects: ["unassigned", "~/a", "~/b"]),
+                       "a filter has no order")
+        XCTAssertEqual(PanelLayout(sessions: PanelLayout.Sessions(projects: [""])).normalized(), PanelLayout())
+        XCTAssertEqual(PanelLayout(sessions: PanelLayout.Sessions(sort: .active)).normalized(), PanelLayout())
+        XCTAssertNotEqual(PanelLayout(sessions: PanelLayout.Sessions(sort: .date)).normalized(), PanelLayout())
+    }
+
+    func testThePlanResolvesTheSortAndTheProjects() {
+        let plain = PanelLayoutPlan(layout: PanelLayout(), blocks: []).sessions
+        XCTAssertEqual(plain.sort, .active)
+        XCTAssertTrue(plain.keeps(project: { .unassigned }))
+        var asked = false
+        XCTAssertTrue(plain.keeps(project: { asked = true; return .unassigned }))
+        XCTAssertFalse(asked, "a filter that names no project asks for none, which would read Git's pointers")
+
+        let plan = PanelLayoutPlan(layout: PanelLayout(sessions: PanelLayout.Sessions(
+            sort: .date, projects: ["/work/alpha", "unassigned", ""])), blocks: []).sessions
+        XCTAssertEqual(plan.sort, .date)
+        XCTAssertTrue(plan.keeps(project: { .directory("/work/alpha") }))
+        XCTAssertTrue(plan.keeps(project: { .unassigned }))
+        XCTAssertFalse(plan.keeps(project: { .directory("/work/beta") }))
+        XCTAssertFalse(plan.keeps(project: { .directory("/work/alpha/sub") }), "a session's project is matched by its id")
+        XCTAssertNotEqual(plan, plain)
+    }
+
+    /// A project's id is its folder written with ~, the same in every language, or `unassigned`, and names it back.
+    func testAProjectsIdIsItsFolderWrittenWithATilde() {
+        let home = NSHomeDirectory()
+        XCTAssertEqual(SessionProject.directory(home + "/work/alpha").id, "~/work/alpha")
+        XCTAssertEqual(SessionProject.directory("/work/alpha").id, "/work/alpha")
+        XCTAssertEqual(SessionProject.unassigned.id, "unassigned")
+        L10n.setLanguage(.zhHans)
+        defer { L10n.setLanguage(.system) }
+        XCTAssertEqual(SessionProject.unassigned.id, "unassigned", "the label is the language's, the id is not")
+        for project in [SessionProject.directory(home + "/work/alpha"), .directory("/work/alpha"), .unassigned] {
+            XCTAssertEqual(SessionProject(id: project.id), project)
+        }
+        XCTAssertEqual(SessionProject.ordered([.unassigned, .directory("/work/b"), .directory("/work/a10"), .directory("/work/a9")]),
+                       [.directory("/work/a9"), .directory("/work/a10"), .directory("/work/b"), .unassigned],
+                       "by label as Finder orders names, the sessions of no folder last")
     }
 
     /// A model the chart has no tokens of now is an issue, unless a layout holds it, and so is one of an agent the
@@ -167,9 +301,9 @@ final class PanelLayoutFiltersTests: XCTestCase {
         let sonnet = AgentDescriptor(id: "claude-model:sonnet", vendor: "Claude", model: "Sonnet", source: "", enabled: true)
         let gpt = AgentDescriptor(id: "codex-model:gpt", vendor: "Codex", model: "GPT", source: "", enabled: true)
         XCTAssertEqual(PanelLayoutPlan(layout: PanelLayout(), blocks: []).sessions.period, .day)
-        let plan = PanelLayoutPlan(layout: PanelLayout(sessions: PanelLayout.Sessions(period: .hours6),
+        let plan = PanelLayoutPlan(layout: PanelLayout(sessions: PanelLayout.Sessions(period: .week),
                                                        tokens: PanelLayout.Tokens(models: ["claude-model:opus"])), blocks: [])
-        XCTAssertEqual(plan.sessions.period, .hours6)
+        XCTAssertEqual(plan.sessions.period, .week)
         XCTAssertTrue(plan.tokens.narrows)
         XCTAssertTrue(plan.tokens.keeps(opus))
         XCTAssertFalse(plan.tokens.keeps(sonnet))
@@ -185,5 +319,31 @@ final class PanelLayoutFiltersTests: XCTestCase {
         XCTAssertEqual(PanelTokenPeriod.allCases.map(\.duration), [86400, 7 * 86400, 30 * 86400] as [TimeInterval])
         XCTAssertEqual(PanelTokenPeriod.allCases.map(\.bucketSize), [.minutes15, .day1, .day1])
         XCTAssertEqual(PanelTokenPeriod.allCases.map(\.range), [.hours24, .days7, .days30])
+    }
+
+    /// A repository with a worktree, as Git leaves their pointers, beside a folder outside Git and a link to it, in a
+    /// folder of its own; Git itself is not run.
+    private struct Worktree {
+        let directory: URL
+        let main: URL
+        let worktree: URL
+        let plain: URL
+        let link: URL
+
+        init() throws {
+            let files = FileManager.default
+            directory = files.temporaryDirectory.appendingPathComponent("HUD Projects \(UUID().uuidString)").resolvingSymlinksInPath()
+            main = directory.appendingPathComponent("main")
+            worktree = directory.appendingPathComponent("tree")
+            plain = directory.appendingPathComponent("plain")
+            link = directory.appendingPathComponent("link")
+            let pointers = main.appendingPathComponent(".git/worktrees/tree")
+            for folder in [pointers, worktree.appendingPathComponent("Sources"), plain.appendingPathComponent("docs")] {
+                try files.createDirectory(at: folder, withIntermediateDirectories: true)
+            }
+            try "../..\n".write(to: pointers.appendingPathComponent("commondir"), atomically: true, encoding: .utf8)
+            try "gitdir: \(pointers.path)\n".write(to: worktree.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+            try files.createSymbolicLink(at: link, withDestinationURL: plain)
+        }
     }
 }

@@ -87,8 +87,9 @@ struct ScreensPane: View {
         let listed = current.map { settings.panelLayout.effective(for: $0.key).hud.agents } ?? []
         var items = store.map { ScreenAgents(store: $0, listed: listed, mode: .simple).meterItems } ?? []
         if items.isEmpty { items = SimpleMeterItem.samples }
-        // The preview shows what bot logos do even while nothing is running.
-        let bots = settings.settings.botLogos
+        // The preview shows what bot logos do even while nothing is running, as the HUD draws them, an agent's draft
+        // included.
+        let bots = settings.effectiveSettings.botLogos
         if bots, !items.contains(where: \.isWorking) { items[0].isWorking = true }
         return SimpleMeterConfig(items: items, placement: sample, bots: bots)
     }

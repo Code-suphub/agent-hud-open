@@ -108,11 +108,7 @@ final class DockContactAnchorTests: XCTestCase {
         let domain = "app.agenthud.tests.dock-contact.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
-        settings.update {
-            $0.showIslandQuota = false
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
-        }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = false }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
         store.replace(report: DemoUsageProvider.report(agents: settings.agents,
             historyHours: UsageStore.historyHours, now: Date()))

@@ -132,9 +132,25 @@ final class PanelFiltersViewTests: XCTestCase {
         keep(PanelLayout(sessions: PanelLayout.Sessions(limit: 10, period: .week)))
         XCTAssertEqual(HoverPanelView.sessionRows(store, filter: plan.sessions).shown.map(\.id).last, "s9", "ended yesterday")
         XCTAssertGreaterThan(height(), day + 10, "one more row")
-        keep(PanelLayout(sessions: PanelLayout.Sessions(limit: 10, period: .hour)))
-        XCTAssertEqual(HoverPanelView.sessionRows(store, filter: plan.sessions).shown.count, 6)
-        XCTAssertLessThan(height(), day - 20, "two rows fewer")
+    }
+
+    /// The rows follow the layout's order and projects: by date the same rows stand in another order and the panel keeps
+    /// its height; one project's rows alone make it shorter.
+    func testTheRowsFollowTheLayoutsOrderAndProjects() throws {
+        keep(PanelLayout(sessions: PanelLayout.Sessions(limit: 10)))
+        let day = height()
+        let active = HoverPanelView.sessionRows(store, filter: plan.sessions).shown.map(\.id)
+        keep(PanelLayout(sessions: PanelLayout.Sessions(limit: 10, sort: .date)))
+        let date = HoverPanelView.sessionRows(store, filter: plan.sessions).shown.map(\.id)
+        XCTAssertEqual(Set(date), Set(active))
+        XCTAssertEqual(date, store.view.sessions.map(\.id).filter(Set(active).contains), "every row by its last event")
+        XCTAssertEqual(height(), day, accuracy: 0.5)
+
+        let s7 = try XCTUnwrap(store.view.sessions.first { $0.id == "s7" }?.session)
+        keep(PanelLayout(sessions: PanelLayout.Sessions(limit: 10, projects: [SessionProject(s7).id])))
+        XCTAssertEqual(HoverPanelView.sessionRows(store, filter: plan.sessions).shown.map(\.id), ["s2", "s7", "s3", "s6"],
+                       "the sample's sessions in ~/work/agent-hud")
+        XCTAssertLessThan(height(), day - 20, "four rows fewer")
     }
 
     // MARK: Tokens

@@ -137,12 +137,11 @@ final class PanelHoldHUDTests: XCTestCase {
         let settings = SettingsStore(defaults: defaults, defaultAgents: agents)
         settings.update {
             $0.screens[key] = placement
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
             $0.requiresOptionToOpen = false
             $0.hoverDelayMs = 0
             $0.collapseDelayMs = collapseDelayMs
         }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false; $0.sessionList = false }
         let reads = ReadCount()
         let store = UsageStore(provider: reads, settings: settings)
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))

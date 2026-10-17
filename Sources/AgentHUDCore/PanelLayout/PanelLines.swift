@@ -100,7 +100,7 @@ extension PanelLayoutPlan {
 extension PanelBlockPlan {
     /// The block taking `span` of its line with `columns` cells on a line.
     func spanning(_ span: PanelSpan, columns: Int) -> PanelBlockPlan {
-        PanelBlockPlan(key: key, kind: kind, widget: widget, measures: measures, hiddenRows: hiddenRows, countdown: countdown,
-                       columns: columns, ringSize: ringSize, span: span, period: period)
+        PanelBlockPlan(key: key, kind: kind, widget: widget, measures: measures, hiddenRows: hiddenRows, rowOrder: rowOrder,
+                       accounts: accounts, countdown: countdown, columns: columns, ringSize: ringSize, span: span, period: period)
     }
 }

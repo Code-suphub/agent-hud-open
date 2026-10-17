@@ -119,7 +119,7 @@ public struct CodexDesktopPermissions: Sendable {
                 params = ["conversationId": pending.threadID, "clientUserMessageId": messageID,
                           "input": [["type": "text", "text": text, "text_elements": []]],
                           "attachments": [], "restoreMessage": restore]
-            case .clientWindow, nil: throw Failure.unsupportedDecision
+            case .clientWindow, .clientReply, nil: throw Failure.unsupportedDecision
             }
             let reply: [String: Any]
             var wroteAnswer = false
@@ -148,7 +148,7 @@ public struct CodexDesktopPermissions: Sendable {
                 guard receipt["result"]["result"]["result"]["turnId"].stringValue == turnID else {
                     throw CodexDesktopIPC.Failure.acceptanceUncertain
                 }
-            case .clientWindow, nil: throw Failure.unsupportedDecision
+            case .clientWindow, .clientReply, nil: throw Failure.unsupportedDecision
             }
         }
     }

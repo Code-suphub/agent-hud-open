@@ -90,11 +90,9 @@ final class IslandCanvasRebaseTests: XCTestCase {
             let settings = SettingsStore(defaults: defaults, defaultAgents: agents)
             settings.update {
                 $0.screens[ScreenIdentity.key(for: screen)] = ScreenPlacement(mode: .logos, edge: .left, offset: 0.5)
-                $0.showIslandQuota = false
-                $0.showIslandTokens = false
-                $0.showIslandSessions = false
                 $0.requiresOptionToOpen = false
             }
+            settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = false }
             let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
             store.glowHidden = true
             let now = Date()

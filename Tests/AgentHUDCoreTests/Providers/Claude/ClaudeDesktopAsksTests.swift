@@ -206,6 +206,36 @@ final class ClaudeDesktopAsksTests: XCTestCase {
         XCTAssertTrue(ClaudeDesktopAsks.requests(for: [session], now: then).isEmpty, "no words, no card")
     }
 
+    func testAfterARelaunchTheQuestionsWordsAreReadAgainFromItsOwnLine() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let log = folder.appendingPathComponent("\(session).jsonl")
+        let data = Data((newLines.prefix(2).joined(separator: "\n") + "\n").utf8)
+        try data.write(to: log)
+        var accumulator = TranscriptAccumulator(path: log.path, isSubagent: false)
+        accumulator.ingest(FastTranscriptParser.parse(data, at: 0))
+        XCTAssertEqual(accumulator.build()?.activity?.ask?.offset, 0, "the call is the log's first line")
+        // What the ledger gives back after a relaunch: that the session asks, where, and none of the words.
+        let kept = try JSONDecoder().decode(TranscriptAccumulator.self, from: JSONEncoder().encode(accumulator))
+        let session = try XCTUnwrap(kept.build())
+        XCTAssertEqual(session.activity?.ask?.isWorded, false)
+        let reworded = ClaudeTranscriptStore.reworded(session)
+        XCTAssertEqual(reworded.activity?.ask?.question, "Should I commit it now?")
+        XCTAssertEqual(reworded.activity?.ask?.options.map(\.label), ["Commit it", "Not yet"])
+        XCTAssertEqual(reworded.activity?.ask?.offset, 0)
+        XCTAssertEqual(reworded.activity?.ask?.at, session.activity?.ask?.at)
+        XCTAssertNotNil(ClaudeDesktopAsks.requests(for: [live(asking: reworded.activity?.ask, ended: true)],
+                                                   now: reworded.activity!.ask!.at.addingTimeInterval(60)).first,
+                        "and the card is there again")
+        // A line that is another call's leaves the question without words rather than with someone else's.
+        var moved = kept.build()!
+        let elsewhere = SessionActivity.Ask(id: session.activity!.ask!.id, kind: .nextStep, question: "", options: [],
+                                            at: session.activity!.ask!.at, offset: newLines[0].utf8.count + 1)
+        moved.activity?.open("toolu_other", work: nil, at: elsewhere.at, response: nil, asking: elsewhere)
+        XCTAssertEqual(ClaudeTranscriptStore.reworded(moved).activity?.ask?.isWorded, false)
+    }
+
     // MARK: Waiting and the card
 
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -276,6 +306,72 @@ final class ClaudeDesktopAsksTests: XCTestCase {
         XCTAssertTrue(ClaudeDesktopAsks.requests(for: [live(asking: asked, ended: true)],
                                                  now: asked.at.addingTimeInterval(ClaudeDesktopAsks.standing)).isEmpty)
         XCTAssertTrue(ClaudeDesktopAsks.requests(for: [live(asking: nil, ended: true)], now: now).isEmpty)
+    }
+
+    func testWithAWayToReplyABoxIsAnsweredWithTheWordsAClickSendsAndAnOfferIsStillOnlyShown() throws {
+        let asked = box(at: -60)
+        let offer = SessionActivity.Ask(id: "toolu_offer", kind: .offer, question: "Split the parser",
+                                        options: ClaudeDesktopAsks.offerOptions, at: now.addingTimeInterval(-20))
+        let other = LiveSession(id: "other", agentId: "claude-model:opus", task: "Other", terminal: nil, startedAt: now.addingTimeInterval(-600),
+                                pctOfWindow: nil, tokensIn: 1, tokensOut: 1, observedAt: now, activity: {
+                                    var activity = SessionActivity()
+                                    activity.open(offer.id, work: nil, at: offer.at, asking: offer)
+                                    return activity
+                                }())
+        let requests = ClaudeDesktopAsks.requests(for: [live(asking: asked, ended: true), other], now: now, replies: true)
+        XCTAssertEqual(requests.map(\.nativeApproval), [.clientReply, .clientWindow])
+        XCTAssertEqual(requests.map(\.answersQuestion), [true, false], "an offer's answer cannot be put in words")
+        XCTAssertNotEqual(requests[0].id, ClaudeDesktopAsks.requests(for: [live(asking: asked, ended: true)], now: now).first?.id,
+                          "a card that can be answered replaces one that cannot")
+        let box = requests[0], key = try XCTUnwrap(box.questions.first?.answerKey)
+        func words(_ answer: PermissionQuestion.Answer?) -> String? {
+            ClaudeDesktopAsks.words(answering: box, with: answer.map { [key: $0] } ?? [:])
+        }
+        XCTAssertEqual(words(.init(selected: ["Commit it"])), "Commit the parser change now.", "what the button sends")
+        XCTAssertEqual(words(.init(selected: ["Not yet"])), "Not yet", "a button without words sends its label")
+        XCTAssertEqual(words(.init(selected: ["Commit it"], custom: "  Commit, then push  ")), "Commit, then push", "the user's own words")
+        XCTAssertNil(words(nil), "a box left unanswered sends nothing")
+        XCTAssertNil(words(.init(selected: ["Push it"])), "nor does a label the box does not offer")
+    }
+
+    func testAnAnswerOnTheHUDIsSentIntoTheSessionAndOneThatCouldNotBeBringsTheCardBack() async throws {
+        let queue = PermissionRequests(), asking = live(asking: box(at: -60), ended: true)
+        var sent: [(String, String)] = [], failing = false
+        let delivered = expectation(description: "sent")
+        let reply: ClaudeDesktopAsks.Reply = { sessionID, words in
+            if failing { throw CocoaError(.fileWriteNoPermission) }
+            sent.append((sessionID, words))
+            delivered.fulfill()
+        }
+        ClaudeDesktopAsks.show([asking], now: now, in: queue, reply: reply)
+        let request = try XCTUnwrap(queue.pending.first)
+        let key = try XCTUnwrap(request.questions.first?.answerKey)
+        queue.resolve(request.id, .answer([key: .init(selected: ["Commit it"])]))
+        await fulfillment(of: [delivered], timeout: 2)
+        XCTAssertEqual(sent.map(\.0), [session])
+        XCTAssertEqual(sent.map(\.1), ["Commit the parser change now."])
+        XCTAssertTrue(queue.pending.isEmpty, "answered, the card goes until the next prompt takes the question away")
+
+        // Left unanswered, nothing goes in.
+        let next = SessionActivity.Ask(id: "toolu_next", response: "msg_next", kind: .nextStep, question: "Push it too?",
+                                       recap: "Committed.", options: [.init(label: "Push"), .init(label: "Not yet")],
+                                       at: now.addingTimeInterval(-30))
+        let other = live(asking: next, ended: true)
+        ClaudeDesktopAsks.show([other], now: now, in: queue, reply: reply)
+        let skipped = try XCTUnwrap(queue.pending.first)
+        queue.resolve(skipped.id, .answer([:]))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(sent.count, 1)
+
+        // Words that could not be left for the session leave the question to be answered again.
+        failing = true
+        ClaudeDesktopAsks.show([], now: now, in: queue, reply: reply)
+        ClaudeDesktopAsks.show([other], now: now, in: queue, reply: reply)
+        let retried = try XCTUnwrap(queue.pending.first)
+        queue.resolve(retried.id, .answer([try XCTUnwrap(retried.questions.first?.answerKey): .init(selected: ["Not yet"])]))
+        try await Task.sleep(for: .milliseconds(50))
+        ClaudeDesktopAsks.show([other], now: now, in: queue, reply: reply)
+        XCTAssertEqual(queue.pending.map(\.id), [retried.id])
     }
 
     func testTheQueueShowsTheCardUntilTheLogSaysItWasAnsweredAndPuttingItAwayOnlyHidesIt() throws {

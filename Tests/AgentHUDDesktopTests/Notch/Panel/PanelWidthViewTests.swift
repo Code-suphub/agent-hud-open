@@ -131,8 +131,8 @@ final class PanelWidthViewTests: XCTestCase {
         }
     }
 
-    /// The bar that says a draft waits keeps one line, a style alone or a layout, in an agent's own panel at its narrowest
-    /// and in the whole panel at its narrowest, in both languages.
+    /// The bar that says a draft waits keeps one line, a style alone or a layout, the app's settings alone or beside
+    /// either, in an agent's own panel at its narrowest and in the whole panel at its narrowest, in both languages.
     func testTheDraftBarKeepsOneLineAtTheNarrowestPanels() {
         for language in [AppLanguage.en, .zhHans] {
             let store = sample(language)
@@ -149,7 +149,17 @@ final class PanelWidthViewTests: XCTestCase {
             layout.discard(.screen(screen))
             layout.proposeStyle(HUDStyle(logoSize: 30), for: screen, hasNotch: false)
             for width in [agent[0], whole[0]] { XCTAssertEqual(bar(width), line, accuracy: 0.5, "\(language) style at \(width)") }
+            layout.proposeApp(AppDraft(botLogos: false))
+            for width in [agent[0], whole[0]] {
+                XCTAssertEqual(bar(width), line, accuracy: 0.5, "\(language) style and app at \(width)")
+            }
             layout.discard(.screen(screen))
+            for width in [agent[0], whole[0]] { XCTAssertEqual(bar(width), line, accuracy: 0.5, "\(language) app at \(width)") }
+            layout.propose(.own(PanelLayout(hiddenSections: [.tokens])), for: screen)
+            for width in [agent[0], whole[0]] {
+                XCTAssertEqual(bar(width), line, accuracy: 0.5, "\(language) layout and app at \(width)")
+            }
+            layout.discardPanel(on: screen)
         }
     }
 }

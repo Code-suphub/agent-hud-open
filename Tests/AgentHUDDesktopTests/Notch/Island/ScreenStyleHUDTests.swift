@@ -23,10 +23,9 @@ final class ScreenStyleHUDTests: XCTestCase {
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
         settings.update {
             $0.screens[key] = placement
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
             $0.collapseDelayMs = 5000
         }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false; $0.sessionList = false }
         settings.onChange = { [weak self] _ in self?.changes += 1 }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))

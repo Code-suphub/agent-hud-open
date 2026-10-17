@@ -69,17 +69,15 @@ extension HoverPanelView {
         var id: String { blocks.count == 1 ? blocks[0].id : blocks.map(\.plan.key).joined(separator: "+") }
     }
 
-    /// The plan's lines with what each block draws, where a Settings switch leaves the blocks.
+    /// The plan's lines with what each block draws: a quota block's rows, and the API accounts its layout keeps.
     func blockLines(_ plan: PanelLayoutPlan) -> [BlockLine] {
-        guard store.settings.settings.showIslandQuota else { return [] }
         let groups = Dictionary(quotaGroups.map { ($0.vendor, $0.rows) }, uniquingKeysWith: { first, _ in first })
         let accounts = Dictionary(grouping: billing, by: \.panelBlockKey)
         return plan.lines.compactMap { line in
             let blocks: [Block] = line.compactMap { block in
-                switch block.kind {
-                case .quota: groups[block.key].map { .quota(block, rows: $0) }
-                case .billing: accounts[block.key].map { .billing(block, accounts: $0) }
-                }
+                guard block.kind == .billing else { return groups[block.key].map { .quota(block, rows: $0) } }
+                let kept = (accounts[block.key] ?? []).filter { block.shows(account: $0.id) }
+                return kept.isEmpty ? nil : .billing(block, accounts: kept)
             }
             return blocks.isEmpty ? nil : BlockLine(blocks: blocks)
         }
@@ -118,13 +116,7 @@ extension HoverPanelView {
                 .padding(.top, divided ? spacing.divided : 0)
                 .topDivider(divided ? divider : .clear)
         case .billing(let plan, let accounts):
-            VStack(alignment: .leading, spacing: spacing.blocks) {
-                ForEach(accounts) { account in
-                    APIBillingCard(billing: account, store: store, theme: theme, compact: true, period: plan.period)
-                        .padding(.top, spacing.divided)
-                        .topDivider(divider)
-                }
-            }
+            BillingBlock(store: store, accounts: accounts, plan: plan, dividesFirst: true, divider: divider)
         }
     }
 
@@ -152,13 +144,7 @@ extension HoverPanelView {
         case .quota(let plan, let rows):
             ProviderQuotaBlock(store: store, rows: rows, plan: plan, onOpenAgent: openAgent(plan.key))
         case .billing(let plan, let accounts):
-            VStack(alignment: .leading, spacing: spacing.blocks) {
-                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                    APIBillingCard(billing: account, store: store, theme: theme, compact: true, period: plan.period)
-                        .padding(.top, index > 0 ? spacing.divided : 0)
-                        .topDivider(index > 0 ? divider : .clear)
-                }
-            }
+            BillingBlock(store: store, accounts: accounts, plan: plan, dividesFirst: false, divider: divider)
         }
     }
 }

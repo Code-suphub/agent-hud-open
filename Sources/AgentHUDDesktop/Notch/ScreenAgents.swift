@@ -5,8 +5,9 @@ import AgentHUDCore
 /// put in their order. A list that names none of the agents the HUD would show now narrows nothing
 /// (`HUDAgentOrder`), so the screen shows every agent rather than an empty HUD.
 ///
-/// Only this screen's resting HUD follows the list. The menu bar, quota alerts, requests, other screens and the hover
-/// panel's blocks read the store as it is.
+/// This screen's resting HUD follows the list, and so does the menu bar where it follows this screen's HUD
+/// (`StatusItemController`): the item's figure and colours on the main display, the menu's rows on the screen it opens
+/// on. Quota alerts, requests, other screens and the hover panel's blocks read the store as it is.
 @MainActor
 struct ScreenAgents {
     private let store: UsageStore
