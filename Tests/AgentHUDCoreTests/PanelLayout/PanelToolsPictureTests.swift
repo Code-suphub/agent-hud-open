@@ -86,10 +86,10 @@ final class PanelToolsPictureTests: PanelToolsCase {
         XCTAssertFalse(fits["note"]?.stringValue?.contains("scrolls") == true)
     }
 
-    func testThePictureToolTakesOnlyAScreenAndWhatToShow() {
+    func testThePictureToolTakesOnlyAScreenWhatToShowAndAnAgent() {
         let tools = tools(picture: picture(height: 741))
         XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.getPanelImage, arguments: ["scale": .integer(1), "block": .string("Claude")])),
-                       .failure("get_panel_image takes only screen and show. Unknown: \"block\", \"scale\"."))
+                       .failure("get_panel_image takes only screen, show and agent. Unknown: \"block\", \"scale\"."))
         XCTAssertEqual(tools.answer(MCPToolRequest(tool: MCPTools.getPanelImage, arguments: ["show": .string("glow")])),
                        .failure("show is \"panel\", the default, or \"hud\"."))
         XCTAssertEqual(drawn, 0, "nothing is drawn for a refused call")

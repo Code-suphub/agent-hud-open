@@ -44,11 +44,11 @@ public enum MCPTools {
         """
 
     /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in, the
-    /// same for every glass style.
+    /// same for every glass style. What an agent's own panel is and when a screen has one is the agent argument's to say.
     private static let getPanelImageDescription = """
         Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, account names \
-        masked, session titles left out, or with show 'hud' a screen's resting HUD as it looks now; every glass style \
-        is one stand-in. Use it to check how a change looks; get_panel reads it as data.
+        masked, session titles left out, or with agent one agent's own panel, or with show 'hud' a screen's resting \
+        HUD; glass is one stand-in. Use it to check a change; get_panel reads it as data.
         """
 
     private static let setPanelLayoutDescription = """
@@ -92,6 +92,10 @@ public enum MCPTools {
             "screen": described("string", screenDescription),
             "show": text("What to draw: the hover panel, the default, or the screen's resting HUD, which needs a screen key.",
                          oneOf: ["panel", "hud"]),
+            "agent": described("string", "An agent by name from that screen's shows in get_panel, or by its block's key, to "
+                               + "draw its own panel instead of the whole one: the card a click on its mark opens beside "
+                               + "it, agentPanelWidth wide, on a dynamic or simple HUD with separateAgents on. Needs a "
+                               + "screen key; not with show 'hud'."),
         ]), changes: false),
         tool(setPanelLayout, setPanelLayoutDescription, input: layout, changes: true),
         tool(discardPanelDraft, discardPanelDraftDescription, input: object(["screen": described("string", screenDescription)]),

@@ -177,11 +177,12 @@ public final class DesktopApplication {
         if options.toolChannel != .never {
             // A demo shares the data directory with the real copy, so it takes the tool calls only when asked to; any
             // other launch takes them while the switch in Settings → Experimental is on. A screen's panel is drawn and
-            // measured as that display's island draws it, off screen; the shared layout as the main display's.
-            let renderer = { @MainActor [weak self] (scope: PanelLayoutScope) -> PanelPictureRenderer? in
+            // measured as that display's island draws it, off screen; the shared layout as the main display's. One agent's
+            // own panel is drawn as the card its mark opens on that display's dock, in its look.
+            let renderer = { @MainActor [weak self] (scope: PanelLayoutScope, agent: String?) -> PanelPictureRenderer? in
                 guard let self else { return nil }
                 return PanelPictureRenderer(store: self.store, display: self.notch?.panelDisplay(for: scope.screenKey) ?? .main,
-                                            screen: scope.screenKey)
+                                            screen: scope.screenKey, agent: agent)
             }
             // A screen's resting HUD is drawn as Settings previews it, off screen, with that display's notch.
             let hud = { @MainActor [weak self] (key: String) -> HUDPicture? in
@@ -192,7 +193,8 @@ public final class DesktopApplication {
                                           metrics: ScreenMetrics(screen: display)).picture()
             }
             let tools = PanelTools(store: store, screens: { [weak self] in self?.notch?.panelScreens ?? [] },
-                                   picture: { renderer($0)?.picture() }, fit: { renderer($0)?.fit() }, hud: hud)
+                                   picture: { renderer($0, nil)?.picture() }, fit: { renderer($0, nil)?.fit() }, hud: hud,
+                                   agentPicture: { renderer(.screen($0), $1)?.picture() })
             let channel = AgentToolsChannel(channel: MCPAppChannel { tools.answer($0) }, settings: settings, mode: options.toolChannel)
             toolChannel = channel
             channel.start()
