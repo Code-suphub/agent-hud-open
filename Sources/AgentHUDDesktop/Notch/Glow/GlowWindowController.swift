@@ -37,6 +37,11 @@ final class GlowWindowController {
     private var dockShadowKey: ShadowKey?
     /// The shells the shadows were last placed under: a shell that was not there has no place to move its shadow from.
     private var placedShells: HUDShells?
+    /// A detached card went back into its dock while the materials were pending, before the shells were given their
+    /// shadows again: the card's is dropped once they are.
+    private var cardLeft = false
+    /// A card whose shadow shows moved meanwhile: the dock's shadow fades to its new cut once they are.
+    private var cardSlid = false
     /// The look the installed materials were drawn for.
     private var installedLook: HUDLook?
     /// The canvas they were laid out on: the panel's frame, and the edge the canvas was turned toward.
@@ -372,6 +377,12 @@ final class GlowWindowController {
         /// Whether the shells' shadows follow them in motion: whenever the island animates, and when a card moves
         /// along a dock that separates its agents, which animates while the island does not.
         animatesShells: Bool,
+        /// Whether a detached card has gone back into its dock since the last update: its shadow then goes at once
+        /// rather than fade (`updateShells`).
+        cardLeaves: Bool = false,
+        /// Whether a detached card whose shadow shows is moving to another place: the dock's shadow, cut by the card,
+        /// then fades to its new cut as the card goes there, where it would otherwise switch ahead of the card.
+        fadesDock: Bool = false,
         alert: IslandAlert? = nil,
         quotaVendors: [String] = [],
         pattern: GlowPattern = GlowPattern(),
@@ -421,7 +432,12 @@ final class GlowWindowController {
         shadowLayer.isHidden = stale
         alertLayer.isHidden = stale || appearance.hidden
         shellShadowLayer.isHidden = stale
-        if materialsPending { return }
+        if materialsPending {
+            // The shells are given their shadows once the materials have come, the card's dropped then.
+            cardLeft = cardLeft || cardLeaves
+            cardSlid = cardSlid || fadesDock
+            return
+        }
         installedLook = look
         installedCanvas = (frame, geometry.edge)
 
@@ -471,7 +487,10 @@ final class GlowWindowController {
         CATransaction.commit()
         crossFadeOpacity(shadowLayer, from: previousShadowOpacity)
         updateShells(look.castsShellShadows ? shells : HUDShells(surface: nil, dock: nil), look: look,
-                     geometry: geometry, frame: frame, prepared: prepared, animates: animatesShells)
+                     geometry: geometry, frame: frame, prepared: prepared, animates: animatesShells,
+                     cardLeaves: cardLeaves || cardLeft, fadesDock: fadesDock || cardSlid)
+        cardLeft = false
+        cardSlid = false
 
         // A running grid effect carries the breathing itself; otherwise the whole layer pulses.
         applyBreathing(appearance, pulsesOpacity: !animator.isRunning)
@@ -487,20 +506,34 @@ final class GlowWindowController {
 
     // MARK: Shells
 
+    /// Gives the shells their shadows, leaving everything else here as the last update left it: a detached card's, which
+    /// `ScreenHUD` holds back until the card has grown out of its dock (`CardShadowHold`). It fades in when `animates`,
+    /// and the dock's, cut by the card from now on under a see-through look, fades to its new cut with it.
+    func updateShells(_ shells: HUDShells, look: HUDLook, geometry: NotchGeometry, animates: Bool) {
+        guard look.castsShellShadows else { return }
+        updateShells(shells, look: look, geometry: geometry, frame: Self.panelFrame(for: geometry), prepared: nil,
+                     animates: animates, fadesDock: animates)
+    }
+
     /// Gives the shells their shadows, or takes them away. A shadow that appears fades in where its shell is, one that
-    /// goes fades out where it was, and one already showing follows its shell when `animates`.
+    /// goes fades out where it was, and one already showing follows its shell when `animates`. A detached card's goes
+    /// at once as the card goes back into its dock (`cardLeaves`) and leaves the surface no shell: the card's shadow is
+    /// cut out where the card was, and fading there it would show that place round the card as it shrinks. A change of
+    /// look still cross-fades it. The dock's new shadow fades in over its old one when `fadesDock`.
     private func updateShells(_ shells: HUDShells, look: HUDLook, geometry: NotchGeometry, frame: CGRect,
-                              prepared: PreparedImages?, animates: Bool) {
+                              prepared: PreparedImages?, animates: Bool, cardLeaves: Bool = false,
+                              fadesDock: Bool = false) {
         if let surface = shells.surface, !surface.bare {
             let key = shellShadowKey(for: surface, among: shells, look: look, geometry: geometry, frame: frame)
             shellShadowKey = installShellShadow(key, in: shellShadowLayer, holding: shellShadowKey, prepared: prepared)
         }
         if let dock = shells.dock {
             let key = shellShadowKey(for: dock, among: shells, look: look, geometry: geometry, frame: frame)
-            dockShadowKey = installShellShadow(key, in: dockShadowLayer, holding: dockShadowKey, prepared: nil)
+            dockShadowKey = installShellShadow(key, in: dockShadowLayer, holding: dockShadowKey, prepared: nil,
+                                               fades: fadesDock)
         }
         place(shellShadowLayer, under: shells.surface, was: placedShells?.surface, geometry: geometry, frame: frame,
-              animates: animates)
+              animates: animates && !(cardLeaves && shells.surface == nil))
         place(dockShadowLayer, under: shells.dock, was: placedShells?.dock, geometry: geometry, frame: frame,
               animates: animates)
         placedShells = shells
@@ -528,9 +561,9 @@ final class GlowWindowController {
     }
 
     /// Draws `key`'s shadow into `layer` unless it holds it already, from a prepared bitmap where one matches, and
-    /// returns the key the layer holds now.
+    /// returns the key the layer holds now. The new shadow fades in over the old one on a change of look, or when `fades`.
     private func installShellShadow(_ key: ShadowKey, in layer: CALayer, holding installed: ShadowKey?,
-                                    prepared: PreparedImages?) -> ShadowKey? {
+                                    prepared: PreparedImages?, fades: Bool = false) -> ShadowKey? {
         guard key != installed else { return installed }
         guard let rendered = (prepared?.shadowKey == key ? prepared?.shadow : nil) ?? Self.renderShadow(key) else {
             return installed
@@ -545,7 +578,7 @@ final class GlowWindowController {
         layer.contentsCenter = CGRect(x: horizontal / rendered.size.width, y: vertical / rendered.size.height,
                                       width: (rendered.size.width - horizontal * 2) / rendered.size.width,
                                       height: (rendered.size.height - vertical * 2) / rendered.size.height)
-        crossFade(layer)
+        crossFade(layer, fades: fades)
         CATransaction.commit()
         return key
     }
@@ -582,10 +615,10 @@ final class GlowWindowController {
         if !animates { crossFadeOpacity(layer, from: previousOpacity) }
     }
 
-    /// Fades a layer's new contents in over its old ones while a change of look is being installed. Called inside the
-    /// transaction that sets them.
-    private func crossFade(_ layer: CALayer) {
-        guard crossFades else { return }
+    /// Fades a layer's new contents in over its old ones while a change of look is being installed, or when `fades`.
+    /// Called inside the transaction that sets them.
+    private func crossFade(_ layer: CALayer, fades: Bool = false) {
+        guard crossFades || fades else { return }
         let fade = CATransition()
         fade.type = .fade
         fade.duration = IslandAnimation.duration

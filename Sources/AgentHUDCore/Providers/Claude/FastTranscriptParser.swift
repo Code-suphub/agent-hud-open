@@ -41,6 +41,28 @@ public enum FastTranscriptParser {
     private static let toolResultMarker = Array("\"type\":\"tool_result\"".utf8)
     /// Claude Code writes one content block per line, so a call's name sits in the line's prefix.
     private static let structuredOutputMarker = Array("\"name\":\"StructuredOutput\"".utf8)
+    /// The first content block's type: Claude Code writes one block per line, so a line is the block it holds.
+    private static let blockTypeKey = Array("\"content\":[{\"type\":\"".utf8)
+    /// A tool call's id and name follow its block's type.
+    private static let blockIdKey = Array("\"id\":\"".utf8)
+    private static let blockNameKey = Array("\"name\":\"".utf8)
+    /// A result's call; a failed command's result writes it after the output, so it is searched for past the prefix.
+    private static let toolUseIdKey = Array("\"tool_use_id\":\"".utf8)
+    /// A call's input, read only for the calls that ask the user something in the desktop app's own window.
+    private static let inputKey = Array("\"input\":{".utf8)
+    /// The mark a tool's result carries when the tool ended the turn, written after the result, close to the end.
+    private static let endTurnMarker = Array("\"claude/endTurn\":true".utf8)
+    /// A failed result's mark, which a failed command writes after its output.
+    private static let errorResultMarker = Array("\"is_error\":true".utf8)
+    /// The message Claude Code writes in the model's place when the API failed, with its error and the limit behind it;
+    /// current builds write these after the message, close to the end.
+    private static let apiErrorMarker = Array("\"isApiErrorMessage\":true".utf8)
+    private static let errorKey = Array("\"error\":\"".utf8)
+    private static let quotaLimitsKey = Array("\"quotaLimits\":{".utf8)
+    private static let resetsAtKey = Array("\"resetsAt\":".utf8)
+    /// A `system` line about a failed API request, which carries the attempt when Claude Code tries it again.
+    private static let apiErrorSubtype = Array("\"subtype\":\"api_error\"".utf8)
+    private static let retryAttemptKey = Array("\"retryAttempt\":".utf8)
     private static let customTitleLine = Array("{\"type\":\"custom-title\"".utf8)
     private static let customTitleKey = Array("\"customTitle\":\"".utf8)
     private static let aiTitleLine = Array("{\"type\":\"ai-title\"".utf8)
@@ -142,9 +164,44 @@ public enum FastTranscriptParser {
             // The message-level reason follows the content, so the last occurrence is the real one.
             stopReason = stringValue(after: stopReasonKey, in: line)
         }
+        var toolName: String?, toolUseID: String?, toolResultID: String?, isThinking = false
+        var apiError: String?, limitResetsAt: Date?, retryAttempt: Int?, ask: SessionActivity.Ask?
+        if role == .assistant, let block = find(blockTypeKey, in: head) {
+            let start = block + blockTypeKey.count
+            switch value(after: [], in: line, head: head, from: start) {
+            case "tool_use":
+                toolUseID = value(after: blockIdKey, in: line, head: head, from: start)
+                toolName = value(after: blockNameKey, in: line, head: head, from: start)
+                // Only these few calls have their input read, and it follows the name.
+                if let toolName, let toolUseID, ClaudeDesktopAsks.tools.contains(toolName),
+                   let key = find(inputKey, in: UnsafeRawBufferPointer(rebasing: line[start...])),
+                   let input = object(at: start + key + inputKey.count - 1, in: line) {
+                    ask = ClaudeDesktopAsks.ask(tool: toolName, input: input, id: toolUseID, response: messageId, at: timestamp)
+                }
+            case "thinking", "redacted_thinking": isThinking = true
+            default: break
+            }
+        }
+        let tailStart = max(0, line.count - tailLength)
+        let tail = UnsafeRawBufferPointer(rebasing: line[tailStart...])
+        if role == .assistant, find(apiErrorMarker, in: tail) != nil {
+            apiError = find(errorKey, in: tail, backwards: true).flatMap { string(from: tailStart + $0 + errorKey.count, in: line) }
+            if let limits = find(quotaLimitsKey, in: line, backwards: true) {
+                let rest = UnsafeRawBufferPointer(rebasing: line[limits...])
+                limitResetsAt = find(resetsAtKey, in: rest).flatMap { number(from: limits + $0 + resetsAtKey.count, in: line) }.map {
+                    // Seconds, as Claude Code writes them; a value this large can only be milliseconds.
+                    Date(timeIntervalSince1970: $0 > 100_000_000_000 ? $0 / 1000 : $0)
+                }
+            }
+        } else if role == .other, find(apiErrorSubtype, in: head) != nil {
+            let key = find(retryAttemptKey, in: tail, backwards: true).map { tailStart + $0 } ?? find(retryAttemptKey, in: head)
+            retryAttempt = key.flatMap { number(from: $0 + retryAttemptKey.count, in: line) }.map { Int($0) }
+        }
         var text: String?
         var isPrompt = false
-        if role == .user, find(toolResultMarker, in: head) == nil {
+        if role == .user, find(toolResultMarker, in: head) != nil {
+            toolResultID = value(after: toolUseIdKey, in: line)
+        } else if role == .user {
             text = value(after: contentStringKey, in: line, keyIn: head) ?? value(after: contentTextKey, in: line, keyIn: head)
             // Command output, attachments and compaction summaries are user lines flagged after their content; a slash
             // command the client runs itself is known by its tags.
@@ -154,8 +211,6 @@ public enum FastTranscriptParser {
             // A visible answer. A thinking or tool-use block is a different type and never matches this key.
             text = value(after: contentTextKey, in: line, keyIn: head, limit: messageLength)
         }
-        let tailStart = max(0, line.count - tailLength)
-        let tail = UnsafeRawBufferPointer(rebasing: line[tailStart...])
         // The line's own field is its last occurrence near the end, or, from older builds, the first one near the start.
         func field(_ key: [UInt8]) -> String? {
             find(key, in: tail, backwards: true).flatMap { string(from: tailStart + $0 + key.count, in: line) }
@@ -181,7 +236,11 @@ public enum FastTranscriptParser {
             isCompaction: role == .other && find(compactionMarker, in: head) != nil,
             isStop: role == .other && stopMarkers.contains { find($0, in: head) != nil },
             entrypoint: field(entrypointKey),
-            returnsStructuredOutput: role == .assistant && find(structuredOutputMarker, in: head) != nil
+            returnsStructuredOutput: role == .assistant && find(structuredOutputMarker, in: head) != nil,
+            toolName: toolName, toolUseID: toolUseID, toolResultID: toolResultID, ask: ask,
+            endsTurn: toolResultID != nil && find(endTurnMarker, in: tail, backwards: true) != nil,
+            failed: toolResultID != nil && find(errorResultMarker, in: line) != nil, isThinking: isThinking,
+            apiError: apiError, limitResetsAt: limitResetsAt, retryAttempt: retryAttempt
         )
     }
 
@@ -219,6 +278,25 @@ public enum FastTranscriptParser {
         let haystack = keyIn ?? line
         guard let keyOffset = find(key, in: haystack, backwards: backwards) else { return nil }
         return string(from: keyOffset + key.count, in: line, limit: limit)
+    }
+
+    /// The JSON string after the first `key` from `start` on: the key is looked for in `head`, the value read from `line`.
+    /// An empty key reads the string that starts at `start`.
+    private static func value(after key: [UInt8], in line: UnsafeRawBufferPointer, head: UnsafeRawBufferPointer, from start: Int) -> String? {
+        guard start < head.count else { return nil }
+        let rest = UnsafeRawBufferPointer(rebasing: line[start...])
+        guard !key.isEmpty else { return string(from: 0, in: rest) }
+        return value(after: key, in: rest, keyIn: UnsafeRawBufferPointer(rebasing: head[start...]))
+    }
+
+    /// The JSON number whose first byte is at `start`; nil when none starts there.
+    private static func number(from start: Int, in line: UnsafeRawBufferPointer) -> Double? {
+        var end = start
+        while end < line.count, line[end] == UInt8(ascii: "-") || line[end] == UInt8(ascii: ".") || (0x30...0x39).contains(line[end]) {
+            end += 1
+        }
+        guard end > start else { return nil }
+        return Double(String(decoding: UnsafeRawBufferPointer(rebasing: line[start..<end]), as: UTF8.self))
     }
 
     /// The JSON string after `key` (which ends with the colon), searched backwards; nil when the value is null.
@@ -271,11 +349,14 @@ public enum FastTranscriptParser {
         return (try? JSONSerialization.jsonObject(with: wrapped) as? [String])?.first
     }
 
-    /// The `usage` object as a dictionary (brace-matched slice fed to JSONSerialization). The real usage object is
-    /// the last one on the line, after the message content.
+    /// The `usage` object as a dictionary. The real usage object is the last one on the line, after the message content.
     private static func usageObject(in line: UnsafeRawBufferPointer) -> [String: Any]? {
         guard let keyOffset = find(usageKey, in: line, backwards: true) else { return nil }
-        let open = keyOffset + usageKey.count - 1
+        return object(at: keyOffset + usageKey.count - 1, in: line)
+    }
+
+    /// The JSON object whose opening brace is at `open`, as a dictionary (brace-matched slice fed to JSONSerialization).
+    private static func object(at open: Int, in line: UnsafeRawBufferPointer) -> [String: Any]? {
         var depth = 0
         var index = open
         var inString = false

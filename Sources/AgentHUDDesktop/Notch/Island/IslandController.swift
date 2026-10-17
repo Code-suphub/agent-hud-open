@@ -23,6 +23,8 @@ final class IslandController {
     private let settings: SettingsStore
     private let additionalHUDControls: @MainActor (@escaping @MainActor () -> Void) -> AnyView
     private(set) var huds: [String: ScreenHUD] = [:]
+    /// What each mark shows, decided once for every screen.
+    private let directions: MarkDirections
     /// Display order, so the primary HUD is stable rather than whatever the dictionary yields.
     private var order: [String] = []
     private var systemIsLight = SystemAppearance.isLight
@@ -41,12 +43,17 @@ final class IslandController {
         }
     }
 
+    /// - startedAt: the app's start, before which nothing that happened to an agent is news (`IslandEventTracker`).
     init(store: UsageStore, settings: SettingsStore,
-         additionalHUDControls: @escaping @MainActor (@escaping @MainActor () -> Void) -> AnyView = { _ in AnyView(EmptyView()) }) {
+         additionalHUDControls: @escaping @MainActor (@escaping @MainActor () -> Void) -> AnyView = { _ in AnyView(EmptyView()) },
+         startedAt: Date? = nil) {
         self.store = store
         self.settings = settings
         self.additionalHUDControls = additionalHUDControls
+        directions = MarkDirections(startedAt: startedAt ?? store.clock(), clock: store.clock)
+        directions.read(store.queueMarks)
         rebuild()
+        directions.onChange = { [weak self] in self?.apply(animated: true) }
 
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -65,14 +72,18 @@ final class IslandController {
                 self.apply(animated: true)
             }
         })
-        // Reduce Transparency draws a HUD of glass solid, and turning it off gives the glass back.
+        // Reduce Transparency draws a HUD of glass solid and a see-through solid one opaque, and turning it off gives
+        // the glass and the transparency back.
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.apply(animated: true) }
         })
         trackChanges({ [weak self] in self?.inputs }, onChange: { [weak self] in
-            self?.apply(animated: true)
+            guard let self else { return }
+            // The marks read first, so every screen draws what they now say.
+            self.directions.read(self.store.queueMarks)
+            self.apply(animated: true)
         })
         startPointerMonitors()
     }
@@ -98,6 +109,8 @@ final class IslandController {
         let draftedGlows: [String: GlowSettings]
         /// The panel's width in each screen's layout, by screen key, a draft included: a change resizes an open panel.
         let widths: [String: Int]
+        /// What each mark's sessions are doing and wait on, for the marks' director.
+        let marks: [ReportView.QueueMark]
     }
 
     private var inputs: Inputs {
@@ -111,7 +124,8 @@ final class IslandController {
                       draftedGlows: Dictionary(order.filter { layout.hasStyleDraft($0) }.map { ($0, settings.effectiveGlow(on: $0)) },
                                                uniquingKeysWith: { first, _ in first }),
                       widths: Dictionary(order.map { ($0, layout.effective(for: $0).style.panelWidth) },
-                                         uniquingKeysWith: { first, _ in first }))
+                                         uniquingKeysWith: { first, _ in first }),
+                      marks: store.queueMarks)
     }
 
     // MARK: Screens
@@ -135,7 +149,8 @@ final class IslandController {
         }
         for (index, key) in keys.enumerated() where huds[key] == nil {
             let hud = ScreenHUD(key: key, screen: screens.indices.contains(index) ? screens[index] : nil,
-                                store: store, settings: settings, additionalHUDControls: additionalHUDControls)
+                                store: store, settings: settings, additionalHUDControls: additionalHUDControls,
+                                directions: directions)
             hud.systemIsLight = systemIsLight
             hud.drawsGlassStandIn = drawsGlassStandIn
             hud.onOpenStats = { [weak self] in self?.onOpenStats?() }
@@ -171,22 +186,26 @@ final class IslandController {
     }
 
     /// The attached displays as the MCP tools tell an agent of them, in the system's order: by role, with how each
-    /// presents the HUD now, a style draft included, the agents its resting HUD would show now in each mode, and how the
-    /// Mac is set for the look each draws (`SettingsStore.effectiveLook(on:)`).
+    /// presents the HUD now, a style draft included, the agents its resting HUD would show now in each mode, how the
+    /// Mac is set for the look each draws (`SettingsStore.effectiveLook(on:)`), and which one the person is at, the
+    /// pointer's, else the main display, whose panel an edit of the shared layout holds open.
     var panelScreens: [PanelScreen] {
         let systemIsLight = SystemAppearance.isLight
         let reducesTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let current = underPointer?.key
         return NSScreen.screens.enumerated().map { index, screen in
             let placement = ScreenIdentity.placement(for: screen, in: settings)
             var others: [HUDMode: [String]] = [:]
             for mode in HUDMode.allCases where mode != placement.mode {
                 others[mode] = ScreenAgents.available(store: store, mode: mode)
             }
-            return PanelScreen(key: ScreenIdentity.key(for: screen), name: ScreenIdentity.role(of: screen, at: index),
+            let key = ScreenIdentity.key(for: screen)
+            return PanelScreen(key: key, name: ScreenIdentity.role(of: screen, at: index),
                                mode: placement.mode, edge: placement.mode.isDocked ? placement.edge : .top,
                                hasNotch: ScreenIdentity.hasNotch(screen),
                                agents: ScreenAgents.available(store: store, mode: placement.mode), otherModes: others,
-                               systemIsLight: systemIsLight, reducesTransparency: reducesTransparency)
+                               systemIsLight: systemIsLight, reducesTransparency: reducesTransparency,
+                               hasPointer: key == current)
         }
     }
 
@@ -221,7 +240,10 @@ final class IslandController {
     // MARK: Pointer
 
     /// One monitor for every screen. A collapsed logo queue takes no mouse events so that clicks pass
-    /// through it, which also costs it its tracking; this is what tells each HUD where the pointer is.
+    /// through it, which also costs it its tracking; this is what tells each HUD where the pointer is. A click anywhere,
+    /// and Escape while this app has the keyboard, are a person at work, which ends an agent's hold on a panel
+    /// (`ScreenHUD.personClicked()`, `personPressedEscape()`). Keys typed in other apps are not watched: that would need
+    /// accessibility access, which Agent HUD does not ask for.
     private func startPointerMonitors() {
         let matching: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: matching, handler: { [weak self] _ in
@@ -235,7 +257,34 @@ final class IslandController {
         }) {
             pointerMonitors.append(local)
         }
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] _ in
+            Task { @MainActor in self?.personClicked() }
+        }) {
+            pointerMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: clicks, handler: { [weak self] event in
+            Task { @MainActor in self?.personClicked() }
+            return event
+        }) {
+            pointerMonitors.append(local)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+            if event.keyCode == Self.escapeKey { Task { @MainActor in self?.personPressedEscape() } }
+            return event
+        }) {
+            pointerMonitors.append(local)
+        }
     }
+
+    /// The virtual key code of Escape.
+    private nonisolated static let escapeKey: UInt16 = 53
+
+    /// A click anywhere: each HUD whose panel an agent holds open and the click missed lets go of it.
+    func personClicked() { huds.values.forEach { $0.personClicked() } }
+
+    /// Escape, while this app has the keyboard: every hold on a panel ends.
+    func personPressedEscape() { huds.values.forEach { $0.personTookOver() } }
 
     // MARK: Forwarding
 

@@ -44,7 +44,7 @@ struct BotSheetScene: View {
     private func picture(_ form: BotForm, side: CGFloat, outline: Int) -> CGImage? {
         var motion = BotMotion(seed: 11)
         motion.staysBot = phase == .idle
-        motion.spin = form.spec.spin
+        motion.fit(form.spec)
         motion.set(phase, at: 0)
         var now: TimeInterval = 0
         // Looking a little down and aside, as at a pointer below the queue.

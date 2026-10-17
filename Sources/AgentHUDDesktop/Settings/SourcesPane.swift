@@ -134,7 +134,7 @@ private struct AgentProviderRow: View {
             .accessibilityAddTraits(selected ? .isSelected : [])
         }
         .padding(.horizontal, 6)
-        .background(selected ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 7))
+        .background(selected ? theme.selectedRowBackground : .clear, in: RoundedRectangle(cornerRadius: 7))
         .onDrop(of: [UTType.text], delegate: ReorderDropDelegate(target: .group(group.id), dragging: $dragging,
                                                                  settings: settings, knownGroups: groupIDs))
     }

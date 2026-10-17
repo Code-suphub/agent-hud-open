@@ -268,6 +268,56 @@ final class PanelToolsStyleTests: PanelToolsCase {
             .contains("hud.mode is one of \"notch\", \"dynamic\", \"simple\"."))
     }
 
+    /// The glow's idle period and a grid's pitch, density, core and fade are read back with the rest of the style and
+    /// proposed as Settings › Glow shows them: a grid's on a grid glow, the style that makes it one included, the idle
+    /// period on any glow, each held to the range and the step Settings uses, with every reason at once.
+    func testTheGlowsIdlePeriodAndGridAreProposedAsSettingsShowsThem() throws {
+        let key = "SECOND-UUID"
+        let glow = try XCTUnwrap(try listing(key, in: try call(MCPTools.getPanel))["hud"]?["glow"].objectValue)
+        let standard = GlowSettings()
+        XCTAssertEqual(glow["idleSpeed"], .number(standard.idleBreathSeconds))
+        XCTAssertEqual(glow["gridPitch"], .number(standard.gridPitch))
+        XCTAssertEqual(glow["gridDensity"], .number(standard.gridDensity))
+        XCTAssertEqual(glow["gridCore"], .number(standard.gridCore))
+        XCTAssertEqual(glow["gridFade"], .number(standard.gridFade))
+        XCTAssertEqual(glow["style"], .string("blur"), "listed beside a soft glow, whose grid is kept for a grid style")
+
+        let soft = try refused(["screen": .string(key), "hud": .object(["glow": .object(["gridPitch": .integer(6)])])])
+        XCTAssertEqual(soft, "Nothing was changed. hud.glow.gridPitch: gridPitch sets a grid glow style, one of \"dots\", "
+                       + "\"ascii\", \"blocks\", \"braille\", \"binary\", and the glow of \"Display 2\" would be \"blur\".")
+        let panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(["glow": .object([
+            "style": .string("dots"), "gridPitch": .integer(6), "gridDensity": .number(1.25), "gridCore": .integer(2),
+            "gridFade": .integer(3), "idleSpeed": .integer(12),
+        ])])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(glow: HUDStyle.Glow(style: .dots, idleSpeed: 12, gridPitch: 6,
+                                                                                gridDensity: 1.25, gridCore: 2, gridFade: 3)))
+        var drawn = standard
+        drawn.style = .dots
+        drawn.idleBreathSeconds = 12
+        drawn.gridPitch = 6
+        drawn.gridDensity = 1.25
+        drawn.gridCore = 2
+        drawn.gridFade = 3
+        XCTAssertEqual(settings.effectiveGlow(on: key), drawn)
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["glow"]["gridCore"], .number(2))
+        XCTAssertEqual(changes, 0, "a tool never writes the settings")
+
+        let steps = try refused(["screen": .string(key), "hud": .object(["glow": .object([
+            "style": .string("dots"), "gridPitch": .number(6.5), "gridDensity": .integer(2), "idleSpeed": .integer(30),
+        ])])])
+        for part in ["hud.glow.gridDensity is a number from 0.5 to 1.5 in steps of 0.05.",
+                     "hud.glow.idleSpeed is a number from 1 to 24 in steps of 0.5.",
+                     "hud.glow.gridPitch: gridPitch is a whole number from 4 to 12, as Settings sets it, which 6.5 is not."] {
+            XCTAssertTrue(steps.contains(part), "\(part) — \(steps)")
+        }
+
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(["glow": .object(["idleSpeed": .number(9.5)])])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(glow: HUDStyle.Glow(idleSpeed: 9.5)), "the idle period on a soft glow")
+        let simple = try refused(["screen": .string(key), "hud": .object(["mode": .string("simple"),
+                                                                           "glow": .object(["idleSpeed": .number(9.5)])])])
+        XCTAssertTrue(simple.contains("hud.glow.idleSpeed: A \"simple\" HUD draws no glow"), simple)
+    }
+
     /// A screen that is not attached has no resting HUD to style.
     func testAScreenThatIsAwayTakesNoStyle() throws {
         layout.propose(.own(PanelLayout(order: ["Codex"])), for: "AWAY-UUID")

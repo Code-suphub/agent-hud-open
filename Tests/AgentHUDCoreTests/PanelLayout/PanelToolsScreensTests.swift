@@ -92,6 +92,22 @@ final class PanelToolsScreensTests: PanelToolsCase {
         XCTAssertEqual(asked, [.screen("SECOND-UUID"), .screen("BUILT-IN-UUID")])
     }
 
+    /// Each screen tells the width one agent's own panel has there on a dock that separates its agents, whether or not
+    /// it separates them now: 100 points narrower than the panel its layout gives, a draft's included, and never below
+    /// 440.
+    func testAScreenTellsTheWidthOfAnAgentsOwnPanel() throws {
+        XCTAssertEqual(screens(try call(MCPTools.getPanel)).map { $0["agentPanelWidth"] }, [.integer(440), .integer(440)],
+                       "at the default 540")
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string("SECOND-UUID"), "style": .object(["width": .integer(700)])])
+        var listed = screens(try call(MCPTools.getPanel))
+        XCTAssertEqual(listed.map { $0["width"] }, [.integer(540), .integer(700)])
+        XCTAssertEqual(listed.map { $0["agentPanelWidth"] }, [.integer(440), .integer(600)], "the draft's width less 100")
+        _ = try call(MCPTools.setPanelLayout, ["style": .object(["width": .integer(480)])])
+        listed = screens(try call(MCPTools.getPanel))
+        XCTAssertEqual(listed.map { $0["width"] }, [.integer(480), .integer(700)], "the shared draft, and the screen's own")
+        XCTAssertEqual(listed.map { $0["agentPanelWidth"] }, [.integer(440), .integer(600)], "never below 440")
+    }
+
     /// A screen named by key: attached, or away with a layout of its own; anything else is refused with the screens
     /// that are attached, by key and role.
     func testAScreenIsNamedByAKeyGetPanelGave() throws {
@@ -275,8 +291,9 @@ final class PanelToolsScreensTests: PanelToolsCase {
     func testWhatIsReadOfTheScreensNamesNoOneAndNoAccount() throws {
         let text = String(decoding: try RecordCoding.encoder().encode(JSONValue.object(try call(MCPTools.getPanel))), as: UTF8.self)
         for listed in screens(try call(MCPTools.getPanel)) {
-            XCTAssertEqual(listed.keys.sorted(), ["agents", "edge", "hasNotch", "hud", "key", "layout", "look", "mode", "name",
-                                                  "shows", "styleUnsaved", "unsaved", "width"])
+            XCTAssertEqual(listed.keys.sorted(), ["agentPanelWidth", "agents", "edge", "hasNotch", "held", "hud", "key",
+                                                  "layout", "look", "mode", "name", "shows", "styleUnsaved", "unsaved",
+                                                  "width"])
         }
         let labels = (store.report?.accounts ?? [:]).values.flatMap { $0 }.flatMap { [$0.displayName, $0.account.id] }
         for label in labels { XCTAssertFalse(text.contains(label), label) }

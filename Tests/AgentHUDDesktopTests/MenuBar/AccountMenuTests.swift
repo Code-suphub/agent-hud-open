@@ -5,7 +5,7 @@ import XCTest
 
 final class AccountMenuTests: XCTestCase {
     @MainActor
-    func testHostActionsUseMenuRowsWithoutReplacingCustomViewsOrTargets() throws {
+    func testHostItemsAreDrawnFromTheirOwnFieldsWithoutBeingChanged() throws {
         let suite = "AccountMenuTests.\(UUID().uuidString)", defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = SettingsStore(defaults: defaults, defaultAgents: [])
@@ -19,9 +19,14 @@ final class AccountMenuTests: XCTestCase {
         custom.view = view
         let separator = NSMenuItem.separator()
         let controller = StatusItemController(store: store, settings: settings, additionalMenuItems: { [update, separator, custom] })
-        let menu = NSMenu()
-        controller.menuNeedsUpdate(menu)
-        XCTAssertNotNil(update.view)
+        let entries = controller.menuEntries()
+        let host = try XCTUnwrap(entries.first { $0.title == "New Version…" })
+        XCTAssertEqual(host.value, "⌘U")
+        XCTAssertFalse(host.isEnabled)
+        XCTAssertFalse(host.isSelectable, "a disabled host item is drawn but cannot be chosen")
+        XCTAssertEqual(entries.suffix(5).map(\.kind), [.item, .item, .separator, .item, .item])
+        XCTAssertEqual(entries.suffix(2).first?.title, "Custom", "a custom view is drawn from its item's title")
+        XCTAssertNil(update.view)
         XCTAssertTrue(update.target === target)
         XCTAssertEqual(update.action, #selector(NSResponder.selectAll(_:)))
         XCTAssertEqual(update.keyEquivalent, "u")
@@ -43,14 +48,13 @@ final class AccountMenuTests: XCTestCase {
             item.isEnabled = available
             return [item]
         })
-        let menu = NSMenu()
-        controller.menuNeedsUpdate(menu)
-        XCTAssertEqual(menu.items.suffix(3).map(\.title), ["Settings…", "Check for Updates…", "Quit"])
-        XCTAssertFalse(menu.items[menu.items.count - 2].isEnabled)
+        var entries = controller.menuEntries()
+        XCTAssertEqual(entries.suffix(3).map(\.title), ["Settings…", "Check for Updates…", "Quit"])
+        XCTAssertFalse(entries[entries.count - 2].isEnabled)
         available = true
-        controller.menuNeedsUpdate(menu)
-        XCTAssertTrue(menu.items[menu.items.count - 2].isEnabled)
-        XCTAssertEqual(menu.items.filter { $0.title == "Check for Updates…" }.count, 1)
+        entries = controller.menuEntries()
+        XCTAssertTrue(entries[entries.count - 2].isEnabled)
+        XCTAssertEqual(entries.filter { $0.title == "Check for Updates…" }.count, 1)
     }
 
     @MainActor
@@ -71,13 +75,11 @@ final class AccountMenuTests: XCTestCase {
             .init(account: account, home: "pi:alternate", client: "Pi", label: "shared@example.com", observedAt: now),
             .init(account: account, home: "", client: "Codex", label: "shared@example.com", observedAt: now, isCurrent: false)
         ]]))
-        let controller = StatusItemController(store: store, settings: settings)
-        let menu = NSMenu()
-        controller.menuNeedsUpdate(menu)
-        XCTAssertEqual(Array(menu.items.prefix(4)).map(\.title), ["Codex", "shared@example.com", "5h", "Weekly"])
-        XCTAssertEqual(menu.items.filter { $0.title == "shared@example.com" }.count, 1)
-        XCTAssertEqual(menu.items.filter { $0.title == "Codex" }.count, 1)
-        XCTAssertFalse(menu.items.contains { $0.title == "Pi" })
+        let entries = StatusItemController(store: store, settings: settings).menuEntries()
+        XCTAssertEqual(Array(entries.prefix(4)).map(\.title), ["Codex", "shared@example.com", "5h", "Weekly"])
+        XCTAssertEqual(entries.filter { $0.title == "shared@example.com" }.count, 1)
+        XCTAssertEqual(entries.filter { $0.title == "Codex" }.count, 1)
+        XCTAssertFalse(entries.contains { $0.title == "Pi" })
     }
 
     @MainActor
@@ -100,13 +102,12 @@ final class AccountMenuTests: XCTestCase {
             .init(account: current, label: "current@example.com", plan: "pro", observedAt: now),
             .init(account: old, label: "old@example.com", plan: "plus", observedAt: now.addingTimeInterval(-3600), isCurrent: false)
         ]]))
-        let controller = StatusItemController(store: store, settings: settings)
-        let menu = NSMenu()
-        controller.menuNeedsUpdate(menu)
-        XCTAssertEqual(Array(menu.items.prefix(2)).map(\.title), ["current@example.com", "Weekly"])
-        XCTAssertFalse(menu.items.contains { $0.title == "old@example.com" })
-        XCTAssertTrue(menu.items[0].view?.accessibilityLabel()?.contains("Current account") == true)
-        XCTAssertTrue(menu.items[1].view?.accessibilityLabel()?.contains("Pending update") == true)
+        let entries = StatusItemController(store: store, settings: settings).menuEntries()
+        XCTAssertEqual(Array(entries.prefix(2)).map(\.title).map { $0.components(separatedBy: " · ")[0] },
+                       ["current@example.com", "Weekly"])
+        XCTAssertFalse(entries.contains { $0.title.hasPrefix("old@example.com") })
+        XCTAssertTrue(entries[0].accessibilityLabel.contains("Current account"))
+        XCTAssertTrue(entries[1].accessibilityLabel.contains("Pending update"))
         XCTAssertNil(store.rows[0].level, "a past deadline cannot show a confirmed exhaustion status")
         let future = UsageReport(generatedAt: now, snapshots: [.init(agentId: agents[0].id, remainingPct: 50,
             resetAt: now.addingTimeInterval(20), updatedAt: now)], sessions: [], discoveredAgents: [agents[0]])
@@ -155,10 +156,10 @@ final class AccountMenuTests: XCTestCase {
                 .init(account: stale, label: "stale@example.com", observedAt: now.addingTimeInterval(-7200)),
                 .init(account: old, label: "old@example.com", observedAt: now.addingTimeInterval(-3 * 3600), isCurrent: false),
             ]])
-        let (menu, store) = buildMenu(showing: report, agents: agents, now: now, defaults: defaults)
+        let (entries, store) = buildMenu(showing: report, agents: agents, now: now, defaults: defaults)
 
         XCTAssertNil(store.maxUsedPct, "no window counts: the account's or the vendor's failed read, a passed reset or a signed-out account holds each back")
-        XCTAssertEqual(menu.items.prefix(7).map { [$0.view?.accessibilityLabel() ?? "", $0.toolTip ?? "—"] }, [
+        XCTAssertEqual(entries.prefix(7).map { [$0.accessibilityLabel, $0.toolTip ?? "—"] }, [
             ["Codex", "—"],
             ["failed@example.com, Last read 5m ago", "Quota read failed · Codex login failed"],
             ["Weekly, 90% · <1m", "—"],
@@ -198,69 +199,41 @@ final class AccountMenuTests: XCTestCase {
                        isAvailable: balance.isAvailable, updatedAt: now.addingTimeInterval(-balance.readAgo), notice: balance.notice,
                        billingPool: pool)
         })
-        let (menu, store) = buildMenu(showing: report, agents: agents, now: now, defaults: defaults)
+        let (entries, store) = buildMenu(showing: report, agents: agents, now: now, defaults: defaults)
 
-        let items = menu.items.filter { $0.title.hasSuffix(" · Balance") }
-        XCTAssertEqual(items.map { $0.view?.accessibilityLabel() }, [
+        let items = entries.filter { $0.title.hasSuffix(" · Balance") }
+        XCTAssertEqual(items.map(\.accessibilityLabel), [
             "DeepSeek · API · Balance, $50.00", "Kimi · API · Balance, $0.00", "GLM · API · Balance, -$1.00", "OpenAI · API · Balance, $5.00",
         ])
         XCTAssertEqual(store.enabledBilling.map { store.view.level(of: $0) }, [.critical, .critical, .critical, nil])
         XCTAssertEqual(items.map { $0.toolTip?.hasPrefix("Balance could not be read\nEst. cost") }, [false, false, false, true])
-        XCTAssertEqual(StatusItemController.valueColor(.critical), NSColor(StatusPalette.textColor(for: .critical, light: SystemAppearance.isLight)))
-        XCTAssertEqual([StatusLevel.warning, .ok, nil].map { StatusItemController.valueColor($0) }, [.secondaryLabelColor, .secondaryLabelColor, .secondaryLabelColor])
+        XCTAssertEqual(items.map(\.valueInk), [.critical, .critical, .critical, .secondary])
+        XCTAssertEqual([StatusLevel.warning, .ok, nil].map { StatusItemController.valueInk($0) }, [.secondary, .secondary, .secondary])
     }
 
-    /// A critical figure is coloured for the menu it is in, drawn light or dark, which under Match screen is the HUD's
-    /// look rather than macOS's; any other figure is the menu's own secondary colour.
+    /// A critical figure takes the critical text colour of the look the menu is drawn in, light or dark, which under
+    /// Match screen is the HUD's look rather than macOS's; any other figure is the look's secondary ink.
     @MainActor
-    func testAFiguresColourFollowsTheMenusShade() {
-        for light in [true, false] {
-            XCTAssertEqual(StatusItemController.valueColor(.critical, light: light),
-                           NSColor(StatusPalette.textColor(for: .critical, light: light)), "\(light)")
-            XCTAssertEqual([StatusLevel.warning, .ok, nil].map { StatusItemController.valueColor($0, light: light) },
-                           [.secondaryLabelColor, .secondaryLabelColor, .secondaryLabelColor])
+    func testAFiguresColourFollowsTheMenusLook() {
+        for look in [HUDLook(appearance: .light), HUDLook(appearance: .dark, material: .glass)] {
+            let theme = look.theme
+            XCTAssertEqual(StatusMenuEntry.Ink.critical.color(in: theme), theme.statusText(.critical))
+            XCTAssertEqual(StatusMenuEntry.Ink.secondary.color(in: theme), theme.secondary)
         }
-        XCTAssertNotEqual(StatusItemController.valueColor(.critical, light: true),
-                          StatusItemController.valueColor(.critical, light: false))
+        XCTAssertNotEqual(StatusMenuEntry.Ink.critical.color(in: HUDLook(appearance: .light).theme),
+                          StatusMenuEntry.Ink.critical.color(in: HUDLook(appearance: .dark).theme))
     }
 
-    /// Under Match screen the menu is as dark or light as the look its screen gives it (`WindowLook`), whatever macOS is
-    /// set to; under any other Appearance it takes none of its own and follows the app.
-    @MainActor
-    func testTheMenuTakesTheLookOfItsScreen() throws {
-        let suite = "AccountMenuTests.\(UUID().uuidString)", defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        _ = NSApplication.shared
-        let saved = WindowLook.source
-        defer { WindowLook.source = saved }
-        let settings = SettingsStore(defaults: defaults, defaultAgents: [])
-        let controller = StatusItemController(store: UsageStore(provider: DemoUsageProvider(), settings: settings),
-                                              settings: settings)
-        let menu = NSMenu()
-        for (look, name) in [(HUDLook(appearance: .light), NSAppearance.Name.aqua),
-                             (HUDLook(appearance: .dark, material: .glass), .darkAqua)] {
-            WindowLook.source = { _ in look }
-            controller.menuNeedsUpdate(menu)
-            XCTAssertEqual(menu.appearance?.name, name)
-        }
-        WindowLook.source = { _ in nil }
-        controller.menuNeedsUpdate(menu)
-        XCTAssertNil(menu.appearance)
-    }
-
-    /// The menu `StatusItemController` builds over `report` at `now`, in English, with the rows of `agents` shown.
+    /// The lines `StatusItemController` builds over `report` at `now`, in English, with the rows of `agents` shown.
     @MainActor
     private func buildMenu(showing report: UsageReport, agents: [AgentDescriptor], now: Date,
-                           defaults: UserDefaults) -> (menu: NSMenu, store: UsageStore) {
+                           defaults: UserDefaults) -> (entries: [StatusMenuEntry], store: UsageStore) {
         _ = NSApplication.shared
         let settings = SettingsStore(defaults: defaults, defaultAgents: agents)
         settings.update { $0.language = .en }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
         store.replace(report: report)
         store.now = now
-        let menu = NSMenu()
-        StatusItemController(store: store, settings: settings).menuNeedsUpdate(menu)
-        return (menu, store)
+        return (StatusItemController(store: store, settings: settings).menuEntries(), store)
     }
-
 }

@@ -38,12 +38,16 @@ final class IslandNotchLookTests: XCTestCase {
         XCTAssertTrue(condition(), what, line: line)
     }
 
-    /// The island in a light glass look: at a hardware notch it rests dark glass at the screen's transparency, with the
-    /// housing inked, and opens into the light glass panel; on a display without a notch the bar standing in for one
-    /// draws the light glass look at rest and open alike, with nothing inked.
+    /// The island in a light look of regular glass at a Transparency of 50 %, which regular glass draws at three fifths,
+    /// 0.3: at a hardware notch it rests black glass, the screen's regular glass over four fifths of black
+    /// (`HUDLook.notchRowTransparency`), with the housing inked, and opens into the light glass panel at the screen's
+    /// transparency. The row takes none of the screen's
+    /// transparency, so that it stays black glass at any setting, one with the camera housing, where bare glass would
+    /// turn light over a light menu bar. On a display without a notch the bar standing in for one draws the light glass
+    /// look at rest and open alike, with nothing inked.
     func testTheIslandRestsInTheNotchsRowAndOpensIntoTheLook() throws {
         let (hud, settings, key) = try hud(ScreenPlacement(mode: .notch, appearance: .light, material: .glass,
-                                                            glassTransparency: 0.3))
+                                                            glassStyle: .regular, glassTransparency: 0.5))
         hud.apply(animated: false)
         let look = settings.effectiveLook(on: key), notched = hud.geometry.hasNotch
         XCTAssertEqual(look.appearance, .light)
@@ -53,13 +57,41 @@ final class IslandNotchLookTests: XCTestCase {
         if notched {
             XCTAssertEqual(hud.island.rootView.look.appearance, .dark, "the notch's row stays dark")
             XCTAssertEqual(hud.island.rootView.look.material, look.material, "in the look's material")
-            XCTAssertEqual(hud.island.rootView.look.transparency, look.transparency)
+            if look.material == .glass {
+                XCTAssertEqual(look.transparency, 0.3, "the screen's own, as regular glass draws it")
+                XCTAssertEqual(look.glassStyle, .regular)
+                XCTAssertEqual(hud.island.rootView.look,
+                               HUDLook(appearance: .dark, material: .glass, transparency: HUDLook.notchRowTransparency,
+                                       glassStyle: .regular),
+                               "black glass, in the screen's glass, whatever the screen's transparency")
+            }
         }
 
         hud.forceOpen()
         poll("the island opens") { hud.island.rootView.isOpen }
         XCTAssertEqual(hud.island.rootView.look, look, "open, it takes the screen's whole look")
         XCTAssertEqual(hud.island.rootView.inksNotch, notched, "and keeps the housing black")
+    }
+
+    /// A solid island at a hardware notch rests black and opaque, the wings of its reminders too, whatever solid
+    /// Transparency its screen chooses, here the top, 100 %, which solid draws at 0.6: the row stays one with the camera
+    /// housing. It opens into the screen's look at that transparency. On a display without a notch the bar takes the screen's look at rest too.
+    func testASolidIslandRestsBlackInTheNotchsRowWhateverItsTransparency() throws {
+        let (hud, settings, key) = try hud(ScreenPlacement(mode: .notch, appearance: .light, solidTransparency: 1))
+        hud.apply(animated: false)
+        let look = settings.effectiveLook(on: key), notched = hud.geometry.hasNotch
+        let reduces = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        XCTAssertEqual(look, HUDLook(appearance: .light, transparency: reduces ? 0 : 0.6), "the screen's own")
+        XCTAssertFalse(hud.island.rootView.isOpen)
+        XCTAssertEqual(hud.island.rootView.look, notched ? .standard : look, "at rest")
+        if notched {
+            XCTAssertEqual(hud.island.rootView.look.transparency, 0, "black, opaque")
+            XCTAssertEqual(hud.island.rootView.look.coverOpacity, 1)
+        }
+
+        hud.forceOpen()
+        poll("the island opens") { hud.island.rootView.isOpen }
+        XCTAssertEqual(hud.island.rootView.look, look, "open, it takes the screen's whole look")
     }
 
     /// The island at a hardware notch keeps its ink in every look, so that a change of look fades it in or out rather

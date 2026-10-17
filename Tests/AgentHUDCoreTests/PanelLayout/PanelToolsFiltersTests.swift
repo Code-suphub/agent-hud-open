@@ -110,16 +110,24 @@ final class PanelToolsFiltersTests: PanelToolsCase {
     func testThePanelIsReadWithItsSessionsAndTokens() throws {
         let panel = try result(MCPTools.getPanel)
         XCTAssertEqual(panel["sessions"], .object([
-            "limit": .integer(5), "agents": .array([]), "states": .array(["waiting", "running", "ended"].map(JSONValue.string)),
+            "limit": .integer(5), "period": .string("24h"), "agents": .array([]),
+            "states": .array(["waiting", "running", "ended"].map(JSONValue.string)),
             "offeredAgents": .array(["Claude", "Codex", "DeepSeek"].map(JSONValue.string)),
             "shown": .integer(5), "more": .integer(3),
             "byState": .object(["waiting": .integer(0), "running": .integer(2), "ended": .integer(6)]),
         ]))
         let day = store.hudTokenColumns(consumerIDs: nil).reduce(0) { $0 + $1.total }
+        let models = store.consumers.map { model -> JSONValue in
+            .object(["id": .string(model.id), "name": .string(model.name), "agent": .string(model.displayVendor)])
+        }
         XCTAssertEqual(panel["tokens"], .object([
-            "period": .string("day"), "agents": .array([]),
-            "offeredAgents": .array(["Claude", "Codex", "DeepSeek"].map(JSONValue.string)), "total": .integer(Int64(day)),
+            "period": .string("day"), "agents": .array([]), "models": .array([]),
+            "offeredAgents": .array(["Claude", "Codex", "DeepSeek"].map(JSONValue.string)), "offeredModels": .array(models),
+            "total": .integer(Int64(day)),
         ]))
+        XCTAssertGreaterThan(models.count, 3, "the sample's agents spend tokens on several models")
+        XCTAssertTrue(models.contains(.object(["id": .string("claude-model:claude-opus-5-5"), "name": .string("Opus 5.5"),
+                                               "agent": .string("Claude")])), "an id, the name the panel writes, and its agent")
     }
 
     /// Counts and agents' names only: a session's title, project, path and id never reach an agent.
@@ -175,10 +183,10 @@ final class PanelToolsFiltersTests: PanelToolsCase {
         for part in ["sessions.limit is a whole number from 1 to 10.",
                      "sessions.states[0]: \"idle\" is not one of \"waiting\", \"running\", \"ended\".",
                      "sessions.states[1] is a string.", "sessions.agents is a list.",
-                     "sessions has no property \"project\"; sessions take limit, agents and states.",
+                     "sessions has no property \"project\"; sessions take limit, period, agents and states.",
                      "tokens.period is one of \"day\", \"week\", \"month\".",
                      "tokens.agents[0] is an agent's name from get_panel's tokens.offeredAgents.",
-                     "tokens has no property \"model\"; tokens take period and agents."] {
+                     "tokens has no property \"model\"; tokens take period, agents and models."] {
             XCTAssertTrue(typed.contains(part), "\(part) — \(typed)")
         }
         for limit in [JSONValue.integer(0), .number(2.5), .string("3"), .integer(-1)] {
@@ -206,5 +214,138 @@ final class PanelToolsFiltersTests: PanelToolsCase {
         _ = try result(MCPTools.setPanelLayout, arguments)
         XCTAssertEqual(layout.draft?.sessions.agents, ["Claude", "Grok CLI"])
         XCTAssertEqual(layout.draft?.tokens.period, .month)
+    }
+
+    // MARK: Periods
+
+    func testThePeriodSetsHowFarBackEndedSessionsAreListed() {
+        let hour = rows(PanelLayout.Sessions(limit: 10, period: .hour))
+        XCTAssertEqual(ids(hour), ["s1", "s2", "s4", "s7", "s8", "s3"], "those running, and those ended in the last hour")
+        XCTAssertEqual(hour.counts, [.running: 2, .ended: 4], "the counts are the period's")
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(limit: 10, period: .hours2))).last, "s5")
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(limit: 10, period: .week))),
+                       ["s1", "s2", "s4", "s7", "s8", "s3", "s5", "s6", "s9"])
+        XCTAssertEqual(rows(PanelLayout.Sessions(period: .week)).more, 4, "five rows of nine")
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(period: .days3, agents: ["Codex"], states: [.ended]))), ["s4", "s7", "s9"])
+    }
+
+    /// A period shorter than a day that keeps none of the day's sessions leaves them out, as a filter does; one that has
+    /// no session to leave out says there are none, as the default view does.
+    func testAPeriodThatKeepsNoneOfTheDaysSessionsSaysNoneMatch() throws {
+        let sample = try XCTUnwrap(store.report)
+        func keep(_ kept: Set<String>) {
+            store.replace(report: UsageReport(generatedAt: sample.generatedAt, snapshots: sample.snapshots,
+                                              sessions: sample.sessions.filter { kept.contains($0.id) },
+                                              consumers: sample.consumers, usage: sample.usage))
+        }
+        keep(["s6", "s9"])
+        let hour = rows(PanelLayout.Sessions(period: .hour))
+        XCTAssertTrue(hour.shown.isEmpty)
+        XCTAssertTrue(hour.noneMatch, "s6 ended two hours ago")
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(period: .hours6))), ["s6"])
+        keep(["s9"])
+        XCTAssertFalse(rows(PanelLayout.Sessions(period: .hour)).noneMatch, "the day has no session")
+        XCTAssertFalse(rows().noneMatch)
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(period: .week))), ["s9"])
+        XCTAssertTrue(rows(PanelLayout.Sessions(period: .week, agents: ["Claude"])).noneMatch, "the week's session is Codex's")
+    }
+
+    func testThePeriodIsProposedAndToldBack() throws {
+        let panel = try result(MCPTools.setPanelLayout, ["sessions": .object(["period": .string("7d"), "limit": .integer(10)])])
+        XCTAssertEqual(layout.draft, PanelLayout(sessions: PanelLayout.Sessions(limit: 10, period: .week)))
+        let sessions = try XCTUnwrap(panel["sessions"]?.objectValue)
+        XCTAssertEqual(sessions["period"], .string("7d"))
+        XCTAssertEqual(sessions["shown"], .integer(9))
+        XCTAssertEqual(sessions["byState"], .object(["waiting": .integer(0), "running": .integer(2), "ended": .integer(7)]))
+        XCTAssertEqual(try result(MCPTools.getPanel)["layout"], .object(["sessions": .object(["limit": .integer(10), "period": .string("7d")])]))
+        for period in ["30d", "week", "1d"] {
+            let sentence = try refusal(["sessions": .object(["period": .string(period)])])
+            XCTAssertTrue(sentence.contains(#"sessions.period is one of "1h", "2h", "6h", "12h", "24h", "3d", "7d"."#), sentence)
+        }
+
+        layout.discard()
+        _ = try result(MCPTools.setPanelLayout, ["sessions": .object(["period": .string("24h")])])
+        XCTAssertFalse(layout.hasDraft, "a day is the default view's")
+    }
+
+    // MARK: Models
+
+    func testModelsAreProposedReadAndRefusedWhereTheChartCannotDrawThem() throws {
+        let opus = "claude-model:claude-opus-5-5", sol = "codex-model:gpt-6.1-sol"
+        let panel = try result(MCPTools.setPanelLayout, ["tokens": .object(["models": .array([.string(sol), .string(opus)])])])
+        XCTAssertEqual(layout.draft, PanelLayout(tokens: PanelLayout.Tokens(models: [opus, sol])))
+        let tokens = try XCTUnwrap(panel["tokens"]?.objectValue)
+        XCTAssertEqual(tokens["models"], .array([.string(opus), .string(sol)]))
+        XCTAssertEqual(tokens["total"], .integer(Int64(store.hudTokenColumns(consumerIDs: [opus, sol]).reduce(0) { $0 + $1.total })))
+        XCTAssertEqual(tokens["offeredModels"]?.arrayValue?.count, store.consumers.count, "every model the chart can draw")
+        XCTAssertEqual(store.panelTokenConsumers(PanelTokenFilter(try XCTUnwrap(layout.draft).tokens)), [opus, sol])
+        XCTAssertEqual(store.panelTokenConsumers(PanelTokenFilter(try XCTUnwrap(layout.draft).tokens), vendor: "Claude"), [opus],
+                       "an agent's own panel draws its agent's among them")
+
+        let refused = try refusal(["tokens": .object([
+            "agents": .array([.string("Claude")]),
+            "models": .array([.string(opus), .string(sol), .string("gemini-model:pro"), .string(""), .integer(3)]),
+        ])])
+        for part in ["tokens.models[1]: \"\(sol)\" is Codex's, and tokens.agents leaves Codex out, so the chart would not draw it. "
+                        + "Name \"Codex\" in tokens.agents too, or name no agent.",
+                     "tokens.models[2]: \"gemini-model:pro\" is no model in the token chart now. Models in the chart now: "
+                        + "\"claude-model:claude-fable-5-1\",",
+                     "tokens.models[3] is a model's id from get_panel's tokens.offeredModels.",
+                     "tokens.models[4] is a string."] {
+            XCTAssertTrue(refused.contains(part), "\(part) — \(refused)")
+        }
+        XCTAssertFalse(refused.contains("tokens.models[0]"), "Opus is Claude's")
+        XCTAssertTrue(try refusal(["tokens": .object(["models": .string(opus)])]).contains("tokens.models is a list."))
+    }
+
+    func testAModelTheLayoutHoldsCanBeSentBackWhileItSpendsNoTokens() throws {
+        let opus = "claude-model:claude-opus-5-5"
+        layout.propose(PanelLayout(tokens: PanelLayout.Tokens(models: [opus])))
+        layout.save()
+        let sample = try XCTUnwrap(store.report)
+        store.replace(report: UsageReport(generatedAt: sample.generatedAt, snapshots: sample.snapshots, sessions: sample.sessions,
+                                          consumers: sample.consumers.filter { $0.id != opus }, usage: sample.usage))
+        var arguments = try XCTUnwrap(try result(MCPTools.getPanel)["layout"]?.objectValue)
+        XCTAssertEqual(arguments["tokens"], .object(["models": .array([.string(opus)])]))
+        arguments["tokens"] = .object(["models": .array([.string(opus)]), "period": .string("week")])
+        _ = try result(MCPTools.setPanelLayout, arguments)
+        XCTAssertEqual(layout.draft?.tokens, PanelLayout.Tokens(period: .week, models: [opus]))
+        XCTAssertTrue(try refusal(["tokens": .object(["models": .array([.string("codex-model:none")])])]).contains("tokens.models[0]:"))
+    }
+
+    // MARK: A block's period
+
+    func testABlocksPeriodIsProposedReadAndRefusedWhereItDrawsNoChart() throws {
+        let panel = try result(MCPTools.setPanelLayout, ["blocks": .object([
+            "Claude": .object(["widget": .string("chart"), "period": .string("week")]),
+            "api:DeepSeek": .object(["period": .string("month")]),
+        ])])
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .chart, period: .week),
+                                                          "api:DeepSeek": PanelLayout.Block(period: .month)]))
+        XCTAssertEqual(try block("Claude", in: panel)["period"], .string("week"))
+        XCTAssertEqual(try block("api:DeepSeek", in: panel)["period"], .string("month"))
+        XCTAssertNil(try block("Codex", in: panel)["period"], "bars cover no period")
+
+        let refused = try refusal(["blocks": .object([
+            "Codex": .object(["widget": .string("ring"), "period": .string("day")]),
+            "Claude": .object(["widget": .string("chart"), "period": .string("year")]),
+        ])])
+        for part in [#"blocks.Codex.period: The "ring" widget of "Codex" draws no chart. period applies to the "chart" widget, "#
+                        + #"whose bars cover it, and to API balances, whose estimated cost covers it."#,
+                     #"blocks.Claude.period is one of "day", "week", "month"."#] {
+            XCTAssertTrue(refused.contains(part), "\(part) — \(refused)")
+        }
+
+        // A balance follows the token chart's period where it names none, and a chart stays at a day: either spelled out
+        // is what the block covers anyway.
+        layout.discard()
+        let following = try result(MCPTools.setPanelLayout, [
+            "tokens": .object(["period": .string("week")]),
+            "blocks": .object(["api:DeepSeek": .object(["period": .string("week")]),
+                               "Claude": .object(["widget": .string("chart"), "period": .string("day")])]),
+        ])
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .chart)], tokens: PanelLayout.Tokens(period: .week)))
+        XCTAssertEqual(try block("api:DeepSeek", in: following)["period"], .string("week"))
+        XCTAssertEqual(try block("Claude", in: following)["period"], .string("day"))
     }
 }

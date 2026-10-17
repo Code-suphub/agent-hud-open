@@ -1,3 +1,4 @@
+import AgentHUDSupport
 import XCTest
 @testable import AgentHUDCore
 
@@ -384,5 +385,68 @@ final class PanelLayoutRulesTests: XCTestCase {
                                    order: ["Codex", "Claude", "Zed"])
         XCTAssertEqual(trailing.reduced(against: blocks), trailing, "nothing is known of Cursor's default, and Zed keeps its place")
         XCTAssertEqual(PanelLayout(order: ["Zed", "Claude", "Codex"]).reduced(against: blocks), PanelLayout(order: ["Zed"]))
+    }
+
+    // MARK: Periods
+
+    func testAChartAndABalanceCoverAPeriodAndNoOtherBlockDoes() throws {
+        XCTAssertEqual(PanelWidget.allCases.filter { PanelBlockKind.quota.takesPeriod(under: $0) }, [.chart])
+        XCTAssertTrue(PanelBlockKind.billing.takesPeriod(under: .number))
+        XCTAssertEqual(PanelBlockKind.quota.defaultPeriod(tokens: .month), .day, "a chart stays at the latest 24 hours")
+        XCTAssertEqual(PanelBlockKind.billing.defaultPeriod(tokens: .month), .month, "a balance follows the token chart")
+
+        let json = #"{"blocks":{"Claude":{"period":"week","widget":"chart"}}}"#
+        let layout = PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .chart, period: .week)])
+        XCTAssertEqual(try JSONDecoder().decode(PanelLayout.self, from: Data(json.utf8)), layout)
+        XCTAssertEqual(String(decoding: try RecordCoding.encoder().encode(layout), as: UTF8.self), json)
+        let stored = try JSONDecoder().decode(PanelLayout.self, from: Data(#"{"blocks":{"Claude":{"widget":"chart","period":"year"}}}"#.utf8))
+        XCTAssertNil(stored.blocks["Claude"]?.period, "a period this build does not know is not given")
+        XCTAssertTrue(PanelLayout(blocks: ["Codex": PanelLayout.Block(period: .day)]).blocks["Codex"]?.isEmpty == false)
+    }
+
+    func testAPeriodWhereTheBlockDrawsNoChartIsAnIssue() {
+        func issues(_ key: String, _ block: PanelLayout.Block) -> [PanelLayoutIssue] {
+            PanelLayout(blocks: [key: block]).issues(against: blocks)
+        }
+        XCTAssertEqual(issues("Claude", PanelLayout.Block(period: .week)), [
+            PanelLayoutIssue(path: "blocks.Claude.period",
+                             message: #"The "bar" widget of "Claude" draws no chart. period applies to the "chart" widget, whose bars cover it, and to API balances, whose estimated cost covers it."#),
+        ])
+        for widget in [PanelWidget.ring, .number] {
+            XCTAssertEqual(issues("Codex", PanelLayout.Block(widget: widget, period: .day)).map(\.path), ["blocks.Codex.period"],
+                           "even the default, which the agent believes was heeded")
+        }
+        XCTAssertEqual(issues("Claude", PanelLayout.Block(widget: .chart, period: .month)), [])
+        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(period: .week)), [])
+    }
+
+    /// A chart's day and a balance's token chart period are what they cover anyway; a balance's own period where the
+    /// token chart starts from another draws.
+    func testAPeriodABlockCoversAnywayIsLeftOut() {
+        let layout = PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .chart, period: .day),
+                                          "Codex": PanelLayout.Block(widget: .chart, period: .week),
+                                          "api:DeepSeek": PanelLayout.Block(period: .week)],
+                                 tokens: PanelLayout.Tokens(period: .week))
+        let reduced = PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .chart), "Codex": PanelLayout.Block(widget: .chart, period: .week)],
+                                  tokens: PanelLayout.Tokens(period: .week))
+        XCTAssertEqual(layout.reduced(against: blocks), reduced)
+        XCTAssertEqual(PanelLayoutPlan(layout: reduced, blocks: blocks), PanelLayoutPlan(layout: layout, blocks: blocks))
+        let day = PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(period: .day)], tokens: PanelLayout.Tokens(period: .month))
+        XCTAssertEqual(day.reduced(against: blocks), day)
+        XCTAssertEqual(PanelLayout(blocks: ["Claude": PanelLayout.Block(period: .month)]).reduced(against: blocks), PanelLayout(),
+                       "a stored period on bars draws nothing")
+    }
+
+    func testThePlanGivesEachBlockThePeriodItCovers() {
+        let layout = PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .chart),
+                                          "Codex": PanelLayout.Block(widget: .chart, span: .half, period: .month)],
+                                 tokens: PanelLayout.Tokens(period: .week))
+        let plan = PanelLayoutPlan(layout: layout, blocks: blocks)
+        XCTAssertEqual(plan.blocks.map(\.period), [.day, .month, .week], "a chart's day, its own month, the token chart's week")
+        XCTAssertEqual(plan.lines.flatMap { $0 }.map(\.period), [.day, .month, .week], "kept as the blocks are set in lines")
+        let own = PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(period: .day)], tokens: PanelLayout.Tokens(period: .week))
+        XCTAssertEqual(PanelLayoutPlan(layout: own, blocks: blocks).blocks.last?.period, .day)
+        XCTAssertEqual(PanelLayoutPlan(layout: PanelLayout(blocks: ["Claude": PanelLayout.Block(period: .month)]), blocks: blocks)
+            .blocks.first?.period, .day, "bars cover none")
     }
 }

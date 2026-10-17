@@ -60,7 +60,7 @@ struct SessionDetailView: View {
                     Button(L10n.text("在 Finder 中显示日志", "Reveal log in Finder")) {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                     }
-                    .buttonStyle(.link)
+                    .themedLink(theme)
                     .font(.ui(11))
                 }
             }

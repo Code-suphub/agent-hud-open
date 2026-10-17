@@ -72,6 +72,7 @@ struct SettingsView: View {
     /// The Experimental page's install row, given where a test or a still stands in for this Mac.
     var clientSetup: MCPClientSetup?
     @State private var navigation: SettingsNavigation
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
     @Environment(\.colorScheme) private var scheme
 
     init(settings: SettingsStore, store: UsageStore, initialTab: SettingsTab = .display,
@@ -94,12 +95,14 @@ struct SettingsView: View {
 
     var body: some View {
         @Bindable var navigation = navigation
-        let theme = Theme.forScheme(scheme)
+        // The window's tokens on the ground its screen's look gives it, with Match screen on (`Theme.under(_:)`).
+        let theme = Theme.forScheme(scheme).under(surface?.look)
         HStack(spacing: 0) {
             SettingsSidebar(selection: $navigation.pageID, additionalPages: additionalPages, theme: theme)
                 .frame(width: SettingsWindowLayout.sidebarWidth)
+                // The border on the sidebar's own ground: a line of its own would leave a slit of desktop under glass.
+                .overlay(alignment: .trailing) { Rectangle().fill(theme.sidebarBorder).frame(width: 1) }
                 .layoutPriority(1)
-            Rectangle().fill(theme.sidebarBorder).frame(width: 1)
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(pageTitle).font(.ui(24, .semibold))
@@ -129,10 +132,11 @@ struct SettingsView: View {
             }
             .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .clipped()
+            // The page's ground beside the sidebar's, never under it: glass over glass does not see the desktop.
+            .background(WindowGround(color: theme.windowBackground))
         }
         .frame(minWidth: SettingsWindowLayout.minimum.width, idealWidth: SettingsWindowLayout.size.width,
                minHeight: SettingsWindowLayout.minimum.height, idealHeight: SettingsWindowLayout.size.height)
-        .background(theme.windowBackground)
         .foregroundStyle(theme.text)
         .font(.ui(13))
         .tint(Color.accentColor)
@@ -225,37 +229,51 @@ struct SettingsSidebar: View {
     }
 }
 
-/// One titled group for settings content: its title and subtitle above, its rows on the group's card (`SettingsCard`).
-/// Public, with `SettingRow`, `SettingsToggleRow` and `SettingsDivider`, so that the pages a host app adds to Settings
-/// are built as the app's own are.
-public struct SettingsSection<Content: View>: View {
+/// One titled group for settings content: its title, with what stands beside it if anything, a tag or the group's own
+/// action (`accessory`), and its subtitle above; its rows on the group's card (`SettingsCard`) below. Public, with
+/// `SettingRow`, `SettingsToggleRow` and `SettingsDivider`, so that the pages a host app adds to Settings are built as
+/// the app's own are.
+public struct SettingsSection<Accessory: View, Content: View>: View {
     let title: String
     var subtitle: String? = nil
     /// The window's theme, or nil to take it from the colour scheme the section is drawn in, as a host's page does.
     private let theme: Theme?
+    @ViewBuilder let accessory: () -> Accessory
     @ViewBuilder let content: () -> Content
-    @Environment(\.colorScheme) private var scheme
 
-    init(title: String, subtitle: String? = nil, theme: Theme, @ViewBuilder content: @escaping () -> Content) {
+    init(title: String, subtitle: String? = nil, theme: Theme, @ViewBuilder content: @escaping () -> Content)
+    where Accessory == EmptyView {
         self.title = title
         self.subtitle = subtitle
         self.theme = theme
+        self.accessory = { EmptyView() }
         self.content = content
     }
 
-    public init(title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+    public init(title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content)
+    where Accessory == EmptyView {
+        self.init(title: title, subtitle: subtitle, accessory: { EmptyView() }, content: content)
+    }
+
+    /// A group with `accessory` beside its title.
+    public init(title: String, subtitle: String? = nil, @ViewBuilder accessory: @escaping () -> Accessory,
+                @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.subtitle = subtitle
         self.theme = nil
+        self.accessory = accessory
         self.content = content
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.ui(15, .semibold))
+                HStack(spacing: 8) {
+                    Text(title).font(.ui(15, .semibold))
+                    accessory()
+                }
                 if let subtitle {
-                    Text(subtitle).font(.ui(12)).foregroundStyle((theme ?? Theme.forScheme(scheme)).secondary)
+                    Text(subtitle).font(.ui(12)).settingsSubtitle(theme: theme)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -265,17 +283,46 @@ public struct SettingsSection<Content: View>: View {
     }
 }
 
+/// The ink of a settings group's subtitle, and of a host's line written as one: the window theme's secondary grey on the
+/// window's ground (`Theme.under(_:)`), which on a ground the desktop shows through is a tint of the ink, so that it
+/// holds as the ground lightens or darkens, where a fixed copy of the grey would not.
+public struct SettingsSubtitle: ViewModifier {
+    /// The window's theme, or nil to take it from the colour scheme the view is drawn in.
+    var theme: Theme?
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
+    @Environment(\.colorScheme) private var scheme
+
+    public func body(content: Content) -> some View {
+        content.foregroundStyle((theme ?? Theme.forScheme(scheme).under(surface?.look)).secondary)
+    }
+}
+
+public extension View {
+    /// Inks the view as a settings group's subtitle (`SettingsSubtitle`).
+    func settingsSubtitle() -> some View {
+        modifier(SettingsSubtitle())
+    }
+}
+
+extension View {
+    func settingsSubtitle(theme: Theme?) -> some View {
+        modifier(SettingsSubtitle(theme: theme))
+    }
+}
+
 /// The ground every settings group stands on, Settings → General's: the window theme's card with its hairline, light or
-/// dark as the window is. Public so that the pages a host app adds to Settings stand on the same ground as the app's own.
+/// dark as the window is, and thinned with the window's ground under a look the desktop shows through (`Theme.under(_:)`).
+/// Public so that the pages a host app adds to Settings stand on the same ground as the app's own.
 public struct SettingsCard: ViewModifier {
     var cornerRadius: CGFloat = SettingsCard.cornerRadius
     @Environment(\.colorScheme) private var scheme
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
 
     /// The corner of a settings group.
     public static let cornerRadius: CGFloat = 12
 
     public func body(content: Content) -> some View {
-        let theme = Theme.forScheme(scheme), shape = RoundedRectangle(cornerRadius: cornerRadius)
+        let theme = Theme.forScheme(scheme).under(surface?.look), shape = RoundedRectangle(cornerRadius: cornerRadius)
         content
             .background(theme.card, in: shape)
             .overlay(shape.stroke(theme.cardBorder.opacity(0.55), lineWidth: 1))
@@ -308,16 +355,18 @@ public struct SettingsDivider: View {
 public struct SettingsToggleRow: View {
     let label: String
     var subtitle: String? = nil
+    var tag: String? = nil
     @Binding var isOn: Bool
 
-    public init(label: String, subtitle: String? = nil, isOn: Binding<Bool>) {
+    public init(label: String, subtitle: String? = nil, tag: String? = nil, isOn: Binding<Bool>) {
         self.label = label
         self.subtitle = subtitle
+        self.tag = tag
         self._isOn = isOn
     }
 
     public var body: some View {
-        SettingRow(label: label, subtitle: subtitle) {
+        SettingRow(label: label, subtitle: subtitle, tag: tag) {
             Toggle(label, isOn: $isOn).labelsHidden().toggleStyle(.switch).controlSize(.small)
         }
     }

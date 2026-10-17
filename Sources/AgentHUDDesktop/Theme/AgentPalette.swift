@@ -1,4 +1,5 @@
 import AgentHUDCore
+import SwiftUI
 
 /// Per-agent colors used in the stats window (distinct from the status colors).
 public enum AgentPalette {
@@ -30,5 +31,12 @@ public enum AgentPalette {
     public static func color(index: Int, light: Bool) -> RGBA {
         let palette = light ? lightColors : colors
         return palette[((index % palette.count) + palette.count) % palette.count]
+    }
+}
+
+/// Convenience: `Color(rgba)` for agent palette entries.
+extension AgentPalette {
+    static func swiftUIColor(index: Int) -> Color {
+        Color(color(index: index))
     }
 }

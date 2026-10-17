@@ -10,10 +10,16 @@ struct SimpleMeterView: View {
     /// The island draws the panel behind the figures, so that the same frame can grow into the usage panel.
     /// Left off, the view draws its own fill and hairline, as a preview with no island does.
     var onIsland = false
+    /// The panel's glass is drawn with the line that grows out of it, as one piece (`JoinedGlass`), on a dock that
+    /// separates its agents. The view then draws its figures alone, as on the island.
+    var glassJoined = false
+    /// Whether the view draws the panel's surface behind its figures itself.
+    var drawsSurface: Bool { !onIsland && !glassJoined }
     /// The look of the HUD the panel belongs to: the island's round it, the standard one in a preview with none.
     @Environment(\.hudLook) private var look
     /// Glass drawn as its stand-in, in a preview or a picture of the panel.
     @Environment(\.drawsGlassStandIn) private var glassStandIn
+    @Environment(\.botLogos) private var botLogos
 
     private var theme: Theme { look.theme }
 
@@ -30,8 +36,8 @@ struct SimpleMeterView: View {
         .padding(EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right))
         .frame(width: panel.width, height: panel.height, alignment: .leading)
         .background {
-            if !onIsland {
-                HUDSurface(shape, look: look, fill: theme.islandFill.opacity(theme.restingFillOpacity), contact: nil)
+            if drawsSurface {
+                HUDSurface(shape, look: look, fill: theme.islandFill, contact: nil)
                     .overlay { shape.strokeBorder(look.outline(theme.islandOutline, standIn: glassStandIn), lineWidth: 1) }
             }
         }
@@ -55,11 +61,10 @@ struct SimpleMeterView: View {
                         .stroke(tint, style: StrokeStyle(lineWidth: config.ringWidth, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                 }
-                if config.bots {
-                    BotMark(vendor: item.vendor, size: config.logo, phase: item.attention.phase(working: item.isWorking), staysBot: false)
-                } else {
-                    AgentLogo(vendor: item.vendor, size: config.logo)
-                }
+                // With bots off the mark is its logo, wearing a waiting request's or a badge's sign still.
+                BotMark(vendor: item.vendor, size: config.logo, state: item.shown, cue: item.cue, staysBot: false,
+                        resumes: config.resumes)
+                    .environment(\.botLogos, botLogos && config.bots)
             }
             .frame(width: config.mark, height: config.mark)
             if config.showsNumbers {

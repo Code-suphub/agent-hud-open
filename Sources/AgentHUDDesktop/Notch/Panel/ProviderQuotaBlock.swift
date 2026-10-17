@@ -112,11 +112,13 @@ struct ProviderQuotaBlock: View {
     private var showsCountdown: Bool { store.settings.settings.showResetCountdown && plan.countdown }
 
     var body: some View {
-        // A chart draws the models this vendor's windows count in place of the windows: their tokens over the panel's
-        // last day, in the quarter hours and the colours of the panel's own token chart.
+        // A chart draws the models this vendor's windows count in place of the windows: their tokens over the block's
+        // period, the latest 24 hours unless its layout gives another, in the columns and the colours the panel's own
+        // token chart draws that period in.
         let charted = plan.widget == .chart
         let chartConsumers: [AgentDescriptor] = charted ? store.consumers.filter { $0.displayVendor == vendor } : []
-        let chartColumns: [TokenColumn] = charted ? store.hudTokenColumns(consumerIDs: Set(chartConsumers.map(\.id))) : []
+        let chartColumns: [TokenColumn] = charted
+            ? store.hudTokenColumns(consumerIDs: Set(chartConsumers.map(\.id)), period: plan.period) : []
         VStack(alignment: .leading, spacing: spacing.blockParts) {
             HStack(spacing: 6) {
                 if half {
@@ -143,7 +145,7 @@ struct ProviderQuotaBlock: View {
                     IslandQuotaMetricPicker(selection: $metric, measures: plan.measures, theme: theme)
                         .padding(.trailing, 2)
                 } else if plan.widget == .chart {
-                    let total = TokenConsumptionChart.total(store.report == nil ? nil : chartColumns)
+                    let total = TokenConsumptionChart.total(store.report == nil ? nil : chartColumns, period: plan.period)
                     Group {
                         if half {
                             // The figure stays where the period has no room beside the name.
@@ -191,10 +193,12 @@ struct ProviderQuotaBlock: View {
                 }
             }
             if plan.widget == .chart {
-                TokenBarsChart(columns: chartColumns, interval: store.hudTokenInterval,
+                TokenBarsChart(columns: chartColumns, interval: store.hudTokenInterval(plan.period),
                                colors: chartConsumers.map { theme.agent(store.consumerPaletteIndex($0.id)) },
                                consumers: chartConsumers, theme: theme, context: .island, isLoading: store.report == nil,
                                compact: true)
+                    // Another period is other columns: the bars fade over, as the token chart's do on a flip.
+                    .id(plan.period)
                     .frame(height: 40)
                     .padding(.horizontal, IslandRowLayout.inset)
                     .padding(.top, spacing.chartTop)

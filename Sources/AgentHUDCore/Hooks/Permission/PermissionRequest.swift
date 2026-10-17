@@ -12,6 +12,9 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
         /// not kept beyond what the browser itself keeps.
         case browserAccess(origin: String?, persist: [String])
         case asynchronousQuestion(turnID: String)
+        /// A question the client asks in its own window and takes no answer to from outside, such as the Claude desktop
+        /// app's next-step box: the HUD shows it until the client's records say it was answered there.
+        case clientWindow
     }
 
     public let id: String
@@ -46,6 +49,8 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
     public let at: Date
 
     public var isQuestion: Bool { !questions.isEmpty }
+    /// Whether this question can be answered here; one asked in the client's own window is only shown.
+    public var answersQuestion: Bool { isQuestion && nativeApproval != .clientWindow }
     /// A plan Claude Code wants approved before it starts changing anything.
     public var isPlan: Bool { toolName.map(Self.kind) == Self.planTool }
     static let planTool = "ExitPlanMode"
@@ -95,8 +100,14 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
         if case .computerUseApp = nativeApproval { return "APP" }
         if case .browserAccess = nativeApproval { return "WEB" }
         guard let toolName, !toolName.isEmpty else { return "TOOL" }
+        return Self.group(ofTool: toolName) ?? String(toolName.prefix(6)).uppercased()
+    }
+
+    /// The group a client's tool belongs to, as a request's badge names it: BASH, EDIT, READ, FIND, WEB, AGENT, MCP, ASK
+    /// or PLAN. Nil for a tool no group names, whose badge is its own name.
+    public static func group(ofTool toolName: String) -> String? {
         if toolName.hasPrefix("mcp__") { return "MCP" }
-        switch Self.kind(toolName) {
+        switch kind(toolName) {
         case "Bash", "BashOutput", "KillShell": return "BASH"
         case "Edit", "MultiEdit", "Write", "NotebookEdit", "apply_patch": return "EDIT"
         case "Read": return "READ"
@@ -105,7 +116,7 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
         case "Task", "Agent": return "AGENT"
         case "AskUserQuestion": return "ASK"
         case "ExitPlanMode": return "PLAN"
-        default: return String(toolName.prefix(6)).uppercased()
+        default: return nil
         }
     }
 
@@ -147,7 +158,7 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
         switch nativeApproval {
         case .computerUseApp(let persist), .browserAccess(_, let persist):
             return persist.contains("always") ? .object(["persist": .string("always")]) : nil
-        case .asynchronousQuestion, nil: break
+        case .asynchronousQuestion, .clientWindow, nil: break
         }
         guard source.supportsPermissionUpdates else { return nil }
         return suggestions.first {

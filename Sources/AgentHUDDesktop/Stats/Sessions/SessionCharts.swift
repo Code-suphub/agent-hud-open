@@ -355,9 +355,8 @@ struct SessionBarDetail: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .foregroundStyle(theme.text)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.windowBackground))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.cardBorder))
-        .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+        // Raised off the window, in its screen's look with Match screen on.
+        .raisedBox(theme)
     }
 
     private var title: String {
@@ -463,8 +462,11 @@ struct ContextWindowChart: View {
                     }
                     if let last = points.last {
                         let dot = CGRect(x: last.point.x - 3, y: last.point.y - 3, width: 6, height: 6)
+                        // The ring is cut out of the line, so that the card's ground shows in it, whatever it is.
+                        var cut = context
+                        cut.blendMode = .destinationOut
+                        cut.fill(Path(ellipseIn: dot.insetBy(dx: -1.5, dy: -1.5)), with: .color(.black))
                         context.fill(Path(ellipseIn: dot), with: .color(color))
-                        context.stroke(Path(ellipseIn: dot), with: .color(theme.windowBackground), lineWidth: 1.5)
                     }
                 }
                 .frame(width: plot, height: height)

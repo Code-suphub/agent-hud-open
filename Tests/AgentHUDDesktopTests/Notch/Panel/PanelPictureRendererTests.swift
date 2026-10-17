@@ -115,14 +115,17 @@ final class PanelPictureRendererTests: XCTestCase {
         // renderer's own drawing with masking off.
         let island = try islandPanelText()
         let unmasked = try text(of: try XCTUnwrap(renderer.draw(masked: false)))
+        // Each name is read as it is written, its capitals too; a masked name must not be read in any case.
         for name in names {
-            XCTAssertTrue(island.contains(name), "the island's panel shows \(name)")
-            XCTAssertTrue(unmasked.contains(name), "unmasked, the picture shows \(name)")
+            XCTAssertTrue(island.contains(name), "the island's panel shows \(name):\n\(island)")
+            XCTAssertTrue(unmasked.contains(name), "unmasked, the picture shows \(name):\n\(unmasked)")
         }
 
         let masked = try XCTUnwrap(renderer.picture())
         let read = try text(of: masked)
-        for name in names { XCTAssertFalse(read.contains(name), "the picture shows \(name):\n\(read)") }
+        for name in names {
+            XCTAssertFalse(read.localizedCaseInsensitiveContains(name), "the picture shows \(name):\n\(read)")
+        }
         XCTAssertFalse(read.contains("@"))
         for position in 1...HoverPanelView.sessionRows(store).shown.count {
             XCTAssertTrue(read.contains("Session \(position)"), "row \(position) is named by its place:\n\(read)")

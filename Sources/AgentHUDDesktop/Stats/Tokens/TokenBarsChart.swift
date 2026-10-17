@@ -163,18 +163,10 @@ struct TokenBarsChart: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .foregroundStyle(theme.text)
-        .background {
-            // Over glass the details are its tint once more, which sets them off the panel they stand on: glass shows
-            // nothing through glass.
-            if context == .island {
-                HUDSurface(RoundedRectangle(cornerRadius: 8), look: look, fill: theme.raisedSurface, contact: nil)
-                    .environment(\.drawsGlassStandIn, true)
-            } else {
-                RoundedRectangle(cornerRadius: 8).fill(theme.windowBackground)
-            }
-        }
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.cardBorder))
-        .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+        // Raised in the screen's whole look, the HUD's on the island and the window's with Match screen on, as the hover
+        // details beside it are; over glass as glass's stand-in, which keeps a ground at any transparency
+        // (`HUDLook.glassStandIn`).
+        .raisedBox(theme, hud: context == .island ? look : nil)
     }
 
     private func period(_ column: TokenColumn) -> String {

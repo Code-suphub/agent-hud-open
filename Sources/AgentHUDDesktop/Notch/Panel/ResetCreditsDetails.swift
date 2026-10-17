@@ -41,7 +41,8 @@ struct ResetCreditsDetails: View {
         .foregroundStyle(theme.text)
         .padding(12)
         .frame(width: 310)
-        .background(HUDSurface(RoundedRectangle(cornerRadius: 10), look: look, fill: theme.raisedSurface, contact: nil))
+        .background(HUDSurface(RoundedRectangle(cornerRadius: 10), look: look, fill: theme.raisedSurface, contact: nil)
+            .environment(\.drawsRaisedBox, true))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(look.outline(theme.cardBorder, standIn: glassStandIn)))
         .fixedSize(horizontal: false, vertical: true)
     }

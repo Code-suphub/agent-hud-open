@@ -66,9 +66,11 @@ extension PanelTools {
         return layout.hasDraft ? "the shared layout's unsaved draft" : "the saved shared layout"
     }
 
-    /// What a picture says of glass: it is drawn off screen, where no desktop is behind it to show through.
-    static let glassStandIn = "Its glass is drawn as a stand-in: a picture is drawn off screen, with no desktop behind it "
-        + "to show through."
+    /// What a picture says of glass: it is drawn off screen, where no desktop is behind it to show through, so every
+    /// glass style is drawn as the same stand-in, at the transparency the style draws, and a picture shows no
+    /// difference between them but that.
+    static let glassStandIn = "Its glass is drawn as a stand-in, the same for clear, regular and material glass but "
+        + "for the transparency each draws: a picture is drawn off screen, with no desktop behind it to show through."
 
     // MARK: The resting HUD
 

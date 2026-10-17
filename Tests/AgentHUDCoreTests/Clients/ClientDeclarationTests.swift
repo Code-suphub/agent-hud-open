@@ -72,10 +72,13 @@ final class ClientDeclarationTests: XCTestCase {
         XCTAssertEqual(attention, AttentionHooks.Source.allCases.map { AgentClient(rawValue: $0.rawValue)! })
     }
 
-    func testEveryRequestCanBeAnsweredOrIsAPlan() {
+    /// The one other request shown without an answer is the question the Claude desktop app asks in its own window, which
+    /// only its session log reports and which the app takes only there.
+    func testEveryRequestCanBeAnsweredOrIsAPlanOrAQuestionAskedInTheClientsOwnWindow() {
         for declaration in ClientDeclarations.all {
             for request in declaration.requests where request.kind != .plan {
-                XCTAssertFalse(request.answers.isEmpty, "\(declaration.client.rawValue) \(request.kind.rawValue)")
+                let shownOnly = declaration.client == .claude && request.kind == .question && request.arrives == .appended("session log")
+                XCTAssertEqual(request.answers.isEmpty, shownOnly, "\(declaration.client.rawValue) \(request.kind.rawValue)")
             }
         }
     }

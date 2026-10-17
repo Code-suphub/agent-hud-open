@@ -13,6 +13,8 @@ public final class DesktopApplication {
     private let additionalMenuItems: () -> [NSMenuItem]
     private let additionalHUDControls: @MainActor (@escaping @MainActor () -> Void) -> AnyView
     private let onIslandEvents: ((IslandEventTracker.Update, UsageReport, Date) -> Void)?
+    /// When the app started: what happened to an agent before it is history, for the island's events and the marks'.
+    private let startedAt: Date
     private var islandEvents = IslandEventTracker()
     /// The requests already on the island, so a change to the waiting list says which ones arrived and which left.
     private var shownRequests: [String] = []
@@ -56,7 +58,8 @@ public final class DesktopApplication {
         self.additionalMenuItems = additionalMenuItems
         self.additionalHUDControls = additionalHUDControls
         self.onIslandEvents = onIslandEvents
-        islandEvents = IslandEventTracker(startedAt: store.clock())
+        startedAt = store.clock()
+        islandEvents = IslandEventTracker(startedAt: startedAt)
         onboardingWindow = OnboardingWindowController(settings: settings, store: store,
             sources: options.demo ? { DemoData.sources } : { SourceDetector.detect() })
         onboardingWindow.onFinish = { [weak self] in
@@ -71,7 +74,11 @@ public final class DesktopApplication {
         settings.update { $0.applyLiveStatusDefaults(sources: sources) }
         WindowLook.source = { [weak self] screen in self?.settings.windowLook(on: screen) }
         applyAppearance()
-        let notch = IslandController(store: store, settings: settings, additionalHUDControls: additionalHUDControls)
+        // Clawd plays the Claude app's own sprites, bundled with Agent HUD and decoded once its first mark is built, in a
+        // demo and a recording too.
+        ClawdSprites.shared.source = .shared
+        let notch = IslandController(store: store, settings: settings, additionalHUDControls: additionalHUDControls,
+                                     startedAt: startedAt)
         notch.onOpenStats = { [weak self] in self?.showStats() }
         notch.onOpenSettings = { [weak self] in self?.showSettings() }
         self.notch = notch
@@ -97,7 +104,7 @@ public final class DesktopApplication {
             _ = self.settings.settings
             _ = self.settings.panelLayout.styleDraft(of: "")
             _ = NSScreen.screens.map { self.settings.windowLook(on: $0) }
-        }, onChange: { WindowLook.refreshAll() })
+        }, onChange: { [weak self] in self?.refreshLooks() })
         observeWindowLooks()
         trackChanges({ [weak self] in
             self?.settings.settings.language
@@ -148,6 +155,7 @@ public final class DesktopApplication {
         }, onChange: { [weak self] in
             self?.installObserversForNewClients()
             if let self { self.codexDesktopApprovals.updateSessions(self.store.report?.sessions ?? []) }
+            self?.showClaudeDesktopAsks()
         })
         trackChanges({ [weak self] in
             _ = self?.store.report
@@ -232,6 +240,13 @@ public final class DesktopApplication {
         }
     }
 
+    /// The questions the Claude desktop app asks in its own window, which only its session logs record, among the requests
+    /// the user is asked about. The demo has none.
+    private func showClaudeDesktopAsks() {
+        guard !options.demo else { return }
+        ClaudeDesktopAsks.show(store.view.recentSessions.filter(\.liveStatus).map(\.session), now: Date())
+    }
+
     /// Mirrors the requests waiting for the user onto the island: a new one is shown, and one the client took back
     /// disappears without being answered.
     private func syncPermissionRequests() {
@@ -283,8 +298,8 @@ public final class DesktopApplication {
     /// Has the windows take their screen's look again whenever the Mac changes what it depends on. Each waits a turn of
     /// the run loop, so that the HUDs have taken a change of displays first and every screen is known by its key again.
     private func observeWindowLooks() {
-        let refresh: @Sendable (Notification) -> Void = { _ in
-            Task { @MainActor in WindowLook.refreshAll() }
+        let refresh: @Sendable (Notification) -> Void = { [weak self] _ in
+            Task { @MainActor in self?.refreshLooks() }
         }
         windowLookObservers = [
             NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -304,6 +319,12 @@ public final class DesktopApplication {
         case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
         case .light: NSApp.appearance = NSAppearance(named: .aqua)
         }
+        refreshLooks()
+    }
+
+    /// Every window and the open menu-bar menu take their screen's look again (`WindowLook`).
+    private func refreshLooks() {
         WindowLook.refreshAll()
+        statusItem?.refreshLook()
     }
 }

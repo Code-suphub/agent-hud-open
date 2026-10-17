@@ -201,7 +201,7 @@ struct TokenConsumptionChart: View {
                                     .font(.ui(11))
                             }
                             .padding(.vertical, 3).padding(.horizontal, 4)
-                            .background(modelFilter.isPicked(model.id) ? theme.text.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 5))
+                            .background(modelFilter.isPicked(model.id) ? theme.pickedChip : .clear, in: RoundedRectangle(cornerRadius: 5))
                             .contentShape(Rectangle())
                         }
                         .accessibilityIdentifier("token-model-\(model.id)")

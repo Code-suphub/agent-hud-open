@@ -78,6 +78,11 @@ public struct AgentSettingsGroup: Identifiable, Equatable, Sendable {
             let rest = ids.filter { !ordered.contains($0) }
             ids = ordered + rest
         }
+        // A plan's account is shown in the group its windows are in. A GLM plan only WorkBuddy carries is filed under GLM,
+        // its provider, and shown in WorkBuddy's group.
+        let planGroups = Dictionary(agents.compactMap { agent in
+            agent.billingPool.flatMap { $0.product == .plan ? ($0.id, agent.vendor) : nil }
+        }, uniquingKeysWith: { first, _ in first })
         let groups = ids.map { id in
             let family = sources.filter { $0.provider == id }
             let source = family.first { $0.state != .notDetected } ?? family.first
@@ -85,7 +90,11 @@ public struct AgentSettingsGroup: Identifiable, Equatable, Sendable {
             let windows = existing.first { $0.id == id }?.agents ?? []
             let services = (report?.services ?? []).filter { $0.client == id }
             // Older restart copies include former accounts; only current identities have settings and quota rows.
-            let accountIDs = Set((report?.accounts?[id] ?? []).filter(\.isCurrent).map(\.account.id))
+            let filed = (report?.accounts?[id] ?? []).filter { $0.isCurrent && (planGroups[$0.account.id] ?? id) == id }
+            let shown = windows.compactMap(\.billingPool).filter { pool in
+                pool.provider != id && report?.accounts?[pool.provider]?.contains { $0.account.id == pool.id && $0.isCurrent } == true
+            }
+            let accountIDs = Set(filed.map(\.account.id) + shown.map(\.id))
             let accounts = accountIDs.compactMap { report?.observation(accountID: $0) }
                 .sorted { ($0.isCurrent ? 1 : 0, $0.observedAt) > ($1.isCurrent ? 1 : 0, $1.observedAt) }
             var plans = accounts.isEmpty ? source?.planLabel.map { [$0] } ?? [] : []

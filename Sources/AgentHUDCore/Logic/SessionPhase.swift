@@ -179,7 +179,7 @@ public struct SessionPhase: Hashable, Sendable {
     public static func stopped(_ turn: SessionTurn, atMs stop: Int64?) -> SessionTurn {
         guard let stop, turn.state.isInFlight, stop >= turn.observedAtMs else { return turn }
         return SessionTurn(provider: turn.provider, sessionID: turn.sessionID, turnID: turn.turnID, state: .completed,
-                           startedAtMs: turn.startedAtMs, observedAtMs: stop, message: turn.message)
+                           startedAtMs: turn.startedAtMs, observedAtMs: stop, message: turn.message, outcome: .completed)
     }
 
     /// A turn a heartbeat keeps fresh, as Pi's observer does, as it stands at `readAt`: a turn in flight whose last
@@ -207,7 +207,7 @@ public struct SessionPhase: Hashable, Sendable {
             observed = max(observed, RecordCoding.milliseconds(subagentsAt))
         }
         return SessionTurn(provider: turn.provider, sessionID: turn.sessionID, turnID: turn.turnID, state: state,
-                           startedAtMs: turn.startedAtMs, observedAtMs: observed, message: message)
+                           startedAtMs: turn.startedAtMs, observedAtMs: observed, message: message, outcome: turn.outcome)
     }
 
     // MARK: View
@@ -242,6 +242,13 @@ public struct SessionPhase: Hashable, Sendable {
     /// started.
     func awaitingApproval(_ session: LiveSession, turn: SessionTurn?) -> SessionPhase {
         SessionPhase(state: .waitingForApproval, since: isInFlight ? since : Self.inFlightSince(session, turn: turn), validUntil: nil)
+    }
+
+    /// The phase of a session whose client asks its user something in its own window (`SessionActivity.ask`), asked at
+    /// `at`, given the phase it has otherwise: waiting for approval until `end` or until the work in flight is no longer
+    /// vouched for; since the work in flight started, or since the question for a turn that has ended.
+    func asking(since at: Date, until end: Date) -> SessionPhase {
+        SessionPhase(state: .waitingForApproval, since: isInFlight ? since : at, validUntil: min(validUntil ?? end, end))
     }
 }
 
