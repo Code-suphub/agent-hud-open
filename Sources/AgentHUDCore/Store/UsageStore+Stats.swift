@@ -118,6 +118,29 @@ public extension UsageStore {
         return Set(consumers.filter { (mark == nil || VendorMark.key($0.vendor) == mark) && filter.keeps($0) }.map(\.id))
     }
 
+    // MARK: A balance over a period
+
+    /// What an API account spent in `currency` over a period of the HUD's history (`hudTokenInterval(_:)`), as its
+    /// block's estimated cost, burn rate and chart read it: from the costs the report holds, up to the time of the data.
+    /// Nil where one of the recorded requests had no price in the currency.
+    func balanceSpend(_ billing: APIBilling, currency: String, period: PanelTokenPeriod) -> BalanceSpend? {
+        billing.spend(currency: currency, during: hudTokenInterval(period), now: dataDate)
+    }
+
+    /// When `balance` runs out at the pace `spend` sets, from the time it was read, else the time of the data: nil where
+    /// its reading shows no level (`balanceLevel(_:billing:)`), as a quota window whose reading shows none has no run-out
+    /// time, where nothing was spent, and for a balance that has run out.
+    func balanceRunsOut(_ balance: AccountBalance, billing: APIBilling, at spend: BalanceSpend) -> Date? {
+        guard balanceLevel(balance, billing: billing) != nil, spend.currency == balance.currency else { return nil }
+        return spend.runsOutAt(balance.total, readAt: billing.updatedAt ?? dataDate)
+    }
+
+    /// The columns of an API account's estimated cost in `currency` over a period of the HUD's history, in that period's
+    /// columns, as its block's chart draws them.
+    func balanceCostColumns(_ billing: APIBilling, currency: String, period: PanelTokenPeriod) -> [CostColumn] {
+        ChartData.costBars(costs: billing.costs, currency: currency, interval: hudTokenInterval(period), bucketSize: period.bucketSize)
+    }
+
     var statsActivity: ActivityGrid {
         UsageAnalytics.activityGrid(usage: (report?.usage ?? []).filter { $0.start < dataDate },
             since: dataDate.addingTimeInterval(-7 * 86400), calendar: .current, dimensions: tokenDimensions)

@@ -18,6 +18,8 @@ final class PanelLayoutPlanTests: XCTestCase {
     }
 
     private let everyMeasure: [PanelMeasure] = [.quota, .burnRate, .tokens, .cost]
+    /// What a balance's number offers: money, and no tokens.
+    private let ofABalance: [PanelMeasure] = [.quota, .burnRate, .cost]
 
     func testTheDefaultLayoutIsTheDefaultView() {
         let planned = plan(PanelLayout())
@@ -25,7 +27,7 @@ final class PanelLayoutPlanTests: XCTestCase {
             PanelBlockPlan(key: "Claude", kind: .quota, widget: .bar, measures: everyMeasure),
             PanelBlockPlan(key: "Codex", kind: .quota, widget: .bar, measures: everyMeasure),
             PanelBlockPlan(key: "Cursor", kind: .quota, widget: .bar, measures: everyMeasure),
-            PanelBlockPlan(key: "api:DeepSeek", kind: .billing, widget: .number, measures: [.quota]),
+            PanelBlockPlan(key: "api:DeepSeek", kind: .billing, widget: .number, measures: ofABalance),
         ])
         XCTAssertEqual(planned.blocks.map(\.measure), [.quota, .quota, .quota, .quota])
         XCTAssertEqual(planned.blocks.map(\.countdown), [true, true, true, true])
@@ -80,8 +82,17 @@ final class PanelLayoutPlanTests: XCTestCase {
             let quota = block("Claude", in: PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: widget)]))
             XCTAssertEqual(quota?.widget, widget, "quota windows take \(widget)")
             let balance = block("api:DeepSeek", in: PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(widget: widget)]))
-            XCTAssertEqual(balance?.widget, .number, "a balance asked for \(widget) is a number: it has no ceiling")
-            XCTAssertEqual(balance?.measures, [.quota])
+            switch widget {
+            case .chart:
+                XCTAssertEqual(balance?.widget, .chart, "a balance is charted by its estimated cost")
+                XCTAssertEqual(balance?.measures, [.cost])
+            case .number:
+                XCTAssertEqual(balance?.widget, .number)
+                XCTAssertEqual(balance?.measures, ofABalance)
+            case .bar, .ring:
+                XCTAssertEqual(balance?.widget, .number, "a balance asked for \(widget) is a number: it has no ceiling")
+                XCTAssertEqual(balance?.measures, ofABalance)
+            }
         }
     }
 
@@ -109,10 +120,14 @@ final class PanelLayoutPlanTests: XCTestCase {
         expect("Claude", PanelLayout.Block(widget: .chart, measures: [.cost]), offers: ofAChart)
         expect("Claude", PanelLayout.Block(widget: .chart, measures: [.quota, .tokens]), offers: ofAChart)
         expect("Claude", PanelLayout.Block(widget: .chart, measures: [.burnRate, .quota]), offers: ofAChart)
-        expect("api:DeepSeek", PanelLayout.Block(measures: [.cost]), offers: [.quota])
-        expect("api:DeepSeek", PanelLayout.Block(measures: [.cost, .quota]), offers: [.quota])
+        expect("api:DeepSeek", PanelLayout.Block(measures: [.cost]), offers: [.cost])
+        // A balance has no tokens of its own.
+        expect("api:DeepSeek", PanelLayout.Block(measures: [.cost, .tokens, .quota]), offers: [.cost, .quota])
+        expect("api:DeepSeek", PanelLayout.Block(measures: [.tokens]), offers: ofABalance)
+        expect("api:DeepSeek", PanelLayout.Block(widget: .chart, measures: [.tokens]), offers: [.cost])
+        expect("api:DeepSeek", PanelLayout.Block(widget: .chart, measures: [.quota, .burnRate]), offers: [.cost])
         // The widget falls back first, and the measures are weighed under the widget that results.
-        expect("api:DeepSeek", PanelLayout.Block(widget: .chart, measures: [.tokens]), offers: [.quota])
+        expect("api:DeepSeek", PanelLayout.Block(widget: .ring, measures: [.tokens, .burnRate]), offers: [.burnRate])
         expect("Claude", PanelLayout.Block(widget: .chart, measures: [.burnRate]), offers: ofAChart)
     }
 

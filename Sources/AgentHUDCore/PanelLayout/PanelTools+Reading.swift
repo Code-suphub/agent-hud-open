@@ -154,16 +154,28 @@ extension PanelTools {
             let accounts = store.enabledBilling.filter { $0.panelBlockKey == plan.key }
             block["name"] = .string(accounts.first?.displayName ?? plan.key)
             block["balances"] = .array(accounts.flatMap { account in
-                account.balances.map { balance -> JSONValue in
-                    var entry: [String: JSONValue] = ["currency": .string(balance.currency), "amount": .string("\(balance.total)"),
-                                                      "state": .string(Self.state(store.view.assessment(of: account)))]
-                    if let level = store.balanceLevel(balance, billing: account) { entry["level"] = .string(level.rawValue) }
-                    if let date = balance.runsOutAt { entry["runsOutAt"] = .string(Self.time(date)) }
-                    return .object(entry)
-                }
+                account.balances.map { balance in self.balance(balance, of: account, over: plan.period) }
             })
         }
         return .object(block)
+    }
+
+    /// One API balance's reading: its amount, level, state and the time it runs out at its own fall (`runsOutAt`,
+    /// `AccountBalance.runsOutAt`), and over its block's period what the measures beside it read: the estimated cost of
+    /// the requests recorded (`cost`), that cost per day (`burnPerDay`), and when the amount runs out at that pace
+    /// (`burnRunsOutAt`), which a reading that shows no level has not, as in the panel. Amounts are written as decimals in
+    /// the balance's currency, a pace to the millionth; nothing is told that its recorded requests leave unpriced.
+    private func balance(_ balance: AccountBalance, of account: APIBilling, over period: PanelTokenPeriod) -> JSONValue {
+        var entry: [String: JSONValue] = ["currency": .string(balance.currency), "amount": .string("\(balance.total)"),
+                                          "state": .string(Self.state(store.view.assessment(of: account)))]
+        if let level = store.balanceLevel(balance, billing: account) { entry["level"] = .string(level.rawValue) }
+        if let date = balance.runsOutAt { entry["runsOutAt"] = .string(Self.time(date)) }
+        if let spend = store.balanceSpend(account, currency: balance.currency, period: period) {
+            entry["cost"] = .string("\(spend.cost)")
+            entry["burnPerDay"] = .string(Self.millionths(spend.perDay))
+            if let date = store.balanceRunsOut(balance, billing: account, at: spend) { entry["burnRunsOutAt"] = .string(Self.time(date)) }
+        }
+        return .object(entry)
     }
 
     /// The session rows as an agent reads them: the limit, the period, the agents and the states in effect, the agents
@@ -242,6 +254,12 @@ extension PanelTools {
     }
 
     private static func tenths(_ value: Double) -> Double { (value * 10).rounded() / 10 }
+    /// An amount of money to the millionth, the most an estimate is written with, as a decimal.
+    private static func millionths(_ value: Decimal) -> String {
+        var exact = value, rounded = Decimal()
+        NSDecimalRound(&rounded, &exact, 6, .plain)
+        return "\(rounded)"
+    }
     /// A picture's scale to the hundredth below it, which never reads as more pixels than were drawn.
     static func hundredths(_ value: Double) -> Double { (value * 100).rounded(.down) / 100 }
     static func points(_ value: Double) -> String { "\(Int64(value.rounded()))" }

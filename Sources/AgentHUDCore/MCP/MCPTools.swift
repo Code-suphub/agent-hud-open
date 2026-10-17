@@ -26,7 +26,10 @@ public enum MCPTools {
     /// read only, since no tool changes a Settings switch.
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
-        with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
+        with their latest readings, and each API balance with runsOutAt, when it runs out at the pace the balance \
+        itself fell over the last day, and over the block's period cost, the estimated cost of the requests recorded, \
+        burnPerDay, that cost per day, and burnRunsOutAt, when the balance runs out at that pace; the layout in \
+        effect, the panel's width and height and whether it scrolls, and the \
         widgets and measures each block accepts; how many sessions it lists and over what period, and its token \
         chart's period, the agents and models it can draw and its total; the attached screens, each with its resting \
         HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own \
@@ -99,10 +102,13 @@ public enum MCPTools {
         let section = text("One of the panel's sections.", oneOf: ["blocks", "tokens", "sessions"])
         let measure: JSONValue = .object(["type": .string("string"), "enum": names(PanelMeasure.allCases.map(\.rawValue))])
         let block = object([
-            "widget": text("How the block is drawn: bar rows, a ring, a number or a chart.",
-                           oneOf: ["bar", "ring", "number", "chart"]),
-            "measures": list("What its picker offers, in order, the first shown first: quota (an API account's balance), burn, "
-                             + "tokens, cost. One means no picker; none means all its widget offers.", of: measure),
+            "widget": text("How the block is drawn: bar rows, a ring, a number or a chart. An API balance takes number, its "
+                           + "card, or chart, its estimated cost over its period.", oneOf: ["bar", "ring", "number", "chart"]),
+            "measures": list("What its picker offers, in order, the first shown first: quota, burn, tokens, cost. On an API "
+                             + "balance's number, quota is the balance beside its estimated cost, burn the cost per day "
+                             + "over its period and when the balance runs out at it, and cost the estimated cost beside "
+                             + "that pace; its chart offers cost alone. One means no picker; none means all its widget "
+                             + "offers.", of: measure),
             "hidden": described("boolean", "True hides the block."),
             "hiddenRows": list("Keys of the block's rows to hide, from get_panel.", of: key),
             "countdown": described("boolean", "False hides a quota block's reset times."),
@@ -111,8 +117,8 @@ public enum MCPTools {
             "span": text("The whole line, the default, or half of it beside the next block if that is half too. Not for bar "
                          + "rows.", oneOf: PanelSpan.allCases.map(\.rawValue)),
             "period": text("For the chart widget, the last 24 hours, 7 days or 30 days its bars cover, day if left out; for an "
-                           + "API balance, what its estimated cost covers, the token chart's period if left out. For no other "
-                           + "block.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
+                           + "API balance, what its estimated cost, burn rate and chart cover, the token chart's period if left "
+                           + "out. For no other block.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
         ])
         let blocks: [String: JSONValue] = [
             "type": .string("object"),

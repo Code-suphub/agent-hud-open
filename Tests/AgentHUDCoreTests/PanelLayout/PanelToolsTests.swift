@@ -43,9 +43,9 @@ final class PanelToolsTests: PanelToolsCase {
 
         let deepseek = try block("api:DeepSeek", in: panel)
         XCTAssertEqual(deepseek["kind"], .string("billing"))
-        XCTAssertEqual(deepseek["widgets"], .array([.string("number")]))
-        XCTAssertEqual(deepseek["measures"], .array([.string("quota")]))
-        XCTAssertEqual(deepseek["offeredMeasures"], .array([.string("quota")]))
+        XCTAssertEqual(deepseek["widgets"], .array([.string("number"), .string("chart")]))
+        XCTAssertEqual(deepseek["measures"], .array(["quota", "burn", "cost"].map(JSONValue.string)))
+        XCTAssertEqual(deepseek["offeredMeasures"], .array(["quota", "burn", "cost"].map(JSONValue.string)))
         for property in ["countdown", "columns", "ringSize"] {
             XCTAssertNil(deepseek[property], "a balance has no \(property) to set")
         }
@@ -323,7 +323,7 @@ final class PanelToolsTests: PanelToolsCase {
         }
         // Both kinds in one answer: a name that would be forgiven, and what the rest asks that the panel cannot do.
         let both = try refusal(["blocks": .object(["Claude": .object(["widget": .string("gauge")]),
-                                                   "api:DeepSeek": .object(["measures": .array([.string("cost")])])]),
+                                                   "api:DeepSeek": .object(["measures": .array([.string("tokens")])])]),
                                 "order": .array([.string("Zed")])])
         for part in ["blocks.Claude.widget is one of", "blocks.api:DeepSeek.measures[0]:", "order[0]: No block has the key \"Zed\""] {
             XCTAssertTrue(both.contains(part), "\(part) — \(both)")

@@ -36,12 +36,25 @@ extension PanelMeasure {
         case .cost: "dollarsign"
         }
     }
+
+    /// How a block of `kind` names the measure: on an API balance `quota` is the balance itself, money with no share of
+    /// a ceiling, and every other measure is named as on quota windows.
+    func label(for kind: PanelBlockKind) -> String {
+        kind == .billing && self == .quota ? L10n.text("余额", "Balance") : label
+    }
+
+    /// The symbol a block of `kind` draws the measure with: a note for an API balance's `quota`, which has no percentage.
+    func symbol(for kind: PanelBlockKind) -> String {
+        kind == .billing && self == .quota ? "banknote" : symbol
+    }
 }
 
 /// Compact, direct measure selection for a provider block, over the measures its widget offers.
 struct IslandQuotaMetricPicker: View {
     @Binding var selection: PanelMeasure
     var measures = PanelBlockKind.quota.measures(under: .bar)
+    /// What the block it heads holds, which names its measures: quota windows, or an API balance.
+    var kind = PanelBlockKind.quota
     /// The tokens of what it heads: its block's in the panel, or the sample's in Settings.
     let theme: Theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -52,7 +65,7 @@ struct IslandQuotaMetricPicker: View {
                 Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { selection = metric }
                 } label: {
-                    Image(systemName: metric.symbol)
+                    Image(systemName: metric.symbol(for: kind))
                         .font(.ui(9, .semibold))
                         .frame(width: 20, height: IslandRowLayout.headingHeight)
                         .foregroundStyle(selection == metric ? theme.text : theme.tertiary)
@@ -63,8 +76,8 @@ struct IslandQuotaMetricPicker: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(metric.label)
-                .accessibilityLabel(metric.label)
+                .help(metric.label(for: kind))
+                .accessibilityLabel(metric.label(for: kind))
                 .accessibilityAddTraits(selection == metric ? .isSelected : [])
             }
         }

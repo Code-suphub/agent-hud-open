@@ -118,13 +118,7 @@ extension HoverPanelView {
                 .padding(.top, divided ? spacing.divided : 0)
                 .topDivider(divided ? divider : .clear)
         case .billing(let plan, let accounts):
-            VStack(alignment: .leading, spacing: spacing.blocks) {
-                ForEach(accounts) { account in
-                    APIBillingCard(billing: account, store: store, theme: theme, compact: true, period: plan.period)
-                        .padding(.top, spacing.divided)
-                        .topDivider(divider)
-                }
-            }
+            BillingBlock(store: store, accounts: accounts, plan: plan, dividesFirst: true, divider: divider)
         }
     }
 
@@ -152,13 +146,7 @@ extension HoverPanelView {
         case .quota(let plan, let rows):
             ProviderQuotaBlock(store: store, rows: rows, plan: plan, onOpenAgent: openAgent(plan.key))
         case .billing(let plan, let accounts):
-            VStack(alignment: .leading, spacing: spacing.blocks) {
-                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                    APIBillingCard(billing: account, store: store, theme: theme, compact: true, period: plan.period)
-                        .padding(.top, index > 0 ? spacing.divided : 0)
-                        .topDivider(index > 0 ? divider : .clear)
-                }
-            }
+            BillingBlock(store: store, accounts: accounts, plan: plan, dividesFirst: false, divider: divider)
         }
     }
 }
