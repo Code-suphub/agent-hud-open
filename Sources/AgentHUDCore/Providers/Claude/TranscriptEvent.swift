@@ -16,7 +16,8 @@ public struct TranscriptEvent: Hashable, Sendable {
     public let outputTokens: Int
     /// The part of `outputTokens` spent thinking, which current builds record per message.
     public let thinkingTokens: Int
-    /// First text of a user message (used for the session title); nil for other lines.
+    /// First text of a user message (used for the session title); for an assistant line, what it shows the user, its
+    /// answer or a narration; nil for other lines.
     public let text: String?
     public let sessionId: String?
     public let cwd: String?
@@ -54,7 +55,8 @@ public struct TranscriptEvent: Hashable, Sendable {
     public let endsTurn: Bool
     /// A call's result the client marked as an error (`is_error`), such as a next-step box the app refused to draw.
     public let failed: Bool
-    /// An assistant line holding a thinking block. Claude Code writes the block once it is finished.
+    /// An assistant line holding a thinking block. Claude Code writes the block once it is finished. A narration, the
+    /// agent's words the desktop app shows between its calls, is written as one too and is not this: its words are `text`.
     public let isThinking: Bool
     /// The `error` of the message Claude Code writes in the model's place when the API failed the turn (`isApiErrorMessage`),
     /// such as "rate_limit", "billing_error" or "server_error"; nil for every other line.

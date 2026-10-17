@@ -78,7 +78,7 @@ public actor ClaudeTranscriptStore {
         for log in pass.logs {
             if let cached = sessionsByPath[log.path] {
                 result.append(cached)
-            } else if let built = logs.entry(log.path)?.summary.build() {
+            } else if let built = logs.entry(log.path)?.summary.build().map(Self.reworded) {
                 sessionsByPath[log.path] = built
                 result.append(built)
             }
@@ -92,6 +92,25 @@ public actor ClaudeTranscriptStore {
         scan.elapsed = Date().timeIntervalSince(started)
         lastScan = scan
         return Result(sessions: result, pending: scan.pending)
+    }
+
+    /// The session with the words of the question its client still asks, when the ledger kept only that it asks: they are
+    /// read again from the one line its call is on, once each time the session is built.
+    static func reworded(_ session: TranscriptSession) -> TranscriptSession {
+        guard let ask = session.activity?.ask, !ask.isWorded, let offset = ask.offset,
+              let line = line(at: offset, path: session.path), let read = FastTranscriptParser.parseLine(line)?.ask else { return session }
+        var session = session
+        session.activity?.reword(read)
+        return session
+    }
+
+    /// The line that starts at `offset` in the log at `path`, read no further than `limit` bytes; nil past that.
+    static func line(at offset: Int, path: String, limit: Int = 64 << 10) -> Data? {
+        guard offset >= 0, let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        guard (try? handle.seek(toOffset: UInt64(offset))) != nil, let data = try? handle.read(upToCount: limit),
+              let end = data.firstIndex(of: 0x0A) else { return nil }
+        return data[data.startIndex..<end]
     }
 
     static func isSubagent(_ url: URL) -> Bool {

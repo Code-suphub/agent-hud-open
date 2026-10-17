@@ -206,6 +206,36 @@ final class ClaudeDesktopAsksTests: XCTestCase {
         XCTAssertTrue(ClaudeDesktopAsks.requests(for: [session], now: then).isEmpty, "no words, no card")
     }
 
+    func testAfterARelaunchTheQuestionsWordsAreReadAgainFromItsOwnLine() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let log = folder.appendingPathComponent("\(session).jsonl")
+        let data = Data((newLines.prefix(2).joined(separator: "\n") + "\n").utf8)
+        try data.write(to: log)
+        var accumulator = TranscriptAccumulator(path: log.path, isSubagent: false)
+        accumulator.ingest(FastTranscriptParser.parse(data, at: 0))
+        XCTAssertEqual(accumulator.build()?.activity?.ask?.offset, 0, "the call is the log's first line")
+        // What the ledger gives back after a relaunch: that the session asks, where, and none of the words.
+        let kept = try JSONDecoder().decode(TranscriptAccumulator.self, from: JSONEncoder().encode(accumulator))
+        let session = try XCTUnwrap(kept.build())
+        XCTAssertEqual(session.activity?.ask?.isWorded, false)
+        let reworded = ClaudeTranscriptStore.reworded(session)
+        XCTAssertEqual(reworded.activity?.ask?.question, "Should I commit it now?")
+        XCTAssertEqual(reworded.activity?.ask?.options.map(\.label), ["Commit it", "Not yet"])
+        XCTAssertEqual(reworded.activity?.ask?.offset, 0)
+        XCTAssertEqual(reworded.activity?.ask?.at, session.activity?.ask?.at)
+        XCTAssertNotNil(ClaudeDesktopAsks.requests(for: [live(asking: reworded.activity?.ask, ended: true)],
+                                                   now: reworded.activity!.ask!.at.addingTimeInterval(60)).first,
+                        "and the card is there again")
+        // A line that is another call's leaves the question without words rather than with someone else's.
+        var moved = kept.build()!
+        let elsewhere = SessionActivity.Ask(id: session.activity!.ask!.id, kind: .nextStep, question: "", options: [],
+                                            at: session.activity!.ask!.at, offset: newLines[0].utf8.count + 1)
+        moved.activity?.open("toolu_other", work: nil, at: elsewhere.at, response: nil, asking: elsewhere)
+        XCTAssertEqual(ClaudeTranscriptStore.reworded(moved).activity?.ask?.isWorded, false)
+    }
+
     // MARK: Waiting and the card
 
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
