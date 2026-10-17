@@ -11,6 +11,9 @@ struct OpenAgentCredential: Sendable {
     var clients: Set<String> = []
     var expiresAt: Date? = nil
     func isUsable(at now: Date) -> Bool { expiresAt.map { $0 > now.addingTimeInterval(60) } ?? true }
+    /// The group the plan's windows, read error and detection belong to. A GLM plan only WorkBuddy carries is shown
+    /// inside WorkBuddy's group; every other plan, and its account in every case, stays with its provider.
+    var displayGroup: String { pool.provider == "GLM" && clients == ["WorkBuddy"] ? "WorkBuddy" : pool.provider }
     var endpoint: URL {
         switch service {
         case .kimi: URL(string: "https://api.kimi.com/coding/v1/usages")!
@@ -156,17 +159,14 @@ enum OpenAgentCredentials {
                 if value.isUsable(at: now) { found.append(value) }
             }
         }
-        // WorkBuddy keeps model entries in ~/.workbuddy/models.json; a GLM Coding Plan entry whose URL is
-        // Zhipu's own coding endpoint carries the plan's key. Only those endpoints are read, mirroring the
-        // restriction the same function applies to every other client's stored credentials.
-        let workBuddyModels = read(home.appendingPathComponent(".workbuddy/models.json"))
-        for entry in workBuddyModels.arrayValue ?? [] {
+        // WorkBuddy keeps model entries in ~/.workbuddy/models.json; a GLM Coding Plan entry whose URL is one of Zhipu's
+        // own coding endpoints carries the plan's key. Any other URL, Kimi's and OpenCode Go's included, is not read. A key
+        // another client carries too joins that client's plan.
+        for entry in read(home.appendingPathComponent(".workbuddy/models.json")).arrayValue ?? [] {
             guard entry["vendor"].stringValue == "GLM Coding Plan",
-                  let key = entry["apiKey"].stringValue, !key.isEmpty,
-                  let service = service(provider: "", baseURL: entry["url"].stringValue) else { continue }
-            if found.contains(where: { $0.service == service && $0.token == key }) { continue }
-            let credential = credential(service, token: key, client: "WorkBuddy")
-            if credential.isUsable(at: now) { found.append(credential) }
+                  let service = service(provider: "", baseURL: entry["url"].stringValue),
+                  service == .glmChina || service == .glmGlobal else { continue }
+            add(service, entry["apiKey"].stringValue, "WorkBuddy")
         }
         return merge(found)
     }

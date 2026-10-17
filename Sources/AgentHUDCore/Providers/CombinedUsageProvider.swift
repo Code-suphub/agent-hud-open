@@ -126,7 +126,8 @@ public struct CombinedUsageProvider: UsageProvider {
         var notices: [String: String] = [:], quotaNotices: [String: String] = [:], issues: [String: ReadingIssue] = [:]
         for (index, report, error) in results {
             if let report {
-                notices.merge(report.sourceNotices, uniquingKeysWith: { _, new in new })
+                // Two sources can write one group's notice: a GLM plan only WorkBuddy carries files its read error there.
+                notices.merge(report.sourceNotices, uniquingKeysWith: { old, new in old == new ? new : old + " · " + new })
                 quotaNotices.merge(report.quotaNotices ?? report.sourceNotices, uniquingKeysWith: { _, new in new })
                 issues.merge(report.typedReadingIssues, uniquingKeysWith: { _, new in new })
             }

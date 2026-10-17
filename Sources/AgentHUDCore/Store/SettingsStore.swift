@@ -207,9 +207,9 @@ public final class SettingsStore {
                     if existing.model != found.model || existing.shortModel != found.shortModel || existing.source != found.source
                         || existing.connected != found.connected || existing.billingPool != found.billingPool
                         || existing.account != found.account || existing.allModels != found.allModels || existing.vendor != found.vendor {
-                        // A same-id row follows its provider's current homing: the display group can move when
-                        // the credential that carries it is read under a different group (a plan a Tencent
-                        // client alone carries shows inside that client's group).
+                        // A same-id row follows its provider's current homing, keeping its switch: a GLM plan only
+                        // WorkBuddy carries shows inside WorkBuddy's group, and moves to GLM's once another client
+                        // carries its key.
                         list[index] = AgentDescriptor(
                             id: existing.id, vendor: found.vendor, model: found.model, shortModel: found.shortModel, source: found.source,
                             enabled: existing.enabled, connected: found.connected, billingPool: found.billingPool, account: found.account,
