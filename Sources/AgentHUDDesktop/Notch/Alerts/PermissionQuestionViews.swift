@@ -112,6 +112,11 @@ struct PermissionQuestionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // A next-step box's recap: what the agent says is done, above the question it ends on.
+            if request.nativeApproval == .clientReply, let recap = request.detail {
+                Text(recap).font(.ui(11)).foregroundStyle(color.secondary)
+                    .lineLimit(4).fixedSize(horizontal: false, vertical: true)
+            }
             HStack(alignment: .firstTextBaseline, spacing: 7) {
                 if questions.count > 1 {
                     Text("\(page + 1)/\(questions.count)")

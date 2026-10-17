@@ -71,21 +71,25 @@ public struct SessionActivity: Hashable, Codable, Sendable {
         public let recap: String?
         public let options: [Option]
         public let at: Date
-        enum CodingKeys: String, CodingKey { case id, response, kind, at }
+        /// Where the call's line begins in its log: the ledger keeps this, not the words, so a later run reads them again
+        /// from that one line.
+        public var offset: Int?
+        enum CodingKeys: String, CodingKey { case id, response, kind, at, offset }
 
         /// Whether its words were read in this run.
         public var isWorded: Bool { !question.isEmpty }
 
         public init(id: String, response: String? = nil, kind: Kind, question: String, recap: String? = nil, options: [Option],
-                    at: Date) {
+                    at: Date, offset: Int? = nil) {
             self.id = id; self.response = response; self.kind = kind; self.question = question; self.recap = recap
-            self.options = options; self.at = at
+            self.options = options; self.at = at; self.offset = offset
         }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             self.init(id: try c.decode(String.self, forKey: .id), response: try c.decodeIfPresent(String.self, forKey: .response),
-                      kind: try c.decode(Kind.self, forKey: .kind), question: "", options: [], at: try c.decode(Date.self, forKey: .at))
+                      kind: try c.decode(Kind.self, forKey: .kind), question: "", options: [], at: try c.decode(Date.self, forKey: .at),
+                      offset: try c.decodeIfPresent(Int.self, forKey: .offset))
         }
     }
 
@@ -182,6 +186,15 @@ public struct SessionActivity: Hashable, Codable, Sendable {
         } else if let asked = self.ask, asked.response == nil || asked.response != response {
             self.ask = nil
         }
+    }
+
+    /// The words of the question still asked, read again from its call's line after the ledger gave it back without
+    /// them. Only the same call's words are taken, and only while none are there.
+    public mutating func reword(_ read: Ask) {
+        guard let asked = ask, asked.id == read.id, !asked.isWorded, read.isWorded else { return }
+        var worded = read
+        worded.offset = asked.offset ?? read.offset
+        ask = worded
     }
 
     /// A call's result came back at `at`, `failed` when the client marked it an error. An offer is answered by its result;

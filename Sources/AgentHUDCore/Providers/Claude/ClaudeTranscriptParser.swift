@@ -72,7 +72,8 @@ public enum ClaudeTranscriptParser {
             entrypoint: object["entrypoint"] as? String,
             returnsStructuredOutput: calls.contains { $0["type"] as? String == "tool_use" && $0["name"] as? String == "StructuredOutput" },
             toolName: call?["name"] as? String, toolUseID: call?["id"] as? String, toolResultID: resultID, ask: ask, endsTurn: endsTurn, failed: failed,
-            isThinking: ["thinking", "redacted_thinking"].contains(block?["type"] as? String),
+            isThinking: block?["type"] as? String == "redacted_thinking"
+                || block?["type"] as? String == "thinking" && !ClaudeNarration.isNarration(signature: block?["signature"] as? String ?? ""),
             apiError: apiError, limitResetsAt: resetsAt.map { Date(timeIntervalSince1970: $0) },
             retryAttempt: isRetry ? object["retryAttempt"] as? Int : nil
         )

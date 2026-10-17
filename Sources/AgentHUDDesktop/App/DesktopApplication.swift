@@ -240,11 +240,17 @@ public final class DesktopApplication {
         }
     }
 
+    /// How the host sends the words of an answer to the Claude desktop app's next-step box into its session, such as the
+    /// private app's plugin; nil leaves the box to be answered in the app.
+    public var claudeDesktopReply: ClaudeDesktopAsks.Reply? {
+        didSet { showClaudeDesktopAsks() }
+    }
+
     /// The questions the Claude desktop app asks in its own window, which only its session logs record, among the requests
     /// the user is asked about. The demo has none.
     private func showClaudeDesktopAsks() {
         guard !options.demo else { return }
-        ClaudeDesktopAsks.show(store.view.recentSessions.filter(\.liveStatus).map(\.session), now: Date())
+        ClaudeDesktopAsks.show(store.view.recentSessions.filter(\.liveStatus).map(\.session), now: Date(), reply: claudeDesktopReply)
     }
 
     /// Mirrors the requests waiting for the user onto the island: a new one is shown, and one the client took back

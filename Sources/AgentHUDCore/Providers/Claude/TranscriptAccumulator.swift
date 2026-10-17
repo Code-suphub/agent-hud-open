@@ -201,8 +201,10 @@ public struct TranscriptAccumulator: Hashable, Sendable, Codable {
             activity.startTurn()
             activity.line = Self.isInterruption(event) ? .context : .prompt
         } else if let id = event.toolUseID {
+            var ask = event.ask
+            ask?.offset = event.offset
             activity.open(id, work: event.toolName.flatMap(SessionActivity.work(ofTool:)), at: event.timestamp,
-                          response: event.messageId, asking: event.ask)
+                          response: event.messageId, asking: ask)
             activity.line = .call
         } else if let id = event.toolResultID {
             activity.close(id, at: event.timestamp, failed: event.failed)
