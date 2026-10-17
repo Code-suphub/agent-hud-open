@@ -484,7 +484,7 @@ final class PanelToolsFiltersTests: PanelToolsCase {
             "Claude": .object(["widget": .string("chart"), "period": .string("year")]),
         ])])
         for part in [#"blocks.Codex.period: The "ring" widget of "Codex" draws no chart. period applies to the "chart" widget, "#
-                        + #"whose bars cover it, and to API balances, whose estimated cost covers it."#,
+                        + #"whose bars cover it, and to API balances, whose estimated cost, burn rate and chart cover it."#,
                      #"blocks.Claude.period is one of "day", "week", "month"."#] {
             XCTAssertTrue(refused.contains(part), "\(part) — \(refused)")
         }

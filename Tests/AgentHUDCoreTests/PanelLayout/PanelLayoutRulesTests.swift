@@ -25,9 +25,9 @@ final class PanelLayoutRulesTests: XCTestCase {
 
     // MARK: What a kind accepts
 
-    func testQuotaWindowsTakeEveryWidgetAndABalanceOnlyANumber() {
+    func testQuotaWindowsTakeEveryWidgetAndABalanceANumberOrAChart() {
         XCTAssertEqual(PanelBlockKind.quota.widgets, [.bar, .ring, .number, .chart])
-        XCTAssertEqual(PanelBlockKind.billing.widgets, [.number], "a balance has no ceiling for a bar or a ring to fill")
+        XCTAssertEqual(PanelBlockKind.billing.widgets, [.number, .chart], "a balance has no ceiling for a bar or a ring to fill")
         XCTAssertEqual(PanelBlockKind.quota.defaultWidget, .bar)
         XCTAssertEqual(PanelBlockKind.billing.defaultWidget, .number)
         XCTAssertEqual(Set(PanelBlockKind.quota.widgets), Set(PanelWidget.allCases))
@@ -38,8 +38,9 @@ final class PanelLayoutRulesTests: XCTestCase {
             XCTAssertEqual(PanelBlockKind.quota.measures(under: widget), [.quota, .burnRate, .tokens, .cost], "\(widget)")
         }
         XCTAssertEqual(PanelBlockKind.quota.measures(under: .chart), [.tokens])
-        XCTAssertEqual(PanelBlockKind.billing.measures(under: .number), [.quota])
-        for widget in [PanelWidget.bar, .ring, .chart] {
+        XCTAssertEqual(PanelBlockKind.billing.measures(under: .number), [.quota, .burnRate, .cost], "money, and no tokens")
+        XCTAssertEqual(PanelBlockKind.billing.measures(under: .chart), [.cost], "a balance's chart draws its estimated cost")
+        for widget in [PanelWidget.bar, .ring] {
             XCTAssertEqual(PanelBlockKind.billing.measures(under: widget), [], "\(widget) is not a balance's widget")
         }
     }
@@ -51,7 +52,9 @@ final class PanelLayoutRulesTests: XCTestCase {
         XCTAssertEqual(PanelBlockKind.quota.measures([.cost, .cost, .burnRate], under: .number), [.cost, .burnRate])
         XCTAssertEqual(PanelBlockKind.quota.measures([.quota, .tokens], under: .chart), [.tokens])
         XCTAssertEqual(PanelBlockKind.quota.measures([.quota], under: .chart), [.tokens])
-        XCTAssertEqual(PanelBlockKind.billing.measures([.cost], under: .number), [.quota])
+        XCTAssertEqual(PanelBlockKind.billing.measures([.cost], under: .number), [.cost])
+        XCTAssertEqual(PanelBlockKind.billing.measures([.tokens, .burnRate], under: .number), [.burnRate])
+        XCTAssertEqual(PanelBlockKind.billing.measures([.quota, .burnRate], under: .chart), [.cost])
         for kind in [PanelBlockKind.quota, .billing] {
             for widget in kind.widgets {
                 XCTAssertEqual(kind.measures([], under: widget), kind.measures(under: widget), "\(kind) \(widget)")
@@ -63,6 +66,8 @@ final class PanelLayoutRulesTests: XCTestCase {
         XCTAssertEqual(PanelBlockKind.quota.widget(for: .ring), .ring)
         XCTAssertEqual(PanelBlockKind.quota.widget(for: nil), .bar)
         XCTAssertEqual(PanelBlockKind.billing.widget(for: .ring), .number)
+        XCTAssertEqual(PanelBlockKind.billing.widget(for: .bar), .number)
+        XCTAssertEqual(PanelBlockKind.billing.widget(for: .chart), .chart)
     }
 
     func testWhatAKindHasToSetUnderAWidget() {
@@ -72,6 +77,8 @@ final class PanelLayoutRulesTests: XCTestCase {
         XCTAssertEqual(PanelWidget.allCases.filter { PanelBlockKind.quota.takesRingSize(under: $0) }, [.ring])
         XCTAssertFalse(PanelWidget.allCases.contains { PanelBlockKind.billing.takesColumns(under: $0) }, "a balance's number is its card")
         XCTAssertFalse(PanelWidget.allCases.contains { PanelBlockKind.billing.takesRingSize(under: $0) })
+        XCTAssertTrue(PanelBlockKind.billing.takesHalf(under: .chart), "a balance's chart can take half a line, as its card can")
+        XCTAssertTrue(PanelBlockKind.billing.takesPeriod(under: .chart))
     }
 
     // MARK: The blocks of a view
@@ -170,14 +177,12 @@ final class PanelLayoutRulesTests: XCTestCase {
         }
         func noCeiling(_ widget: String) -> String {
             "\"api:DeepSeek\" is an API balance, which has no ceiling, so the \"\(widget)\" widget has nothing to measure it against."
-                + " It accepts: \"number\"."
+                + " It accepts: \"number\", \"chart\"."
         }
         XCTAssertEqual(issues(.number), [])
+        XCTAssertEqual(issues(.chart), [], "a balance is charted by its estimated cost")
         XCTAssertEqual(issues(.ring), [PanelLayoutIssue(path: "blocks.api:DeepSeek.widget", message: noCeiling("ring"))])
         XCTAssertEqual(issues(.bar).map(\.message), [noCeiling("bar")])
-        XCTAssertEqual(issues(.chart).map(\.message), [
-            #""api:DeepSeek" is an API balance, and a chart of money is not drawn yet. It accepts: "number"."#,
-        ])
         for widget in PanelWidget.allCases {
             XCTAssertEqual(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: widget)]).issues(against: blocks), [], "\(widget)")
         }
@@ -195,17 +200,26 @@ final class PanelLayoutRulesTests: XCTestCase {
         ])
         XCTAssertEqual(issues("Claude", PanelLayout.Block(widget: .chart, measures: [.tokens])), [])
         XCTAssertEqual(issues("Claude", PanelLayout.Block(measures: [.cost])), [], "without a widget the default one decides")
-        let together = [
-            #"The "number" widget of "api:DeepSeek" does not offer the measure "cost"."#,
-            #" An API balance shows its balance and its estimated cost together, as "quota". It offers: "quota"."#,
+        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(measures: [.cost, .burnRate, .quota])), [], "a balance's number offers all three")
+        let money = [
+            #"The "number" widget of "api:DeepSeek" does not offer the measure "tokens"."#,
+            #" An API balance is measured in money; the tokens of its models are in the token chart."#,
+            #" It offers: "quota", "burn", "cost"."#,
         ].joined()
-        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(measures: [.quota, .cost])), [
-            PanelLayoutIssue(path: "blocks.api:DeepSeek.measures[1]", message: together),
+        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(measures: [.quota, .tokens])), [
+            PanelLayoutIssue(path: "blocks.api:DeepSeek.measures[1]", message: money),
+        ])
+        let charted = [
+            #"The "chart" widget of "api:DeepSeek" does not offer the measure "burn"."#,
+            #" The "chart" widget of an API balance draws its estimated cost over its period. It offers: "cost"."#,
+        ].joined()
+        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(widget: .chart, measures: [.cost, .burnRate])), [
+            PanelLayoutIssue(path: "blocks.api:DeepSeek.measures[1]", message: charted),
         ])
         // A widget the block cannot take is drawn as its default, and the measures are weighed under that one.
-        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(widget: .ring, measures: [.burnRate])).map(\.path),
+        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(widget: .ring, measures: [.tokens])).map(\.path),
                        ["blocks.api:DeepSeek.widget", "blocks.api:DeepSeek.measures[0]"])
-        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(widget: .ring, measures: [.quota])).map(\.path), ["blocks.api:DeepSeek.widget"])
+        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(widget: .ring, measures: [.burnRate])).map(\.path), ["blocks.api:DeepSeek.widget"])
     }
 
     func testACountdownColumnsOrARingSizeWhereTheBlockHasNoneToSetIsAnIssue() {
@@ -225,6 +239,9 @@ final class PanelLayoutRulesTests: XCTestCase {
             PanelLayoutIssue(path: "blocks.api:DeepSeek.columns",
                              message: #""api:DeepSeek" is an API balance, drawn as its card, which has no cells to set in columns."#),
         ])
+        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(widget: .chart, columns: 2)).map(\.message), [
+            #""api:DeepSeek" is an API balance, drawn as a chart of its estimated cost, which has no cells to set in columns."#,
+        ])
         XCTAssertEqual(issues("Claude", PanelLayout.Block(widget: .number, ringSize: .large)), [
             PanelLayoutIssue(path: "blocks.Claude.ringSize",
                              message: #"The "number" widget of "Claude" draws no ring. ringSize applies to the "ring" widget."#),
@@ -232,7 +249,7 @@ final class PanelLayoutRulesTests: XCTestCase {
         XCTAssertEqual(issues("Claude", PanelLayout.Block(ringSize: .medium)).map(\.path), ["blocks.Claude.ringSize"],
                        "even the default size, which the agent believes was heeded")
         XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(widget: .ring, ringSize: .small)).map(\.message), [
-            #""api:DeepSeek" is an API balance, which has no ceiling, so the "ring" widget has nothing to measure it against. It accepts: "number"."#,
+            #""api:DeepSeek" is an API balance, which has no ceiling, so the "ring" widget has nothing to measure it against. It accepts: "number", "chart"."#,
             #""api:DeepSeek" is an API balance, which draws no ring."#,
         ])
         for widget in [PanelWidget.ring, .number] {
@@ -321,7 +338,7 @@ final class PanelLayoutRulesTests: XCTestCase {
         let spelled = PanelLayout(blocks: [
             "Claude": PanelLayout.Block(widget: .bar, measures: [.quota, .burnRate, .tokens, .cost], countdown: true),
             "Codex": PanelLayout.Block(widget: .bar),
-            "api:DeepSeek": PanelLayout.Block(widget: .number, measures: [.quota]),
+            "api:DeepSeek": PanelLayout.Block(widget: .number, measures: [.quota, .burnRate, .cost]),
         ], order: ["Claude", "Codex", "api:DeepSeek"], sections: [.blocks, .tokens, .sessions],
            style: PanelStyle(spacing: .regular, separators: true))
         XCTAssertFalse(spelled.isDefault)
@@ -334,13 +351,14 @@ final class PanelLayoutRulesTests: XCTestCase {
         let layout = PanelLayout(blocks: [
             "Claude": PanelLayout.Block(widget: .chart, measures: [.tokens], hiddenRows: ["claude-weekly"]),
             "Codex": PanelLayout.Block(widget: .bar, measures: [.cost, .quota], hidden: true),
-            "api:DeepSeek": PanelLayout.Block(measures: [.quota]),
+            "api:DeepSeek": PanelLayout.Block(widget: .chart, measures: [.cost]),
         ], order: ["Codex", "Claude", "api:DeepSeek"], hiddenSections: [.tokens], style: PanelStyle(spacing: .roomy))
         XCTAssertEqual(layout.reduced(against: blocks), PanelLayout(blocks: [
             "Claude": PanelLayout.Block(widget: .chart, hiddenRows: ["claude-weekly"]),
             "Codex": PanelLayout.Block(measures: [.cost, .quota], hidden: true),
+            "api:DeepSeek": PanelLayout.Block(widget: .chart),
         ], order: ["Codex"], hiddenSections: [.tokens], style: PanelStyle(spacing: .roomy)),
-                       "tokens is all a chart offers, and the rest of the order follows anyway")
+                       "tokens is all a quota block's chart offers and cost all a balance's, and the rest of the order follows anyway")
         XCTAssertEqual(PanelLayout(order: ["api:DeepSeek", "Claude", "Codex"]).reduced(against: blocks), PanelLayout(order: ["api:DeepSeek"]))
         XCTAssertEqual(PanelLayout(order: ["Codex", "api:DeepSeek", "Claude"]).reduced(against: blocks),
                        PanelLayout(order: ["Codex", "api:DeepSeek"]))
@@ -352,12 +370,15 @@ final class PanelLayoutRulesTests: XCTestCase {
         let layout = PanelLayout(blocks: [
             "Claude": PanelLayout.Block(widget: .ring, measures: [.quota, .burnRate, .tokens, .cost, .quota], columns: 4, ringSize: .medium),
             "Codex": PanelLayout.Block(widget: .bar, measures: [.burnRate, .quota], columns: 3, ringSize: .large),
-            "api:DeepSeek": PanelLayout.Block(measures: [.cost, .quota], countdown: false),
+            "api:DeepSeek": PanelLayout.Block(widget: .number, measures: [.quota, .tokens, .burnRate, .cost], countdown: false,
+                                              columns: 3),
         ])
         XCTAssertEqual(layout.reduced(against: blocks), PanelLayout(blocks: [
             "Claude": PanelLayout.Block(widget: .ring),
             "Codex": PanelLayout.Block(measures: [.burnRate, .quota]),
-        ]))
+        ]), "a balance offers no tokens, has no countdown and no cells")
+        XCTAssertEqual(PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(measures: [.cost, .quota])]).reduced(against: blocks),
+                       PanelLayout(blocks: ["api:DeepSeek": PanelLayout.Block(measures: [.cost, .quota])]), "two of a balance's three draw")
         let kept = PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .number, measures: [.cost, .quota, .burnRate, .tokens],
                                                                     countdown: false, columns: 6),
                                         "Codex": PanelLayout.Block(widget: .ring, measures: [.quota], ringSize: .small)])
@@ -416,7 +437,7 @@ final class PanelLayoutRulesTests: XCTestCase {
         }
         XCTAssertEqual(issues("Claude", PanelLayout.Block(period: .week)), [
             PanelLayoutIssue(path: "blocks.Claude.period",
-                             message: #"The "bar" widget of "Claude" draws no chart. period applies to the "chart" widget, whose bars cover it, and to API balances, whose estimated cost covers it."#),
+                             message: #"The "bar" widget of "Claude" draws no chart. period applies to the "chart" widget, whose bars cover it, and to API balances, whose estimated cost, burn rate and chart cover it."#),
         ])
         for widget in [PanelWidget.ring, .number] {
             XCTAssertEqual(issues("Codex", PanelLayout.Block(widget: widget, period: .day)).map(\.path), ["blocks.Codex.period"],
@@ -424,6 +445,7 @@ final class PanelLayoutRulesTests: XCTestCase {
         }
         XCTAssertEqual(issues("Claude", PanelLayout.Block(widget: .chart, period: .month)), [])
         XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(period: .week)), [])
+        XCTAssertEqual(issues("api:DeepSeek", PanelLayout.Block(widget: .chart, period: .month)), [])
     }
 
     /// A chart's day and a balance's token chart period are what they cover anyway; a balance's own period where the

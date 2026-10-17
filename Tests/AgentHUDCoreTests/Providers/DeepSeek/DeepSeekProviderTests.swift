@@ -290,6 +290,37 @@ final class DeepSeekProviderTests: XCTestCase {
         XCTAssertEqual(recorded.reduce(0) { $0 + $1.tokensIn }, 200, "both logs' tokens are recorded")
     }
 
+    /// A balance's costs reach back as far as the ledger keeps them, over the month its estimated cost, burn rate and
+    /// chart can cover, while the logs are read for the store's week: a request of twenty days ago, recorded when an
+    /// earlier pass read its log, is still costed.
+    func testABalancesCostsReachBackTheMonthTheLedgerKeeps() async throws {
+        let directory = try temporaryDirectory(), now = now
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("sessions")
+        for (id, daysAgo) in [("recent", 2.0), ("old", 20.0)] {
+            let at = now.addingTimeInterval(-daysAgo * 86400), start = Int64(at.timeIntervalSince1970 * 1000), file = try logFile(root, id: id)
+            let lines = """
+            {"type":"session","version":0,"id":"\(id)","createdAt":\(start - 1000),"cwd":"/fixture"}
+            {"type":"turn/start","seq":0,"time":\(start),"data":{"turn":1}}
+            {"type":"request/header","seq":1,"time":\(start),"data":{"header":{"config":{"provider":"deepseek-official","model":"deepseek-v4-flash"}},"reason":"initial"}}
+            {"type":"assistant/message","seq":2,"time":\(start),"data":{"turn":1,"step":1,"usage":{"inputTokens":100000,"outputTokens":1000}}}
+            {"type":"turn/end","seq":3,"time":\(start + 1000),"data":{"turn":1,"reason":{"kind":"completed"}}}
+            """
+            try (lines + "\n").write(to: file, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: at.addingTimeInterval(1)], ofItemAtPath: file.path)
+        }
+        let ledger = UsageLedger.inMemory()
+        let provider = DeepSeekUsageProvider(directory: directory, transcripts: DeepSeekTranscriptStore(root: root, ledger: ledger),
+                                             readProcessStarts: { [] }, clock: { now })
+        _ = try await provider.fetchUsage(agents: [], historyHours: 31 * 24 + 25)
+        let report = try await provider.fetchUsage(agents: [], historyHours: UsageStore.historyHours)
+        let billing = try XCTUnwrap(report.billing.first)
+        let week = try XCTUnwrap(billing.estimatedCost(currency: "CNY", during: DateInterval(start: now.addingTimeInterval(-7 * 86400), end: now)))
+        let month = try XCTUnwrap(billing.estimatedCost(currency: "CNY", during: DateInterval(start: now.addingTimeInterval(-30 * 86400), end: now)))
+        XCTAssertGreaterThan(week, 0)
+        XCTAssertEqual(month, week * 2, "the request of twenty days ago costs what the week's does, at the same hour of the day")
+    }
+
     func testProviderRefreshesProcessEvidenceForAnUnchangedQuietLog() async throws {
         let dir = try temporaryDirectory(), now = now
         defer { try? FileManager.default.removeItem(at: dir) }

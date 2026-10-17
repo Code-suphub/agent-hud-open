@@ -28,19 +28,21 @@ public enum MCPTools {
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API provider), each block's \
         accounts, with the id a layout names one by, its email or name and its plan, and its rows in the order shown \
-        with their latest readings, the layout in effect, whether reset countdowns show, the panel's width and height \
-        and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists, over what \
-        period and in what order, and the agents and projects it can narrow them to, each project with its id and \
-        name; its token chart's period, the agents and models it can draw and its total; the attached screens, each \
-        with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one \
-        agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the \
-        whole app's settings as drawn now, with appUnsaved, whether an unsaved draft of them waits: appearance; \
-        matchScreen, with which a screen's style draft also restyles the app's windows and the menu-bar menu on that \
-        screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and reminders; \
-        showMenuBarIcon; language, and writtenIn, the language names are written in, both read only; and hover: \
-        pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the \
-        layout; block, row, account and screen keys and project ids come from here. Names are written as the panel \
-        shows them, in the application's language.
+        with their latest readings, and each API balance with runsOutAt, when it runs out at the pace the balance \
+        itself fell over the last day, and over the block's period cost, the estimated cost of the requests recorded, \
+        burnPerDay, that cost per day, and burnRunsOutAt, when the balance runs out at that pace; the layout in \
+        effect, whether reset countdowns show, the panel's width and height and whether it scrolls, and the widgets \
+        and measures each block accepts; how many sessions it lists, over what period and in what order, and the \
+        agents and projects it can narrow them to, each project with its id and name; its token chart's period, the \
+        agents and models it can draw and its total; the attached screens, each with its resting HUD's style, the look \
+        it draws now, the agents it can show, agentPanelWidth, the width of one agent's own panel on a dock that \
+        separates its agents, and whether an edit holds its panel open; and app, the whole app's settings as drawn \
+        now, with appUnsaved, whether an unsaved draft of them waits: appearance; matchScreen, with which a screen's \
+        style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn \
+        into bots on a Dynamic dock, a Simple panel and reminders; showMenuBarIcon; language, and writtenIn, the \
+        language names are written in, both read only; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and \
+        collapseDelayMs in milliseconds. Call it before changing the layout; block, row, account and screen keys and \
+        project ids come from here. Names are written as the panel shows them, in the application's language.
         """
 
     /// Pictures are drawn off screen, where no desktop shows through glass, so a glass HUD is drawn as a stand-in, the
@@ -112,10 +114,13 @@ public enum MCPTools {
         let section = text("One of the panel's sections.", oneOf: ["blocks", "tokens", "sessions"])
         let measure: JSONValue = .object(["type": .string("string"), "enum": names(PanelMeasure.allCases.map(\.rawValue))])
         let block = object([
-            "widget": text("How the block is drawn: bar rows, a ring, a number or a chart.",
-                           oneOf: ["bar", "ring", "number", "chart"]),
-            "measures": list("What its picker offers, in order, the first shown first: quota (an API account's balance), burn, "
-                             + "tokens, cost. One means no picker; none means all its widget offers.", of: measure),
+            "widget": text("How the block is drawn: bar rows, a ring, a number or a chart. An API balance takes number, its "
+                           + "card, or chart, its estimated cost over its period.", oneOf: ["bar", "ring", "number", "chart"]),
+            "measures": list("What its picker offers, in order, the first shown first: quota, burn, tokens, cost. On an API "
+                             + "balance's number, quota is the balance beside its estimated cost, burn the cost per day "
+                             + "over its period and when the balance runs out at it, and cost the estimated cost beside "
+                             + "that pace; its chart offers cost alone. One means no picker; none means all its widget "
+                             + "offers.", of: measure),
             "hidden": described("boolean", "True hides the block."),
             "hiddenRows": list("Keys of the block's rows to hide, from get_panel.", of: key),
             "rows": list("Keys of the block's rows, from get_panel, in the order to show them; rows left out keep their "
@@ -129,8 +134,9 @@ public enum MCPTools {
             "span": text("The whole line, the default, or half of it beside the next block if that is half too. Not for bar "
                          + "rows.", oneOf: PanelSpan.allCases.map(\.rawValue)),
             "period": text("For the chart widget, the last 24 hours, 7 days or 30 days its bars cover, day if left out; for an "
-                           + "API balance, what its estimated cost covers, in the menu bar's tooltip too, the token chart's "
-                           + "period if left out. For no other block.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
+                           + "API balance, what its estimated cost, burn rate and chart cover, its estimated cost in the menu "
+                           + "bar's tooltip too, the token chart's period if left out. For no other block.",
+                           oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),
         ])
         let blocks: [String: JSONValue] = [
             "type": .string("object"),

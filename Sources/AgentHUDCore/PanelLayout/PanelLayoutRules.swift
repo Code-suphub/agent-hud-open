@@ -6,22 +6,24 @@ public enum PanelBlockKind: String, Sendable { case quota, billing }
 
 public extension PanelBlockKind {
     /// The widgets the kind accepts, its default first. A bar and a ring draw a share of a ceiling, and a balance has
-    /// none, so a balance is a number; a chart of money is not drawn yet.
+    /// none, so a balance is a number, its card, or a chart of what its requests cost over time.
     var widgets: [PanelWidget] {
         switch self {
         case .quota: [.bar, .ring, .number, .chart]
-        case .billing: [.number]
+        case .billing: [.number, .chart]
         }
     }
 
     /// The measures the kind offers under a widget, in picker order; none under a widget it does not accept. A chart of
-    /// quota windows draws the history the panel holds, tokens. A balance's number offers `quota` alone: its card shows
-    /// the balance and the estimated cost together.
+    /// quota windows draws the history the panel holds, tokens. A balance is money: its number offers the balance beside
+    /// its estimated cost (`quota`), the pace its recorded costs set and when the balance runs out at it (`burn`), and
+    /// the estimated cost beside that pace (`cost`); its chart draws the estimated cost over time.
     func measures(under widget: PanelWidget) -> [PanelMeasure] {
         switch (self, widget) {
         case (.quota, .bar), (.quota, .ring), (.quota, .number): [.quota, .burnRate, .tokens, .cost]
         case (.quota, .chart): [.tokens]
-        case (.billing, .number): [.quota]
+        case (.billing, .number): [.quota, .burnRate, .cost]
+        case (.billing, .chart): [.cost]
         case (.billing, _): []
         }
     }
@@ -66,11 +68,13 @@ extension PanelBlockKind {
     func takesHalf(under widget: PanelWidget) -> Bool { widget != .bar }
 
     /// Whether the kind's blocks drawn with `widget` cover a period a layout sets: quota windows as a chart, whose bars
-    /// are their models' tokens over it, and a balance, whose estimated cost covers it.
+    /// are their models' tokens over it, and a balance under either widget, whose estimated cost, the pace it sets and
+    /// its chart's bars cover it.
     func takesPeriod(under widget: PanelWidget) -> Bool { (self == .quota && widget == .chart) || self == .billing }
 
-    /// The period a block covers where its layout gives none: the latest 24 hours on a chart, as before blocks had a
-    /// period, and on a balance the period the layout's token chart starts from, `tokens`.
+    /// The period a block covers where its layout gives none: the latest 24 hours on a quota block's chart, as before
+    /// blocks had a period, and on a balance, drawn as its card or as a chart, the period the layout's token chart
+    /// starts from, `tokens`.
     func defaultPeriod(tokens: PanelTokenPeriod) -> PanelTokenPeriod { self == .billing ? tokens : .day }
 }
 
@@ -223,8 +227,8 @@ extension PanelLayout {
         let drawn = "The \"\(widget.rawValue)\" widget of \"\(block.key)\""
         let balance = "\"\(block.key)\" is an API balance"
         for (index, measure) in change.measures.enumerated() where !offered.contains(measure) {
-            let reason: String = kind == .billing ? " An API balance shows its balance and its estimated cost together, as \"quota\"." : ""
-            let message = "\(drawn) does not offer the measure \"\(measure.rawValue)\".\(reason)"
+            let why = reason(for: measure, kind: kind, under: widget)
+            let message = "\(drawn) does not offer the measure \"\(measure.rawValue)\".\(why)"
             issues.append(PanelLayoutIssue(path: path + ".measures[\(index)]",
                                            message: "\(message) It offers: \(quoted(offered.map(\.rawValue)))."))
         }
@@ -233,7 +237,8 @@ extension PanelLayout {
                                            message: "\(balance), which has no reset to count down to. countdown applies to quota blocks."))
         }
         if change.columns != nil && !kind.takesColumns(under: widget) {
-            let message: String = kind == .billing ? "\(balance), drawn as its card, which has no cells to set in columns."
+            let drawnAs = widget == .chart ? "a chart of its estimated cost" : "its card"
+            let message: String = kind == .billing ? "\(balance), drawn as \(drawnAs), which has no cells to set in columns."
                 : "\(drawn) draws no cells. columns applies to the \"ring\" and \"number\" widgets."
             issues.append(PanelLayoutIssue(path: path + ".columns", message: message))
         }
@@ -250,7 +255,7 @@ extension PanelLayout {
         }
         if change.period != nil && !kind.takesPeriod(under: widget) {
             let message = "\(drawn) draws no chart. period applies to the \"chart\" widget, whose bars cover it, and to API "
-                + "balances, whose estimated cost covers it."
+                + "balances, whose estimated cost, burn rate and chart cover it."
             issues.append(PanelLayoutIssue(path: path + ".period", message: message))
         }
         let rows = block.rowKeys.isEmpty ? "It has no rows to hide." : "Its rows: \(quoted(block.rowKeys))."
@@ -279,10 +284,22 @@ extension PanelLayout {
         switch (block.kind, widget) {
         case (.billing, .bar), (.billing, .ring):
             "\"\(block.key)\" is an API balance, which has no ceiling, so the \"\(widget.rawValue)\" widget has nothing to measure it against."
-        case (.billing, .chart):
-            "\"\(block.key)\" is an API balance, and a chart of money is not drawn yet."
         default:
             "\"\(block.key)\" does not accept the \"\(widget.rawValue)\" widget."
+        }
+    }
+
+    /// Why a block of `kind` drawn with `widget` does not offer a measure, where more can be said than what it offers
+    /// instead: a balance is money, whose models' tokens the token chart draws, and its chart draws its estimated cost
+    /// alone. Empty, or a sentence with a space before it.
+    private static func reason(for measure: PanelMeasure, kind: PanelBlockKind, under widget: PanelWidget) -> String {
+        switch (kind, widget) {
+        case (.billing, .chart):
+            " The \"chart\" widget of an API balance draws its estimated cost over its period."
+        case (.billing, _) where measure == .tokens:
+            " An API balance is measured in money; the tokens of its models are in the token chart."
+        default:
+            ""
         }
     }
 
