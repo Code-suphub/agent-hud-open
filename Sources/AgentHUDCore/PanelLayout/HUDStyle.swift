@@ -206,6 +206,14 @@ struct PanelStyleDraft: Equatable, Sendable {
         return restoring.glow ?? defaultGlow
     }
 
+    /// Whether the draft draws more than its style lists over the `saved` placement and glow: a version it brings back
+    /// that differs in what no style field names, such as the transparency kept for the material not drawn.
+    func restoresUnlisted(over saved: ScreenPlacement, glow: GlowSettings, defaultGlow: GlowSettings) -> Bool {
+        guard restoring != nil else { return false }
+        return style.applied(to: saved) != placement(over: saved, hasNotch: hasNotch)
+            || style.applied(to: glow) != self.glow(over: glow, defaultGlow: defaultGlow)
+    }
+
     /// The screen's own placement and glow once the draft is written over `look`: the version it restores, else the
     /// style over `look`, where a part the style changes nothing of stays as it was, none included, so a screen that
     /// draws a default keeps drawing it.

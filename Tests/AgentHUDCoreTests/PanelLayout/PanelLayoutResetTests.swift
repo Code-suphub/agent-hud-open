@@ -236,4 +236,46 @@ final class PanelLayoutResetTests: XCTestCase {
         XCTAssertFalse(layout.proposeDefaultLook(for: screen, hasNotch: false), "already the defaults")
         XCTAssertNil(layout.styleDraft(of: screen))
     }
+
+    /// The default style proposed for a screen weighs its whole placement and glow, as the HUD style's Reset to Default
+    /// restores them: a screen that differs from the defaults only in what no style field names, the transparency it
+    /// keeps for the material it does not draw, gets a draft that lists no field and draws the defaults, which Save
+    /// writes as the reset writes it and Revert to Previous takes back. A previous version that differs only there, for
+    /// either material, is brought back the same way, and a screen whose own placement and glow are the defaults gets
+    /// none.
+    func testTheDefaultStyleWeighsWhatNoStyleFieldNames() {
+        let placement = ScreenPlacement(glassTransparency: 0.9)
+        let settings = SettingsStore(defaults: makeDefaults())
+        settings.update { $0.screens[screen] = placement }
+        let layout = settings.panelLayout
+        XCTAssertTrue(layout.proposeDefaultLook(for: screen, hasNotch: false), "glass's transparency on a solid HUD")
+        XCTAssertEqual(layout.styleDraft(of: screen), HUDStyle(), "no field lists it")
+        XCTAssertEqual(settings.effectivePlacement(on: screen, hasNotch: false), .default(hasNotch: false))
+        XCTAssertEqual(settings.effectiveGlow(on: screen), settings.settings.glow)
+        layout.save(.screen(screen))
+        XCTAssertNil(settings.settings.screens[screen], "as Reset to Default writes it")
+        layout.revert(.screen(screen))
+        XCTAssertEqual(settings.settings.screens[screen], placement, "Revert brings it back")
+
+        // A previous version that differs only there is brought back the same way.
+        layout.resetLook(screen)
+        XCTAssertTrue(layout.proposePrevious(.screen(screen), hasNotch: false))
+        XCTAssertEqual(layout.styleDraft(of: screen), HUDStyle())
+        XCTAssertEqual(settings.effectivePlacement(on: screen, hasNotch: false), placement)
+
+        let glass = SettingsStore(defaults: makeDefaults())
+        glass.update { $0.screens[screen] = ScreenPlacement(material: .glass, solidTransparency: 0.3) }
+        glass.panelLayout.resetLook(screen)
+        glass.update { $0.screens[screen] = ScreenPlacement(material: .glass) }
+        XCTAssertTrue(glass.panelLayout.proposePrevious(.screen(screen), hasNotch: false), "solid's on a glass HUD")
+        XCTAssertEqual(glass.panelLayout.styleDraft(of: screen), HUDStyle())
+        XCTAssertEqual(glass.effectivePlacement(on: screen, hasNotch: false).solidTransparency, 0.3)
+
+        let kept = SettingsStore(defaults: makeDefaults())
+        kept.update {
+            $0.screens[screen] = .default(hasNotch: false)
+            $0.screenGlow[screen] = $0.glow
+        }
+        XCTAssertFalse(kept.panelLayout.proposeDefaultLook(for: screen, hasNotch: false), "the defaults kept as its own")
+    }
 }

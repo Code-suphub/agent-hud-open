@@ -354,7 +354,7 @@ public struct PanelTools {
         case .screen(let key):
             let name = name(of: key, among: attached)
             let draft = layout.draft(of: key)
-            if layout.styleDraft(of: key) != nil { return styleNote(name, of: key) }
+            if layout.styleDraft(of: key) != nil { return styleNote(name, of: key) + unlistedNote(of: key) }
             guard let draft else {
                 return "This is what \(name) already has saved, so there is no draft for it."
             }
@@ -386,6 +386,17 @@ public struct PanelTools {
         return "The resting HUD of \(name) shows its style as an unsaved draft; its panel's layout is the one it has "
             + "saved. The user keeps the style by hovering the Agent HUD on that display and pressing Save in the "
             + "panel; it is dropped when Agent HUD restarts, " + dropped
+    }
+
+    /// What a style draft that brings a version back draws beyond the fields its hud lists, as Save writes it: a sentence
+    /// after the note, or nothing where it draws those fields alone.
+    private func unlistedNote(of key: String) -> String {
+        guard let draft = layout.styles[key] else { return "" }
+        let settings = store.settings.settings
+        guard draft.restoresUnlisted(over: settings.placement(on: key, hasNotch: draft.hasNotch), glow: settings.glow(on: key),
+                                     defaultGlow: settings.glow) else { return "" }
+        return " Beside the fields its hud lists, the draft brings back what no hud field sets, such as the transparency "
+            + "kept for the material the HUD does not draw, and Save writes that too."
     }
 
     private func discardNote(_ scope: PanelLayoutScope, among attached: [PanelScreen]) -> String {

@@ -138,6 +138,12 @@ final class HUDStyleTests: XCTestCase {
                        HUDStyle(material: .solid, transparency: 0.3), "glass's 0.3 is not solid's")
         XCTAssertEqual(HUDStyle(material: .glass, transparency: 0.3).reduced(placement: glass, glow: GlowSettings()),
                        HUDStyle(), "the saved material and its own transparency, repeated, change nothing")
+        // The style a change of material draws, sent back whole, is that change.
+        for (style, placement) in [(HUDStyle(material: .glass, transparency: 0), solid),
+                                   (HUDStyle(material: .solid, transparency: 0.3), glass)] {
+            XCTAssertEqual(HUDStyle(every: style.applied(to: placement), glow: GlowSettings())
+                .reduced(placement: placement, glow: GlowSettings()), style)
+        }
     }
 
     /// What glass is made of, clear or regular Liquid Glass or a material, is a style field like the look's others: set
