@@ -3,11 +3,11 @@ import Foundation
 import XCTest
 @testable import AgentHUDCore
 
-/// A screen's look through the tools: its appearance, material and glass's transparency are style fields like any
-/// other, a draft drawn over the screen's settings that Save keeps, Discard drops, Revert to Previous undoes and the
-/// reset gives back as dark and solid; a notch HUD at a notch takes them too, its notch's row kept dark; a transparency
-/// is the material in effect's, 0 to 1 for either; and what get_panel and the pictures say of the look drawn now, its
-/// transparency as it is drawn.
+/// A screen's look through the tools: its appearance, material, glass style and glass's transparency are style fields
+/// like any other, a draft drawn over the screen's settings that Save keeps, Discard drops, Revert to Previous undoes
+/// and the reset gives back as dark, solid and clear; a notch HUD at a notch takes them too, its notch's row kept dark;
+/// a transparency is the material in effect's, 0 to 1 for either, and get_panel lists what each material keeps; and
+/// what get_panel and the pictures say of the look drawn now, its glass style and its transparency as it is drawn.
 final class PanelToolsLookTests: PanelToolsCase {
     /// How the Mac is set, which the host tells with each screen.
     private var systemIsLight = false
@@ -55,17 +55,18 @@ final class PanelToolsLookTests: PanelToolsCase {
         try XCTUnwrap((panel["screens"]?.arrayValue ?? []).compactMap(\.objectValue).first { $0["key"] == .string(key) })
     }
 
-    private func look(_ appearance: String, _ material: String, transparency: Double = 0,
+    /// The look get_panel lists: glass with the style it is made of, clear unless another is given, and solid with none.
+    private func look(_ appearance: String, _ material: String, transparency: Double = 0, glassStyle: String = "clear",
                       note: String? = nil) -> JSONValue {
         var look: [String: JSONValue] = ["appearance": .string(appearance), "material": .string(material),
                                          "transparency": .number(transparency)]
+        if material == "glass" { look["glassStyle"] = .string(glassStyle) }
         if let note { look["note"] = .string(note) }
         return .object(look)
     }
 
     /// What a solid HUD or clear glass draws of the transparency `chosen`, which get_panel's look gives: three fifths of
-    /// it (`ScreenPlacement.transparencyScale(material:glassStyle:)`). An agent cannot choose what glass is made of, so
-    /// glass here is clear unless a test saves another.
+    /// it (`ScreenPlacement.transparencyScale(material:glassStyle:)`). Glass here is clear unless a test chooses another.
     private func drawn(_ chosen: Double) -> Double { chosen * 0.6 }
 
     // MARK: A draft like any other
@@ -153,6 +154,106 @@ final class PanelToolsLookTests: PanelToolsCase {
         _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "from": .string("previous")])
         XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false).appearance, .dark)
         XCTAssertEqual(settings.settings.screens[key]?.appearance, .light, "as a draft, the settings as saved")
+    }
+
+    /// The glass style is a draft like the look's other fields. A solid HUD takes one and keeps it, as Settings keeps
+    /// it while Solid is chosen, and the reply's note says it takes effect once the material is glass; on glass it is
+    /// drawn at once, and get_panel's look names it, at the share of the transparency it draws.
+    func testTheGlassStyleIsADraftThatASolidHUDKeeps() throws {
+        let key = "SECOND-UUID"
+        var panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(["glassStyle": .string("regular")])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(glassStyle: .regular))
+        XCTAssertNil(layout.draft(of: key), "the glass style alone leaves the layout as it is")
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false), ScreenPlacement(glassStyle: .regular))
+        XCTAssertEqual(changes, 0, "a tool never writes the settings")
+        let kept = "The resting HUD of \"Display 2\" would be solid, so its glass style \"regular\" is kept, as Settings "
+            + "keeps it, and takes effect once its material is \"glass\"."
+        XCTAssertTrue(panel["note"]?.stringValue?.contains(kept) == true, "\(panel["note"] ?? .null)")
+        XCTAssertEqual(panel["layout"]?["hud"], .object(["glassStyle": .string("regular")]))
+        var listed = try listing(key, in: panel)
+        XCTAssertEqual(listed["hud"]?["glassStyle"], .string("regular"), "the style, as the draft has it")
+        XCTAssertEqual(listed["look"], look("dark", "solid"), "drawn solid, with no glass style")
+
+        panel = try call(MCPTools.setPanelLayout, ["screen": .string(key),
+                                                   "hud": .object(["material": .string("glass"), "glassStyle": .string("material")])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, glassStyle: .material))
+        XCTAssertFalse(panel["note"]?.stringValue?.contains("would be solid") == true, "\(panel["note"] ?? .null)")
+        listed = try listing(key, in: panel)
+        XCTAssertEqual(listed["look"], look("dark", "glass", transparency: ScreenPlacement.standardGlassTransparency,
+                                            glassStyle: "material"), "the material draws all of its transparency")
+
+        // A screen saved as glass draws the style proposed at once; Save keeps it and Revert takes it back.
+        settings.update { $0.screens[key] = ScreenPlacement(material: .glass, glassStyle: .regular) }
+        changes = 0
+        panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(["glassStyle": .string("clear")])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(glassStyle: .clear))
+        XCTAssertFalse(panel["note"]?.stringValue?.contains("would be solid") == true)
+        XCTAssertEqual(try listing(key, in: panel)["look"],
+                       look("dark", "glass", transparency: drawn(ScreenPlacement.standardGlassTransparency)))
+        layout.savePanel(on: key)
+        XCTAssertEqual(settings.settings.screens[key], ScreenPlacement(material: .glass))
+        XCTAssertEqual(changes, 1)
+        layout.revert(.screen(key))
+        XCTAssertEqual(settings.settings.screens[key]?.glassStyle, .regular)
+
+        // Reduce Transparency draws glass of any style solid, with no glass style, as the look's note says.
+        reducesTransparency = true
+        listed = try listing(key, in: try call(MCPTools.getPanel))
+        XCTAssertEqual(listed["look"],
+                       look("dark", "solid", note: "This Mac has Reduce Transparency on, so the HUD is drawn solid and opaque."))
+        XCTAssertEqual(listed["hud"]?["glassStyle"], .string("regular"), "the style as chosen still")
+    }
+
+    /// get_panel lists beside the transparency in effect what each material keeps, solid's and glass's, which no proposal
+    /// sets: the style listed sent back whole changes nothing, a kept transparency is taken where it repeats what the
+    /// screen keeps now or would keep under the proposal, and any other is refused with what sets it instead.
+    func testEachMaterialsTransparencyIsListedAndReadOnly() throws {
+        let key = "SECOND-UUID"
+        var hud = try XCTUnwrap(try listing(key, in: try call(MCPTools.getPanel))["hud"]?.objectValue)
+        XCTAssertEqual(hud["transparency"], .number(0), "solid's, the material in effect")
+        XCTAssertEqual(hud["solidTransparency"], .number(ScreenPlacement.standardSolidTransparency))
+        XCTAssertEqual(hud["glassTransparency"], .number(ScreenPlacement.standardGlassTransparency))
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(hud)])
+        XCTAssertNil(layout.styleDraft(of: key), "the style listed, sent back whole, changes nothing")
+        XCTAssertNil(layout.draft(of: key), "and is the style alone")
+
+        hud["transparency"] = .number(0.3)
+        var panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(hud)])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(transparency: 0.3), "what was listed, with one field changed")
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["solidTransparency"], .number(0.3), "kept as the draft has it")
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["glassTransparency"], .number(ScreenPlacement.standardGlassTransparency))
+
+        let sentence = try refused(["screen": .string(key), "hud": .object(["glassTransparency": .number(0.2)])])
+        XCTAssertEqual(sentence, "Nothing was changed. hud.glassTransparency is read only: \"Display 2\" keeps 0.5 for glass, "
+                       + "as get_panel lists it, and hud.transparency sets the transparency of the material its HUD would "
+                       + "have, \"solid\". Leave it out, or give it as listed.")
+        panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object([
+            "material": .string("glass"), "transparency": .number(0.2), "glassTransparency": .number(0.2),
+            "solidTransparency": .number(0),
+        ])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, transparency: 0.2),
+                       "what the proposal leaves each, given as it would be")
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["glassTransparency"], .number(0.2))
+        XCTAssertEqual(try refused(["screen": .string(key), "hud": .object(["solidTransparency": .number(1.5)])]),
+                       "Nothing was changed. hud.solidTransparency is a number from 0 to 1.", "out of range, said once")
+        XCTAssertEqual(try refused(["screen": .string("all"), "hud": .object(["solidTransparency": .number(0)])]),
+                       "Nothing was changed. hud.solidTransparency repeats what get_panel lists for one screen's resting HUD, "
+                       + "so the proposal needs that screen's key.")
+
+        // With a layout of its own saved, a hud of kept transparencies alone leaves it as it is, and so does a reset.
+        layout.discardStyle(key)
+        layout.propose(.own(PanelLayout(hiddenSections: [.tokens])), for: key)
+        layout.save(.screen(key))
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(["glassTransparency": .number(0.5)])])
+        XCTAssertNil(layout.draft(of: key), "the layout as saved")
+        XCTAssertNil(layout.styleDraft(of: key), "a proposal is whole: it leaves the style as saved")
+        settings.update { $0.screens[key] = ScreenPlacement(material: .glass, glassTransparency: 0.8) }
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object([
+            "reset": .bool(true), "glassTransparency": .number(ScreenPlacement.standardGlassTransparency),
+        ])])
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false), .default(hasNotch: false),
+                       "glass's as the default keeps it")
+        XCTAssertNil(layout.draft(of: key))
     }
 
     // MARK: What is refused
@@ -285,6 +386,39 @@ final class PanelToolsLookTests: PanelToolsCase {
         XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false).glassTransparency, 0.4, "glass's as saved")
     }
 
+    /// A proposal that changes the material sets the transparency of the material it puts in effect, even where it is
+    /// the value the other material keeps: glass at 0 on a screen whose solid HUD is opaque is glass at 0, not glass at
+    /// what it kept, and the glass's transparency that proposal leaves, given as get_panel would list it, is taken with
+    /// it. One that repeats what the new material keeps changes only the material.
+    func testAChangeOfMaterialKeepsATransparencyThatRepeatsTheOtherMaterials() throws {
+        let key = "SECOND-UUID"
+        let glassAtNone: [String: JSONValue] = ["material": .string("glass"), "transparency": .number(0)]
+        var panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(glassAtNone)])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, transparency: 0))
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false).glassTransparency, 0, "glass at 0, as asked")
+        XCTAssertEqual(try listing(key, in: panel)["look"], look("dark", "glass", transparency: 0))
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["glassTransparency"], .number(0))
+
+        panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object(glassAtNone.merging([
+            "glassTransparency": .number(0), "solidTransparency": .number(0),
+        ]) { $1 })])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, transparency: 0),
+                       "what the proposal leaves each, given as get_panel would list it")
+
+        layout.discardStyle(key)
+        settings.update { $0.screens[key] = ScreenPlacement(mode: .logos, edge: .right, solidTransparency: 0.2) }
+        panel = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object([
+            "material": .string("glass"), "transparency": .number(0.2),
+        ])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass, transparency: 0.2))
+        XCTAssertEqual(try listing(key, in: panel)["look"], look("dark", "glass", transparency: drawn(0.2)))
+        _ = try call(MCPTools.setPanelLayout, ["screen": .string(key), "hud": .object([
+            "material": .string("glass"), "transparency": .number(ScreenPlacement.standardGlassTransparency),
+        ])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle(material: .glass), "glass's own, repeated, changes nothing")
+        XCTAssertEqual(changes, 1, "the settings written by the test alone")
+    }
+
     // MARK: What is read
 
     /// get_panel says what each screen draws now: a notch at a notch in its look as any HUD, `system` as macOS is set,
@@ -342,12 +476,12 @@ final class PanelToolsLookTests: PanelToolsCase {
         for (style, top) in [(HUDGlassStyle.clear, 0.6), (.regular, 0.6), (.material, 1)] {
             settings.update { $0.screens[key] = ScreenPlacement(material: .glass, glassStyle: style, glassTransparency: 1) }
             let listed = try listing(key, in: try call(MCPTools.getPanel))
-            XCTAssertEqual(listed["look"], look("dark", "glass", transparency: top), "\(style)")
+            XCTAssertEqual(listed["look"], look("dark", "glass", transparency: top, glassStyle: style.rawValue), "\(style)")
             XCTAssertEqual(listed["hud"]?["transparency"], .number(1), "\(style): the style as chosen")
         }
         settings.update { $0.screens[key] = ScreenPlacement(material: .glass, glassStyle: .material, glassTransparency: 0.4) }
-        XCTAssertEqual(try listing(key, in: try call(MCPTools.getPanel))["look"], look("dark", "glass", transparency: 0.4),
-                       "the material, all of it")
+        XCTAssertEqual(try listing(key, in: try call(MCPTools.getPanel))["look"],
+                       look("dark", "glass", transparency: 0.4, glassStyle: "material"), "the material, all of it")
 
         settings.update { $0.screens[key] = ScreenPlacement(glassStyle: .material, solidTransparency: 0.5) }
         var listed = try listing(key, in: try call(MCPTools.getPanel))

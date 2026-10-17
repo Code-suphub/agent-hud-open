@@ -64,6 +64,7 @@ public enum SnapshotRunner {
                                        removed: "  const initials = user.name.slice(0, 2)",
                                        added: "  const initials = user?.name?.slice(0, 2) ?? '?'", at: Date())),
             ("question", snapshotQuestion()),
+            ("desktop-ask", snapshotDesktopAsk()),
             ("plan", PermissionRequest(id: "snapshot-plan", source: .claude, sessionID: "snapshot", toolName: "ExitPlanMode",
                                        summary: L10n.text("为登录接口加上限流", "Add rate limiting to the login endpoint"),
                                        detail: L10n.text("## 为登录接口加上限流\n\n1. 按账号和地址统计尝试次数\n2. 超出上限时返回 429 和 Retry-After\n3. 在接口测试里覆盖这两种情况",
@@ -543,6 +544,20 @@ public enum SnapshotRunner {
                                         questions: questions, at: Date())
         QuestionDraft.draft(for: request.id).pick(0, of: 0, in: questions[0])
         return request
+    }
+
+    /// The Claude desktop app's next-step box, which the HUD shows and leaves to the app to answer.
+    static func snapshotDesktopAsk() -> PermissionRequest {
+        let question = L10n.text("现在提交吗？", "Should I commit it now?")
+        return PermissionRequest(id: "snapshot-desktop-ask", source: .claude, sessionID: "snapshot", toolName: "mcp__ccd_turn__wrap_up",
+                                 summary: question,
+                                 detail: L10n.text("解析器改好了，测试都通过；还没有提交。", "The parser change is in and the tests pass; nothing is committed yet."),
+                                 cwd: "/Users/me/Projects/acme-web",
+                                 questions: [PermissionQuestion(id: "toolu_snapshot", question: question, header: L10n.text("下一步", "Next step"),
+                                                                options: [.init(label: L10n.text("现在提交", "Commit it"),
+                                                                                description: L10n.text("现在提交解析器的改动。", "Commit the parser change now.")),
+                                                                          .init(label: L10n.text("先不提交", "Not yet"))])],
+                                 nativeApproval: .clientWindow, at: Date())
     }
 
     /// Many recorded models: the folded filter, a model subset and the HUD's ten-label limit use the same full data.

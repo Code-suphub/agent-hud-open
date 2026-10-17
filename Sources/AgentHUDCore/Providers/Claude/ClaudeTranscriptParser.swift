@@ -24,6 +24,7 @@ public enum ClaudeTranscriptParser {
         var text: String?
         var isToolResult = false
         var resultID: String?
+        var failed = false
         if role == .user, let content = message?["content"] {
             if let string = content as? String {
                 text = string
@@ -31,6 +32,7 @@ public enum ClaudeTranscriptParser {
                 text = blocks.first { ($0["type"] as? String) == "text" }?["text"] as? String
                 isToolResult = blocks.contains { ($0["type"] as? String) == "tool_result" }
                 resultID = blocks.first { ($0["type"] as? String) == "tool_result" }?["tool_use_id"] as? String
+                failed = blocks.first { ($0["type"] as? String) == "tool_result" }?["is_error"] as? Bool == true
             }
         }
         let block = role == .assistant ? (message?["content"] as? [[String: Any]])?.first : nil
@@ -42,6 +44,12 @@ public enum ClaudeTranscriptParser {
         let isSummary = object["isCompactSummary"] as? Bool ?? false
         let details = usage?["output_tokens_details"] as? [String: Any]
         let calls = role == .assistant ? message?["content"] as? [[String: Any]] ?? [] : []
+        let ask = call.flatMap { call -> SessionActivity.Ask? in
+            guard let name = call["name"] as? String, let id = call["id"] as? String,
+                  let input = call["input"] as? [String: Any] else { return nil }
+            return ClaudeDesktopAsks.ask(tool: name, input: input, id: id, response: message?["id"] as? String, at: timestamp)
+        }
+        let endsTurn = resultID != nil && ((object["mcpMeta"] as? [String: Any])?["_meta"] as? [String: Any])?["claude/endTurn"] as? Bool == true
         return TranscriptEvent(
             timestamp: timestamp,
             role: role,
@@ -63,7 +71,7 @@ public enum ClaudeTranscriptParser {
             isStop: object["type"] as? String == "system" && ["stop_hook_summary", "turn_duration"].contains(object["subtype"] as? String),
             entrypoint: object["entrypoint"] as? String,
             returnsStructuredOutput: calls.contains { $0["type"] as? String == "tool_use" && $0["name"] as? String == "StructuredOutput" },
-            toolName: call?["name"] as? String, toolUseID: call?["id"] as? String, toolResultID: resultID,
+            toolName: call?["name"] as? String, toolUseID: call?["id"] as? String, toolResultID: resultID, ask: ask, endsTurn: endsTurn, failed: failed,
             isThinking: ["thinking", "redacted_thinking"].contains(block?["type"] as? String),
             apiError: apiError, limitResetsAt: resetsAt.map { Date(timeIntervalSince1970: $0) },
             retryAttempt: isRetry ? object["retryAttempt"] as? Int : nil

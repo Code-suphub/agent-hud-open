@@ -268,6 +268,7 @@ final class SimpleMeterTests: XCTestCase {
             defer { hud.close() }
             XCTAssertEqual(hud.island.rootView.simpleMeter?.bots, on, "the panel follows the one switch for every mark")
         }
-        XCTAssertFalse(SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple)).bots, "a picture keeps its logos")
+        XCTAssertFalse(SimpleMeterConfig(items: [], placement: ScreenPlacement(mode: .simple)).bots,
+                       "a panel only measured or drawn in a snapshot keeps its logos")
     }
 }

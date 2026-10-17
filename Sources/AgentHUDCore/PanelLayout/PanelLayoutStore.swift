@@ -28,8 +28,10 @@ public enum PanelLayoutScope: Hashable, Sendable {
 /// (`resetLook(_:)`), each a version of its own, so going back after either undoes it. Drafts live in memory, so a
 /// relaunch drops them. The saved layouts are one value in the defaults the store was given (`PanelLayoutStorage`),
 /// written when any of them changes, and a screen that is not attached keeps its own layout for when it returns.
-/// Nothing here reads a provider or touches the agent list, and only a person's action writes the settings. The methods
-/// without a scope act on the shared layout.
+/// Nothing here reads a provider or touches the agent list, and only a person's action writes the settings. A person's
+/// choice ends the agents' holds on the panels it reaches (`holds`): Save, Revert to Previous and both resets here, and
+/// the bar's Save and Discard (`savePanel(on:)`, `discardPanel(on:)`); `discard(_:)` alone is an agent's too, and leaves
+/// them. The methods without a scope act on the shared layout.
 @MainActor
 @Observable
 public final class PanelLayoutStore {
@@ -47,6 +49,8 @@ public final class PanelLayoutStore {
     /// Counts the changes since launch, from 0, across every document: one more each time a saved layout, a previous
     /// one, a draft or a style draft changes, so a caller can tell that something changed since it last read.
     private(set) var revision = 0
+    /// The holds agents' edits put on the screens' panels, which a person's choice about a layout ends (`PanelHolds`).
+    public let holds = PanelHolds()
 
     private let defaults: UserDefaults
     /// The settings a style draft is drawn over and saved into, and a version's style is read from and restored to; set
@@ -222,8 +226,8 @@ public final class PanelLayoutStore {
     /// differ from what is saved, and written back by Save exactly as it was kept. Nil, a look the screen already draws,
     /// or a screen that is not attached (`hasNotch` nil) drops the style draft instead, so the proposal is whole. The
     /// whole placement and glow are weighed, as Revert to Previous and the HUD style's Reset to Default restore them, so
-    /// a look that differs only in what no style field names, the glass style, the glow's idle breath or grid, or the
-    /// transparency of the material not drawn, is a draft that lists no field.
+    /// a look that differs only in what no style field names, the transparency kept for the material not drawn, is a
+    /// draft that lists no field.
     private func proposeLook(_ look: ScreenLook?, for screen: String, hasNotch: Bool?) {
         guard let look, let hasNotch, let settings = owner?.settings else { return discardStyle(screen) }
         let placement = look.placement ?? .default(hasNotch: hasNotch), glow = look.glow ?? settings.glow
@@ -242,6 +246,7 @@ public final class PanelLayoutStore {
     /// new version, and the screen's own placement and glow before it are kept with the previous version where they
     /// differ from what is written. Nothing without a draft.
     public func save(_ scope: PanelLayoutScope = .shared) {
+        holds.end(scope, in: self)
         switch scope {
         case .shared:
             guard let draft else { return }
@@ -277,6 +282,7 @@ public final class PanelLayoutStore {
     /// them restored, and the ones they replace are kept with the version reverted from. Without a previous layout the
     /// saved one stays. Any draft of the scope, a style draft included, is dropped.
     public func revert(_ scope: PanelLayoutScope = .shared) {
+        holds.end(scope, in: self)
         switch scope {
         case .shared:
             set(current: previous ?? current, previous: previous == nil ? nil : current, draft: nil)
@@ -296,6 +302,7 @@ public final class PanelLayoutStore {
     /// a screen, the default view becomes its own layout and its style stays as saved, so the previous version is the
     /// layout it replaces with the same style. Any draft of the scope, a style draft included, is dropped.
     public func reset(_ scope: PanelLayoutScope = .shared) {
+        holds.end(scope, in: self)
         switch scope {
         case .shared:
             set(current: PanelLayout(), previous: current.isDefault ? previous : current, draft: nil)
@@ -314,6 +321,7 @@ public final class PanelLayoutStore {
     /// to Previous brings it back. A screen that already draws the defaults, or a store without settings, keeps its
     /// versions as they are.
     public func resetLook(_ screen: String) {
+        holds.end(screen)
         guard let before = look(of: screen), before != ScreenLook() else { return discardStyle(screen) }
         let document = screens[screen] ?? PanelScreenDocument()
         set(screen: screen, PanelScreenDocument(current: document.current, previous: document.current, draft: document.draft,
@@ -324,6 +332,7 @@ public final class PanelLayoutStore {
     /// Lets `screen` use the shared layout again at once: its own layout becomes its previous one. Any draft of the
     /// screen, a style draft included, is dropped; its style stays as saved.
     public func useShared(_ screen: String) {
+        holds.end(screen)
         guard let document = screens[screen] else { return discardStyle(screen) }
         let unchanged = document.current == .shared
         set(screen: screen, PanelScreenDocument(current: .shared, previous: unchanged ? document.previous : document.current,

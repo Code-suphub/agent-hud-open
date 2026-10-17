@@ -12,7 +12,8 @@ public enum OpenAgentSource: String, CaseIterable, Sendable {
     }
     public func isInstalled(home: URL = FileManager.default.homeDirectoryForCurrentUser,
                             environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        if self == .glm { return OpenAgentCredentials.discover(home: home, environment: environment).contains { $0.pool.provider == "GLM" } }
+        // A plan shown in another client's group, such as one only WorkBuddy carries, does not make GLM detected.
+        if self == .glm { return OpenAgentCredentials.discover(home: home, environment: environment).contains { $0.displayGroup == "GLM" } }
         return OpenAgentPaths(home: home, environment: environment).roots(for: self).contains { FileManager.default.fileExists(atPath: $0.path) }
     }
 }

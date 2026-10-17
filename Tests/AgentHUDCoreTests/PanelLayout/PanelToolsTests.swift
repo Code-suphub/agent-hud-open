@@ -31,6 +31,7 @@ final class PanelToolsTests: PanelToolsCase {
         XCTAssertNil(claude["measure"], "the measure shown first is the first of measures")
         XCTAssertNil(claude["columns"], "bars have no cells")
         XCTAssertNil(claude["ringSize"])
+        XCTAssertNil(claude["period"], "bars cover no period")
         let rows = (claude["rows"]?.arrayValue ?? []).compactMap(\.objectValue)
         XCTAssertEqual(rows.map { $0["key"] }, [.string("claude-session"), .string("claude-weekly"), .string("claude-weekly-fable")])
         let session = try XCTUnwrap(rows.first)
@@ -48,6 +49,7 @@ final class PanelToolsTests: PanelToolsCase {
         for property in ["countdown", "columns", "ringSize"] {
             XCTAssertNil(deepseek[property], "a balance has no \(property) to set")
         }
+        XCTAssertEqual(deepseek["period"], .string("day"), "its estimated cost covers the token chart's period")
         let balance = try XCTUnwrap(deepseek["balances"]?.arrayValue?.first?.objectValue)
         XCTAssertEqual(balance["currency"], .string("CNY"))
         XCTAssertEqual(balance["amount"], .string("8.85"))
@@ -69,6 +71,44 @@ final class PanelToolsTests: PanelToolsCase {
         let tokens = try XCTUnwrap(sections.first { $0["key"] == .string("tokens") })
         XCTAssertEqual(tokens["shown"], .bool(true), "the layout does not hide it")
         XCTAssertEqual(tokens["onInSettings"], .bool(false))
+    }
+
+    /// What the whole app is set to is read with the panel as Settings has it, the language its names are written in
+    /// beside the one chosen, and every tool's answer carries it; none changes it, and a call that tries is refused.
+    func testTheAppsSettingsAreReadAndNoToolChangesThem() throws {
+        XCTAssertEqual(try result(MCPTools.getPanel)["app"], .object([
+            "appearance": .string("system"), "matchScreen": .bool(false), "botLogos": .bool(true),
+            "language": .string("system"), "writtenIn": .string("en"),
+            "hover": .object(["pressOptionToOpen": .bool(false), "openAtTopEdge": .bool(false),
+                              "delayMs": .integer(400), "collapseDelayMs": .integer(200)]),
+        ]), "the defaults, with the names in English as the tests write them")
+
+        settings.update {
+            $0.appearance = .light
+            $0.appearanceFollowsScreen = true
+            $0.botLogos = false
+            $0.language = .zhHans
+            $0.requiresOptionToOpen = true
+            $0.openImmediatelyAtTop = true
+            $0.hoverDelayMs = 650
+            $0.collapseDelayMs = 0
+        }
+        changes = 0
+        let saved = settings.settings
+        let app: JSONValue = .object([
+            "appearance": .string("light"), "matchScreen": .bool(true), "botLogos": .bool(false),
+            "language": .string("zh-Hans"), "writtenIn": .string("zh-Hans"),
+            "hover": .object(["pressOptionToOpen": .bool(true), "openAtTopEdge": .bool(true),
+                              "delayMs": .integer(650), "collapseDelayMs": .integer(0)]),
+        ])
+        XCTAssertEqual(try result(MCPTools.getPanel)["app"], app)
+        XCTAssertEqual(try result(MCPTools.setPanelLayout, ["hiddenSections": .array([.string("tokens")])])["app"], app,
+                       "a proposal answers with the panel as get_panel reads it")
+        XCTAssertEqual(try result(MCPTools.discardPanelDraft)["app"], app)
+        let refused = try refusal(["app": .object(["botLogos": .bool(true)])])
+        XCTAssertTrue(refused.contains("Unknown: \"app\"."), refused)
+        XCTAssertEqual(settings.settings, saved)
+        XCTAssertEqual(changes, 0, "no tool changes a Settings switch")
     }
 
     /// A window's name is how the person who looks at the panel calls the row, so it follows the application's
@@ -270,7 +310,7 @@ final class PanelToolsTests: PanelToolsCase {
         for part in ["blocks.Claude.widget is one of \"bar\", \"ring\", \"number\", \"chart\"",
                      "blocks.Claude.measures[0]: \"speed\" is not one of \"quota\", \"burn\", \"tokens\", \"cost\"",
                      "blocks.Claude.measures[1] is a string", "blocks.Claude has no property \"hide\"",
-                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, countdown, columns, ringSize and span.",
+                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, countdown, columns, ringSize, span and period.",
                      "blocks.Claude.hidden is true or false", "sections[0]: \"weather\" is not one of", "order is a list"] {
             XCTAssertTrue(names.contains(part), "\(part) — \(names)")
         }
