@@ -159,16 +159,36 @@ enum OpenAgentCredentials {
                 if value.isUsable(at: now) { found.append(value) }
             }
         }
-        // WorkBuddy keeps model entries in ~/.workbuddy/models.json; a GLM Coding Plan entry whose URL is one of Zhipu's
-        // own coding endpoints carries the plan's key. Any other URL, Kimi's and OpenCode Go's included, is not read. A key
-        // another client carries too joins that client's plan.
-        for entry in read(home.appendingPathComponent(".workbuddy/models.json")).arrayValue ?? [] {
+        // A key another client carries too joins that client's plan.
+        for entry in workBuddyPlanEntries(home: home) { add(entry.service, entry.key, "WorkBuddy") }
+        return merge(found)
+    }
+
+    /// The GLM Coding Plan entries of WorkBuddy's model list, `~/.workbuddy/models.json`: an entry of that vendor whose
+    /// URL is one of Zhipu's own coding endpoints carries the plan's key. Any other URL, Kimi's and OpenCode Go's included,
+    /// is not read, and of such an entry only its `id`, `url` and `apiKey` are.
+    private static func workBuddyPlanEntries(home: URL) -> [(id: String?, service: OpenAgentCredential.Service, key: String)] {
+        (read(home.appendingPathComponent(".workbuddy/models.json")).arrayValue ?? []).compactMap { entry in
             guard entry["vendor"].stringValue == "GLM Coding Plan",
                   let service = service(provider: "", baseURL: entry["url"].stringValue),
-                  service == .glmChina || service == .glmGlobal else { continue }
-            add(service, entry["apiKey"].stringValue, "WorkBuddy")
+                  service == .glmChina || service == .glmGlobal,
+                  let key = entry["apiKey"].stringValue, !key.isEmpty else { return nil }
+            return (entry["id"].stringValue, service, key)
         }
-        return merge(found)
+    }
+
+    /// The plan each of WorkBuddy's GLM Coding Plan entries sends its calls to, by the entry's `id`, which a call that
+    /// went through it names in its `custom-local:<id>` route: the pool its key is, the same pool the key's quota reading
+    /// is filed under, whichever clients carry it. An id two entries with different keys share names neither.
+    static func workBuddyPlanRoutes(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [String: String] {
+        var routes: [String: String] = [:], ambiguous: Set<String> = []
+        for entry in workBuddyPlanEntries(home: home) {
+            guard let id = entry.id, !id.isEmpty else { continue }
+            let pool = credential(entry.service, token: entry.key, client: "WorkBuddy").pool.id
+            if let known = routes[id], known != pool { ambiguous.insert(id) }
+            routes[id] = pool
+        }
+        return routes.filter { !ambiguous.contains($0.key) }
     }
     static func kimiStorageName(_ service: OpenAgentCredential.Service) -> String {
         guard service == .kimiGlobal else { return "kimi-code" }
