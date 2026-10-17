@@ -27,8 +27,9 @@ public enum MCPTools {
     private static let getPanelDescription = """
         Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows \
         with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the \
-        widgets and measures each block accepts; how many sessions it lists and over what period, and its token \
-        chart's period, the agents and models it can draw and its total; the attached screens, each with its resting \
+        widgets and measures each block accepts; how many sessions it lists, over what period and in what order, and \
+        the agents and projects it can narrow them to, each project with its id and name; its token chart's period, \
+        the agents and models it can draw and its total; the attached screens, each with its resting \
         HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own \
         panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the whole app's \
         settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style draft \
@@ -129,14 +130,23 @@ public enum MCPTools {
         let sessions = object([
             "limit": described("integer", "Rows at most, \(limits.lowerBound) to \(limits.upperBound); "
                                + "\(PanelLayout.Sessions.defaultLimit) if left out."),
-            "period": text("How long after its last activity an ended session is still listed, 1 hour to 7 days; 24h if "
-                           + "left out. Sessions at work are listed whatever the period.",
+            "period": text("How long after its last activity an ended session is still listed: day, the last 24 hours, "
+                           + "the default, or week, the last 7 days. Sessions at work are listed whatever the period.",
                            oneOf: PanelSessionPeriod.allCases.map(\.rawValue)),
+            "sort": text("How the rows are ordered: active, the default, lists sessions at work first, those waiting "
+                         + "for approval ahead of those running, then the others by their last activity; date lists "
+                         + "every session by its last activity, newest first, whatever its state.",
+                         oneOf: PanelSessionSort.allCases.map(\.rawValue)),
             "agents": list("Only these agents' sessions, names from get_panel's sessions.offeredAgents; none for every "
                            + "agent.", of: key),
+            "projects": list("Only these projects' sessions, ids from get_panel's sessions.offeredProjects: a "
+                             + "project's folder written with ~, a Git repository's worktrees counted as one project, "
+                             + "or unassigned for sessions with no folder. A path, absolute or with ~, inside a project "
+                             + "or a worktree of it names that project, so your own working directory names the "
+                             + "project you work in; it is listed by its id. None for every project.", of: key),
             "states": list("Only sessions in these states; none for all.",
                            of: text("A session's state.", oneOf: PanelSessionState.allCases.map(\.rawValue))),
-        ], description: "Which sessions the session rows list.")
+        ], description: "Which sessions the session rows list, and in what order.")
         let tokens = object([
             "period": text("What the token chart shows when the panel opens: the last 24 hours, 7 days or 30 days; day if "
                            + "left out.", oneOf: PanelTokenPeriod.allCases.map(\.rawValue)),

@@ -52,7 +52,7 @@ extension PanelTools {
                          "onInSettings": .bool(switches[section] ?? true)])
             }),
             "blocks": .array(drawn.map { block(of: $0, shown: shown.contains($0.key)) }),
-            "sessions": sessions(plan.sessions, listing: effective.sessions.normalized().agents),
+            "sessions": sessions(plan.sessions, listing: effective.sessions.normalized()),
             "tokens": tokens(plan.tokens, listing: effective.tokens.normalized()),
             "screens": .array(attached.map(listing)),
             "app": app(),
@@ -166,19 +166,25 @@ extension PanelTools {
         return .object(block)
     }
 
-    /// The session rows as an agent reads them: the limit, the period, the agents and the states in effect, the agents
-    /// that have sessions now, how many rows are shown and how many more the filter lists, and how many sessions of the
-    /// period each state has before the agents and states. Counts and names of agents only: no title, prompt, project,
-    /// path or session id.
-    private func sessions(_ filter: PanelSessionFilter, listing agents: [String]) -> JSONValue {
-        let view = store.view, rows = view.panelSessions(filter)
+    /// The session rows as an agent reads them: the limit, the period, the order, the agents, the projects and the
+    /// states in effect, the agents that have sessions now and the projects those sessions belong to, each by its id and
+    /// its name, how many rows are shown and how many more the filter lists, and how many sessions of the period each
+    /// state has before the agents, projects and states. Counts, agents' names and projects only: no title, prompt or
+    /// session id. A project is the one the store keeps for the report; nothing is read for it but Git's pointers, once.
+    private func sessions(_ filter: PanelSessionFilter, listing listed: PanelLayout.Sessions) -> JSONValue {
+        let view = store.view, rows = store.panelSessions(filter)
         let states = filter.states.isEmpty ? PanelSessionState.allCases : PanelSessionState.allCases.filter(filter.states.contains)
         return .object([
             "limit": .integer(Int64(filter.limit)),
             "period": .string(filter.period.rawValue),
-            "agents": .array(agents.map(JSONValue.string)),
+            "sort": .string(filter.sort.rawValue),
+            "agents": .array(listed.agents.map(JSONValue.string)),
+            "projects": .array(listed.projects.map(JSONValue.string)),
             "states": .array(states.map { .string($0.rawValue) }),
             "offeredAgents": .array(view.panelSessionAgents.map(JSONValue.string)),
+            "offeredProjects": .array(store.panelSessionProjects.map { project in
+                .object(["id": .string(project.id), "name": .string(project.title)])
+            }),
             "shown": .integer(Int64(rows.shown.count)),
             "more": .integer(Int64(rows.more)),
             "byState": .object(Dictionary(uniqueKeysWithValues: PanelSessionState.allCases.map {

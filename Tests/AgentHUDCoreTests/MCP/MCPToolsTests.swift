@@ -118,12 +118,26 @@ final class MCPToolsTests: XCTestCase {
 
         let sessions = schema["properties"]["sessions"]
         XCTAssertEqual(sessions["additionalProperties"], .bool(false))
-        XCTAssertEqual(sessions["properties"].objectValue?.keys.sorted(), ["agents", "limit", "period", "states"])
+        XCTAssertEqual(sessions["properties"].objectValue?.keys.sorted(), ["agents", "limit", "period", "projects", "sort", "states"])
         XCTAssertEqual(sessions["properties"]["limit"]["type"], .string("integer"))
         XCTAssertEqual(sessions["properties"]["limit"]["description"].stringValue, "Rows at most, 1 to 10; 5 if left out.")
         XCTAssertEqual(sessions["properties"]["agents"]["items"], .object(["type": .string("string")]))
+        XCTAssertEqual(sessions["properties"]["projects"]["items"], .object(["type": .string("string")]))
         XCTAssertEqual(choices(sessions["properties"]["states"]["items"]), ["waiting", "running", "ended"])
-        XCTAssertEqual(choices(sessions["properties"]["period"]), ["1h", "2h", "6h", "12h", "24h", "3d", "7d"])
+        XCTAssertEqual(choices(sessions["properties"]["period"]), ["day", "week"])
+        XCTAssertEqual(choices(sessions["properties"]["sort"]), ["active", "date"])
+        XCTAssertEqual(sessions["properties"]["period"]["description"].stringValue,
+                       "How long after its last activity an ended session is still listed: day, the last 24 hours, the default, "
+                       + "or week, the last 7 days. Sessions at work are listed whatever the period.")
+        XCTAssertEqual(sessions["properties"]["sort"]["description"].stringValue,
+                       "How the rows are ordered: active, the default, lists sessions at work first, those waiting for approval "
+                       + "ahead of those running, then the others by their last activity; date lists every session by its last "
+                       + "activity, newest first, whatever its state.")
+        XCTAssertEqual(sessions["properties"]["projects"]["description"].stringValue,
+                       "Only these projects' sessions, ids from get_panel's sessions.offeredProjects: a project's folder written "
+                       + "with ~, a Git repository's worktrees counted as one project, or unassigned for sessions with no folder. "
+                       + "A path, absolute or with ~, inside a project or a worktree of it names that project, so your own "
+                       + "working directory names the project you work in; it is listed by its id. None for every project.")
         let tokens = schema["properties"]["tokens"]
         XCTAssertEqual(tokens["additionalProperties"], .bool(false))
         XCTAssertEqual(tokens["properties"].objectValue?.keys.sorted(), ["agents", "models", "period"])
@@ -226,6 +240,7 @@ final class MCPToolsTests: XCTestCase {
                        PanelSessionState.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["tokens"]["properties"]["period"]), PanelTokenPeriod.allCases.map(\.rawValue))
         XCTAssertEqual(choices(schema["properties"]["sessions"]["properties"]["period"]), PanelSessionPeriod.allCases.map(\.rawValue))
+        XCTAssertEqual(choices(schema["properties"]["sessions"]["properties"]["sort"]), PanelSessionSort.allCases.map(\.rawValue))
         XCTAssertEqual(choices(block["period"]), PanelTokenPeriod.allCases.map(\.rawValue))
         let hud = schema["properties"]["hud"]["properties"]
         XCTAssertEqual(choices(hud["mode"]), HUDMode.allCases.map(\.agentName))
@@ -245,7 +260,7 @@ final class MCPToolsTests: XCTestCase {
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {
         let tools = Dictionary(uniqueKeysWithValues: MCPTools.definitions.map { ($0["name"].stringValue ?? "", $0) })
         XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
-                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists and over what period, and its token chart's period, the agents and models it can draw and its total; the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the whole app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are written in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
+                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists, over what period and in what order, and the agents and projects it can narrow them to, each project with its id and name; its token chart's period, the agents and models it can draw and its total; the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the whole app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are written in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
         XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
                        "Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, account names masked, session titles left out, or with show 'hud' a screen's resting HUD as it looks now; every glass style is one stand-in. Use it to check how a change looks; get_panel reads it as data.")
         XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)

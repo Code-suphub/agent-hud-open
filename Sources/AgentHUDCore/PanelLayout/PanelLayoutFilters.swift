@@ -48,30 +48,51 @@ public enum PanelTokenPeriod: String, Codable, CaseIterable, Sendable, Identifia
     }
 }
 
-/// How long after its last event an ended session is still listed in the hover panel's session rows: from an hour to the
-/// seven days sessions are reported for (`SessionWindow.recency`), each named by its length, `1h` to `7d`, as the token
-/// chart's picker names its periods. A session with work in flight is listed whatever the period.
+/// How long after its last event an ended session is still listed in the hover panel's session rows: the last 24 hours
+/// (`day`) or the seven days sessions are reported for (`week`, `SessionWindow.recency`), named as the token chart's
+/// periods are. The rows look back no further than a week, and need no finer step than a day. A session with work in
+/// flight is listed whatever the period.
 public enum PanelSessionPeriod: String, Codable, CaseIterable, Sendable, Identifiable {
-    case hour = "1h", hours2 = "2h", hours6 = "6h", hours12 = "12h", day = "24h", days3 = "3d", week = "7d"
+    case day, week
 
     public var id: Self { self }
 
     public var duration: TimeInterval {
         switch self {
-        case .hour: 3600
-        case .hours2: 2 * 3600
-        case .hours6: 6 * 3600
-        case .hours12: 12 * 3600
-        case .day: 24 * 3600
-        case .days3: 3 * 86400
+        case .day: 86400
         case .week: 7 * 86400
+        }
+    }
+
+    /// A period as a stored layout names it: by this build's names, or by those of the build before, which reached back
+    /// from an hour to seven days, each read as the period that covers most of it, `3d` and `7d` as a week and the
+    /// shorter ones as a day, so that a layout saved by that build loads with its rows. Nil for a name neither knows.
+    init?(stored name: String) {
+        if let period = Self(rawValue: name) {
+            self = period
+            return
+        }
+        switch name {
+        case "1h", "2h", "6h", "12h", "24h": self = .day
+        case "3d", "7d": self = .week
+        default: return nil
         }
     }
 }
 
+/// How the hover panel's session rows are ordered. `active`, the default view's order: the sessions with work in flight
+/// first, those waiting for the user ahead of those running and the newest started first within each, then the others
+/// by their last event, the newest first. `date`: every session by its last event, the newest first, whatever its state.
+public enum PanelSessionSort: String, Codable, CaseIterable, Sendable, Identifiable {
+    case active, date
+
+    public var id: Self { self }
+}
+
 public extension PanelLayout {
-    /// Which sessions the panel's session rows list, and how many. `Sessions()` is the default view's, five rows of every
-    /// agent's sessions in every state of the last day, and is not written.
+    /// Which sessions the panel's session rows list, in what order, and how many. `Sessions()` is the default view's, five
+    /// rows of every agent's sessions of every project in every state of the last day, those in flight first, and is not
+    /// written.
     struct Sessions: Hashable, Codable, Sendable {
         /// The rows a layout can give the section.
         static let limitRange = 1...10
@@ -82,18 +103,26 @@ public extension PanelLayout {
         public var limit: Int?
         /// How long after its last event an ended session is still listed; nil for a day.
         public var period: PanelSessionPeriod?
+        /// How the rows are ordered; nil for `active`, those in flight first.
+        public var sort: PanelSessionSort?
         /// The agents whose sessions are listed, by vendor, each matched by the mark it is drawn with (`VendorMark`), as
         /// an agent's own panel matches its sessions: "Codex" names the mark Codex and ChatGPT share. Empty for every
         /// agent.
         public var agents: [String]
+        /// The projects whose sessions are listed, each by the id `get_panel` gives it (`SessionProject.id`): its folder
+        /// written with ~, a Git repository's worktrees counted as the repository's, or `unassigned` for the sessions of no
+        /// folder. Empty for every project.
+        public var projects: [String]
         /// The states whose sessions are listed; empty for every state.
         public var states: [PanelSessionState]
 
-        public init(limit: Int? = nil, period: PanelSessionPeriod? = nil, agents: [String] = [],
-                    states: [PanelSessionState] = []) {
+        public init(limit: Int? = nil, period: PanelSessionPeriod? = nil, sort: PanelSessionSort? = nil, agents: [String] = [],
+                    projects: [String] = [], states: [PanelSessionState] = []) {
             self.limit = limit
             self.period = period
+            self.sort = sort
             self.agents = agents
+            self.projects = projects
             self.states = states
         }
 
@@ -103,29 +132,39 @@ public extension PanelLayout {
         /// The period in effect: the layout's, else a day.
         var listedPeriod: PanelSessionPeriod { period ?? .day }
 
+        /// The order in effect: the layout's, else `active`.
+        var rowSort: PanelSessionSort { sort ?? .active }
+
         /// Whether the section lists what the default view lists.
         var isDefault: Bool { normalized() == Sessions() }
 
-        /// The section written one way: no limit at five or outside `limitRange`; no period for a day; each mark once, by
-        /// the first name given for it, in name order, since a filter has no order, and no empty name; and each state once
-        /// in default order, none where all three are listed, which keeps every state as none does.
+        /// The section written one way: no limit at five or outside `limitRange`; no period for a day and no sort for
+        /// `active`; each mark once, by the first name given for it, in name order, since a filter has no order, and no
+        /// empty name; each project once, in id order, and no empty id; and each state once in default order, none where
+        /// all three are listed, which keeps every state as none does.
         func normalized() -> Sessions {
             let states = PanelSessionState.allCases.filter(states.contains)
             return Sessions(limit: rowLimit == Self.defaultLimit ? nil : rowLimit,
                             period: listedPeriod == .day ? nil : listedPeriod,
+                            sort: rowSort == .active ? nil : rowSort,
                             agents: VendorMark.merged(agents.filter { !$0.isEmpty }).sorted(),
+                            projects: projects.filter { !$0.isEmpty }.withoutRepeats.sorted(),
                             states: states.count == PanelSessionState.allCases.count ? [] : states)
         }
 
-        private enum CodingKeys: String, CodingKey { case limit, period, agents, states }
+        private enum CodingKeys: String, CodingKey { case limit, period, sort, agents, projects, states }
 
         /// Nil when the value is not an object. A limit that is no whole number from 1 to 10 is not given, and neither is a
-        /// period this build does not know; a state it does not know is left out, and a name that is not a string too.
+        /// period or a sort this build does not know; a period the build before named is read as the one that covers it
+        /// (`PanelSessionPeriod.init(stored:)`); a state it does not know is left out, and a name or an id that is not a
+        /// string too.
         init?(json: JSONValue) {
             guard let fields = json.objectValue else { return nil }
             self.init(limit: fields["limit"]?.countValue.flatMap { Self.limitRange.contains($0) ? $0 : nil },
-                      period: fields["period"]?.stringValue.flatMap(PanelSessionPeriod.init(rawValue:)),
+                      period: fields["period"]?.stringValue.flatMap(PanelSessionPeriod.init(stored:)),
+                      sort: fields["sort"]?.stringValue.flatMap(PanelSessionSort.init(rawValue:)),
                       agents: PanelLayout.strings(fields["agents"]),
+                      projects: PanelLayout.strings(fields["projects"]),
                       states: PanelLayout.strings(fields["states"]).compactMap(PanelSessionState.init(rawValue:)))
         }
 
@@ -141,7 +180,9 @@ public extension PanelLayout {
             var c = encoder.container(keyedBy: CodingKeys.self)
             if rowLimit != Self.defaultLimit { try c.encode(rowLimit, forKey: .limit) }
             if listedPeriod != .day { try c.encode(listedPeriod, forKey: .period) }
+            if rowSort != .active { try c.encode(rowSort, forKey: .sort) }
             if !agents.isEmpty { try c.encode(agents, forKey: .agents) }
+            if !projects.isEmpty { try c.encode(projects, forKey: .projects) }
             if !states.isEmpty { try c.encode(states, forKey: .states) }
         }
     }
@@ -206,8 +247,9 @@ public extension PanelLayout {
 
 extension PanelLayout {
     /// What is wrong with a layout's sessions and tokens, as `misreadings(of:)` tells it: not an object, a limit that is
-    /// no whole number from 1 to 10, a state or period this build does not know, a name or a model's id that is not a
-    /// string or is empty, a property they do not have.
+    /// no whole number from 1 to 10, a state, sort or period this build does not know, a period the build before named
+    /// among them, which a stored layout reads as the period that covers it but a proposal is told, a name, a project's
+    /// id or a model's id that is not a string or is empty, a property they do not have.
     static func misreadings(ofSessions sessions: JSONValue, tokens: JSONValue) -> [String] {
         var found: [String] = []
         if sessions != .null {
@@ -222,12 +264,21 @@ extension PanelLayout {
                         }
                     case "period":
                         found += misnamed(value, at: "sessions.period", among: PanelSessionPeriod.allCases.map(\.rawValue))
+                    case "sort":
+                        found += misnamed(value, at: "sessions.sort", among: PanelSessionSort.allCases.map(\.rawValue))
                     case "agents":
                         found += agentNames(value, at: "sessions.agents", from: "get_panel's sessions.offeredAgents")
+                    case "projects":
+                        found += names(value, at: "sessions.projects", among: nil)
+                        for (index, item) in (value.arrayValue ?? []).enumerated() where item.stringValue?.isEmpty == true {
+                            found.append("sessions.projects[\(index)] is a project's id from get_panel's "
+                                         + "sessions.offeredProjects, or a path inside one.")
+                        }
                     case "states":
                         found += names(value, at: "sessions.states", among: PanelSessionState.allCases.map(\.rawValue))
                     default:
-                        found.append("sessions has no property \"\(property)\"; sessions take limit, period, agents and states.")
+                        found.append("sessions has no property \"\(property)\"; sessions take limit, period, sort, agents, "
+                                     + "projects and states.")
                     }
                 }
             } else {
