@@ -174,15 +174,9 @@ public extension UsageReport {
     }
 
     /// Rows without an account (demo data, placeholders) count as current. An account is looked up under its own
-    /// provider, and a billing pool under the vendor its provider's report grouped it under, since a pool only Tencent's
-    /// clients carry is reported inside that client's group.
+    /// provider, also for a plan whose rows are shown in another client's group.
     func isCurrent(_ agent: AgentDescriptor) -> Bool {
-        guard let id = agent.account?.id else { return true }
-        let keys = agent.billingPool != nil ? [agent.account!.provider, agent.vendor] : [agent.account!.provider]
-        for key in keys {
-            guard let observations = accounts?[key] else { continue }
-            if observations.filter({ $0.account.id == id }).contains(where: \.isCurrent) { return true }
-        }
-        return keys.contains { accounts?[$0] != nil } ? false : true
+        guard let account = agent.account, let observations = accounts?[account.provider] else { return true }
+        return observations.contains { $0.account.id == account.id && $0.isCurrent }
     }
 }

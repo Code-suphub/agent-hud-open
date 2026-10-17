@@ -200,7 +200,9 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
                             source: L10n.sourceAdditionalUsage, enabled: true, account: account, allModels: $0.allModels)
         }
         let consumerIDs = Set(consumers.map(\.id))
-        let quotaIDs = Set(windows.map(\.id) + agents.filter { $0.vendor == source.vendor }.map(\.id))
+        // A plan's rows shown in this group, such as a GLM plan only WorkBuddy carries, are linked by their own provider to
+        // the calls that went through the plan, never to every model this client used.
+        let quotaIDs = Set(windows.map(\.id) + agents.filter { $0.vendor == source.vendor && $0.billingPool == nil }.map(\.id))
         let accounts: [String: [AccountObservation]]?
         if quota.isSignedIn {
             accounts = [source.vendor: [AccountObservation(account: account, client: quota.client, label: quota.label,
