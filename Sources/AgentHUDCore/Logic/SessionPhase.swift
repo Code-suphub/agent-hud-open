@@ -243,6 +243,13 @@ public struct SessionPhase: Hashable, Sendable {
     func awaitingApproval(_ session: LiveSession, turn: SessionTurn?) -> SessionPhase {
         SessionPhase(state: .waitingForApproval, since: isInFlight ? since : Self.inFlightSince(session, turn: turn), validUntil: nil)
     }
+
+    /// The phase of a session whose client asks its user something in its own window (`SessionActivity.ask`), asked at
+    /// `at`, given the phase it has otherwise: waiting for approval until `end` or until the work in flight is no longer
+    /// vouched for; since the work in flight started, or since the question for a turn that has ended.
+    func asking(since at: Date, until end: Date) -> SessionPhase {
+        SessionPhase(state: .waitingForApproval, since: isInFlight ? since : at, validUntil: min(validUntil ?? end, end))
+    }
 }
 
 extension SessionTurn.State {

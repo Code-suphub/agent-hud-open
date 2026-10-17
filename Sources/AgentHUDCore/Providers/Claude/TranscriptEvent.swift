@@ -46,6 +46,14 @@ public struct TranscriptEvent: Hashable, Sendable {
     public let toolUseID: String?
     /// The call a user line carries the result of, from its `tool_result` block's `tool_use_id`.
     public let toolResultID: String?
+    /// What a call asks the user in the client's own window, from the input of the only calls that do so
+    /// (`ClaudeDesktopAsks`); nil for every other line.
+    public let ask: SessionActivity.Ask?
+    /// A call's result that ends the turn, as the Claude desktop app's next-step box does (`claude/endTurn`): no answer
+    /// and no Stop hook summary follow it.
+    public let endsTurn: Bool
+    /// A call's result the client marked as an error (`is_error`), such as a next-step box the app refused to draw.
+    public let failed: Bool
     /// An assistant line holding a thinking block. Claude Code writes the block once it is finished.
     public let isThinking: Bool
     /// The `error` of the message Claude Code writes in the model's place when the API failed the turn (`isApiErrorMessage`),
@@ -63,8 +71,9 @@ public struct TranscriptEvent: Hashable, Sendable {
         outputTokens: Int, thinkingTokens: Int = 0, text: String?, sessionId: String?, cwd: String?, messageId: String? = nil,
         requestId: String? = nil, stopReason: String? = nil, isSidechain: Bool = false, isPrompt: Bool = false,
         isCompaction: Bool = false, isStop: Bool = false, entrypoint: String? = nil, returnsStructuredOutput: Bool = false,
-        toolName: String? = nil, toolUseID: String? = nil, toolResultID: String? = nil, isThinking: Bool = false,
-        apiError: String? = nil, limitResetsAt: Date? = nil, retryAttempt: Int? = nil
+        toolName: String? = nil, toolUseID: String? = nil, toolResultID: String? = nil, ask: SessionActivity.Ask? = nil,
+        endsTurn: Bool = false, failed: Bool = false, isThinking: Bool = false, apiError: String? = nil, limitResetsAt: Date? = nil,
+        retryAttempt: Int? = nil
     ) {
         self.timestamp = timestamp
         self.role = role
@@ -89,6 +98,9 @@ public struct TranscriptEvent: Hashable, Sendable {
         self.toolName = toolName
         self.toolUseID = toolUseID
         self.toolResultID = toolResultID
+        self.ask = ask
+        self.endsTurn = endsTurn
+        self.failed = failed
         self.isThinking = isThinking
         self.apiError = apiError
         self.limitResetsAt = limitResetsAt
