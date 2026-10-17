@@ -1,10 +1,11 @@
 import AgentHUDSupport
 import Foundation
 
-/// What Agent HUD's MCP tools do in the running application: read what the hover panel shows, draw a picture of it or
-/// of a screen's resting HUD, propose a layout for it, and drop a proposal, for the shared layout or for one screen's
-/// own, whose proposal can also change the style of that screen's resting HUD, or change that alone. An edit of a
-/// layout, or a drop, holds a screen's panel open while the agent works (`PanelHolds`), until the agent says it is done.
+/// What Agent HUD's MCP tools do in the running application: read what the hover panel shows, draw a picture of it, of
+/// one agent's own panel or of a screen's resting HUD, propose a layout for it, and drop a proposal, for the shared
+/// layout or for one screen's own, whose proposal can also change the style of that screen's resting HUD, or change
+/// that alone. An edit of a layout, or a drop, holds a screen's panel open while the agent works (`PanelHolds`), until
+/// the agent says it is done.
 ///
 /// Every answer comes from what the application holds: the last report, the settings and the layout store, the
 /// attached screens, and the panel's own views, which the host measures and draws off screen through the closures it
@@ -29,6 +30,10 @@ public struct PanelTools {
     /// Draws an attached screen's resting HUD, by its key, as `get_panel_image` returns it with show "hud"; nil where
     /// nothing can draw it.
     let hud: (@MainActor (String) -> HUDPicture?)?
+    /// Draws one agent's own panel on an attached screen whose dock separates its agents, by the screen's key and the
+    /// agent's vendor as that screen lists it, as `get_panel_image` returns it with an agent; nil where nothing can draw
+    /// it.
+    let agentPicture: (@MainActor (String, String) -> PanelPicture?)?
 
     /// Drawn once a launch. The layout store counts its changes from 0 at every launch, so counted from 0 a revision
     /// an agent read before a relaunch would pass for the current one after it.
@@ -43,24 +48,31 @@ public struct PanelTools {
     ///   scrolls.
     /// - hud: draws an attached screen's resting HUD off screen as it looks now, a style draft included, without
     ///   opening anything; without it `get_panel_image` refuses show "hud".
+    /// - agentPicture: draws one agent's own panel off screen, the card a click on its mark opens beside it on a dock
+    ///   that separates its agents, as the layout in effect on that screen draws it, at the screen's `agentPanelWidth`,
+    ///   masked as `picture` masks the whole panel; without it `get_panel_image` refuses an agent.
     public init(store: UsageStore, screens: (@MainActor () -> [PanelScreen])? = nil,
                 picture: (@MainActor (PanelLayoutScope) -> PanelPicture?)? = nil,
                 fit: (@MainActor (PanelLayoutScope) -> PanelFit?)? = nil,
-                hud: (@MainActor (String) -> HUDPicture?)? = nil) {
-        self.init(store: store, launch: Self.drawnAtLaunch, screens: screens, picture: picture, fit: fit, hud: hud)
+                hud: (@MainActor (String) -> HUDPicture?)? = nil,
+                agentPicture: (@MainActor (String, String) -> PanelPicture?)? = nil) {
+        self.init(store: store, launch: Self.drawnAtLaunch, screens: screens, picture: picture, fit: fit, hud: hud,
+                  agentPicture: agentPicture)
     }
 
     /// - launch: the number revisions are counted from, where a test names its own.
     init(store: UsageStore, launch: Int64, screens: (@MainActor () -> [PanelScreen])? = nil,
          picture: (@MainActor (PanelLayoutScope) -> PanelPicture?)? = nil,
          fit: (@MainActor (PanelLayoutScope) -> PanelFit?)? = nil,
-         hud: (@MainActor (String) -> HUDPicture?)? = nil) {
+         hud: (@MainActor (String) -> HUDPicture?)? = nil,
+         agentPicture: (@MainActor (String, String) -> PanelPicture?)? = nil) {
         self.store = store
         self.launch = launch
         self.screens = screens
         self.picture = picture
         self.fit = fit
         self.hud = hud
+        self.agentPicture = agentPicture
     }
 
     var layout: PanelLayoutStore { store.settings.panelLayout }
@@ -79,14 +91,22 @@ public struct PanelTools {
             do { return .result(panel(try scope(of: arguments, among: attached), among: attached)) }
             catch { return .failure(Self.sentence(error)) }
         case MCPTools.getPanelImage:
-            if let unknown = Self.unknown(arguments, taking: ["screen", "show"]) {
-                return .failure("get_panel_image takes only screen and show. \(unknown)")
+            if let unknown = Self.unknown(arguments, taking: ["screen", "show", "agent"]) {
+                return .failure("get_panel_image takes only screen, show and agent. \(unknown)")
             }
             do {
                 let scope = try scope(of: arguments, among: attached)
+                // An agent given as null is not given, as any key is.
+                let agent = arguments["agent"] ?? .null
                 switch arguments["show"] ?? .null {
-                case .null, .string("panel"): return image(scope, among: attached)
-                case .string("hud"): return hudImage(scope, among: attached)
+                case .null, .string("panel"):
+                    return agent == .null ? image(scope, among: attached) : agentImage(scope, agent: agent, among: attached)
+                case .string("hud"):
+                    guard agent == .null else {
+                        return .failure("show \"hud\" draws a screen's resting HUD, and agent one agent's own panel, so "
+                                        + "they are not given together: leave out show, or agent.")
+                    }
+                    return hudImage(scope, among: attached)
                 default: return .failure("show is \"panel\", the default, or \"hud\".")
                 }
             } catch {

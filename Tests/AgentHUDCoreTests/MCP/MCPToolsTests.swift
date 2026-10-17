@@ -68,12 +68,18 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual([MCPTools.getPanel, MCPTools.getPanelImage, MCPTools.setPanelLayout, MCPTools.discardPanelDraft,
                         MCPTools.finishPanelEdit], tools.map { $0["name"].stringValue })
         for index in [0, 1, 3] {
-            XCTAssertEqual(tools[index]["inputSchema"]["properties"].objectValue?.keys.sorted(), index == 1 ? ["screen", "show"] : ["screen"],
-                           "\(tools[index]["name"]) takes the screen it acts on and, for a picture, what to draw")
+            XCTAssertEqual(tools[index]["inputSchema"]["properties"].objectValue?.keys.sorted(),
+                           index == 1 ? ["agent", "screen", "show"] : ["screen"],
+                           "\(tools[index]["name"]) takes the screen it acts on and, for a picture, what to draw and for which agent")
             XCTAssertEqual(tools[index]["inputSchema"]["properties"]["screen"], tools[2]["inputSchema"]["properties"]["screen"],
                            "every tool names a screen the same way")
         }
         XCTAssertEqual(tools[1]["inputSchema"]["properties"]["show"]["enum"], .array([.string("panel"), .string("hud")]))
+        XCTAssertEqual(tools[1]["inputSchema"]["properties"]["agent"]["type"], .string("string"))
+        XCTAssertEqual(tools[1]["inputSchema"]["properties"]["agent"]["description"].stringValue,
+                       "An agent by name from that screen's shows in get_panel, or by its block's key, to draw its own panel "
+                       + "instead of the whole one: the card a click on its mark opens beside it, agentPanelWidth wide, on a "
+                       + "dynamic or simple HUD with separateAgents on. Needs a screen key; not with show 'hud'.")
         XCTAssertEqual(tools[4]["inputSchema"]["properties"].objectValue?.keys.sorted(), ["screen"],
                        "finish_panel_edit takes the screen it lets go of and nothing else")
         XCTAssertEqual(tools[4]["inputSchema"]["properties"]["screen"]["description"].stringValue,
@@ -247,7 +253,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
                        "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists and over what period, and its token chart's period, the agents and models it can draw and its total; the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the whole app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are written in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
         XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
-                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, account names masked, session titles left out, or with show 'hud' a screen's resting HUD as it looks now; every glass style is one stand-in. Use it to check how a change looks; get_panel reads it as data.")
+                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, account names masked, session titles left out, or with agent one agent's own panel, or with show 'hud' a screen's resting HUD; glass is one stand-in. Use it to check a change; get_panel reads it as data.")
         XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
         XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
                        "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, appearance, material, glass style and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style. A layout edit holds the panel open on screen for two minutes from the call, and a call with only hud style fields closes it so the HUD shows; call finish_panel_edit when you are done.")

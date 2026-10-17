@@ -1,7 +1,8 @@
 import AgentHUDSupport
 import Foundation
 
-/// What `get_panel_image` tells an agent: a picture of a screen's hover panel, or of its resting HUD.
+/// What `get_panel_image` tells an agent: a picture of a screen's hover panel, of one agent's own panel there, or of its
+/// resting HUD.
 extension PanelTools {
     // MARK: The panel
 
@@ -16,24 +17,47 @@ extension PanelTools {
         guard let drawn = picture(scope) else {
             return .failure("The panel's picture could not be drawn. Try again, or read the panel with get_panel.")
         }
-        let fit = drawn.fit
         var note: String
         var display = "The main display"
         switch scope {
         case .shared:
             note = "The hover panel as \(layout.hasDraft ? "the unsaved draft" : "the saved layout") draws it"
         case .screen(let key):
-            note = "The hover panel on \(name(of: key, among: attached)) as \(drawing(key)) draws it"
-            // The bar above the footer says what waits unsaved, the screen's style too, and counts in the height.
-            if layout.hasStyleDraft(key) {
-                note += layout.draftScope(on: key) == nil
-                    ? ", with the bar above its footer that says its resting HUD's style is unsaved"
-                    : ", with the bar above its footer for the unsaved layout and its resting HUD's unsaved style"
-            }
+            note = "The hover panel on \(name(of: key, among: attached)) as \(drawing(key)) draws it" + styleBar(on: key)
             if attached.contains(where: { $0.key == key }) { display = "That display" }
         }
-        note += ", \(Self.points(drawn.width)) by \(Self.points(fit.height)) points, with account names masked, session titles "
-            + "left out and any reading's reason or client's notice drawn as grey bars."
+        // The shared layout is drawn in the main display's look, the first attached.
+        let looked = scope.screenKey.flatMap { key in attached.first { $0.key == key } } ?? attached.first
+        let glass = looked.map { $0.drawsGlass(store.settings.effectivePlacement(on: $0.key, hasNotch: $0.hasNotch)) } ?? false
+        note += measures(of: drawn, on: display, glass: glass)
+        return .result(fields(of: drawn, on: scope, note: note), images: [MCPImage(mimeType: "image/png", data: drawn.png)])
+    }
+
+    /// What a panel's picture is said to be beside its note: which screen and layout and its revision, whether a draft
+    /// waits, its size in points, whether it scrolls on its display, and the pixels a point it is drawn at.
+    private func fields(of drawn: PanelPicture, on scope: PanelLayoutScope, note: String) -> [String: JSONValue] {
+        [
+            "screen": .string(Self.name(of: scope)), "revision": .integer(revision), "unsaved": .bool(unsaved(scope)),
+            "width": .integer(Int64(drawn.width.rounded())), "height": .integer(Int64(drawn.fit.height.rounded())),
+            "scrolls": .bool(drawn.fit.scrolls), "pixelsPerPoint": .number(Self.hundredths(drawn.scale)), "note": .string(note),
+        ]
+    }
+
+    /// The bar above a screen's footer where its resting HUD's style waits unsaved, which says so and counts in the
+    /// height, as a clause after what the picture draws; nothing where no style draft waits.
+    private func styleBar(on key: String) -> String {
+        guard layout.hasStyleDraft(key) else { return "" }
+        return layout.draftScope(on: key) == nil
+            ? ", with the bar above its footer that says its resting HUD's style is unsaved"
+            : ", with the bar above its footer for the unsaved layout and its resting HUD's unsaved style"
+    }
+
+    /// What a panel's note says after what it draws: its size, what is masked, whether `display` lets it open whole,
+    /// the scale it is drawn at where that is less than the usual, and that glass is a stand-in where it is drawn in it.
+    private func measures(of drawn: PanelPicture, on display: String, glass: Bool) -> String {
+        let fit = drawn.fit
+        var note = ", \(Self.points(drawn.width)) by \(Self.points(fit.height)) points, with account names masked, session "
+            + "titles left out and any reading's reason or client's notice drawn as grey bars."
         if fit.scrolls {
             note += " \(display) opens it at most \(Self.points(fit.maximumHeight)) points tall, so a person scrolls to see "
                 + "the rest; the picture shows all of it."
@@ -42,17 +66,8 @@ extension PanelTools {
             note += " It is drawn at \(Self.hundredths(drawn.scale)) pixels a point instead of \(Self.points(PanelPicture.pointScale)) "
                 + "to stay within \(PanelPicture.pixelLimit) pixels tall."
         }
-        // The shared layout is drawn in the main display's look, the first attached.
-        let looked = scope.screenKey.flatMap { key in attached.first { $0.key == key } } ?? attached.first
-        if let looked, looked.drawsGlass(store.settings.effectivePlacement(on: looked.key, hasNotch: looked.hasNotch)) {
-            note += " " + Self.glassStandIn
-        }
-        let result: [String: JSONValue] = [
-            "screen": .string(Self.name(of: scope)), "revision": .integer(revision), "unsaved": .bool(unsaved(scope)),
-            "width": .integer(Int64(drawn.width.rounded())), "height": .integer(Int64(fit.height.rounded())),
-            "scrolls": .bool(fit.scrolls), "pixelsPerPoint": .number(Self.hundredths(drawn.scale)), "note": .string(note),
-        ]
-        return .result(result, images: [MCPImage(mimeType: "image/png", data: drawn.png)])
+        if glass { note += " " + Self.glassStandIn }
+        return note
     }
 
     /// Which layout a screen's panel draws, in words.
@@ -71,6 +86,71 @@ extension PanelTools {
     /// difference between them but that.
     static let glassStandIn = "Its glass is drawn as a stand-in, the same for clear, regular and material glass but "
         + "for the transparency each draws: a picture is drawn off screen, with no desktop behind it to show through."
+
+    // MARK: One agent's own panel
+
+    /// A picture of one agent's own panel on an attached screen whose dock separates its agents, the card a click on the
+    /// agent's mark opens beside it, at the screen's `agentPanelWidth`, as the layout in effect there draws it, a draft
+    /// and its bar included: what the whole panel's picture says, with the agent as the screen lists it. The agent is
+    /// named as `get_panel` names it: as the screen's `shows` lists it, matched by the mark it is drawn with, or by its
+    /// block's key, an API balance's standing for the vendor its accounts name.
+    func agentImage(_ scope: PanelLayoutScope, agent given: JSONValue, among attached: [PanelScreen]) -> MCPToolReply {
+        guard let asked = given.stringValue, !asked.isEmpty else {
+            return .failure("agent is an agent's name from that screen's shows in get_panel, or its block's key.")
+        }
+        guard case .screen(let key) = scope else {
+            return .failure("agent draws one agent's own panel on a screen whose dock separates its agents, so it needs "
+                            + "that screen's key. " + Self.attachedList(attached))
+        }
+        guard let screen = attached.first(where: { $0.key == key }) else {
+            return .failure("\(name(of: key, among: attached, starting: true)) has no agent's own panel to draw. "
+                            + Self.attachedList(attached))
+        }
+        let placement = store.settings.effectivePlacement(on: key, hasNotch: screen.hasNotch)
+        guard placement.mode.isDocked, placement.separatesAgents else {
+            return .failure(Self.oneSharedPanel(on: screen, placement))
+        }
+        let shown = HUDAgentOrder(listed: effective(scope).hud.agents, available: screen.agents(in: placement.mode))
+            .arrange(screen.agents(in: placement.mode)) { $0 }
+        // A quota block's key is its vendor; an API balance's is its provider's, whose accounts name their vendor.
+        let vendor = store.enabledBilling.first { $0.panelBlockKey == asked }?.vendor ?? asked
+        guard let agent = shown.first(where: { VendorMark.key($0) == VendorMark.key(vendor) }) else {
+            let offered = shown.isEmpty ? "It shows no agent now."
+                : "It shows: \(PanelLayout.quoted(VendorMark.merged(shown)))."
+            return .failure("\"\(asked)\" has no mark on the resting HUD of \"\(screen.name)\" now, so it has no panel of its "
+                            + "own there. \(offered)")
+        }
+        guard let agentPicture else {
+            return .failure("This copy of Agent HUD cannot draw an agent's own panel, so there is no picture of it here. "
+                            + "get_panel reads the panel as data.")
+        }
+        guard let drawn = agentPicture(key, agent) else {
+            return .failure("The agent's own panel could not be drawn. Try again, or read the panel with get_panel.")
+        }
+        var note = "\"\(agent)\"'s own panel on \"\(screen.name)\", the card a click on its mark opens beside it, as "
+            + "\(drawing(key)) draws it" + styleBar(on: key)
+        note += measures(of: drawn, on: "That display", glass: screen.drawsGlass(placement))
+        let saved = store.settings.settings.placement(on: key, hasNotch: screen.hasNotch)
+        if !(saved.mode.isDocked && saved.separatesAgents) {
+            note += " The dock separates its agents only in the unsaved style draft."
+        }
+        var told = fields(of: drawn, on: scope, note: note)
+        told["agent"] = .string(agent)
+        return .result(told, images: [MCPImage(mimeType: "image/png", data: drawn.png)])
+    }
+
+    /// Why a screen's resting HUD gives no agent a panel of its own, and how it would: a Dynamic dock or a Simple panel
+    /// with `separateAgents` on, which a proposal for that screen can draw as a style draft.
+    private static func oneSharedPanel(on screen: PanelScreen, _ placement: ScreenPlacement) -> String {
+        guard placement.mode.isDocked else {
+            return "The resting HUD of \"\(screen.name)\" is a notch HUD, whose panel is every agent's, so no agent has one "
+                + "of its own there. A Dynamic dock or a Simple panel that separates its agents gives each its own: propose "
+                + "hud.mode \"dynamic\" or \"simple\" with hud.separateAgents true for that screen, then draw it."
+        }
+        return "The resting HUD of \"\(screen.name)\", a \"\(placement.mode.agentName)\" HUD, does not separate its agents, "
+            + "so its panel is every agent's and no agent has one of its own there. Propose hud.separateAgents true for that "
+            + "screen, then draw it."
+    }
 
     // MARK: The resting HUD
 
