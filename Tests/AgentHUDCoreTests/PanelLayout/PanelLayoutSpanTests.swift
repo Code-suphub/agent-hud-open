@@ -124,9 +124,8 @@ final class PanelLayoutSpanTests: XCTestCase {
             #"{"blocks": {"Claude": {"span": "half"}, "Codex": {"widget": "ring", "span": "half"}}}"#.utf8))
         XCTAssertEqual(stored.blocks["Claude"]?.span, .half, "kept in the document")
         XCTAssertEqual(plan(stored).blocks.map(\.span), [.full, .full, .full, .full])
-        XCTAssertEqual(PanelBlockPlan(blocks[0], changed: try XCTUnwrap(stored.blocks["Claude"]), tokenPeriod: .day).span, .full)
-        XCTAssertEqual(PanelBlockPlan(blocks[1], changed: try XCTUnwrap(stored.blocks["Codex"]), tokenPeriod: .day).span, .half,
-                       "a block on its own is told the span it asks for where it can take it")
+        XCTAssertEqual(PanelBlockPlan(blocks[0], in: stored).span, .full)
+        XCTAssertEqual(PanelBlockPlan(blocks[1], in: stored).span, .half, "a block on its own is told the span it asks for where it can take it")
     }
 
     /// Two halves share a line where each is at least `PanelLines.narrowestHalf` wide: at 540 and 720 at every spacing,

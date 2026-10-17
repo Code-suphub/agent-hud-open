@@ -287,9 +287,11 @@ final class PanelToolsScreensTests: PanelToolsCase {
                       "\(result["note"] ?? .null)")
     }
 
-    /// Screens are named by role: what an agent reads names no display by the name its owner gave it, and no account.
+    /// Screens are named by role: what an agent reads of them names no display by the name its owner gave it, and no
+    /// account, which only the blocks name.
     func testWhatIsReadOfTheScreensNamesNoOneAndNoAccount() throws {
-        let text = String(decoding: try RecordCoding.encoder().encode(JSONValue.object(try call(MCPTools.getPanel))), as: UTF8.self)
+        let listing = try call(MCPTools.getPanel)["screens"] ?? .null
+        let text = String(decoding: try RecordCoding.encoder().encode(listing), as: UTF8.self)
         for listed in screens(try call(MCPTools.getPanel)) {
             XCTAssertEqual(listed.keys.sorted(), ["agentPanelWidth", "agents", "edge", "hasNotch", "held", "hud", "key",
                                                   "layout", "look", "mode", "name", "shows", "styleUnsaved", "unsaved",

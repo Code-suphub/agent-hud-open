@@ -37,7 +37,9 @@ public final class SettingsStore {
     public init(defaults: UserDefaults = .standard, defaultAgents: [AgentDescriptor] = []) {
         self.defaults = defaults
         let decoder = JSONDecoder()
-        let preferences = defaults.data(forKey: Keys.settings).flatMap { try? decoder.decode(Settings.self, from: $0) } ?? Settings()
+        let stored = defaults.data(forKey: Keys.settings)
+        let decoded = stored.flatMap { try? decoder.decode(Settings.self, from: $0) }
+        let preferences = decoded ?? Settings()
         settings = preferences
         if let data = defaults.data(forKey: Keys.agents), let stored = try? decoder.decode([AgentDescriptor].self, from: data), !stored.isEmpty {
             // Only seeded placeholders are unconnected: a provider reports the rows it reads, connected.
@@ -49,6 +51,12 @@ public final class SettingsStore {
         panelLayout = PanelLayoutStore(defaults: defaults)
         // A screen's style draft is drawn over these settings, and a person's Save writes it into them.
         panelLayout.owner = self
+        // The Expanded panel's switches were settings until they joined the panel's layouts. Those an earlier version
+        // kept are carried into every saved layout once, and the settings, read whole, are written again without them.
+        if let switches = PanelSwitches.stored(in: stored) {
+            panelLayout.carry(switches)
+            if decoded != nil { persist(preferences, key: Keys.settings) }
+        }
         let normalized = applyingAccountVisibility(to: agents)
         if normalized != agents {
             agents = normalized

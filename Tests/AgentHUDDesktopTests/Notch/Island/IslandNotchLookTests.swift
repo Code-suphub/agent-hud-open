@@ -19,10 +19,9 @@ final class IslandNotchLookTests: XCTestCase {
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
         settings.update {
             $0.screens[key] = placement
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
             $0.collapseDelayMs = 5000
         }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false; $0.sessionList = false }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))
         let hud = ScreenHUD(key: key, screen: screen, store: store, settings: settings,

@@ -91,8 +91,8 @@ struct HoverPanelView: View {
     private var layout: PanelLayoutStore { store.settings.panelLayout }
 
     /// The panel under its screen's layout in effect, a draft included, its blocks in lines at the width the island
-    /// gives the content. The Settings switches decide what exists; the layout hides, orders and draws what they leave.
-    /// One agent's own panel sets every block across the whole line.
+    /// gives the content. The layout decides what is shown, the Expanded panel's switches among it (`PanelSwitches`),
+    /// and how. One agent's own panel sets every block across the whole line.
     private var plan: PanelLayoutPlan {
         let effective = layout.effective(for: screen)
         return PanelLayoutPlan(layout: effective, blocks: store.view.panelBlocks, contentWidth: Double(contentWidth(effective.style)),
@@ -107,12 +107,11 @@ struct HoverPanelView: View {
 
     /// The sections that have something to show, in the layout's order.
     private func sections(_ plan: PanelLayoutPlan, blocks: [Block]) -> [PanelSection] {
-        let settings = store.settings.settings
-        return plan.sections.filter { section in
+        plan.sections.filter { section in
             switch section {
             case .blocks: !blocks.isEmpty
-            case .tokens: settings.showIslandTokens && (store.isLoading || store.isIndexing || !consumers.isEmpty)
-            case .sessions: settings.showIslandSessions
+            case .tokens: store.isLoading || store.isIndexing || !consumers.isEmpty
+            case .sessions: true
             }
         }
     }

@@ -3,9 +3,9 @@ import Foundation
 
 extension PanelLayout {
     /// What reading a layout's JSON would forgive, as sentences for the agent that sent it: a value of the wrong type,
-    /// a name this build does not know, a span's and a period's among them, columns outside 2 to 6, a width outside 480 to 720, a
-    /// session limit outside 1 to 10, a hud style value outside its range, a property a block, the style, the sessions,
-    /// the tokens, the hud or its glow does not have.
+    /// a name this build does not know, a span's and a period's among them, columns outside 2 to 6, a width outside 480
+    /// to 720, a session limit outside 1 to 10, a hud style value outside its range, a property a block, the style, the
+    /// sessions, the tokens, the hud or its glow does not have.
     /// Stored layouts are read forgivingly so that a newer build's layout still loads; an agent's proposal is told
     /// instead, since a forgiven name is a change that silently did not happen.
     static func misreadings(of json: JSONValue) -> [String] {
@@ -13,6 +13,9 @@ extension PanelLayout {
         var found = names(fields["order"], at: "order", among: nil)
         found += names(fields["sections"], at: "sections", among: PanelSection.allCases.map(\.rawValue))
         found += names(fields["hiddenSections"], at: "hiddenSections", among: PanelSection.allCases.map(\.rawValue))
+        if let countdown = fields["countdown"], countdown != .null, countdown.boolValue == nil {
+            found.append("countdown is true or false.")
+        }
         found += misreadings(ofStyle: fields["style"] ?? .null)
         found += misreadings(ofHUD: fields["hud"] ?? .null)
         found += misreadings(ofSessions: fields["sessions"] ?? .null, tokens: fields["tokens"] ?? .null)
@@ -36,9 +39,13 @@ extension PanelLayout {
                 found += names(value, at: "\(path).measures", among: PanelMeasure.allCases.map(\.rawValue))
             case "hidden", "countdown":
                 if value != .null, value.boolValue == nil { found.append("\(path).\(property) is true or false.") }
-            case "hiddenRows":
+            case "hiddenRows", "rows":
                 if value != .null, value.arrayValue?.allSatisfy({ $0.stringValue != nil }) != true {
-                    found.append("\(path).hiddenRows is a list of row keys.")
+                    found.append("\(path).\(property) is a list of row keys.")
+                }
+            case "accounts":
+                if value != .null, value.arrayValue?.allSatisfy({ $0.stringValue != nil }) != true {
+                    found.append("\(path).accounts is a list of account ids from get_panel.")
                 }
             case "columns":
                 if value != .null, value.countValue.map({ Block.columnRange.contains($0) }) != true {
@@ -52,7 +59,7 @@ extension PanelLayout {
                 found += misnamed(value, at: "\(path).period", among: PanelTokenPeriod.allCases.map(\.rawValue))
             default:
                 found.append("\(path) has no property \"\(property)\"; a block takes widget, measures, hidden, hiddenRows, "
-                             + "countdown, columns, ringSize, span and period.")
+                             + "rows, accounts, countdown, columns, ringSize, span and period.")
             }
         }
         return found

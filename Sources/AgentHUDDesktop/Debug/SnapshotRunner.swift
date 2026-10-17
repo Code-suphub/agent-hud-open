@@ -193,8 +193,8 @@ public enum SnapshotRunner {
         saveHUDLooks(preferences: settings.settings, folder: folder)
         // Session titles and token counts remain separate controls, including unavailable and failed returns.
         if let codex = settings.agents.first(where: { $0.vendor == "Codex" }) {
-            let saved = settings.settings
-            settings.update { $0.showIslandQuota = false; $0.showIslandTokens = false; $0.showIslandSessions = true }
+            let saved = settings.settings, switches = settings.panelLayout.switches
+            settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = true }
             let sessions = demoStore(settings)
             let now = DemoClock.now
             sessions.replace(report: UsageReport(generatedAt: now, snapshots: [], sessions: [
@@ -214,6 +214,7 @@ public enum SnapshotRunner {
                                                             failedListedSessionID: "snapshot-native"),
                  folder: folder, scheme: .dark)
             settings.update { $0 = saved }
+            settings.panelLayout.setSwitches { $0 = switches }
         }
         let scrollScene = IslandScene(store: store, settings: settings, open: true, light: false, look: .standard, maximumPanelHeight: 420)
         save("island-scroll-top", scrollScene, folder: folder, scheme: .dark)
@@ -236,15 +237,11 @@ public enum SnapshotRunner {
         save("settings-panel-samples-dark", IslandPane(settings: settings, theme: .dark, look: .standard).padding(20).frame(width: sampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
         save("settings-panel-samples-small-dark", IslandPane(settings: settings, theme: .dark, look: .standard).padding(20).frame(width: smallSampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
         save("settings-panel-samples-light", IslandPane(settings: settings, theme: .light, look: .standard).padding(20).frame(width: sampleWidth).background(Theme.light.windowBackground), folder: folder, scheme: .light)
-        settings.update {
-            $0.showIslandQuota = false; $0.showIslandTokens = false; $0.showIslandSessions = false
-            $0.showResetCountdown = false
+        settings.panelLayout.setSwitches {
+            $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = false; $0.resetCountdown = false
         }
         save("settings-panel-samples-off-dark", IslandPane(settings: settings, theme: .dark, look: .standard).padding(20).frame(width: sampleWidth).background(Theme.dark.windowBackground), folder: folder, scheme: .dark)
-        settings.update {
-            $0.showIslandQuota = true; $0.showIslandTokens = true; $0.showIslandSessions = true
-            $0.showResetCountdown = true
-        }
+        settings.panelLayout.setSwitches { $0 = PanelSwitches() }
         settings.update { $0.glowOutwardOnly = false }
         save("settings-display-soft-dark", SettingsView(settings: settings, store: store, initialTab: .display).frame(width: SettingsWindowLayout.size.width, height: SettingsWindowLayout.size.height), folder: folder, scheme: .dark)
         settings.update { $0.glowOutwardOnly = Settings().glowOutwardOnly }
@@ -322,16 +319,14 @@ public enum SnapshotRunner {
         }
         store.setStatsRange(.hours24)
         store.tokenBucketSize = .hour1
-        settings.update {
-            $0.showIslandTokens = false
-        }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false }
         settings.updateAgents { $0.map { $0.with(enabled: $0.id == "claude-opus") } }
         save("island-custom-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
-        settings.update { $0.showIslandQuota = false; $0.showIslandSessions = false; $0.showIslandTokens = true }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.sessionList = false; $0.tokenUsage = true }
         save("island-tokens-only-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
-        settings.update { $0.showIslandTokens = false }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false }
         save("island-minimal-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
-        settings.update { $0.showIslandQuota = true; $0.showIslandTokens = true; $0.showIslandSessions = true }
+        settings.panelLayout.setSwitches { $0.quotaDetails = true; $0.tokenUsage = true; $0.sessionList = true }
         settings.updateAgents { $0.map { $0.with(enabled: false) } }
         save("island-no-models-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
 
@@ -356,21 +351,19 @@ public enum SnapshotRunner {
                             source: L10n.sourceCodexAppServer, enabled: true),
         ]
         settings.updateAgents { _ in quotaAgents }
-        settings.update {
-            $0.showIslandTokens = false; $0.showIslandSessions = false
-            $0.glowRange = Settings().glowRange; $0.glowBlur = Settings().glowBlur
-        }
+        settings.update { $0.glowRange = Settings().glowRange; $0.glowBlur = Settings().glowBlur }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false; $0.sessionList = false }
         let resetNow = DemoClock.now
         let loadingStore = demoStore(settings)
         save("island-loading-quota", IslandScene(store: loadingStore, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
-        settings.update { $0.showResetCountdown = false }
+        settings.panelLayout.setSwitches { $0.resetCountdown = false }
         save("island-loading-no-reset", IslandScene(store: loadingStore, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
-        settings.update { $0.showResetCountdown = true; $0.showIslandTokens = true }
+        settings.panelLayout.setSwitches { $0.resetCountdown = true; $0.tokenUsage = true }
         save("island-loading-tokens", IslandScene(store: loadingStore, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         loadingStore.replace(report: UsageReport(generatedAt: resetNow, snapshots: [], sessions: [],
                                                 indexing: IndexProgress(done: 12, total: 80)))
         save("island-loading-indexing", IslandScene(store: loadingStore, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
-        settings.update { $0.showIslandTokens = false }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false }
         let quotaSnapshots = quotaAgents.enumerated().map { index, agent in
             UsageSnapshot(agentId: agent.id, remainingPct: [88, 21, 40, 74][index],
                           resetAt: resetNow.addingTimeInterval(index == 0 ? 2 * 3600 + 13 * 60 : Double(index + 1) * 86400),
@@ -419,29 +412,29 @@ public enum SnapshotRunner {
             }
             if name == "available" {
                 save("island-reset-available-light", IslandScene(store: store, settings: settings, open: true, light: true, look: .standard), folder: folder, scheme: .light)
-                settings.update { $0.showResetCountdown = false }
+                settings.panelLayout.setSwitches { $0.resetCountdown = false }
                 save("island-reset-dates-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
-                settings.update { $0.showResetCountdown = true; $0.showIslandQuota = false }
+                settings.panelLayout.setSwitches { $0.resetCountdown = true; $0.quotaDetails = false }
                 save("island-reset-quota-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
-                settings.update { $0.showIslandQuota = true }
+                settings.panelLayout.setSwitches { $0.quotaDetails = true }
                 settings.setAgent(id: "codex", enabled: false)
                 save("island-reset-codex-hidden-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
                 settings.setAgent(id: "codex", enabled: true)
             }
         }
-        settings.update { $0.showResetCountdown = false }
+        settings.panelLayout.setSwitches { $0.resetCountdown = false }
         save("island-no-reset-column-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
 
         // An API-billed agent has one account card, controlled by its agent switch.
         let deepseek = AgentDescriptor(id: "deepseek", vendor: "DeepSeek", model: "Harness", source: L10n.sourceDeepSeekSessions, enabled: true)
         settings.updateAgents { _ in quotaAgents + [deepseek] }
-        settings.update { $0.showResetCountdown = true }
+        settings.panelLayout.setSwitches { $0.resetCountdown = true }
         store.replace(report: UsageReport(generatedAt: resetNow, snapshots: quotaSnapshots, sessions: [],
                                          billing: [DemoData.deepSeekBilling(now: resetNow)],
                                          codexResetCredits: DemoData.codexResetCredits(now: resetNow)))
         save("island-layout-all-agents", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
         settings.updateAgents { _ in [quotaAgents[0], deepseek] }
-        settings.update { $0.showResetCountdown = true }
+        settings.panelLayout.setSwitches { $0.resetCountdown = true }
         store.replace(report: UsageReport(generatedAt: resetNow, snapshots: [quotaSnapshots[0]], sessions: [],
                                          billing: [DemoData.deepSeekBilling(now: resetNow)]))
         save("island-deepseek-enabled-dark", IslandScene(store: store, settings: settings, open: true, light: false, look: .standard), folder: folder, scheme: .dark)
@@ -502,7 +495,9 @@ public enum SnapshotRunner {
         let extra = AgentDescriptor(id: account.windowID("grok:extra"), vendor: "Grok", model: L10n.text("额外用量", "Extra usage"),
             shortModel: L10n.text("额外用量", "Extra"), source: L10n.sourceAdditionalUsage, enabled: true, account: account)
         let reset = now.addingTimeInterval(4 * 86400)
-        settings.update { $0.showIslandQuota = true; $0.showIslandTokens = false; $0.showIslandSessions = false; $0.showResetCountdown = true }
+        settings.panelLayout.setSwitches {
+            $0.quotaDetails = true; $0.tokenUsage = false; $0.sessionList = false; $0.resetCountdown = true
+        }
         settings.updateAgents { _ in [weekly] }
         store.replace(report: UsageReport(generatedAt: now,
             snapshots: [.init(agentId: weekly.id, remainingPct: nil, resetAt: reset, windowDuration: TimeInterval(7 * 86400), updatedAt: now)],

@@ -102,8 +102,10 @@ public struct PanelStyle: Hashable, Codable, Sendable {
 /// (`PanelLayoutStore`).
 ///
 /// A block is one agent's quota windows or one API account's balance, under the key `PanelBlockInfo` gives it; a row of
-/// a block is a quota window, under its `AgentDescriptor.windowKey`. A key that names nothing the panel has now stays
-/// in the document and applies again when its block or row returns.
+/// a block is a quota window, under its `AgentDescriptor.windowKey`, and an account of a block is one of its sections,
+/// under the id `PanelBlockInfo.Account` gives it. A key or an id that names nothing the panel has now stays in the
+/// document and applies again when its block, row or account returns. The four switches of Settings → Display →
+/// Expanded panel are fields of the shared layout (`PanelSwitches`): its hidden sections and its `countdown`.
 ///
 /// The JSON is also what an agent sends, so reading forgives field by field: a widget, ring size, span, period or spacing
 /// name this build does not know leaves that field unset, a measure or section it does not know is left out of its list,
@@ -126,8 +128,14 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         public var hidden: Bool
         /// The rows left out of the block, by row key.
         public var hiddenRows: [String]
-        /// False hides the block's reset times. True follows the Settings switch, which a layout never overrules.
-        public var countdown: Bool
+        /// The order of the block's rows, by row key: those named come first, in that order, and the others keep their
+        /// order after them. Empty for the rows' own order.
+        public var rows: [String]
+        /// The accounts whose rows or balances the block shows, by the id `get_panel` gives each; empty for every account.
+        /// Rows that belong to no account, which no id names, are left out by any.
+        public var accounts: [String]
+        /// Whether a quota block shows its reset times; nil for the layout's `countdown`, which this overrides.
+        public var countdown: Bool?
         /// How many cells of a ring or number widget stand on a line, within `columnRange`; nil for four.
         public var columns: Int?
         /// The size of a ring widget's rings; nil for medium.
@@ -144,12 +152,14 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         static let defaultColumns = 4
 
         public init(widget: PanelWidget? = nil, measures: [PanelMeasure] = [], hidden: Bool = false, hiddenRows: [String] = [],
-                    countdown: Bool = true, columns: Int? = nil, ringSize: PanelRingSize? = nil, span: PanelSpan? = nil,
-                    period: PanelTokenPeriod? = nil) {
+                    rows: [String] = [], accounts: [String] = [], countdown: Bool? = nil, columns: Int? = nil,
+                    ringSize: PanelRingSize? = nil, span: PanelSpan? = nil, period: PanelTokenPeriod? = nil) {
             self.widget = widget
             self.measures = measures
             self.hidden = hidden
             self.hiddenRows = hiddenRows
+            self.rows = rows
+            self.accounts = accounts
             self.countdown = countdown
             self.columns = columns
             self.ringSize = ringSize
@@ -159,22 +169,24 @@ public struct PanelLayout: Hashable, Codable, Sendable {
 
         /// Whether the block changes nothing: every field unset, empty or as the default view has it.
         var isEmpty: Bool {
-            widget == nil && measures.isEmpty && !hidden && hiddenRows.isEmpty && countdown && columns == nil && ringSize == nil
-                && span == nil && period == nil
+            widget == nil && measures.isEmpty && !hidden && hiddenRows.isEmpty && rows.isEmpty && accounts.isEmpty
+                && countdown == nil && columns == nil && ringSize == nil && span == nil && period == nil
         }
 
         /// The block with each measure named once, in the order first named; each hidden row named once, in key order,
-        /// and no empty key among them, since which rows are hidden matters, not the order they were named in; and no
-        /// columns outside `columnRange`.
+        /// and no empty key among them, since which rows are hidden matters, not the order they were named in; each row
+        /// of its order named once, the first time, in the order named; each account once, in id order, since a filter
+        /// has no order, and no empty key or id among them; and no columns outside `columnRange`.
         func normalized() -> Block {
             Block(widget: widget, measures: measures.withoutRepeats, hidden: hidden,
-                  hiddenRows: hiddenRows.filter { !$0.isEmpty }.withoutRepeats.sorted(), countdown: countdown,
-                  columns: columns.flatMap { Self.columnRange.contains($0) ? $0 : nil }, ringSize: ringSize, span: span,
-                  period: period)
+                  hiddenRows: hiddenRows.filter { !$0.isEmpty }.withoutRepeats.sorted(),
+                  rows: rows.filter { !$0.isEmpty }.withoutRepeats, accounts: accounts.filter { !$0.isEmpty }.withoutRepeats.sorted(),
+                  countdown: countdown, columns: columns.flatMap { Self.columnRange.contains($0) ? $0 : nil }, ringSize: ringSize,
+                  span: span, period: period)
         }
 
         private enum CodingKeys: String, CodingKey {
-            case widget, measures, hidden, hiddenRows, countdown, columns, ringSize, span, period
+            case widget, measures, hidden, hiddenRows, rows, accounts, countdown, columns, ringSize, span, period
         }
 
         /// Nil when the value is not an object.
@@ -184,7 +196,9 @@ public struct PanelLayout: Hashable, Codable, Sendable {
                       measures: PanelLayout.strings(fields["measures"]).compactMap(PanelMeasure.init(rawValue:)),
                       hidden: fields["hidden"]?.boolValue ?? false,
                       hiddenRows: PanelLayout.strings(fields["hiddenRows"]),
-                      countdown: fields["countdown"]?.boolValue ?? true,
+                      rows: PanelLayout.strings(fields["rows"]),
+                      accounts: PanelLayout.strings(fields["accounts"]),
+                      countdown: fields["countdown"]?.boolValue,
                       columns: fields["columns"]?.countValue.flatMap { Self.columnRange.contains($0) ? $0 : nil },
                       ringSize: fields["ringSize"]?.stringValue.flatMap(PanelRingSize.init(rawValue:)),
                       span: fields["span"]?.stringValue.flatMap(PanelSpan.init(rawValue:)),
@@ -205,7 +219,9 @@ public struct PanelLayout: Hashable, Codable, Sendable {
             if !measures.isEmpty { try c.encode(measures, forKey: .measures) }
             if hidden { try c.encode(true, forKey: .hidden) }
             if !hiddenRows.isEmpty { try c.encode(hiddenRows, forKey: .hiddenRows) }
-            if !countdown { try c.encode(false, forKey: .countdown) }
+            if !rows.isEmpty { try c.encode(rows, forKey: .rows) }
+            if !accounts.isEmpty { try c.encode(accounts, forKey: .accounts) }
+            try c.encodeIfPresent(countdown, forKey: .countdown)
             try c.encodeIfPresent(columns, forKey: .columns)
             try c.encodeIfPresent(ringSize, forKey: .ringSize)
             try c.encodeIfPresent(span, forKey: .span)
@@ -221,6 +237,8 @@ public struct PanelLayout: Hashable, Codable, Sendable {
     public var sections: [PanelSection]
     /// The sections left out of the panel.
     public var hiddenSections: [PanelSection]
+    /// Whether the quota blocks show their reset times, where a block's own `Block.countdown` does not say otherwise.
+    public var countdown: Bool
     /// How the whole panel is set.
     public var style: PanelStyle
     /// Which agents the resting HUD of a screen that draws this layout shows, and in what order.
@@ -231,12 +249,13 @@ public struct PanelLayout: Hashable, Codable, Sendable {
     public var tokens: Tokens
 
     public init(blocks: [String: Block] = [:], order: [String] = [], sections: [PanelSection] = [],
-                hiddenSections: [PanelSection] = [], style: PanelStyle = PanelStyle(), hud: HUD = HUD(),
+                hiddenSections: [PanelSection] = [], countdown: Bool = true, style: PanelStyle = PanelStyle(), hud: HUD = HUD(),
                 sessions: Sessions = Sessions(), tokens: Tokens = Tokens()) {
         self.blocks = blocks
         self.order = order
         self.sections = sections
         self.hiddenSections = hiddenSections
+        self.countdown = countdown
         self.style = style
         self.hud = hud
         self.sessions = sessions
@@ -261,7 +280,8 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         let sectionOrder = (sections + PanelSection.allCases).withoutRepeats
         return PanelLayout(blocks: kept, order: order.filter { !$0.isEmpty }.withoutRepeats,
                            sections: sectionOrder == PanelSection.allCases ? [] : sectionOrder,
-                           hiddenSections: PanelSection.allCases.filter(hiddenSections.contains), style: style.normalized(),
+                           hiddenSections: PanelSection.allCases.filter(hiddenSections.contains), countdown: countdown,
+                           style: style.normalized(),
                            hud: hud.normalized(), sessions: sessions.normalized(), tokens: tokens.normalized())
     }
 
@@ -270,7 +290,9 @@ public struct PanelLayout: Hashable, Codable, Sendable {
 
     // MARK: Coding
 
-    private enum CodingKeys: String, CodingKey { case blocks, order, sections, hiddenSections, style, hud, sessions, tokens }
+    private enum CodingKeys: String, CodingKey {
+        case blocks, order, sections, hiddenSections, countdown, style, hud, sessions, tokens
+    }
 
     /// Nil when the value is not an object.
     init?(json: JSONValue) {
@@ -282,6 +304,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         self.init(blocks: blocks, order: Self.strings(fields["order"]),
                   sections: Self.strings(fields["sections"]).compactMap(PanelSection.init(rawValue:)),
                   hiddenSections: Self.strings(fields["hiddenSections"]).compactMap(PanelSection.init(rawValue:)),
+                  countdown: fields["countdown"]?.boolValue ?? true,
                   style: fields["style"].flatMap(PanelStyle.init(json:)) ?? PanelStyle(),
                   hud: fields["hud"].flatMap(HUD.init(json:)) ?? HUD(),
                   sessions: fields["sessions"].flatMap(Sessions.init(json:)) ?? Sessions(),
@@ -302,6 +325,7 @@ public struct PanelLayout: Hashable, Codable, Sendable {
         if !order.isEmpty { try c.encode(order, forKey: .order) }
         if !sections.isEmpty { try c.encode(sections, forKey: .sections) }
         if !hiddenSections.isEmpty { try c.encode(hiddenSections, forKey: .hiddenSections) }
+        if !countdown { try c.encode(false, forKey: .countdown) }
         if !style.isDefault { try c.encode(style, forKey: .style) }
         if !hud.isDefault { try c.encode(hud, forKey: .hud) }
         if !sessions.isDefault { try c.encode(sessions, forKey: .sessions) }

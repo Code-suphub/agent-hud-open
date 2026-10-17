@@ -107,17 +107,17 @@ final class PanelLayoutViewTests: XCTestCase {
     }
 
     /// One agent's own panel, on a dock that separates its agents, says whose it is: its quota block names the agent,
-    /// and where none is drawn the panel's title does, whether a Settings switch or the layout took the block away.
+    /// and where none is drawn the panel's title does, whether Settings' Quota details or the layout took the block away.
     func testAnAgentsOwnPanelSaysWhoseItIsWhateverTheLayoutHides() {
         func own() -> CGFloat {
             NSHostingView(rootView: HoverPanelView(store: store, onOpenStats: {}, focusVendor: "Claude")
                 .frame(width: IslandController.agentPanelWidth)).fittingSize.height
         }
         let whole = own()
-        settings.update { $0.showIslandQuota = false }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false }
         let titled = own()
         XCTAssertLessThan(titled, whole - 20)
-        settings.update { $0.showIslandQuota = true }
+        settings.panelLayout.setSwitches { $0.quotaDetails = true }
         XCTAssertEqual(own(), whole, accuracy: 0.5)
 
         keep(PanelLayout(hiddenSections: [.blocks]))
@@ -158,11 +158,12 @@ final class PanelLayoutViewTests: XCTestCase {
             billing.append(balance("DeepSeek"))
         }
         let settings = SettingsStore(defaults: defaults, defaultAgents: agents)
-        settings.update { $0.showIslandTokens = false; $0.showIslandSessions = false }
+        settings.panelLayout.setSwitches { $0.tokenUsage = false; $0.sessionList = false }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings, clock: { now })
         store.replace(report: UsageReport(generatedAt: now, snapshots: [], sessions: [], billing: billing))
         XCTAssertEqual(store.enabledBilling.count, billing.count)
-        XCTAssertTrue(settings.panelLayout.current.isDefault)
+        XCTAssertEqual(settings.panelLayout.current, PanelLayout(hiddenSections: [.tokens, .sessions]),
+                       "the blocks as the default view draws them, alone")
         let width = IslandController.expandedWidth
         let insets = HoverPanelView.notchInsets
         let cards = store.enabledBilling.map { account in
@@ -256,12 +257,20 @@ final class PanelLayoutViewTests: XCTestCase {
         }
     }
 
-    /// The layout hides and orders what the Settings switches leave: a section a switch turned off stays off.
-    func testASettingsSwitchStillDecidesWhatExists() {
-        settings.update { $0.showIslandTokens = false }
+    /// Settings' Token usage switch is the shared layout's tokens section: it hides the chart in the saved layout, a
+    /// layout saved after it is whole and shows what it does not hide, and the switch hides the chart in that one again,
+    /// leaving the rest of it.
+    func testASettingsSwitchIsTheSharedLayoutsSection() throws {
+        let full = height()
+        settings.panelLayout.setSwitches { $0.tokenUsage = false }
         let withoutTokens = height()
-        keep(PanelLayout(sections: [.tokens, .blocks, .sessions]))
+        XCTAssertLessThan(withoutTokens, full - 20)
+        let last = try XCTUnwrap(quotaKeys.last)
+        keep(PanelLayout(order: [last]))
+        XCTAssertEqual(height(), full, accuracy: 0.5, "a layout is whole: the chart it does not hide is shown")
+        settings.panelLayout.setSwitches { $0.tokenUsage = false }
         XCTAssertEqual(height(), withoutTokens, accuracy: 0.5)
+        XCTAssertEqual(layout.current, PanelLayout(order: [last], hiddenSections: [.tokens]))
     }
 
     /// An unsaved draft is drawn at once, with the bar that says so above the footer; saving or discarding it takes

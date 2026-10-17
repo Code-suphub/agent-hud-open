@@ -149,7 +149,7 @@ final class PanelStyleViewTests: XCTestCase {
     /// A style that spells out the default view's is the default layout, and draws the default view.
     func testTheDefaultStyleWrittenOutIsTheDefaultView() {
         let plain = height()
-        keep(PanelLayout(blocks: [quotaKeys[0]: PanelLayout.Block(countdown: true)], style: PanelStyle(spacing: .regular, separators: true)))
+        keep(PanelLayout(countdown: true, style: PanelStyle(spacing: .regular, separators: true)))
         XCTAssertTrue(layout.current.isDefault)
         XCTAssertEqual(height(), plain, accuracy: 0.5)
     }
@@ -173,8 +173,8 @@ final class PanelStyleViewTests: XCTestCase {
         }
     }
 
-    /// Hiding a block's countdown takes its reset times away and keeps every height: the line they stood in stays.
-    /// It never brings back a countdown the Settings switch turned off.
+    /// Hiding a block's countdown takes its reset times away and keeps every height: the line they stood in stays,
+    /// whether the block's own countdown, the layout's or Settings' Reset countdown, which is the layout's, hides them.
     func testHidingTheCountdownKeepsEveryHeight() {
         for widget in PanelBlockKind.quota.widgets {
             for measure in PanelBlockKind.quota.measures(under: widget) {
@@ -182,19 +182,20 @@ final class PanelStyleViewTests: XCTestCase {
                 let measures = [measure] + offered.filter { $0 != measure }
                 keep(every(PanelLayout.Block(widget: widget, measures: measures)))
                 let shown = height()
+                settings.panelLayout.setSwitches { $0.resetCountdown = false }
+                XCTAssertEqual(height(), shown, accuracy: 0.5, "\(widget) \(measure) with the switch off")
                 keep(every(PanelLayout.Block(widget: widget, measures: measures, countdown: false)))
                 XCTAssertEqual(height(), shown, accuracy: 0.5, "\(widget) \(measure)")
-                settings.update { $0.showResetCountdown = false }
-                XCTAssertEqual(height(), shown, accuracy: 0.5, "\(widget) \(measure) with the switch off too")
-                keep(every(PanelLayout.Block(widget: widget, measures: measures)))
-                XCTAssertEqual(height(), shown, accuracy: 0.5, "\(widget) \(measure) with the switch off alone")
-                settings.update { $0.showResetCountdown = true }
+                var off = every(PanelLayout.Block(widget: widget, measures: measures))
+                off.countdown = false
+                keep(off)
+                XCTAssertEqual(height(), shown, accuracy: 0.5, "\(widget) \(measure) with the layout's countdown off")
             }
         }
     }
 
     /// The cell's line under the quota measure is the reset where the countdown is shown, and nothing where the layout
-    /// or the switch hides it.
+    /// hides it.
     func testAHiddenCountdownLeavesACellsLineEmpty() throws {
         let row = try XCTUnwrap(store.rows.first { $0.agent.windowKey == "claude-session" })
         let metrics = QuotaRowMetrics(row: row, insights: nil, outlook: nil, now: store.now, tokensPerHour: nil)

@@ -74,7 +74,8 @@ struct IslandQuotaMetricPicker: View {
 }
 
 /// One independently switchable provider block, drawn by the widget its plan names, with a picker over the measures
-/// the plan offers where there is more than one. Refreshes keep its selected measure because the vendor is its
+/// the plan offers where there is more than one, its accounts those the plan keeps and each one's windows in the plan's
+/// order. Refreshes keep its selected measure because the vendor is its
 /// identity; the panel gives it a new identity when its plan asks for another widget or other measures, and the picker
 /// starts from the first of them again. In half a line the agent's name keeps one line and is given its room before
 /// anything else on it, the loading spinner and a chart's period giving way first, and the heading is as tall as one
@@ -108,8 +109,8 @@ struct ProviderQuotaBlock: View {
 
     private static var openAgentHelp: String { L10n.text("回到最近的会话", "Back to the latest session") }
 
-    /// Whether the block shows reset times: where Settings shows them and the layout does not hide them here.
-    private var showsCountdown: Bool { store.settings.settings.showResetCountdown && plan.countdown }
+    /// Whether the block shows reset times: its own countdown in the layout, else the layout's.
+    private var showsCountdown: Bool { plan.countdown }
 
     var body: some View {
         // A chart draws the models this vendor's windows count in place of the windows: their tokens over the block's
@@ -167,9 +168,10 @@ struct ProviderQuotaBlock: View {
             .foregroundStyle(theme.secondary)
             .padding(.vertical, IslandRowLayout.headingVerticalPadding)
 
-            let sections = store.accountSections(rows)
+            // The accounts the layout keeps, each with its windows in the layout's order and without those it hides.
+            let sections = store.accountSections(rows).filter { plan.shows(account: $0.id) }
             ForEach(sections) { section in
-                let shown = section.rows.filter { !plan.hiddenRows.contains($0.agent.windowKey) }
+                let shown = plan.ordered(section.rows, key: \.agent.windowKey).filter { !plan.hiddenRows.contains($0.agent.windowKey) }
                 let wallets = section.account?.wallets ?? []
                 // Earned resets belong to the signed-in Codex account.
                 let resets = section.isCurrent && section.rows.contains(where: { $0.agent.vendor == "Codex" })

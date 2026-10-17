@@ -155,11 +155,7 @@ private final class IslandPanelScrollFixture {
                             model: "Model \($0)", source: "Test", enabled: true)
         }
         let settings = SettingsStore(defaults: defaults, defaultAgents: agents)
-        settings.update {
-            $0.showIslandQuota = true
-            $0.showIslandTokens = true
-            $0.showIslandSessions = false
-        }
+        settings.panelLayout.setSwitches { $0.quotaDetails = true; $0.tokenUsage = true; $0.sessionList = false }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
         let now = Date()
         store.replace(report: UsageReport(generatedAt: now, snapshots: agents.map {

@@ -40,7 +40,9 @@ public enum GlowEffect: String, Codable, Sendable, CaseIterable {
     case boot
 }
 
-/// User-tunable settings. Every field has a default so older stored JSON still decodes.
+/// User-tunable settings. Every field has a default so older stored JSON still decodes. The switches of Settings →
+/// Display → Expanded panel are not among them: they are fields of the panel's layouts (`PanelSwitches`), into which
+/// `SettingsStore` carries those an earlier version kept here, under keys this type no longer reads or writes.
 public struct Settings: Hashable, Codable, Sendable {
     public static let glowSizeRange = GlowSettings.sizeRange
     public static let breathSecondsRange = GlowSettings.breathSecondsRange
@@ -88,10 +90,6 @@ public struct Settings: Hashable, Codable, Sendable {
     public var openImmediatelyAtTop: Bool = false
     public var hoverDelayMs: Int = 400
     public var collapseDelayMs: Int = 200
-    public var showResetCountdown: Bool = true
-    public var showIslandQuota: Bool = true
-    public var showIslandTokens: Bool = true
-    public var showIslandSessions: Bool = true
     /// A mark turns into its bot while its agent works, asks for approval or has just replied, and while its own card
     /// is open on a dock that separates its agents. It covers the Dynamic dock, the Simple panel and reminders. Off,
     /// marks stay logos and a working one keeps still.
@@ -144,8 +142,7 @@ public struct Settings: Hashable, Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case breathSeconds, idleBreathSeconds, breathAmplitude, glowRange, glowBlur, glowBrightness, glowOutwardOnly
         case glowStyle, glowGridPitch, glowGridSpread, glowGridCore, glowGridFade, glowGridDensity, glowEffect
-        case requiresOptionToOpen, openImmediatelyAtTop, hoverDelayMs, collapseDelayMs, showResetCountdown
-        case showIslandQuota, showIslandTokens, showIslandSessions, botLogos, hiddenAccountIDs
+        case requiresOptionToOpen, openImmediatelyAtTop, hoverDelayMs, collapseDelayMs, botLogos, hiddenAccountIDs
         case liveStatusPreferences, disabledLiveStatusSources, readCopilotQuota, clientHooks, agentTools, approvalWaitMinutes
         case launchAtLogin, showMenuBarIcon, appearance, appearanceFollowsScreen, language, screens, screenGlow, providerOrder
     }
@@ -175,10 +172,6 @@ public struct Settings: Hashable, Codable, Sendable {
         openImmediatelyAtTop = try c.decodeIfPresent(Bool.self, forKey: .openImmediatelyAtTop) ?? d.openImmediatelyAtTop
         hoverDelayMs = try c.decodeIfPresent(Int.self, forKey: .hoverDelayMs) ?? d.hoverDelayMs
         collapseDelayMs = try c.decodeIfPresent(Int.self, forKey: .collapseDelayMs) ?? d.collapseDelayMs
-        showResetCountdown = try c.decodeIfPresent(Bool.self, forKey: .showResetCountdown) ?? d.showResetCountdown
-        showIslandQuota = try c.decodeIfPresent(Bool.self, forKey: .showIslandQuota) ?? d.showIslandQuota
-        showIslandTokens = try c.decodeIfPresent(Bool.self, forKey: .showIslandTokens) ?? d.showIslandTokens
-        showIslandSessions = try c.decodeIfPresent(Bool.self, forKey: .showIslandSessions) ?? d.showIslandSessions
         botLogos = try c.decodeIfPresent(Bool.self, forKey: .botLogos) ?? d.botLogos
         hiddenAccountIDs = Set(try c.decodeIfPresent([String].self, forKey: .hiddenAccountIDs) ?? [])
         if let saved = try c.decodeIfPresent([String: Bool].self, forKey: .liveStatusPreferences) {
@@ -229,10 +222,6 @@ public struct Settings: Hashable, Codable, Sendable {
         try c.encode(openImmediatelyAtTop, forKey: .openImmediatelyAtTop)
         try c.encode(hoverDelayMs, forKey: .hoverDelayMs)
         try c.encode(collapseDelayMs, forKey: .collapseDelayMs)
-        try c.encode(showResetCountdown, forKey: .showResetCountdown)
-        try c.encode(showIslandQuota, forKey: .showIslandQuota)
-        try c.encode(showIslandTokens, forKey: .showIslandTokens)
-        try c.encode(showIslandSessions, forKey: .showIslandSessions)
         try c.encode(botLogos, forKey: .botLogos)
         try c.encode(hiddenAccountIDs.sorted(), forKey: .hiddenAccountIDs)
         try c.encode(liveStatusPreferences, forKey: .liveStatusPreferences)
