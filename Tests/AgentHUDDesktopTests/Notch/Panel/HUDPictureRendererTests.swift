@@ -114,6 +114,24 @@ final class HUDPictureRendererTests: XCTestCase {
         XCTAssertEqual(picture.height, Double(strip.height + 2 * HUDPictureRenderer.margin), accuracy: 1)
     }
 
+    /// A Simple panel's marks in the picture follow Bot logos, as the dock's do and as the panel on screen does, and the
+    /// panel is the same size either way. Whether a bot is out also depends on Reduce Motion, which this does not read.
+    func testASimplePanelsMarksFollowBotLogos() throws {
+        layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
+        var sizes: [CGSize] = []
+        for on in [true, false] {
+            store.settings.update { $0.botLogos = on }
+            let renderer = renderer()
+            XCTAssertEqual(renderer.placement.mode, .simple, "a switch of the whole app leaves the style draft")
+            XCTAssertEqual(renderer.simpleMeter.bots, on)
+            let dock = LogoQueueConfig(items: [], placement: renderer.placement, settings: store.settings.settings)
+            XCTAssertEqual(renderer.simpleMeter.bots, dock.bots, "as a dock's picture follows it")
+            let picture = try XCTUnwrap(renderer.picture())
+            sizes.append(CGSize(width: picture.width, height: picture.height))
+        }
+        XCTAssertEqual(sizes.first, sizes.last)
+    }
+
     /// The picture is drawn in the screen's look: over the same backdrop, a Simple panel's own fill is black in the
     /// standard look and the light surface in the light one, and the panel is the same size in both.
     func testASimplePanelIsDrawnInTheScreensLook() throws {
@@ -129,7 +147,8 @@ final class HUDPictureRendererTests: XCTestCase {
     /// 0.805 of its look's own surface at the standard Transparency, 50 %, which clear glass draws at 0.3, darker than
     /// the backdrop for dark glass and lighter for light glass, short of the solid fill. The stand-in thins as the
     /// dimming beneath the glass does: the surface whole at 0, and at the material's top, 100 % drawn whole, the third
-    /// of it a picture always keeps, dark glass still darker than the backdrop and light glass still lighter.
+    /// of it a picture always keeps, dark glass still darker than the backdrop and light glass still lighter. Every glass
+    /// style is the same stand-in at the transparency it draws, so a picture shows them alike but for that.
     func testAGlassPanelIsDrawnAsItsStandIn() throws {
         layout.proposeStyle(HUDStyle(mode: .simple), for: key, hasNotch: true)
         func glass(_ appearance: HUDLook.Appearance, _ transparency: Double, style: HUDGlassStyle = .clear) throws
@@ -150,6 +169,10 @@ final class HUDPictureRendererTests: XCTestCase {
         XCTAssertLessThan(light.fill, solid.fill - 0.1, "short of the light surface itself")
         XCTAssertEqual(light.picture.width, solid.picture.width)
         XCTAssertEqual(light.picture.height, solid.picture.height)
+        for style in HUDGlassStyle.allCases {
+            XCTAssertEqual(try glass(.dark, standard, style: style).fill, dark.fill, accuracy: 0.005, "\(style)")
+            XCTAssertEqual(try glass(.light, standard, style: style).fill, light.fill, accuracy: 0.005, "\(style)")
+        }
 
         XCTAssertEqual(try glass(.light, 0).fill, solid.fill, accuracy: 0.02, "the light surface whole at 0")
         XCTAssertLessThan(try glass(.dark, 0).fill, 0.02, "black whole at 0")

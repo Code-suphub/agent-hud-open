@@ -4,9 +4,10 @@ import XCTest
 @testable import AgentHUDCore
 @testable import AgentHUDDesktop
 
-/// The hover panel under a layout's sessions and tokens: which rows the session section lists, what it says when the
-/// filter keeps none, and the token chart's height in every period its picker offers, measured as the island measures
-/// the panel: a fresh view tree at the panel's width.
+/// The hover panel under a layout's sessions and tokens: which rows the session section lists and how far back, what it
+/// says when the filter keeps none, the token chart's height in every period its picker offers, a quota block's chart in
+/// its own period and a balance's estimated cost over the layout's, measured as the island measures the panel: a fresh
+/// view tree at the panel's width.
 @MainActor
 final class PanelFiltersViewTests: XCTestCase {
     /// The sample's store over settings of its own, made when a test first reaches for either: two sessions running and
@@ -124,6 +125,18 @@ final class PanelFiltersViewTests: XCTestCase {
                        Set(store.consumers.filter { $0.vendor == "Codex" }.map(\.id)))
     }
 
+    /// The rows reach as far back as the layout's period, and the panel grows and shrinks with them.
+    func testTheRowsReachAsFarBackAsTheLayoutsPeriod() {
+        keep(PanelLayout(sessions: PanelLayout.Sessions(limit: 10)))
+        let day = height()
+        keep(PanelLayout(sessions: PanelLayout.Sessions(limit: 10, period: .week)))
+        XCTAssertEqual(HoverPanelView.sessionRows(store, filter: plan.sessions).shown.map(\.id).last, "s9", "ended yesterday")
+        XCTAssertGreaterThan(height(), day + 10, "one more row")
+        keep(PanelLayout(sessions: PanelLayout.Sessions(limit: 10, period: .hour)))
+        XCTAssertEqual(HoverPanelView.sessionRows(store, filter: plan.sessions).shown.count, 6)
+        XCTAssertLessThan(height(), day - 20, "two rows fewer")
+    }
+
     // MARK: Tokens
 
     /// The picker flips the period in place and the island is sized from the period the layout opens with, so the panel
@@ -202,6 +215,37 @@ final class PanelFiltersViewTests: XCTestCase {
                 try await Task.sleep(for: .milliseconds(10))
             }
         }
+    }
+
+    /// A quota block's chart draws its own period in that period's columns, as tall in every period, and a balance's
+    /// estimated cost covers its block's period, never the range the statistics window shows, which only that window's
+    /// own card follows.
+    func testABlocksPeriodIsDrawnAndTheStatisticsRangeIsNot() throws {
+        func drawn(_ view: some View) -> Data? {
+            let host = NSHostingView(rootView: view.frame(width: IslandController.expandedWidth))
+            host.appearance = NSAppearance(named: .darkAqua)
+            host.frame = CGRect(origin: .zero, size: host.fittingSize)
+            return pixels(host)
+        }
+        let charts = PanelTokenPeriod.allCases.map { period -> (height: CGFloat, pixels: Data?) in
+            keep(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .chart, period: period)], hiddenSections: [.tokens, .sessions]))
+            return (height(), drawn(HoverPanelView(store: store, onOpenStats: {})))
+        }
+        XCTAssertEqual(charts.map(\.height).max() ?? 0, charts.map(\.height).min() ?? 1, accuracy: 0.5, "\(charts.map(\.height))")
+        XCTAssertNotEqual(charts[0].pixels, charts[1].pixels, "a week is other bars and another total")
+        XCTAssertEqual(plan.blocks.first?.period, .month)
+
+        let account = try XCTUnwrap(store.enabledBilling.first)
+        func card(_ period: PanelTokenPeriod?) -> Data? {
+            drawn(APIBillingCard(billing: account, store: store, theme: .island, compact: true, period: period))
+        }
+        let day = card(.day), week = card(.week)
+        XCTAssertNotEqual(day, week, "the sample's balance spent more over the week")
+        store.setStatsRange(.days7)
+        XCTAssertEqual(card(.day), day, "the statistics window's range is not the panel's")
+        XCTAssertEqual(card(nil), week, "the statistics window's own card follows its range")
+        keep(PanelLayout(tokens: PanelLayout.Tokens(period: .week)))
+        XCTAssertEqual(plan.blocks.first { $0.kind == .billing }?.period, .week, "a balance follows the token chart's period")
     }
 
     /// What a view draws, pixel by pixel.
