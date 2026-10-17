@@ -69,7 +69,8 @@ enum TencentBuddySessions {
     }
 
     /// One 429 ceiling a line logged, nil for anything else: only an incomplete answer that carries a 429 error reports
-    /// one. The message names the window in the vendor's words and the reset in the time zone the client logs (its own).
+    /// one. The message names the window in the vendor's words and the reset as a wall-clock time in the vendor's own
+    /// zone, Beijing time, whatever zone this Mac runs in.
     /// The model is the session's latest successful one, because the failed call itself records none; a 429 before any
     /// success names nothing.
     static func limitHit(_ json: ProviderJSON, session: String, date: Date?, lastModels: [String: String]) -> ProviderLimitHit? {

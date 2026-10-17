@@ -164,8 +164,9 @@ final class TencentBuddyProviderTests: XCTestCase, @unchecked Sendable {
 
     func testLimitHitsReportTheResetAndAttributeTheLatestSuccessfulModel() throws {
         let url = try directory().appendingPathComponent("projects/repo/s1.jsonl")
-        // The reset in the vendor's message is a wall-clock time in the client's own zone, wherever the test runs.
-        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = .current
+        // The reset in the vendor's message is a wall-clock time in the vendor's own zone, Beijing time, which the reader
+        // parses it in, so the expectation holds whatever zone this Mac runs in.
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
         let reset = try XCTUnwrap(calendar.date(from: DateComponents(year: 2106, month: 2, day: 7, hour: 6, minute: 28, second: 16)))
         try write([
             line("message", message: "m1", usage: #"{"inputTokens":100,"outputTokens":4,"totalTokens":104}"#),
