@@ -221,6 +221,89 @@ final class AgentSeparationTests: XCTestCase {
         }
     }
 
+    /// Simple and Dynamic never hide their marks, separated or not: an event comes out of its sender's mark, or the
+    /// middle of the dock for an agent with none, and only the open usage panel takes an event in as one of its rows.
+    @MainActor
+    func testEveryDockKeepsItsMarksAndAnEventComesOutOfItsSendersMark() throws {
+        _ = NSApplication.shared
+        let screen = try XCTUnwrap(NSScreen.main)
+        let key = ScreenIdentity.key(for: screen)
+        for mode in [HUDMode.simple, .logos] {
+            for edge in HUDEdge.allCases {
+                let name = "\(mode) \(edge)"
+                func dock() throws -> ScreenHUD {
+                    let domain = "app.agenthud.tests.dock-events.\(UUID().uuidString)"
+                    let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+                    addTeardownBlock { defaults.removePersistentDomain(forName: domain) }
+                    let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.everyAgent)
+                    settings.update { $0.screens[key] = ScreenPlacement(mode: mode, edge: edge, offset: 0.4) }
+                    let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
+                    store.replace(report: DemoUsageProvider.report(agents: settings.agents,
+                        historyHours: UsageStore.historyHours, now: Date()))
+                    let hud = ScreenHUD(key: key, screen: screen, store: store, settings: settings,
+                                        mouseLocation: { CGPoint(x: -10_000, y: -10_000) })
+                    addTeardownBlock { hud.close() }
+                    return hud
+                }
+                func card(_ hud: ScreenHUD) throws -> CGRect {
+                    let local = try XCTUnwrap(hud.island.rootView.presentationFrame)
+                    let canvas = hud.island.panel.frame
+                    return CGRect(x: canvas.minX + local.minX, y: canvas.maxY - local.maxY, width: local.width, height: local.height)
+                }
+                /// The card stands clear of the strip, centred on `anchor` along the edge unless the screen's end holds
+                /// it back.
+                func besides(_ hud: ScreenHUD, _ anchor: CGFloat, _ what: String) throws {
+                    let strip = hud.geometry.rect, frame = try card(hud)
+                    XCTAssertFalse(frame.intersects(strip.insetBy(dx: 1, dy: 1)), "\(name) \(what): clear of the marks")
+                    XCTAssertTrue(hud.island.panel.frame.insetBy(dx: -1, dy: -1).contains(strip), "\(name) \(what): the marks stay on the canvas")
+                    let along = edge.isHorizontal ? frame.midX : frame.midY
+                    let held = edge.isHorizontal ? frame.minX <= screen.frame.minX || frame.maxX >= screen.frame.maxX
+                                                 : frame.minY <= screen.frame.minY || frame.maxY >= screen.frame.maxY
+                    XCTAssertTrue(abs(along - anchor) <= 1 || held, "\(name) \(what): centred on \(anchor), at \(along)")
+                }
+
+                // A reply from the first agent: a pill beside its mark, then its card beside it.
+                let replying = try dock()
+                XCTAssertTrue(replying.agentMarks.isEmpty, "\(name): hovering opens the whole panel")
+                let first = try XCTUnwrap(replying.dockMarks.first, name)
+                replying.present(.completion(SessionCompletion(
+                    sessionID: "dock", vendor: first.vendor, turnID: "reply", task: "New reply",
+                    model: "test", startedAt: nil, completedAt: Date())))
+                XCTAssertEqual(replying.island.rootView.focusVendor, first.vendor, name)
+                XCTAssertNotNil(replying.island.rootView.alert)
+                XCTAssertFalse(replying.island.rootView.isOpen, "\(name): a reply stays compact until it is hovered")
+                try besides(replying, first.anchor, "pill")
+                replying.forceOpen()
+                XCTAssertTrue(replying.island.rootView.showsAlertDetails, name)
+                XCTAssertEqual(replying.island.rootView.focusVendor, first.vendor, name)
+                try besides(replying, first.anchor, "card")
+
+                // A request from a client with no mark here comes out of the middle of the dock.
+                let asking = try dock()
+                let marked = Set(asking.dockMarks.map(\.key))
+                if let source = PermissionHooks.Source.allCases.first(where: { !marked.contains(AgentArtwork.markKey($0.vendor)) }) {
+                    let request = PermissionRequest(id: "dock-\(name)", source: source, sessionID: "dock", toolName: "Bash",
+                                                    summary: "ls", detail: "ls", cwd: "/tmp", at: Date())
+                    asking.present(.permission(request))
+                    XCTAssertEqual(asking.island.rootView.focusVendor, source.vendor, name)
+                    let strip = asking.geometry.rect
+                    try besides(asking, edge.isHorizontal ? strip.midX : strip.midY, "markless request")
+                    asking.withdraw(requestID: request.id)
+                    XCTAssertNil(asking.island.rootView.focusVendor, name)
+                }
+
+                // News that arrives while the whole panel is open is one of its rows.
+                let reading = try dock()
+                reading.forceOpen()
+                let agent = AgentDescriptor(id: "dock-quota", vendor: first.vendor, model: "test", source: "", enabled: true)
+                reading.present(.quota(QuotaAlert.preview(.exhaustion, agent: agent, now: Date())))
+                XCTAssertNotNil(reading.island.rootView.alert, name)
+                XCTAssertNil(reading.island.rootView.focusVendor, "\(name): the open panel holds it")
+                XCTAssertFalse(reading.island.rootView.showsAlertDetails, name)
+            }
+        }
+    }
+
     @MainActor
     func testASettledCardAndItsWindowAreLeftAloneByLaterPasses() throws {
         _ = NSApplication.shared

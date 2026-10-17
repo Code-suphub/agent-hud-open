@@ -120,8 +120,8 @@ public struct ScreenPlacement: Hashable, Codable, Sendable {
     public var showsRings: Bool
     /// Simple mode writes the percentage used beside each mark.
     public var showsNumbers: Bool
-    /// A docked HUD answers for one agent at a time: hovering a mark opens that agent's own panel from the
-    /// mark, and a request or reminder grows from the mark of the agent that sent it while the others stay.
+    /// A docked HUD answers for one agent at a time: hovering a mark opens that agent's own panel from the mark. A
+    /// request or reminder grows from the mark of the agent that sent it on every dock, separated or not.
     public var separatesAgents: Bool
     /// The colours of the HUD, its panel and its cards: dark, the HUD as it has always been, unless chosen otherwise.
     public var appearance: HUDAppearance

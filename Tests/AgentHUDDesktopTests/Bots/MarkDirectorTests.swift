@@ -428,7 +428,7 @@ final class MarkDirectorTests: XCTestCase {
     }
 }
 
-/// Which events a dock hands its marks across the cards that hide it.
+/// Which events a dock hands its marks, among them ones that fired before a mark could play them.
 final class DockMemoryTests: XCTestCase {
     private let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
@@ -440,10 +440,8 @@ final class DockMemoryTests: XCTestCase {
         XCTAssertNil(memory.cue(for: "Claude", nil, badge: nil, at: now))
     }
 
-    func testAFailureMissedUnderACardPlaysOnceWhileItsBadgeStands() {
+    func testAMissedFailurePlaysOnceWhileItsBadgeStands() {
         var memory = DockMemory()
-        memory.hide()
-        XCTAssertTrue(memory.returns)
         let failed = BotCue(event: .failed, at: now)
         let later = now.addingTimeInterval(40)
         let replay = memory.cue(for: "Claude", failed, badge: .failed, at: later)
@@ -454,7 +452,7 @@ final class DockMemoryTests: XCTestCase {
         XCTAssertEqual(memory.cue(for: "Codex", limit, badge: .limited, at: later), BotCue(event: .limitHit, at: later))
     }
 
-    func testAStartMissedUnderACardIsOverAndSoIsAFailureWhoseBadgeWentOff() {
+    func testAMissedStartIsOverAndSoIsAFailureWhoseBadgeWentOff() {
         var memory = DockMemory()
         let start = BotCue(event: .start, at: now), failed = BotCue(event: .failed, at: now)
         let later = now.addingTimeInterval(40)

@@ -107,8 +107,6 @@ struct SimpleMeterConfig: Equatable {
     /// agent's picture of the resting HUD (`HUDPictureRenderer`). Left out, it is off, for a panel that is only measured
     /// or drawn still in a snapshot.
     var bots: Bool
-    /// The panel comes back after a card hid it: its bots take up their looks at once (`DockMemory`).
-    var resumes = false
 
     init(items: [SimpleMeterItem], placement: ScreenPlacement, bots: Bool = false) {
         self.items = items
