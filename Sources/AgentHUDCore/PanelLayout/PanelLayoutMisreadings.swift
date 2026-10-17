@@ -97,12 +97,12 @@ extension PanelLayout {
                 found += HUDStyle.misreadings(ofField: property, value)
                     ?? ["hud has no property \"\(property)\"; the hud takes "
                         + "\(HUDStyle.listed(["agents"] + HUDStyle.names + [HUDStyle.resetName])), and \(kept) as "
-                        + "get_panel lists them."]
+                        + "get_hud lists them."]
                 continue
             }
             found += names(value, at: "hud.agents", among: nil)
             for (index, item) in (value.arrayValue ?? []).enumerated() where item.stringValue?.isEmpty == true {
-                found.append("hud.agents[\(index)] is an agent's name from get_panel's screens.")
+                found.append("hud.agents[\(index)] is an agent's name from get_hud's screens.")
             }
         }
         return found

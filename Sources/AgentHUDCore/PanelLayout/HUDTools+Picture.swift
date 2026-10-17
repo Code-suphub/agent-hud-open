@@ -1,8 +1,8 @@
 import AgentHUDSupport
 import Foundation
 
-/// What `get_panel_image` tells an agent: a picture of a screen's hover panel, or of its resting HUD.
-extension PanelTools {
+/// What `get_hud_screenshot` tells an agent: a picture of a screen's hover panel, or of its resting HUD.
+extension HUDTools {
     // MARK: The panel
 
     /// The picture with what it shows: which screen and layout and its revision, the panel's size in points, whether it
@@ -11,10 +11,10 @@ extension PanelTools {
     func image(_ scope: PanelLayoutScope, among attached: [PanelScreen]) -> MCPToolReply {
         guard let picture else {
             return .failure("This copy of Agent HUD cannot draw the panel, so there is no picture of it here. "
-                            + "get_panel reads the same panel as data.")
+                            + "get_hud reads the same panel as data.")
         }
         guard let drawn = picture(scope) else {
-            return .failure("The panel's picture could not be drawn. Try again, or read the panel with get_panel.")
+            return .failure("The panel's picture could not be drawn. Try again, or read the panel with get_hud.")
         }
         let fit = drawn.fit
         var note: String
@@ -89,10 +89,10 @@ extension PanelTools {
         }
         guard let hud else {
             return .failure("This copy of Agent HUD cannot draw a resting HUD, so there is no picture of it here. "
-                            + "get_panel reads its style as data.")
+                            + "get_hud reads its style as data.")
         }
         guard let drawn = hud(key) else {
-            return .failure("The resting HUD's picture could not be drawn. Try again, or read its style with get_panel.")
+            return .failure("The resting HUD's picture could not be drawn. Try again, or read its style with get_hud.")
         }
         let placement = store.settings.effectivePlacement(on: key, hasNotch: screen.hasNotch)
         let draft = layout.hasStyleDraft(key)

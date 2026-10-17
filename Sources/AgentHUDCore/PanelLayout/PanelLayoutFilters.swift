@@ -151,10 +151,10 @@ public extension PanelLayout {
     struct Tokens: Hashable, Codable, Sendable {
         /// The period the chart starts from each time the panel opens; nil for `day`.
         public var period: PanelTokenPeriod?
-        /// The agents whose models' tokens are charted, by vendor, the key `get_panel` gives a quota block, each matched by
+        /// The agents whose models' tokens are charted, by vendor, the key `get_hud` gives a quota block, each matched by
         /// the mark it is drawn with. Empty for every agent.
         public var agents: [String]
-        /// The models whose tokens are charted, by the id `get_panel` gives each among the chart's models
+        /// The models whose tokens are charted, by the id `get_hud` gives each among the chart's models
         /// (`AgentDescriptor.id`), among those of `agents` where it names any. Empty for every model.
         public var models: [String]
 
@@ -223,7 +223,7 @@ extension PanelLayout {
                     case "period":
                         found += misnamed(value, at: "sessions.period", among: PanelSessionPeriod.allCases.map(\.rawValue))
                     case "agents":
-                        found += agentNames(value, at: "sessions.agents", from: "get_panel's sessions.offeredAgents")
+                        found += agentNames(value, at: "sessions.agents", from: "get_hud's sessions.offeredAgents")
                     case "states":
                         found += names(value, at: "sessions.states", among: PanelSessionState.allCases.map(\.rawValue))
                     default:
@@ -242,11 +242,11 @@ extension PanelLayout {
                     case "period":
                         found += misnamed(value, at: "tokens.period", among: PanelTokenPeriod.allCases.map(\.rawValue))
                     case "agents":
-                        found += agentNames(value, at: "tokens.agents", from: "get_panel's tokens.offeredAgents")
+                        found += agentNames(value, at: "tokens.agents", from: "get_hud's tokens.offeredAgents")
                     case "models":
                         found += names(value, at: "tokens.models", among: nil)
                         for (index, item) in (value.arrayValue ?? []).enumerated() where item.stringValue?.isEmpty == true {
-                            found.append("tokens.models[\(index)] is a model's id from get_panel's tokens.offeredModels.")
+                            found.append("tokens.models[\(index)] is a model's id from get_hud's tokens.offeredModels.")
                         }
                     default:
                         found.append("tokens has no property \"\(property)\"; tokens take period, agents and models.")

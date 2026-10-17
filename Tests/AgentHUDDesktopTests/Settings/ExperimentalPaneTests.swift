@@ -76,14 +76,14 @@ final class ExperimentalPaneTests: XCTestCase {
         XCTAssertEqual(setup.controls(toolsOn: false), .init(picker: false, action: false, copyCommand: false, hint: false))
 
         toggle.performClick(nil)
-        await settle(page) { settings.settings.agentTools && page.picker?.isEnabled == true }
-        XCTAssertTrue(settings.settings.agentTools, "the switch writes the setting")
+        await settle(page) { settings.settings.hudTools && page.picker?.isEnabled == true }
+        XCTAssertTrue(settings.settings.hudTools, "the switch writes the setting")
         XCTAssertEqual(page.toggle?.state, .on)
         XCTAssertEqual(page.picker?.isEnabled, true)
-        XCTAssertEqual(setup.controls(toolsOn: settings.settings.agentTools), .init(picker: true, action: true, copyCommand: true, hint: true))
+        XCTAssertEqual(setup.controls(toolsOn: settings.settings.hudTools), .init(picker: true, action: true, copyCommand: true, hint: true))
         XCTAssertEqual(setup.action, .add)
 
-        settings.update { $0.agentTools = false }
+        settings.update { $0.hudTools = false }
         await settle(page) { page.picker?.isEnabled == false }
         XCTAssertEqual(page.picker?.isEnabled, false, "dimmed again with the switch")
         XCTAssertTrue(mac.runs.isEmpty, "nothing ran on its own")
@@ -95,7 +95,7 @@ final class ExperimentalPaneTests: XCTestCase {
         let setup = MCPClientSetup(environment: mac.environment)
         let page = try page(settings, setup)
         await settle(page) { page.picker != nil }
-        XCTAssertFalse(settings.settings.agentTools)
+        XCTAssertFalse(settings.settings.hudTools)
         XCTAssertEqual(page.picker?.isEnabled, true, "the picker Remove needs")
         XCTAssertEqual(setup.action, .remove)
         XCTAssertTrue(setup.controls(toolsOn: false).action, "Remove itself")

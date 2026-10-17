@@ -16,33 +16,33 @@ import Foundation
 /// it, so the layout that was read can be sent again, and a proposal is kept as what it changes, so one that draws what
 /// is saved leaves no draft. Screens are named by role and agents by vendor; nothing names an account.
 @MainActor
-public struct PanelTools {
+public struct HUDTools {
     let store: UsageStore
     /// The number the revisions an agent is given are counted from.
     let launch: Int64
     /// Lists the attached screens; nil where the host has none to tell.
     let screens: (@MainActor () -> [PanelScreen])?
-    /// Draws a scope's panel as `get_panel_image` returns it; nil where nothing can draw it.
+    /// Draws a scope's panel as `get_hud_screenshot` returns it; nil where nothing can draw it.
     let picture: (@MainActor (PanelLayoutScope) -> PanelPicture?)?
     /// Measures a scope's panel without drawing it; nil where nothing can.
     let fit: (@MainActor (PanelLayoutScope) -> PanelFit?)?
-    /// Draws an attached screen's resting HUD, by its key, as `get_panel_image` returns it with show "hud"; nil where
-    /// nothing can draw it.
+    /// Draws an attached screen's resting HUD, by its key, as `get_hud_screenshot` returns it with show "hud"; nil
+    /// where nothing can draw it.
     let hud: (@MainActor (String) -> HUDPicture?)?
 
     /// Drawn once a launch. The layout store counts its changes from 0 at every launch, so counted from 0 a revision
     /// an agent read before a relaunch would pass for the current one after it.
     private static let drawnAtLaunch = Int64.random(in: 1...999_999) * 1_000
 
-    /// - screens: the attached displays, in the system's order, as `get_panel` lists them; without it no screen is
+    /// - screens: the attached displays, in the system's order, as `get_hud` lists them; without it no screen is
     ///   listed and only the shared layout, or a screen the store already keeps a layout for, can be addressed.
     /// - picture: draws the hover panel of a scope off screen, as the layout in effect there draws it, at that screen's
     ///   width and insets (the main display's for the shared layout), with account names masked, session titles left
-    ///   out and what providers and clients wrote as placeholder bars; without it `get_panel_image` is refused.
-    /// - fit: measures that panel off screen; without it `get_panel` leaves out the panel's height and whether it
+    ///   out and what providers and clients wrote as placeholder bars; without it `get_hud_screenshot` is refused.
+    /// - fit: measures that panel off screen; without it `get_hud` leaves out the panel's height and whether it
     ///   scrolls.
     /// - hud: draws an attached screen's resting HUD off screen as it looks now, a style draft included, without
-    ///   opening anything; without it `get_panel_image` refuses show "hud".
+    ///   opening anything; without it `get_hud_screenshot` refuses show "hud".
     public init(store: UsageStore, screens: (@MainActor () -> [PanelScreen])? = nil,
                 picture: (@MainActor (PanelLayoutScope) -> PanelPicture?)? = nil,
                 fit: (@MainActor (PanelLayoutScope) -> PanelFit?)? = nil,
@@ -72,15 +72,15 @@ public struct PanelTools {
         let attached = screens?() ?? []
         let arguments = request.arguments
         switch request.tool {
-        case MCPTools.getPanel:
+        case MCPTools.getHUD:
             if let unknown = Self.unknown(arguments, taking: ["screen"]) {
-                return .failure("get_panel takes only screen. \(unknown)")
+                return .failure("get_hud takes only screen. \(unknown)")
             }
             do { return .result(panel(try scope(of: arguments, among: attached), among: attached)) }
             catch { return .failure(Self.sentence(error)) }
-        case MCPTools.getPanelImage:
+        case MCPTools.getHUDScreenshot:
             if let unknown = Self.unknown(arguments, taking: ["screen", "show"]) {
-                return .failure("get_panel_image takes only screen and show. \(unknown)")
+                return .failure("get_hud_screenshot takes only screen and show. \(unknown)")
             }
             do {
                 let scope = try scope(of: arguments, among: attached)
@@ -92,11 +92,11 @@ public struct PanelTools {
             } catch {
                 return .failure(Self.sentence(error))
             }
-        case MCPTools.setPanelLayout:
+        case MCPTools.draftHUD:
             return propose(arguments, among: attached)
-        case MCPTools.discardPanelDraft:
+        case MCPTools.discardHUDDraft:
             if let unknown = Self.unknown(arguments, taking: ["screen"]) {
-                return .failure("Nothing was changed. discard_panel_draft takes only screen. \(unknown)")
+                return .failure("Nothing was changed. discard_hud_draft takes only screen. \(unknown)")
             }
             do {
                 let scope = try scope(of: arguments, among: attached)
@@ -115,9 +115,9 @@ public struct PanelTools {
             } catch {
                 return .failure("Nothing was changed. " + Self.sentence(error))
             }
-        case MCPTools.finishPanelEdit:
+        case MCPTools.finishHUDEdit:
             if let unknown = Self.unknown(arguments, taking: ["screen"]) {
-                return .failure("Nothing was changed. finish_panel_edit takes only screen. \(unknown)")
+                return .failure("Nothing was changed. finish_hud_edit takes only screen. \(unknown)")
             }
             do { return .result(finish(try scope(of: arguments, among: attached), among: attached)) } catch {
                 return .failure("Nothing was changed. " + Self.sentence(error))
@@ -146,7 +146,7 @@ public struct PanelTools {
     private func scope(of arguments: [String: JSONValue], among attached: [PanelScreen]) throws -> PanelLayoutScope {
         guard let given = arguments["screen"], given != .null else { return .shared }
         guard let key = given.stringValue else {
-            throw Refusal(sentence: "screen is a screen key from get_panel's screens, or \"all\" for the shared layout.")
+            throw Refusal(sentence: "screen is a screen key from get_hud's screens, or \"all\" for the shared layout.")
         }
         if key == "all" { return .shared }
         guard attached.contains(where: { $0.key == key }) || layout.screenKeys.contains(key) else {
@@ -186,11 +186,11 @@ public struct PanelTools {
         }
         if let given = arguments["revision"], given != .null {
             guard case .integer(let read) = given else {
-                return .failure("Nothing was changed. revision is the whole number get_panel returned.")
+                return .failure("Nothing was changed. revision is the whole number get_hud returned.")
             }
             guard read == revision else {
                 return .failure("Nothing was changed. The layout changed since you read it: its revision is now "
-                                + "\(revision). Call get_panel again, then propose.")
+                                + "\(revision). Call get_hud again, then propose.")
             }
         }
         // What the panel drew before, against which the edit's first agent is found.
@@ -308,7 +308,7 @@ public struct PanelTools {
 
     /// What a screen is proposed for a layout sent for it: its saved own layout where the layout draws that; the shared
     /// layout where the screen draws the shared layout, saved or as its draft, and the layout draws what that draws, so
-    /// the layout `get_panel` returned for such a screen, sent back, changes nothing; else the layout as its own.
+    /// the layout `get_hud` returned for such a screen, sent back, changes nothing; else the layout as its own.
     private func choice(_ asked: PanelLayout, for key: String, against existing: [PanelBlockInfo]) -> PanelScreenLayout {
         let own = layout.ownLayout(of: key)
         if let own, asked == own.reduced(against: existing) { return .own(own) }

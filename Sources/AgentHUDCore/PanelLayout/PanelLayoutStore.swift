@@ -159,7 +159,7 @@ public final class PanelLayoutStore {
     /// Shows a style as `screen`'s style draft, without saving it, drawn over that screen's settings at once; an empty
     /// style drops the style draft instead, and the style a waiting draft already lists keeps that draft as it is, so
     /// what an agent read, sent back, changes nothing. The style is taken as given: an agent's proposal is reduced to
-    /// what it changes first (`PanelTools`). Returns whether a style draft now waits for the screen.
+    /// what it changes first (`HUDTools`). Returns whether a style draft now waits for the screen.
     /// - hasNotch: whether the screen has a notch, which decides the placement a screen without one of its own saved
     ///   draws, and so the one a Save writes the style over.
     @discardableResult

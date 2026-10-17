@@ -52,7 +52,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(response["result"].objectValue?.keys.sorted(), ["tools"], "a handshake client gets the list and nothing else")
         let tools = try XCTUnwrap(response["result"]["tools"].arrayValue)
         XCTAssertEqual(tools.map { $0["name"].stringValue },
-                       ["get_panel", "get_panel_image", "set_panel_layout", "discard_panel_draft", "finish_panel_edit"])
+                       ["get_hud", "get_hud_screenshot", "draft_hud", "discard_hud_draft", "finish_hud_edit"])
         XCTAssertEqual(try probe.response(to: #"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)["result"], response["result"],
                        "the same list in the same order every time, so a client may cache it")
 
@@ -65,8 +65,8 @@ final class MCPToolsTests: XCTestCase {
             XCTAssertEqual(tool["inputSchema"]["additionalProperties"], .bool(false), "\(name) takes no property it does not name")
             try assertSchema(tool["inputSchema"], at: name)
         }
-        XCTAssertEqual([MCPTools.getPanel, MCPTools.getPanelImage, MCPTools.setPanelLayout, MCPTools.discardPanelDraft,
-                        MCPTools.finishPanelEdit], tools.map { $0["name"].stringValue })
+        XCTAssertEqual([MCPTools.getHUD, MCPTools.getHUDScreenshot, MCPTools.draftHUD, MCPTools.discardHUDDraft,
+                        MCPTools.finishHUDEdit], tools.map { $0["name"].stringValue })
         for index in [0, 1, 3] {
             XCTAssertEqual(tools[index]["inputSchema"]["properties"].objectValue?.keys.sorted(), index == 1 ? ["screen", "show"] : ["screen"],
                            "\(tools[index]["name"]) takes the screen it acts on and, for a picture, what to draw")
@@ -75,14 +75,14 @@ final class MCPToolsTests: XCTestCase {
         }
         XCTAssertEqual(tools[1]["inputSchema"]["properties"]["show"]["enum"], .array([.string("panel"), .string("hud")]))
         XCTAssertEqual(tools[4]["inputSchema"]["properties"].objectValue?.keys.sorted(), ["screen"],
-                       "finish_panel_edit takes the screen it lets go of and nothing else")
+                       "finish_hud_edit takes the screen it lets go of and nothing else")
         XCTAssertEqual(tools[4]["inputSchema"]["properties"]["screen"]["description"].stringValue,
-                       "A screen key from get_panel to let go of that screen's panel; 'all', the default, for every screen's.")
+                       "A screen key from get_hud to let go of that screen's panel; 'all', the default, for every screen's.")
         XCTAssertFalse(tools.contains { $0["name"].stringValue?.contains("save") == true }, "saving is the user's click in the panel")
     }
 
     func testTheLayoutToolTakesTheLayoutAndNothingElse() throws {
-        let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("set_panel_layout") })["inputSchema"]
+        let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("draft_hud") })["inputSchema"]
         let properties = try XCTUnwrap(schema["properties"].objectValue)
         XCTAssertEqual(properties.keys.sorted(),
                        ["blocks", "from", "hiddenSections", "hud", "order", "revision", "screen", "sections", "sessions", "style",
@@ -140,7 +140,7 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(schema["properties"]["revision"]["type"], .string("integer"))
         XCTAssertEqual(schema["properties"]["screen"]["type"], .string("string"))
         XCTAssertEqual(schema["properties"]["screen"]["description"].stringValue,
-                       "A screen key from get_panel for that screen's own layout; 'all', the default, for the shared layout the other screens use.")
+                       "A screen key from get_hud for that screen's own layout; 'all', the default, for the shared layout the other screens use.")
 
         let hud = schema["properties"]["hud"]
         XCTAssertEqual(hud["type"], .string("object"))
@@ -162,14 +162,14 @@ final class MCPToolsTests: XCTestCase {
                        "Solid, or the system's glass, which shows the desktop through it blurred, light or dark as the appearance and the desktop make it; solid while Reduce Transparency is on. At a hardware notch a notch HUD stays dark in the notch's row, black or black glass; the panel and the cards it opens into take the look.")
         XCTAssertEqual(hud["properties"]["transparency"]["type"], .string("number"))
         XCTAssertEqual(hud["properties"]["transparency"]["description"].stringValue,
-                       "How much of the desktop shows through, glass's or solid's as the material is: glass lays less of the appearance's colour beneath it, solid draws less of its fill, all of it at 0; Solid, Clear and Regular draw three fifths of it, 0.6 at 1, and Material all of it; 0 to 1. It sets the transparency of the material the HUD would have; get_panel lists what each keeps as solidTransparency and glassTransparency.")
+                       "How much of the desktop shows through, glass's or solid's as the material is: glass lays less of the appearance's colour beneath it, solid draws less of its fill, all of it at 0; Solid, Clear and Regular draw three fifths of it, 0.6 at 1, and Material all of it; 0 to 1. It sets the transparency of the material the HUD would have; get_hud lists what each keeps as solidTransparency and glassTransparency.")
         XCTAssertEqual(choices(hud["properties"]["glassStyle"]), ["clear", "regular", "material"])
         XCTAssertEqual(hud["properties"]["glassStyle"]["description"].stringValue,
                        "What glass is made of: clear or regular Liquid Glass, which the HUD draws alike, as clear, and a window that matches its screen as regular, or material, an even frosted blur; Clear and Regular are a frosted blur before macOS 26. Kept while the material is solid, as Settings keeps it.")
         for (name, material) in [("solidTransparency", "solid's"), ("glassTransparency", "glass's")] {
             XCTAssertEqual(hud["properties"][name]["type"], .string("number"), name)
             XCTAssertEqual(hud["properties"][name]["description"].stringValue,
-                           "Read only: \(material) transparency as get_panel lists it, which can be sent back as listed; transparency sets the material's own.")
+                           "Read only: \(material) transparency as get_hud lists it, which can be sent back as listed; transparency sets the material's own.")
         }
         XCTAssertEqual(schema["properties"]["from"]["description"].stringValue,
                        "Propose the built-in layout, the last saved one, or for a screen the shared layout, instead of the one described here. Only 'previous' brings a screen's HUD style with it.")
@@ -213,7 +213,7 @@ final class MCPToolsTests: XCTestCase {
 
     /// The names the schema offers are the names the layout reads, so an agent is never offered one that is refused.
     func testTheSchemaOffersTheNamesTheLayoutReads() throws {
-        let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("set_panel_layout") })["inputSchema"]
+        let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("draft_hud") })["inputSchema"]
         func choices(_ node: JSONValue) -> [String] { node["enum"].arrayValue?.compactMap(\.stringValue) ?? [] }
         let block = schema["properties"]["blocks"]["additionalProperties"]["properties"]
         XCTAssertEqual(choices(block["widget"]), PanelWidget.allCases.map(\.rawValue))
@@ -244,25 +244,25 @@ final class MCPToolsTests: XCTestCase {
 
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {
         let tools = Dictionary(uniqueKeysWithValues: MCPTools.definitions.map { ($0["name"].stringValue ?? "", $0) })
-        XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
+        XCTAssertEqual(tools["get_hud"]?["description"].stringValue,
                        "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists and over what period, and its token chart's period, the agents and models it can draw and its total; the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the whole app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are written in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
-        XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
-                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, account names masked, session titles left out, or with show 'hud' a screen's resting HUD as it looks now; every glass style is one stand-in. Use it to check how a change looks; get_panel reads it as data.")
-        XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
-        XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
-                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, appearance, material, glass style and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style. A layout edit holds the panel open on screen for two minutes from the call, and a call with only hud style fields closes it so the HUD shows; call finish_panel_edit when you are done.")
-        XCTAssertEqual(tools["discard_panel_draft"]?["description"].stringValue,
+        XCTAssertEqual(tools["get_hud_screenshot"]?["description"].stringValue,
+                       "Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, account names masked, session titles left out, or with show 'hud' a screen's resting HUD as it looks now; every glass style is one stand-in. Use it to check how a change looks; get_hud reads it as data.")
+        XCTAssertLessThanOrEqual(tools["get_hud_screenshot"]?["description"].stringValue?.count ?? .max, 300)
+        XCTAssertEqual(tools["draft_hud"]?["description"].stringValue,
+                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, appearance, material, glass style and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_hud holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style. A layout edit holds the panel open on screen for two minutes from the call, and a call with only hud style fields closes it so the HUD shows; call finish_hud_edit when you are done.")
+        XCTAssertEqual(tools["discard_hud_draft"]?["description"].stringValue,
                        "Drop the unsaved draft so the Agent HUD panel returns to the saved layout and, for a screen, its resting HUD to its saved style. Like a layout edit it holds the panel open, unless it drops a HUD style alone.")
-        XCTAssertEqual(tools["finish_panel_edit"]?["description"].stringValue,
+        XCTAssertEqual(tools["finish_hud_edit"]?["description"].stringValue,
                        "Say your edit of the Agent HUD panel is done, so the panel an edit held open closes unless the user's pointer is on it. Drafts stay as they are, waiting for the user's Save.")
 
-        XCTAssertEqual(tools["get_panel"]?["annotations"], .object(["readOnlyHint": .bool(true), "openWorldHint": .bool(false)]))
-        XCTAssertEqual(tools["get_panel_image"]?["annotations"], .object(["readOnlyHint": .bool(true), "openWorldHint": .bool(false)]))
+        XCTAssertEqual(tools["get_hud"]?["annotations"], .object(["readOnlyHint": .bool(true), "openWorldHint": .bool(false)]))
+        XCTAssertEqual(tools["get_hud_screenshot"]?["annotations"], .object(["readOnlyHint": .bool(true), "openWorldHint": .bool(false)]))
         let draft: JSONValue = .object(["readOnlyHint": .bool(false), "destructiveHint": .bool(false),
                                         "idempotentHint": .bool(true), "openWorldHint": .bool(false)])
-        XCTAssertEqual(tools["set_panel_layout"]?["annotations"], draft)
-        XCTAssertEqual(tools["discard_panel_draft"]?["annotations"], draft)
-        XCTAssertEqual(tools["finish_panel_edit"]?["annotations"], draft, "letting go of the panel destroys nothing and may be repeated")
+        XCTAssertEqual(tools["draft_hud"]?["annotations"], draft)
+        XCTAssertEqual(tools["discard_hud_draft"]?["annotations"], draft)
+        XCTAssertEqual(tools["finish_hud_edit"]?["annotations"], draft, "letting go of the panel destroys nothing and may be repeated")
     }
 
     func testAToolTheServerDoesNotHaveIsTheProtocolsError() throws {
@@ -271,25 +271,25 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(response["error"], .object(["code": .integer(-32602), "message": .string("Unknown tool: save_panel_layout")]))
         XCTAssertEqual(try call(#"{"arguments":{}}"#)["error"]["code"], .integer(-32602), "a call names its tool")
         XCTAssertEqual(try call(#"{"name":7}"#)["error"]["code"], .integer(-32602))
-        XCTAssertEqual(try call(#"{"name":"get_panel","arguments":[1]}"#)["error"]["code"], .integer(-32602), "arguments are an object")
-        XCTAssertEqual(try call(#"{"name":"get_panel","arguments":"{}"}"#)["error"]["code"], .integer(-32602))
+        XCTAssertEqual(try call(#"{"name":"get_hud","arguments":[1]}"#)["error"]["code"], .integer(-32602), "arguments are an object")
+        XCTAssertEqual(try call(#"{"name":"get_hud","arguments":"{}"}"#)["error"]["code"], .integer(-32602))
         XCTAssertTrue(probe.calls.isEmpty, "none of these reaches the application")
     }
 
     func testACallWithNoApplicationRunningSaysSo() throws {
         probe.answer = .notRunning
         // Claude Code 2.1.296 on a handshake connection.
-        let line = #"{"method":"tools/call","params":{"name":"get_panel","arguments":{},"_meta":{"claudecode/toolUseId":"toolu_1","progressToken":2}},"jsonrpc":"2.0","id":2}"#
+        let line = #"{"method":"tools/call","params":{"name":"get_hud","arguments":{},"_meta":{"claudecode/toolUseId":"toolu_1","progressToken":2}},"jsonrpc":"2.0","id":2}"#
         let response = try probe.response(to: line)
         XCTAssertEqual(response["id"], .integer(2))
         XCTAssertEqual(try text(of: response), "Agent HUD is not running. Open Agent HUD and try again.")
         XCTAssertEqual(response["result"]["isError"], .bool(true))
         XCTAssertEqual(response["result"].objectValue?.keys.sorted(), ["content", "isError"],
                        "a client's own _meta does not make the request one of the newest revision")
-        XCTAssertEqual(probe.calls, [MCPToolRequest(tool: "get_panel")])
+        XCTAssertEqual(probe.calls, [MCPToolRequest(tool: "get_hud")])
 
         // Codex 0.162.1 puts the turn it runs in beside the call.
-        let codex = #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"_meta":{"callId":"exec-1","x-codex-turn-metadata":{"session_id":"thread-1","sandbox":"seatbelt","codex_version":"0.162.1"},"threadId":"thread-1","progressToken":1},"name":"get_panel","arguments":{}}}"#
+        let codex = #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"_meta":{"callId":"exec-1","x-codex-turn-metadata":{"session_id":"thread-1","sandbox":"seatbelt","codex_version":"0.162.1"},"threadId":"thread-1","progressToken":1},"name":"get_hud","arguments":{}}}"#
         XCTAssertEqual(try probe.response(to: codex)["result"], response["result"])
     }
 
@@ -297,13 +297,13 @@ final class MCPToolsTests: XCTestCase {
         let result: [String: JSONValue] = ["revision": .integer(12), "saved": .bool(false), "share": .number(0.25),
                                            "blocks": .array([.object(["key": .string("claude"), "title": .string("Claude\nMax \"20x\"")])])]
         probe.answer = .reply(.result(result))
-        let response = try call(#"{"name":"get_panel"}"#)
+        let response = try call(#"{"name":"get_hud"}"#)
         XCTAssertEqual(response["result"]["isError"], .bool(false))
         XCTAssertNil(response["result"].objectValue?["structuredContent"])
         let text = try text(of: response)
         XCTAssertFalse(text.contains("\n") || text.contains(": "), "compact, on one line")
         XCTAssertEqual(try JSONValue.parse(Data(text.utf8)), .object(result))
-        XCTAssertEqual(probe.calls, [MCPToolRequest(tool: "get_panel")], "arguments left out are none")
+        XCTAssertEqual(probe.calls, [MCPToolRequest(tool: "get_hud")], "arguments left out are none")
     }
 
     /// A picture comes after the text that says what it shows, as the image block every revision the server answers
@@ -315,7 +315,7 @@ final class MCPToolsTests: XCTestCase {
         let image: JSONValue = .object(["type": .string("image"), "data": .string(png.base64EncodedString()),
                                         "mimeType": .string("image/png")])
         for meta in ["", "," + MCPServerProbe.meta] {
-            let response = try call(#"{"name":"get_panel_image","arguments":{}\#(meta)}"#)
+            let response = try call(#"{"name":"get_hud_screenshot","arguments":{}\#(meta)}"#)
             let content = try XCTUnwrap(response["result"]["content"].arrayValue)
             XCTAssertEqual(content.count, 2, meta)
             XCTAssertEqual(content[0]["type"], .string("text"))
@@ -326,10 +326,10 @@ final class MCPToolsTests: XCTestCase {
             XCTAssertEqual(response["result"]["resultType"], meta.isEmpty ? .null : .string("complete"),
                            "the newest revision says the result is complete; a handshake client gets the content alone")
         }
-        XCTAssertEqual(probe.calls, [MCPToolRequest(tool: "get_panel_image"), MCPToolRequest(tool: "get_panel_image")])
+        XCTAssertEqual(probe.calls, [MCPToolRequest(tool: "get_hud_screenshot"), MCPToolRequest(tool: "get_hud_screenshot")])
 
         probe.answer = .reply(.failure("This copy of Agent HUD cannot draw the panel."))
-        let refused = try call(#"{"name":"get_panel_image"}"#)
+        let refused = try call(#"{"name":"get_hud_screenshot"}"#)
         XCTAssertEqual(try text(of: refused), "This copy of Agent HUD cannot draw the panel.", "a refusal is its sentence and no picture")
         XCTAssertEqual(refused["result"]["isError"], .bool(true))
     }
@@ -337,22 +337,22 @@ final class MCPToolsTests: XCTestCase {
     func testArgumentsReachTheApplicationAsTheyCame() throws {
         probe.answer = .reply(.result(["revision": .integer(13)]))
         let arguments = #"{"blocks":{"claude":{"widget":"ring","hiddenRows":["weekly"]}},"order":["codex","claude"],"revision":12,"unknown":null}"#
-        _ = try call(#"{"name":"set_panel_layout","arguments":\#(arguments)}"#)
-        _ = try call(#"{"name":"discard_panel_draft","arguments":{}}"#)
-        let layout = MCPToolRequest(tool: "set_panel_layout",
+        _ = try call(#"{"name":"draft_hud","arguments":\#(arguments)}"#)
+        _ = try call(#"{"name":"discard_hud_draft","arguments":{}}"#)
+        let layout = MCPToolRequest(tool: "draft_hud",
                                     arguments: try XCTUnwrap(try JSONValue.parse(Data(arguments.utf8)).objectValue))
-        XCTAssertEqual(probe.calls, [layout, MCPToolRequest(tool: "discard_panel_draft")], "checking them is the application's job")
+        XCTAssertEqual(probe.calls, [layout, MCPToolRequest(tool: "discard_hud_draft")], "checking them is the application's job")
     }
 
     func testARefusalOrSilenceFromTheApplicationIsAnErrorResult() throws {
-        probe.answer = .reply(.failure("The layout changed since revision 12. Call get_panel and send the layout again."))
-        let refused = try call(#"{"name":"set_panel_layout","arguments":{"revision":12}}"#)
-        XCTAssertEqual(try text(of: refused), "The layout changed since revision 12. Call get_panel and send the layout again.")
+        probe.answer = .reply(.failure("The layout changed since revision 12. Call get_hud and send the layout again."))
+        let refused = try call(#"{"name":"draft_hud","arguments":{"revision":12}}"#)
+        XCTAssertEqual(try text(of: refused), "The layout changed since revision 12. Call get_hud and send the layout again.")
         XCTAssertEqual(refused["result"]["isError"], .bool(true))
         XCTAssertNil(refused.objectValue?["error"], "the model reads a refusal and tries again; it is not a protocol error")
 
         probe.answer = .unanswered
-        let silent = try call(#"{"name":"discard_panel_draft"}"#)
+        let silent = try call(#"{"name":"discard_hud_draft"}"#)
         XCTAssertEqual(try text(of: silent), "Agent HUD did not answer. Try again.")
         XCTAssertEqual(silent["result"]["isError"], .bool(true))
     }

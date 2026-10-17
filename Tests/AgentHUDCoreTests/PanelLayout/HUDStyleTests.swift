@@ -194,7 +194,7 @@ final class HUDStyleTests: XCTestCase {
     }
 
     /// The transparency a screen keeps for each material is no style field: a style reads none, and a hud may give one
-    /// only as a number from 0 to 1, the slider's, whose value the proposal weighs (`PanelTools.StyleProposal`).
+    /// only as a number from 0 to 1, the slider's, whose value the proposal weighs (`HUDTools.StyleProposal`).
     func testTheKeptTransparenciesAreReadOnly() {
         XCTAssertEqual(HUDStyle.KeptTransparency.allCases.map(\.rawValue), ["solidTransparency", "glassTransparency"])
         XCTAssertFalse(HUDStyle.names.contains("solidTransparency"))
@@ -345,7 +345,7 @@ final class HUDStyleTests: XCTestCase {
                        ["hud has no property \"background\"; the hud takes agents, mode, edge, position, logoSize, logoGap, "
                         + "edgeDistance, showLogos, simpleSize, ringWidth, showRings, showNumbers, separateAgents, "
                         + "appearance, material, glassStyle, transparency, glow and reset, and solidTransparency and "
-                        + "glassTransparency as get_panel lists them."])
+                        + "glassTransparency as get_hud lists them."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .string("yes")), ["hud.reset is true or false."])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .bool(false)), [])
         XCTAssertEqual(HUDStyle.misreadings(ofField: "reset", .null), [])

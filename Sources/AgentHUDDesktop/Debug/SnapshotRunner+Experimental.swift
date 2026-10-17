@@ -12,13 +12,13 @@ extension SnapshotRunner {
     static func saveExperimental(settings: SettingsStore, store: UsageStore, folder: URL) {
         if let prefix = ProcessInfo.processInfo.environment["AGENTHUD_SNAPSHOT_PREFIX"],
            !"settings-experimental".hasPrefix(prefix) && !prefix.hasPrefix("settings-experimental") { return }
-        let saved = settings.settings.agentTools
-        defer { settings.update { $0.agentTools = saved } }
+        let saved = settings.settings.hudTools
+        defer { settings.update { $0.hudTools = saved } }
         let setup = MCPClientSetup(environment: .sample)
         setup.refresh()
         func shoot(_ name: String, _ choice: MCPClientSetup.Choice, toolsOn: Bool, scheme: ColorScheme = .dark,
                    size: CGSize = SettingsWindowLayout.size) {
-            settings.update { $0.agentTools = toolsOn }
+            settings.update { $0.hudTools = toolsOn }
             setup.choice = choice
             save(name, SettingsView(settings: settings, store: store, initialTab: .experimental, clientSetup: setup)
                 .frame(width: size.width, height: size.height), folder: folder, scheme: scheme)

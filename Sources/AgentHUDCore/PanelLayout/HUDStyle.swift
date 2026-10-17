@@ -6,7 +6,7 @@ import Foundation
 /// over its settings (`applied(to:)`) until a person saves it into them or drops it (`PanelLayoutStore`), and a person's
 /// own edit of that screen drops it first. Its values are within the ranges Settings keep them in.
 ///
-/// It is written in an agent's words, as `set_panel_layout`'s `hud` takes it beside `agents`: `mode` is `notch`,
+/// It is written in an agent's words, as `draft_hud`'s `hud` takes it beside `agents`: `mode` is `notch`,
 /// `dynamic` or `simple`; `position` is the placement's `offset`, `logoGap` its `gapScale`, `edgeDistance` its
 /// `logoEdgeDistance`, `showLogos`, `showRings` and `showNumbers` its `showsLogos`, `showsRings` and `showsNumbers`,
 /// `separateAgents` its `separatesAgents` and `transparency` the material's own, while `appearance`, `material` and
@@ -155,7 +155,7 @@ public struct HUDStyle: Hashable, Sendable {
         return next
     }
 
-    /// Every field an agent can set, as `placement` and `glow` have it: a screen's style in effect, as `get_panel` lists it.
+    /// Every field an agent can set, as `placement` and `glow` have it: a screen's style in effect, as `get_hud` lists it.
     init(every placement: ScreenPlacement, glow: GlowSettings) {
         self.init(mode: placement.mode, edge: placement.edge, position: placement.offset, logoSize: placement.logoSize,
                   logoGap: placement.gapScale, edgeDistance: placement.logoEdgeDistance, showLogos: placement.showsLogos,
@@ -393,7 +393,7 @@ extension HUDStyle {
     /// hardware is given, dark and solid, and the default glow, as the HUD style's Reset to Default gives them.
     static let resetName = "reset"
 
-    /// A transparency a screen keeps for one material, solid's or glass's, which `get_panel` lists beside the style so
+    /// A transparency a screen keeps for one material, solid's or glass's, which `get_hud` lists beside the style so
     /// that an agent can tell what a change of material draws. No proposal sets one, since `transparency` sets the one
     /// of the material the HUD would have, but a hud may give one as it was listed, so the style listed can be sent
     /// back whole.
