@@ -93,15 +93,18 @@ public final class DesktopApplication {
         HotKeyCenter.shared.register(id: 1, keyCode: HotKeyCenter.keyH, modifiers: HotKeyCenter.commandOption) { [weak self] in
             self?.toggleGlow()
         }
+        // The app's Appearance, an agent's unsaved draft of it included, reaches every window that does not match its
+        // screen.
         trackChanges({ [weak self] in
-            self?.settings.settings.appearance
+            self?.settings.effectiveSettings.appearance
         }, onChange: { [weak self] in self?.applyAppearance() })
         // Under Match screen a screen's new look, its style draft's included, reaches the windows on that screen. The
-        // settings and the style drafts (any one of them read reads them all) are read apart from the displays as well,
-        // so the watch is armed with no display attached too; a window whose look has not changed is left as it is.
+        // settings with the app's draft and the style drafts (any one of them read reads them all) are read apart from
+        // the displays as well, so the watch is armed with no display attached too; a window whose look has not changed
+        // is left as it is.
         trackChanges({ [weak self] in
             guard let self else { return }
-            _ = self.settings.settings
+            _ = self.settings.effectiveSettings
             _ = self.settings.panelLayout.styleDraft(of: "")
             _ = NSScreen.screens.map { self.settings.windowLook(on: $0) }
         }, onChange: { [weak self] in self?.refreshLooks() })
@@ -320,7 +323,7 @@ public final class DesktopApplication {
 
     private func applyAppearance() {
         // With Match screen on, each window and the menu take their screen's over this (`WindowLook`).
-        switch settings.settings.appearance {
+        switch settings.effectiveSettings.appearance {
         case .system: NSApp.appearance = nil
         case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
         case .light: NSApp.appearance = NSAppearance(named: .aqua)

@@ -85,8 +85,8 @@ final class MCPToolsTests: XCTestCase {
         let schema = try XCTUnwrap(MCPTools.definitions.first { $0["name"] == .string("set_panel_layout") })["inputSchema"]
         let properties = try XCTUnwrap(schema["properties"].objectValue)
         XCTAssertEqual(properties.keys.sorted(),
-                       ["blocks", "from", "hiddenSections", "hud", "order", "revision", "screen", "sections", "sessions", "style",
-                        "tokens"])
+                       ["app", "blocks", "from", "hiddenSections", "hud", "order", "revision", "screen", "sections", "sessions",
+                        "style", "tokens"])
         XCTAssertNil(schema.objectValue?["required"], "every property is optional")
         func choices(_ node: JSONValue) -> [String] { node["enum"].arrayValue?.compactMap(\.stringValue) ?? [] }
 
@@ -240,19 +240,40 @@ final class MCPToolsTests: XCTestCase {
                        "the hud's fields are the ones the strict reading knows")
         XCTAssertEqual(Set(hud["glow"]["properties"].objectValue?.keys.map { $0 } ?? []),
                        Set(HUDStyle.GlowField.allCases.map(\.rawValue)), "and the glow's")
+
+        // The app's settings take what get_panel lists under app, Hover behavior's under hover, the read-only language
+        // with them, and nothing else.
+        let app = schema["properties"]["app"]
+        XCTAssertEqual(app["additionalProperties"], .bool(false))
+        XCTAssertEqual(app["properties"].objectValue?.keys.sorted(),
+                       ["appearance", "botLogos", "hover", "language", "matchScreen", "showMenuBarIcon", "writtenIn"])
+        XCTAssertEqual(Set(app["properties"].objectValue?.keys.map { $0 } ?? []),
+                       Set(AppDraft.Field.allCases.filter { !$0.isHover }.map(\.rawValue) + ["hover"] + AppDraft.readOnly),
+                       "the app's fields are the ones the strict reading knows")
+        XCTAssertEqual(choices(app["properties"]["appearance"]), AppearanceMode.allCases.map(\.rawValue))
+        let hover = app["properties"]["hover"]
+        XCTAssertEqual(hover["additionalProperties"], .bool(false))
+        XCTAssertEqual(Set(hover["properties"].objectValue?.keys.map { $0 } ?? []),
+                       Set(AppDraft.Field.allCases.filter(\.isHover).map(\.rawValue)), "and the hover's")
+        XCTAssertEqual(hover["properties"]["delayMs"]["type"], .string("integer"))
+        XCTAssertEqual(hover["properties"]["delayMs"]["description"].stringValue,
+                       "How long hovering waits before it opens the panel, in milliseconds, 0 to 1500 in steps of 50.")
+        XCTAssertTrue(app["description"].stringValue?.contains("only when the user explicitly asks for one of these "
+                                                                + "settings, never as a side effect of arranging the panel") == true,
+                      "an agent is told when it may change them")
     }
 
     func testEachToolSaysWhatItDoesAndWhatItMayChange() throws {
         let tools = Dictionary(uniqueKeysWithValues: MCPTools.definitions.map { ($0["name"].stringValue ?? "", $0) })
         XCTAssertEqual(tools["get_panel"]?["description"].stringValue,
-                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists and over what period, and its token chart's period, the agents and models it can draw and its total; the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the whole app's settings, read only and changed in Settings alone: appearance; matchScreen, with which a screen's style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and reminders; language, and writtenIn, the language names are written in; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
+                       "Read what the Agent HUD hover panel shows now: its blocks (one per agent or API account), each block's rows with their latest readings, the layout in effect, the panel's width and height and whether it scrolls, and the widgets and measures each block accepts; how many sessions it lists and over what period, and its token chart's period, the agents and models it can draw and its total; the attached screens, each with its resting HUD's style, the look it draws now, the agents it can show, agentPanelWidth, the width of one agent's own panel on a dock that separates its agents, and whether an edit holds its panel open; and app, the whole app's settings as drawn now, with appUnsaved, whether an unsaved draft of them waits: appearance; matchScreen, with which a screen's style draft also restyles the app's windows and the menu-bar menu on that screen; botLogos, whether marks turn into bots on a Dynamic dock, a Simple panel and reminders; showMenuBarIcon; language, and writtenIn, the language names are written in, both read only; and hover: pressOptionToOpen, openAtTopEdge, and delayMs and collapseDelayMs in milliseconds. Call it before changing the layout; block, row and screen keys come from here. Names are written as the panel shows them, in the application's language.")
         XCTAssertEqual(tools["get_panel_image"]?["description"].stringValue,
                        "Show a picture of the Agent HUD hover panel as the layout in effect draws it, a draft included, account names masked, session titles left out, or with show 'hud' a screen's resting HUD as it looks now; every glass style is one stand-in. Use it to check how a change looks; get_panel reads it as data.")
         XCTAssertLessThanOrEqual(tools["get_panel_image"]?["description"].stringValue?.count ?? .max, 300)
         XCTAssertEqual(tools["set_panel_layout"]?["description"].stringValue,
-                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, appearance, material, glass style and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style. A layout edit holds the panel open on screen for two minutes from the call, and a call with only hud style fields closes it so the HUD shows; call finish_panel_edit when you are done.")
+                       "Propose a layout for the Agent HUD hover panel: its blocks, sections, session rows, token chart and style, its width included, and the screen's resting HUD: which agents it shows and, for one screen, its mode, edge, sizes, appearance, material, glass style and glow. Send the whole layout you want; anything left out uses the default, and a HUD style field left out stays as saved. A call with only hud style fields leaves the layout as it is. What the layout from get_panel holds for a block, a row or an agent not listed now can be sent back as it is. It shows at once as an unsaved draft: the user keeps it with Save in the panel, and it is dropped when Agent HUD restarts. Pass from 'default' to propose the built-in layout instead, 'previous' for the last saved one, for a screen with the resting HUD style that went with it, or 'shared' to have a screen use the shared layout again; hud.reset proposes a screen's default HUD style. A layout edit holds the panel open on screen for two minutes from the call, and a call with only hud style fields closes it so the HUD shows; call finish_panel_edit when you are done. app changes the whole app's own settings, its appearance, matchScreen, botLogos, showMenuBarIcon and hover, for every screen, as a draft the same Save keeps: name it only when the user explicitly asks for one of those settings, never as a side effect of arranging the panel. A call that leaves app out leaves them as they are, and a call with only app changes them alone and opens nothing.")
         XCTAssertEqual(tools["discard_panel_draft"]?["description"].stringValue,
-                       "Drop the unsaved draft so the Agent HUD panel returns to the saved layout and, for a screen, its resting HUD to its saved style. Like a layout edit it holds the panel open, unless it drops a HUD style alone.")
+                       "Drop the unsaved draft so the Agent HUD panel returns to the saved layout and, for a screen, its resting HUD to its saved style; a draft of the app's own settings stays. Like a layout edit it holds the panel open, unless it drops a HUD style alone.")
         XCTAssertEqual(tools["finish_panel_edit"]?["description"].stringValue,
                        "Say your edit of the Agent HUD panel is done, so the panel an edit held open closes unless the user's pointer is on it. Drafts stay as they are, waiting for the user's Save.")
 

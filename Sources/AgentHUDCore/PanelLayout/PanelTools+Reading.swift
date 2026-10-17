@@ -11,17 +11,17 @@ extension PanelTools {
         return key
     }
 
-    /// Whether the panel of a scope shows a draft: the shared layout's own, or for a screen the one its bar saves.
+    /// Whether the panel of a scope shows a draft and the bar that says so: the shared layout's own, or for a screen the
+    /// one its bar saves, and the app's draft, which every panel's bar shows.
     func unsaved(_ scope: PanelLayoutScope) -> Bool {
-        guard case .screen(let key) = scope else { return layout.hasDraft }
-        return layout.hasDraft(on: key)
+        layout.hasDraft(on: scope.screenKey)
     }
 
     /// The panel as an agent reads it: which screen, the layout in effect there, with a screen's style draft in its
     /// hud, and the style it sets, its width among it, the panel's height on that display and whether it scrolls there,
     /// whether Settings shows reset countdowns, every section and every block the panel has, shown or hidden, with the
     /// span each takes there and the readings of its rows, the session rows and the token chart as the layout filters
-    /// them, the attached screens, and what the app is set to that a proposal is drawn under.
+    /// them, the attached screens, and what the app's own settings draw now, with whether the app's draft waits.
     /// - proposed: whether the note answers a proposal, after which it says which blocks the layout gives half a line
     ///   take the whole one there, and why.
     func panel(_ scope: PanelLayoutScope, among attached: [PanelScreen], note: String? = nil,
@@ -55,7 +55,8 @@ extension PanelTools {
             "sessions": sessions(plan.sessions, listing: effective.sessions.normalized().agents),
             "tokens": tokens(plan.tokens, listing: effective.tokens.normalized()),
             "screens": .array(attached.map(listing)),
-            "app": app(),
+            "app": .object(appListing()),
+            "appUnsaved": .bool(layout.appDraft != nil),
         ]
         if case .screen(let key) = scope { result["usesSharedLayout"] = .bool(layout.usesShared(key)) }
         if let measured {
@@ -102,29 +103,6 @@ extension PanelTools {
             "shows": .array(order.arrange(screen.agents) { $0 }.map(JSONValue.string)),
         ]
         return .object(listed.merging(holdListing(screen.key)) { $1 })
-    }
-
-    /// What the whole app is set to that decides how a proposal is drawn, read only, as no tool changes a Settings
-    /// switch: the app's own Appearance and Match screen, under which each of the app's windows and the menu-bar menu
-    /// take the look of the HUD on the screen they are on, a style draft's included; Bot logos, whether marks turn into
-    /// bots on a dock, a Simple panel and reminders; the language chosen and the one the panel's names are written in;
-    /// and how hovering opens and closes the panel, its delays in milliseconds.
-    private func app() -> JSONValue {
-        let settings = store.settings.settings
-        let written: AppLanguage = L10n.resolved == .zhHans ? .zhHans : .en
-        return .object([
-            "appearance": .string(settings.appearance.rawValue),
-            "matchScreen": .bool(settings.appearanceFollowsScreen),
-            "botLogos": .bool(settings.botLogos),
-            "language": .string(settings.language.rawValue),
-            "writtenIn": .string(written.rawValue),
-            "hover": .object([
-                "pressOptionToOpen": .bool(settings.requiresOptionToOpen),
-                "openAtTopEdge": .bool(settings.openImmediatelyAtTop),
-                "delayMs": .integer(Int64(settings.hoverDelayMs)),
-                "collapseDelayMs": .integer(Int64(settings.collapseDelayMs)),
-            ]),
-        ])
     }
 
     /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns,

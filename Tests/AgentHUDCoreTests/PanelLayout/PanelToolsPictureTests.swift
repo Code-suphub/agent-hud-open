@@ -115,6 +115,27 @@ final class PanelToolsPictureTests: PanelToolsCase {
                                                           + "HUD's unsaved style") == true, "\(both["note"] ?? .null)")
     }
 
+    /// The app's settings unsaved show the bar in every screen's panel, the shared layout's too, which the note names
+    /// beside whatever else waits there.
+    func testAPictureWithTheAppsDraftSaysWhyItIsUnsaved() throws {
+        layout.proposeApp(AppDraft(botLogos: false))
+        let (shared, _) = try answer(tools(picture: picture(height: 785)), [:])
+        XCTAssertEqual(shared["unsaved"], .bool(true))
+        XCTAssertTrue(shared["note"]?.stringValue?.hasPrefix("The hover panel as the saved layout draws it, with the bar above "
+                                                             + "its footer that says the app's settings are unsaved, 540 by 785")
+                      == true, "\(shared["note"] ?? .null)")
+        layout.proposeStyle(HUDStyle(logoSize: 30), for: "SCREEN-A", hasNotch: false)
+        let (styled, _) = try answer(tools(picture: picture(height: 785)), ["screen": .string("SCREEN-A")])
+        XCTAssertTrue(styled["note"]?.stringValue?.contains("with the bar above its footer that says its resting HUD's style "
+                                                            + "and the app's settings are unsaved, 540") == true,
+                      "\(styled["note"] ?? .null)")
+        layout.propose(.own(PanelLayout(order: ["Codex"])), for: "SCREEN-A")
+        let (all, _) = try answer(tools(picture: picture(height: 785)), ["screen": .string("SCREEN-A")])
+        XCTAssertTrue(all["note"]?.stringValue?.contains("with the bar above its footer for the unsaved layout, its resting "
+                                                         + "HUD's unsaved style and the app's unsaved settings, 540") == true,
+                      "\(all["note"] ?? .null)")
+    }
+
     func testWithoutARendererThePictureIsRefused() {
         XCTAssertEqual(PanelTools(store: store, launch: 0).answer(MCPToolRequest(tool: MCPTools.getPanelImage)),
                        .failure("This copy of Agent HUD cannot draw the panel, so there is no picture of it here. "

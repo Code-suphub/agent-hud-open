@@ -15,8 +15,8 @@ struct GeneralPane: View {
                         Text(L10n.text("深色", "Dark")).tag(AppearanceMode.dark)
                     }
                     .labelsHidden().pickerStyle(.segmented)
-                    // The windows take their screen's look instead while Match screen is on.
-                    .disabled(settings.settings.appearanceFollowsScreen)
+                    // The windows take their screen's look instead while Match screen is on, an agent's draft of it included.
+                    .disabled(settings.effectiveSettings.appearanceFollowsScreen)
                 }
                 SettingsDivider(theme: theme)
                 SettingsToggleRow(

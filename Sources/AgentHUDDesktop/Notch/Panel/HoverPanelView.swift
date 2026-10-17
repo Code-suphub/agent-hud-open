@@ -124,8 +124,8 @@ struct HoverPanelView: View {
             } else {
                 measuredContent
             }
-            // An unsaved layout, or this screen's unsaved HUD style, is said above the footer, outside the scrolling
-            // content, and counts in the height.
+            // An unsaved layout, this screen's unsaved HUD style, or the app's unsaved settings, is said above the
+            // footer, outside the scrolling content, and counts in the height.
             VStack(alignment: .leading, spacing: footerSpacing) {
                 if layout.hasDraft(on: screen) {
                     PanelDraftBar(layout: layout, screen: screen).transition(.opacity)

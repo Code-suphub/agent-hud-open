@@ -38,9 +38,10 @@ enum WindowLook {
 
 extension SettingsStore {
     /// The look the app's windows and the menu take on `screen` (the main screen when nil): nil unless Match screen is
-    /// on, else the look of that screen's HUD, as the panel that opens there draws it, style draft included.
+    /// on, an agent's draft of it included, else the look of that screen's HUD, as the panel that opens there draws it,
+    /// style draft included.
     func windowLook(on screen: NSScreen?) -> HUDLook? {
-        guard settings.appearanceFollowsScreen, let screen = screen ?? NSScreen.main else { return nil }
+        guard effectiveSettings.appearanceFollowsScreen, let screen = screen ?? NSScreen.main else { return nil }
         return effectiveLook(on: ScreenIdentity.key(for: screen))
     }
 }

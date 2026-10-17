@@ -88,6 +88,10 @@ public struct Settings: Hashable, Codable, Sendable {
     public var openImmediatelyAtTop: Bool = false
     public var hoverDelayMs: Int = 400
     public var collapseDelayMs: Int = 200
+    /// The milliseconds Settings sets the hover delay and the collapse delay in, and the step its sliders move them by.
+    /// A stored value is read as it was written, outside them too.
+    public static let hoverDelayRange = 0...1500
+    public static let hoverDelayStep = 50
     public var showResetCountdown: Bool = true
     public var showIslandQuota: Bool = true
     public var showIslandTokens: Bool = true
