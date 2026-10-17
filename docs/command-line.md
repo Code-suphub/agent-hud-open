@@ -104,10 +104,9 @@ No tool saves and no tool writes the settings: a person keeps a draft with Save 
 To add the server to a client, open Settings → Experimental:
 
 1. Turn on Let agents arrange the HUD.
-2. Pick the client.
-3. Press Add.
+2. Open Add to client and pick the client.
 
-Then ask a new session of that client to rearrange the HUD. The list has Claude Code and Codex where this Mac has them; Other copies the server's settings as JSON for any other client. Add and Remove run the client's own commands below with this copy's executable, only when pressed, and Agent HUD only reads the client's configuration to show whether the server is there. From a disk image or App Translocation there is no Add: move Agent HUD to Applications first. In a terminal:
+Then ask a new session of that client to change the HUD. The row says which clients have the server, and the menu checks them. It lists Claude Code and Codex where this Mac has them, and Copy settings for another client copies the server's settings as JSON for any other client. Picking an unchecked client adds the server and picking a checked one removes it, by the client's own command below with this copy's executable, run only when picked; Agent HUD only reads the client's configuration to show whether the server is there. A command that fails offers itself to copy, to run in a terminal. From a disk image or App Translocation no client can be added: move Agent HUD to Applications first. In a terminal:
 
 ```sh
 claude mcp add --scope user agent-hud -- "/Applications/Agent HUD Open.app/Contents/MacOS/Agent HUD Open" --mcp
