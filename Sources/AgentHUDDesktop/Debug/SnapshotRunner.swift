@@ -613,8 +613,9 @@ public enum SnapshotRunner {
         let preferences = settings.settings
         let originalReport = store.report
         defer {
-            settings.updateAgents { _ in original }
+            // The settings first: the rows follow their recorded provider order.
             settings.update { $0 = preferences }
+            settings.updateAgents { _ in original }
             if let originalReport { store.replace(report: originalReport) }
         }
         settings.updateAgents { _ in [
@@ -655,9 +656,12 @@ public enum SnapshotRunner {
         for scheme in [ColorScheme.dark, .light] {
             let appearance = scheme == .dark ? "dark" : "light"
             for (state, providerID) in [("overview", nil), ("claude", "Claude"), ("grok", "Grok"), ("prepaid", "DeepSeek"), ("unavailable", "Antigravity"), ("unconfigured", "GLM")] as [(String, String?)] {
-                let displayOrder = settings.agents
+                let displayOrder = settings.agents, displayPreferences = settings.settings
                 if state == "prepaid" { settings.moveAgentGroup(id: "DeepSeek", to: "Claude") }
-                defer { settings.updateAgents { _ in displayOrder } }
+                defer {
+                    settings.update { $0 = displayPreferences }
+                    settings.updateAgents { _ in displayOrder }
+                }
                 let view = SettingsView(settings: settings, store: store, initialTab: .sources,
                                         sourceStatuses: sources, initialProviderID: providerID)
                 save("settings-agents-\(state)-\(appearance)",
