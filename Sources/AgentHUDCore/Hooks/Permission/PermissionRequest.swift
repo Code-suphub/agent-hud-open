@@ -15,6 +15,9 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
         /// A question the client asks in its own window and takes no answer to from outside, such as the Claude desktop
         /// app's next-step box: the HUD shows it until the client's records say it was answered there.
         case clientWindow
+        /// A question the client asks in its own window whose answers are words it takes as the user's next message, such
+        /// as the Claude desktop app's next-step box where the app's host can send them: answering here sends them.
+        case clientReply
     }
 
     public let id: String
@@ -158,7 +161,7 @@ public struct PermissionRequest: Identifiable, Equatable, Sendable {
         switch nativeApproval {
         case .computerUseApp(let persist), .browserAccess(_, let persist):
             return persist.contains("always") ? .object(["persist": .string("always")]) : nil
-        case .asynchronousQuestion, .clientWindow, nil: break
+        case .asynchronousQuestion, .clientWindow, .clientReply, nil: break
         }
         guard source.supportsPermissionUpdates else { return nil }
         return suggestions.first {

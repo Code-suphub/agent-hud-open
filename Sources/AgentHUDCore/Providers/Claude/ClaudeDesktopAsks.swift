@@ -6,8 +6,14 @@ import Foundation
 /// offers a task its own session (`mcp__ccd_session__start_session` with `initiation: "offer"`). The session log is the
 /// only record: the call's input says what is asked, a result or the next prompt that it was answered.
 ///
-/// The HUD shows them and cannot answer them: the app takes the click in its own window.
+/// The HUD shows them. The app takes a click in its own window; a box's answer can also be given here when the host can
+/// send its words into the session as the user's next message (`Reply`), which is what a click on the box sends. An
+/// offer's answer cannot be put in words, so an offer is only shown.
 public enum ClaudeDesktopAsks {
+    /// Sends `words` into the session `sessionID` as the user's next message: the host's way in, such as the private
+    /// app's plugin. It throws when the words could not be left for the session.
+    public typealias Reply = @MainActor (_ sessionID: String, _ words: String) async throws -> Void
+
     static let nextStepTool = "mcp__ccd_turn__wrap_up"
     static let offerTool = "mcp__ccd_session__start_session"
     /// The only calls whose input the transcript parser reads.
@@ -111,30 +117,47 @@ public enum ClaudeDesktopAsks {
     // MARK: Requests
 
     /// Puts the questions `sessions` ask in the app's window at `now` among the requests the user is asked about, in place
-    /// of the ones they asked before. Only the sessions whose live status is on are passed. Nothing answers them: the card
-    /// has no answers to give, and putting it away only hides it.
+    /// of the ones they asked before. Only the sessions whose live status is on are passed. With `reply`, a box's answer
+    /// sends the words it stands for; without it, or for an offer, the card has no answers to give, and putting it away
+    /// or leaving a question unanswered only hides it.
     @MainActor
-    public static func show(_ sessions: [LiveSession], now: Date, in queue: PermissionRequests = .shared) {
-        queue.updateNativeRequests(requests(for: sessions, now: now), source: .claude) { _, _ in }
-    }
-
-    /// The cards for the questions `sessions` ask in the app's window at `now`. Each is shown until the session's log
-    /// says it was answered; answering it is left to the app. A question whose words were not read in this run, one the
-    /// ledger kept across a relaunch, has no card: its session still waits.
-    public static func requests(for sessions: [LiveSession], now: Date) -> [PermissionRequest] {
-        sessions.compactMap { session in
-            guard let ask = session.activity?.ask, ask.isWorded, stands(ask, at: now) else { return nil }
-            return request(ask, session: session)
+    public static func show(_ sessions: [LiveSession], now: Date, in queue: PermissionRequests = .shared, reply: Reply? = nil) {
+        queue.updateNativeRequests(requests(for: sessions, now: now, replies: reply != nil), source: .claude) { request, decision in
+            guard let reply, request.nativeApproval == .clientReply, case .answer(let answers) = decision,
+                  let words = words(answering: request, with: answers) else { return }
+            try await reply(request.sessionID, words)
         }
     }
 
-    static func request(_ ask: SessionActivity.Ask, session: LiveSession) -> PermissionRequest {
+    /// The cards for the questions `sessions` ask in the app's window at `now`. Each is shown until the session's log
+    /// says it was answered; with `replies` a box can be answered here, else answering it is left to the app. A question
+    /// whose words were not read in this run, one the ledger kept across a relaunch, has no card: its session still waits.
+    public static func requests(for sessions: [LiveSession], now: Date, replies: Bool = false) -> [PermissionRequest] {
+        sessions.compactMap { session in
+            guard let ask = session.activity?.ask, ask.isWorded, stands(ask, at: now) else { return nil }
+            return request(ask, session: session, replies: replies)
+        }
+    }
+
+    /// The words an answer to a box stands for, as a click on the box would send them: the user's own, else the chosen
+    /// button's message, else its label. Nil for a box left unanswered.
+    static func words(answering request: PermissionRequest, with answers: [String: PermissionQuestion.Answer]) -> String? {
+        guard let question = request.questions.first, let answer = answers[question.answerKey] else { return nil }
+        if let own = answer.custom?.trimmingCharacters(in: .whitespacesAndNewlines), !own.isEmpty { return own }
+        guard let label = answer.selected.first, let option = question.options.first(where: { $0.label == label }) else { return nil }
+        return option.description ?? option.label
+    }
+
+    static func request(_ ask: SessionActivity.Ask, session: LiveSession, replies: Bool = false) -> PermissionRequest {
         let tool = ask.kind == .offer ? offerTool : nextStepTool
         let header = ask.kind == .offer ? L10n.text("新任务", "New task") : L10n.text("下一步", "Next step")
         let question = PermissionQuestion(id: ask.id, question: ask.question, header: header,
                                           options: ask.options.map { .init(label: $0.label, description: $0.message) })
-        return PermissionRequest(id: "claude-desktop-ask:" + RecordCoding.hash([session.id, ask.id]), source: .claude,
-                                 sessionID: session.id, toolName: tool, summary: ask.question, detail: ask.recap,
-                                 cwd: session.workingDirectory, questions: [question], nativeApproval: .clientWindow, at: ask.at)
+        // A card that can be answered is another card than one that cannot: a host that starts or stops sending replaces it.
+        let answerable = replies && ask.kind == .nextStep
+        return PermissionRequest(id: "claude-desktop-ask:" + (answerable ? "reply:" : "") + RecordCoding.hash([session.id, ask.id]),
+                                 source: .claude, sessionID: session.id, toolName: tool, summary: ask.question, detail: ask.recap,
+                                 cwd: session.workingDirectory, questions: [question],
+                                 nativeApproval: answerable ? .clientReply : .clientWindow, at: ask.at)
     }
 }
