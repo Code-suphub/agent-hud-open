@@ -20,7 +20,10 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
     nonisolated var seesLocalWork: Bool { source != .cursor }
     private let ledger: UsageLedger
     private let sessionLedger: SessionLedger
+    /// WorkBuddy's plan ceilings, from the 429s its transcripts logged; nil for every other source.
+    private var ceilings: WorkBuddyCeilings?
 
+    /// - ceilings: WorkBuddy's ceilings, kept in memory when not given.
     init(source: AdditionalSource, readQuota: @escaping @Sendable () async throws -> ProviderQuota,
          readSessions: @escaping @Sendable (Date) async -> ProviderSessions,
          history: QuotaHistoryStore,
@@ -29,6 +32,7 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
          botQuotaDirectory: URL? = nil,
          refreshSessions: @escaping @Sendable (Int) async -> Void = { _ in },
          watchedDirectories: [URL]? = nil, fileChanges: @escaping @Sendable (Set<String>?) async -> Void = { _ in },
+         ceilings: WorkBuddyCeilings? = nil,
          ledger: UsageLedger = .inMemory()) {
         self.source = source; self.readQuota = readQuota; self.readSessions = readSessions
         noteChanges = fileChanges
@@ -37,6 +41,7 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
         self.history = history; self.clock = clock
         self.botQuotaDirectory = botQuotaDirectory
         self.watchedDirectories = watchedDirectories
+        self.ceilings = source == .workbuddy ? ceilings ?? WorkBuddyCeilings() : nil
         self.ledger = ledger
         sessionLedger = SessionLedger(source: source.rawValue, ledger: ledger)
     }
@@ -72,7 +77,10 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
             }
         }, watchedDirectories: local.roots + (CompletionHooks.Source(rawValue: source.rawValue).map {
             [CompletionHooks.directory.appendingPathComponent($0.rawValue)]
-        } ?? []), fileChanges: { await local.fileChanges($0) }, ledger: ledger)
+        } ?? []), fileChanges: { await local.fileChanges($0) },
+        ceilings: source == .workbuddy
+            ? WorkBuddyCeilings(fileURL: persistHistory ? AppSupport.directory.appendingPathComponent("workbuddy-ceilings.json") : nil) : nil,
+        ledger: ledger)
     }
 
     func fileChanges(_ paths: Set<String>?) async {
@@ -122,6 +130,11 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
         let now = clock(), weekAgo = now.addingTimeInterval(-AlertPolicy.insightsLookback)
         let since = min(weekAgo, now.addingTimeInterval(-Double(historyHours) * 3600))
         var local = await readSessions(since)
+        // WorkBuddy keeps its own names for its sessions and meters them itself; both come from its database in one read.
+        let metering = source == .workbuddy ? WorkBuddyMetering.read(sessions: local.sessions, models: local.models) : nil
+        if let titles = metering?.titles, !titles.isEmpty {
+            for index in local.sessions.indices { if let title = titles[local.sessions[index].id] { local.sessions[index].title = title } }
+        }
         if source == .grok {
             let targets = GrokSessionOrigins.read(sessionIDs: Set(local.sessions.filter { $0.client == "Grok CLI" }.map(\.id)))
             for index in local.sessions.indices where local.sessions[index].client == "Grok CLI" {
@@ -158,29 +171,20 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
         if quota.forgetAccounts { lastAccount = nil }
         if quota.isSignedIn { lastAccount = account }
         let failed = if case .failure = lastQuota?.result { true } else { false }
-        // The ceilings the transcripts' 429 errors logged, each shown while its reset time is still ahead. The plans
-        // behind API-reached models expose no quota endpoint, so a logged reset is the only reading these rows have.
-        let limitHits = source == .workbuddy ? local.limitHits.filter { $0.reset > now } : []
         var windows = quota.scopedWindows(source)
-        // The transcripts hold every ceiling a WorkBuddy account has, so this pass can declare the account's windows
-        // complete even when none of them is ahead: the quota's own windows and the ceilings still ahead, never an
-        // expired one — its absence from the inventory is what retires its row, instead of the row lingering as a
-        // pending reset for the whole retention period. Another source's quota reading stays incremental until that
-        // source declares its own inventory.
-        var quotaWindowIDs = quota.quotaWindowIDs ?? (source == .workbuddy ? Set(quota.windows.map(\.id)) : nil)
-        if !limitHits.isEmpty {
-            let account = quota.resolvedAccount(source)
-            let latest = Dictionary(limitHits.map { ($0.model, $0) }, uniquingKeysWith: { max($0.observedAt, $1.observedAt) == $0.observedAt ? $0 : $1 })
-            for hit in latest.values.sorted(by: { $0.model < $1.model }) {
-                let raw = "limit:\(hit.model):\(hit.window)"
-                // The model's own name leads, because two models can sit at their ceilings at once and the window's
-                // period alone would not tell their rows apart.
-                let model = source == .workbuddy ? WorkBuddySessions.displayName(hit.model, apiReached: local.apiReached) : hit.model
-                windows.append(.init(id: account.windowID(raw),
-                                     label: "\(model) · \(Self.limitLabel(hit.window))",
-                                     remaining: 0, reset: hit.reset, duration: Self.limitDurations[hit.window],
-                                     shortLabel: "\(model) · \(Self.limitShort(hit.window))", observedAt: hit.observedAt))
-                quotaWindowIDs?.insert(raw)
+        var quotaWindowIDs = quota.quotaWindowIDs
+        // WorkBuddy's ceilings say what its account is: while one is shown, or one the app shows is left to retire, the
+        // account's windows are complete; with neither there is no account, rather than one no reading named.
+        var noAccount = false
+        if var ceilings {
+            let rows = ceilings.rows(logged: local.limitHits, indexing: local.indexing != nil, agents: agents,
+                                     apiReached: local.apiReached, account: account, now: now)
+            self.ceilings = ceilings
+            windows += rows.windows
+            switch rows.inventory {
+            case .pending: break
+            case .none: noAccount = true
+            case .complete(let ids): quotaWindowIDs = (quotaWindowIDs ?? Set(quota.windows.map(\.id))).union(ids)
             }
         }
         // Account-wide imports are the same on every machine signed into the account, so their totals are kept per account.
@@ -193,11 +197,6 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
                                                          : ModelCatalog.consumerName(of: "\(source.rawValue)-model:\($0)"),
                             source: L10n.sourceAdditionalUsage, enabled: true)
         }
-        // WorkBuddy meters its sessions itself; attribute what it charged while this pass has each session's models.
-        let sessionCredits: [String: SessionCredits]?
-        if source == .workbuddy, !local.models.isEmpty {
-            sessionCredits = WorkBuddySessions.credits(sessions: local.sessions, models: local.models)
-        } else { sessionCredits = nil }
         let sessions = listed.compactMap { item -> LiveSession? in
             guard let start = item.startedAt ?? item.events.map(\.timestamp).min(), let end = item.lastSeen else { return nil }
             let model = item.events.max { $0.timestamp < $1.timestamp }?.model ?? "Unknown"
@@ -242,8 +241,9 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
                 plan: quota.plan, observedAt: observedAt, aliases: quota.accountAliases,
                 quotaWindowIDs: quotaWindowIDs.map { Set($0.map(account.windowID)) },
                 wallets: quota.wallets.map { $0.observed(at: $0.observedAt ?? observedAt) }, sourceInfo: quota.sourceInfo)]]
-        } else if quota.signedOut, quotaNotice == nil {
-            // A successful signed-out/absent client read confirms that previously retained accounts are no longer current.
+        } else if quota.signedOut || noAccount, quotaNotice == nil {
+            // A successful signed-out/absent client read confirms that previously retained accounts are no longer current,
+            // and so does a WorkBuddy pass with no ceiling to show or retire.
             accounts = [source.vendor: []]
         } else { accounts = nil }
         return UsageReport(generatedAt: now, snapshots: snapshots, sessions: sessions,
@@ -255,28 +255,6 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
             completions: listed.flatMap(\.completions) + hookCompletions, turns: listed.flatMap(\.turns),
             accounts: accounts,
             forgottenAccountProviders: quota.forgetAccounts ? [source.vendor] : nil,
-            sessionCredits: (sessionCredits?.isEmpty ?? true) ? nil : sessionCredits)
-    }
-
-    /// How the 429 ceiling rows name their windows, in the vendor's own words where the transcripts quote them
-    /// (`5 小时的使用上限`), else in the words the other plans' clients read; and each window's length, which the
-    /// message itself does not carry. The month's length is a guess at a calendar month, not a vendor's number: a
-    /// monthly ceiling's row simply retires at its reset time, and only the pace of a forecast reads the length.
-    private static let limitDurations: [String: TimeInterval] = ["5h": 5 * 3600, "day": 86400, "week": 7 * 86400, "month": 30 * 86400]
-    private static func limitLabel(_ window: String) -> String {
-        switch window {
-        case "5h": L10n.text("5 小时使用上限", "5-hour usage limit")
-        case "day": L10n.text("每日使用上限", "Daily usage limit")
-        case "week": L10n.text("每周使用上限", "Weekly usage limit")
-        default: L10n.text("每月使用上限", "Monthly usage limit")
-        }
-    }
-    private static func limitShort(_ window: String) -> String {
-        switch window {
-        case "5h": "5h"
-        case "day": L10n.text("每日", "Daily")
-        case "week": L10n.text("每周", "Weekly")
-        default: L10n.text("每月", "Monthly")
-        }
+            sessionCredits: (metering?.credits.isEmpty ?? true) ? nil : metering?.credits)
     }
 }

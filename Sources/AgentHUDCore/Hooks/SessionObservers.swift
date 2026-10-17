@@ -38,6 +38,8 @@ public enum SessionObservers {
             do { try CompletionHooks.configure(source, enabled: enabled, executable: executable, home: home) }
             catch { NSLog("[AgentHUD] Completion hook setup failed for %@: %@", source.rawValue, error.localizedDescription) }
         }
+        do { try CodeBuddySharedHome.removeHandlers(home: home, executable: executable) }
+        catch { NSLog("[AgentHUD] CodeBuddy hook cleanup in WorkBuddy's settings failed: %@", error.localizedDescription) }
     }
 
     /// The vendors whose observer lives in the client's own directory — Pi's extension, OpenCode's plugin — where that

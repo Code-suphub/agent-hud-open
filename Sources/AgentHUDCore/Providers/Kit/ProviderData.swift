@@ -177,14 +177,17 @@ struct ProviderSessions: Sendable {
     var limitHits: [ProviderLimitHit] = []
 }
 
-/// One 429 ceiling a transcript logged: the model it interrupted (the session's latest successful one), the limit
-/// window it names (`ProviderLimitHit.windows`), when the vendor resets it and when the error was logged.
-public struct ProviderLimitHit: Hashable, Sendable {
-    public static let windows = ["5h", "day", "week", "month"]
-    public let model: String
-    public let window: String
-    public let reset: Date
-    public let observedAt: Date
+/// One 429 ceiling a transcript logged: the model it interrupted (the session's latest successful one), the entry of the
+/// app's own model list that call went through (the `<id>` of its `custom-local:<id>` route, nil for a model the app
+/// served itself), the limit window it names (`ProviderLimitHit.windows`), when the vendor resets it and when the
+/// error was logged.
+struct ProviderLimitHit: Hashable, Codable, Sendable {
+    static let windows = ["5h", "day", "week", "month"]
+    let model: String
+    var route: String? = nil
+    let window: String
+    let reset: Date
+    let observedAt: Date
 }
 
 // The existing JSON value representation keeps parsed data Sendable without passing Foundation Any graphs.
