@@ -745,3 +745,44 @@ final class UsageStoreTests: XCTestCase {
         }
     }
 }
+
+final class ProviderGroupOrderTests: XCTestCase {
+    private let known = ["Claude", "Codex", "Cursor", "GLM", "Kimi", "WorkBuddy"]
+
+    func testAFirstDragRecordsTheKnownOrderWithOnlyTheDraggedPairMoved() {
+        // Dragging WorkBuddy onto Codex once moved every group, because the order was rebuilt from a set's.
+        var settings = Settings()
+        settings.moveProvider(id: "WorkBuddy", to: "Codex", known: known)
+        XCTAssertEqual(settings.providerOrder, ["Claude", "WorkBuddy", "Codex", "Cursor", "GLM", "Kimi"])
+        // A second drag moves only the pair it names, from the order the first one recorded.
+        settings.moveProvider(id: "Kimi", to: "Claude", known: known)
+        XCTAssertEqual(settings.providerOrder, ["Kimi", "Claude", "WorkBuddy", "Codex", "Cursor", "GLM"])
+    }
+
+    func testAMoveOfAGroupThePageDoesNotListChangesNothing() {
+        var settings = Settings()
+        settings.moveProvider(id: "Ghost", to: "Codex", known: known)
+        XCTAssertEqual(settings.providerOrder, [], "a drag of a group the page does not list changes nothing")
+        settings.moveProvider(id: "Codex", to: "Phantom", known: known)
+        XCTAssertEqual(settings.providerOrder, [], "and neither does one onto a group it does not list")
+    }
+
+    func testEntriesThatNoLongerExistAreIgnoredAndNewcomersKeepTheirPlace() throws {
+        let stale = try JSONDecoder().decode(Settings.self, from: Data(#"{"providerOrder":["Gone","Codex","Claude"]}"#.utf8))
+        var settings = stale
+        settings.moveProvider(id: "Claude", to: "Codex", known: known)
+        XCTAssertEqual(settings.providerOrder, ["Claude", "Codex", "Cursor", "GLM", "Kimi", "WorkBuddy"])
+    }
+
+    @MainActor
+    func testADraggedProviderGroupOrdersTheHUDWithIt() {
+        let defaults = UserDefaults(suiteName: "ProviderGroupOrderTests")!
+        defaults.removePersistentDomain(forName: "ProviderGroupOrderTests")
+        let rows = known.map { AgentDescriptor(id: "\($0)-model", vendor: $0, model: "M", source: "", enabled: true) }
+        let store = SettingsStore(defaults: defaults, defaultAgents: rows)
+        store.moveProviderGroup(id: "WorkBuddy", to: "Codex", known: known)
+        XCTAssertEqual(store.settings.providerOrder, ["Claude", "WorkBuddy", "Codex", "Cursor", "GLM", "Kimi"])
+        XCTAssertEqual(store.agents.map(\.displayVendor), ["Claude", "WorkBuddy", "Codex", "Cursor", "GLM", "Kimi"],
+                       "the same drag orders the HUD's rows and the glow with it")
+    }
+}

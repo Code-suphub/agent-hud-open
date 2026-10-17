@@ -18,7 +18,8 @@ struct SourcesPane: View {
 
     var body: some View {
         let detected = sources ?? SourceDetector.resolve(SourceDetector.detect(), report: store.report)
-        let groups = AgentSettingsGroup.make(sources: detected, agents: settings.agents, report: store.report)
+        let groups = AgentSettingsGroup.make(sources: detected, agents: settings.agents, report: store.report,
+                                             providerOrder: settings.settings.providerOrder)
         let selected = groups.first { $0.id == selectedProviderID } ?? groups.first
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
@@ -29,7 +30,7 @@ struct SourcesPane: View {
                     LazyVStack(spacing: 3) {
                         ForEach(groups) { group in
                             AgentProviderRow(group: group, settings: settings, theme: theme,
-                                selected: group.id == selected?.id, dragging: $dragging) {
+                                selected: group.id == selected?.id, dragging: $dragging, groupIDs: groups.map(\.id)) {
                                 selectedProviderID = group.id
                             }
                         }
@@ -87,23 +88,21 @@ private struct AgentProviderRow: View {
     let theme: Theme
     let selected: Bool
     @Binding var dragging: AgentOrderDrag?
+    /// Every group id this page lists, in the order it lists them: a drag rebuilds the recorded order from them.
+    var groupIDs: [String] = []
     let onSelect: () -> Void
 
     var body: some View {
         let undetected = group.source?.state == .notDetected
         HStack(spacing: 4) {
-            if !group.agents.isEmpty {
-                OrderDragHandle(theme: theme)
-                    .padding(.vertical, 12)
-                    .contentShape(Rectangle())
-                    .onDrag {
-                        dragging = .group(group.id)
-                        return NSItemProvider(object: group.id as NSString)
-                    }
-                    .help(L10n.text("拖动以调整分组顺序", "Drag to reorder this group"))
-            } else {
-                Color.clear.frame(width: 16)
-            }
+            OrderDragHandle(theme: theme)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+                .onDrag {
+                    dragging = .group(group.id)
+                    return NSItemProvider(object: group.id as NSString)
+                }
+                .help(L10n.text("拖动以调整分组顺序", "Drag to reorder this group"))
             Button(action: onSelect) {
                 HStack(spacing: 8) {
                     AgentLogo(vendor: group.id, size: 20)
@@ -136,7 +135,8 @@ private struct AgentProviderRow: View {
         }
         .padding(.horizontal, 6)
         .background(selected ? theme.selectedRowBackground : .clear, in: RoundedRectangle(cornerRadius: 7))
-        .onDrop(of: [UTType.text], delegate: ReorderDropDelegate(target: .group(group.id), dragging: $dragging, settings: settings))
+        .onDrop(of: [UTType.text], delegate: ReorderDropDelegate(target: .group(group.id), dragging: $dragging,
+                                                                 settings: settings, knownGroups: groupIDs))
     }
 }
 
