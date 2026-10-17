@@ -212,11 +212,7 @@ struct StatsView: View {
     private var sessionProjects: [SessionProject] {
         var projects = Set(store.statsSessions.map(SessionProject.init))
         if let sessionProject { projects.insert(sessionProject) }
-        return projects.sorted {
-            if $0 == .unassigned { return false }
-            if $1 == .unassigned { return true }
-            return $0.label.localizedStandardCompare($1.label) == .orderedAscending
-        }
+        return SessionProject.ordered(projects)
     }
 
     private func sessionCount(_ theme: Theme) -> some View {

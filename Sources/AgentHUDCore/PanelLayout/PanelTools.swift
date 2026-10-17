@@ -14,7 +14,8 @@ import Foundation
 /// it, and one the panel or the HUD cannot do as asked is refused whole, with every reason, so an agent never believes a
 /// change that fell back. What the layout already holds for a block, a row or an agent that is away may come back with
 /// it, so the layout that was read can be sent again, and a proposal is kept as what it changes, so one that draws what
-/// is saved leaves no draft. Screens are named by role and agents by vendor; nothing names an account.
+/// is saved leaves no draft. Screens are named by role, agents by vendor and projects by their folder; nothing names an
+/// account.
 @MainActor
 public struct PanelTools {
     let store: UsageStore
@@ -246,11 +247,16 @@ public struct PanelTools {
         // or the screen's resting HUD cannot do. What the layout already holds for a block, a row or an agent that is
         // away may come back with it.
         var reasons = PanelLayout.misreadings(of: document)
-        let proposal = PanelLayout(json: document) ?? PanelLayout()
+        var proposal = PanelLayout(json: document) ?? PanelLayout()
+        // A project named by a path inside it, an agent's own working directory among them, is listed by its id.
+        let projects = PanelLayout.projectMatch(document["sessions"]["projects"], among: store.panelSessionProjects,
+                                                holding: held)
+        proposal.sessions.projects = projects.ids
         let style = StyleProposal(hud: arguments["hud"]?.objectValue ?? [:], scope: scope, among: attached, tools: self)
         reasons += proposal.issues(against: existing, holding: held).map { "\($0.path): \($0.message)" }
         reasons += proposal.filterIssues(sessionAgents: view.panelSessionAgents, tokenAgents: view.panelTokenAgents,
                                          tokenModels: view.panelTokenModels, holding: held).map { "\($0.path): \($0.message)" }
+        reasons += projects.issues.map { "\($0.path): \($0.message)" }
         reasons += style.reasons
         reasons += proposal.hudIssues(against: agents(for: scope, among: attached, in: style.mode),
                                       whose: whose(scope, among: attached), holding: held).map { "\($0.path): \($0.message)" }
@@ -285,6 +291,9 @@ public struct PanelTools {
             note += " The resting HUD of \(name(of: key, among: attached)) would be solid, so its glass style "
                 + "\"\(glass.rawValue)\" is kept, as Settings keeps it, and takes effect once its material is "
                 + "\"glass\"."
+        }
+        for path in projects.paths {
+            note += " \"\(path.given)\" names the project \"\(path.id)\", which sessions.projects lists by that id."
         }
         if styleAlone {
             note += scope.screenKey.map { " The layout of the panel on \(name(of: $0, among: attached)) is unchanged" }

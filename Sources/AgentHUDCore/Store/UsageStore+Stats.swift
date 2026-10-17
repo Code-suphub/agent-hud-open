@@ -118,6 +118,16 @@ public extension UsageStore {
         return Set(consumers.filter { (mark == nil || VendorMark.key($0.vendor) == mark) && filter.keeps($0) }.map(\.id))
     }
 
+    /// The hover panel's session rows under a layout's `sessions` (`ReportView.panelSessions(_:vendor:project:)`), each
+    /// session's project the one kept for the report (`sessionProject(_:)`).
+    func panelSessions(_ filter: PanelSessionFilter = PanelSessionFilter(), vendor: String? = nil) -> PanelSessionRows {
+        view.panelSessions(filter, vendor: vendor, project: sessionProject)
+    }
+
+    /// The projects the sessions belong to now, which a layout's `sessions.projects` can list
+    /// (`ReportView.panelSessionProjects(project:)`), each the one kept for the report.
+    internal var panelSessionProjects: [SessionProject] { view.panelSessionProjects(project: sessionProject) }
+
     var statsActivity: ActivityGrid {
         UsageAnalytics.activityGrid(usage: (report?.usage ?? []).filter { $0.start < dataDate },
             since: dataDate.addingTimeInterval(-7 * 86400), calendar: .current, dimensions: tokenDimensions)

@@ -105,8 +105,9 @@ public struct PanelStyle: Hashable, Codable, Sendable {
 /// a block is a quota window, under its `AgentDescriptor.windowKey`. A key that names nothing the panel has now stays
 /// in the document and applies again when its block or row returns.
 ///
-/// The JSON is also what an agent sends, so reading forgives field by field: a widget, ring size, span, period or spacing
-/// name this build does not know leaves that field unset, a measure or section it does not know is left out of its list,
+/// The JSON is also what an agent sends, so reading forgives field by field: a widget, ring size, span, period, sort or
+/// spacing name this build does not know leaves that field unset, a session period the build before named is the period
+/// that covers it, a measure or section it does not know is left out of its list,
 /// columns outside 2 to 6, a width outside 480 to 720 and a session limit outside 1 to 10 count as not given, a block,
 /// a style, the sessions, the tokens or a hud that is not an object is left out, a value of the wrong type counts as not
 /// given, and keys it does not know are ignored, the style
