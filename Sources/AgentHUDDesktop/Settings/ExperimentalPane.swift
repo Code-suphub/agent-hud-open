@@ -19,16 +19,16 @@ struct ExperimentalPane: View {
     }
 
     var body: some View {
-        let toolsOn = settings.settings.agentTools
+        let toolsOn = settings.settings.hudTools
         let controls = setup.controls(toolsOn: toolsOn)
         VStack(alignment: .leading, spacing: 28) {
             SettingsSection(title: L10n.text("Agent 工具", "Agent tools"), theme: theme) {
                 SettingRow(label: L10n.text("允许 agent 调整 HUD", "Let agents arrange the HUD"),
                            subtitle: L10n.text("agent 通过 MCP 读取面板和 HUD，起草新布局，由你保存。",
                                                "Agents read the panel and HUD over MCP and draft new layouts for you to save.")) {
-                    Toggle(L10n.text("允许 agent 调整 HUD", "Let agents arrange the HUD"), isOn: settings.binding(\.agentTools))
+                    Toggle(L10n.text("允许 agent 调整 HUD", "Let agents arrange the HUD"), isOn: settings.binding(\.hudTools))
                         .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                        .accessibilityIdentifier("experimental-agent-tools")
+                        .accessibilityIdentifier("experimental-hud-tools")
                 }
                 SettingsDivider(theme: theme)
                 installRow(controls, toolsOn: toolsOn)
@@ -64,7 +64,8 @@ struct ExperimentalPane: View {
                     if setup.commandLine != nil {
                         Button(L10n.text("拷贝命令", "Copy command")) { setup.copyCommand() }
                             .buttonStyle(.plain)
-                            .foregroundStyle(controls.copyCommand ? Color.accentColor : theme.secondary.opacity(0.5))
+                            .foregroundStyle(controls.copyCommand ? theme.accentText : theme.secondary.opacity(0.5))
+                            .underline(controls.copyCommand && theme.isSeeThrough)
                             .disabled(!controls.copyCommand)
                             .help(setup.commandLine ?? "")
                             .accessibilityIdentifier("experimental-agent-tools-copy")

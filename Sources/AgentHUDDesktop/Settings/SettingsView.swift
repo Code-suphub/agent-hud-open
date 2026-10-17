@@ -229,44 +229,84 @@ struct SettingsSidebar: View {
     }
 }
 
-/// One titled group for settings content: its title and subtitle above, its rows on the group's card (`SettingsCard`).
-/// Public, with `SettingRow`, `SettingsToggleRow` and `SettingsDivider`, so that the pages a host app adds to Settings
-/// are built as the app's own are.
-public struct SettingsSection<Content: View>: View {
+/// One titled group for settings content: its title, with what stands beside it if anything, a tag or the group's own
+/// action (`accessory`), and its subtitle above; its rows on the group's card (`SettingsCard`) below. Public, with
+/// `SettingRow`, `SettingsToggleRow` and `SettingsDivider`, so that the pages a host app adds to Settings are built as
+/// the app's own are.
+public struct SettingsSection<Accessory: View, Content: View>: View {
     let title: String
     var subtitle: String? = nil
     /// The window's theme, or nil to take it from the colour scheme the section is drawn in, as a host's page does.
     private let theme: Theme?
+    @ViewBuilder let accessory: () -> Accessory
     @ViewBuilder let content: () -> Content
-    @Environment(WindowSurface.self) private var surface: WindowSurface?
-    @Environment(\.colorScheme) private var scheme
 
-    init(title: String, subtitle: String? = nil, theme: Theme, @ViewBuilder content: @escaping () -> Content) {
+    init(title: String, subtitle: String? = nil, theme: Theme, @ViewBuilder content: @escaping () -> Content)
+    where Accessory == EmptyView {
         self.title = title
         self.subtitle = subtitle
         self.theme = theme
+        self.accessory = { EmptyView() }
         self.content = content
     }
 
-    public init(title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+    public init(title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content)
+    where Accessory == EmptyView {
+        self.init(title: title, subtitle: subtitle, accessory: { EmptyView() }, content: content)
+    }
+
+    /// A group with `accessory` beside its title.
+    public init(title: String, subtitle: String? = nil, @ViewBuilder accessory: @escaping () -> Accessory,
+                @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.subtitle = subtitle
         self.theme = nil
+        self.accessory = accessory
         self.content = content
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.ui(15, .semibold))
+                HStack(spacing: 8) {
+                    Text(title).font(.ui(15, .semibold))
+                    accessory()
+                }
                 if let subtitle {
-                    Text(subtitle).font(.ui(12)).foregroundStyle((theme ?? Theme.forScheme(scheme).under(surface?.look)).secondary)
+                    Text(subtitle).font(.ui(12)).settingsSubtitle(theme: theme)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             VStack(spacing: 0, content: content)
                 .settingsCard()
         }
+    }
+}
+
+/// The ink of a settings group's subtitle, and of a host's line written as one: the window theme's secondary grey on the
+/// window's ground (`Theme.under(_:)`), which on a ground the desktop shows through is a tint of the ink, so that it
+/// holds as the ground lightens or darkens, where a fixed copy of the grey would not.
+public struct SettingsSubtitle: ViewModifier {
+    /// The window's theme, or nil to take it from the colour scheme the view is drawn in.
+    var theme: Theme?
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
+    @Environment(\.colorScheme) private var scheme
+
+    public func body(content: Content) -> some View {
+        content.foregroundStyle((theme ?? Theme.forScheme(scheme).under(surface?.look)).secondary)
+    }
+}
+
+public extension View {
+    /// Inks the view as a settings group's subtitle (`SettingsSubtitle`).
+    func settingsSubtitle() -> some View {
+        modifier(SettingsSubtitle())
+    }
+}
+
+extension View {
+    func settingsSubtitle(theme: Theme?) -> some View {
+        modifier(SettingsSubtitle(theme: theme))
     }
 }
 

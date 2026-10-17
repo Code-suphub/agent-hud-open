@@ -27,7 +27,7 @@ final class MCPStatelessTests: XCTestCase {
 
     func testARequestThatCarriesItsRevisionGetsACompleteResult() throws {
         let listed = try probe.response(to: #"{"method":"tools/list","jsonrpc":"2.0","id":0,"params":{\#(meta)}}"#)["result"]
-        XCTAssertEqual(listed["tools"].arrayValue?.count, 4)
+        XCTAssertEqual(listed["tools"].arrayValue?.count, 5)
         XCTAssertEqual(listed["tools"], .array(MCPTools.definitions))
         XCTAssertEqual(listed["resultType"], .string("complete"))
         XCTAssertEqual(listed["ttlMs"], .integer(300_000))
@@ -35,7 +35,7 @@ final class MCPStatelessTests: XCTestCase {
         XCTAssertEqual(listed["_meta"]["io.modelcontextprotocol/serverInfo"], serverInfo)
 
         // Claude Code adds keys of its own beside the protocol's.
-        let call = #"{"method":"tools/call","params":{"name":"get_panel","arguments":{},\#(meta.dropLast()),"claudecode/toolUseId":"toolu_1","progressToken":1}},"jsonrpc":"2.0","id":1}"#
+        let call = #"{"method":"tools/call","params":{"name":"get_hud","arguments":{},\#(meta.dropLast()),"claudecode/toolUseId":"toolu_1","progressToken":1}},"jsonrpc":"2.0","id":1}"#
         let called = try probe.response(to: call)["result"]
         XCTAssertEqual(called["resultType"], .string("complete"))
         XCTAssertEqual(called["isError"], .bool(true))
@@ -44,7 +44,7 @@ final class MCPStatelessTests: XCTestCase {
         XCTAssertNil(called.objectValue?["ttlMs"], "what a tool returns is not for caching")
 
         probe.answer = .reply(.result(["revision": .integer(1)]))
-        let read = try probe.response(to: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_panel",\#(meta)}}"#)["result"]
+        let read = try probe.response(to: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_hud",\#(meta)}}"#)["result"]
         XCTAssertEqual(read.blockText, #"{"revision":1}"#)
         XCTAssertEqual([read["isError"], read["resultType"]], [.bool(false), .string("complete")])
 
@@ -111,7 +111,7 @@ final class MCPStatelessTests: XCTestCase {
         let older = meta.replacingOccurrences(of: "2026-07-28", with: "2025-11-25")
         let listed = try probe.response(to: #"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{\#(older)}}"#)
         XCTAssertEqual(listed["result"].objectValue?.keys.sorted(), ["tools"], "no result type, no caching hints")
-        let called = try probe.response(to: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_panel",\#(older)}}"#)
+        let called = try probe.response(to: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_hud",\#(older)}}"#)
         XCTAssertEqual(called["result"].objectValue?.keys.sorted(), ["content", "isError"])
         XCTAssertEqual(try probe.response(to: #"{"jsonrpc":"2.0","id":3,"method":"ping","params":{\#(older)}}"#)["result"], .object([:]))
         for method in ["server/discover", "subscriptions/listen"] {
@@ -119,14 +119,14 @@ final class MCPStatelessTests: XCTestCase {
             XCTAssertEqual(response["error"]["code"], .integer(-32601), "\(method) is not a method of 2025-11-25")
         }
         let bare = try probe.response(to: #"{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2025-06-18"}}}"#)
-        XCTAssertEqual(bare["result"]["tools"].arrayValue?.count, 4, "a handshake revision asks for no capabilities in the request")
+        XCTAssertEqual(bare["result"]["tools"].arrayValue?.count, 5, "a handshake revision asks for no capabilities in the request")
     }
 
     func testTheListIsOnePageSoACursorIsUnknown() throws {
         let paged = try probe.response(to: #"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"cursor":"eyJwYWdlIjogMn0=",\#(meta)}}"#)
         XCTAssertEqual(paged["error"], .object(["code": .integer(-32602), "message": .string("Invalid params: unknown cursor")]))
         let first = try probe.response(to: #"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"cursor":null,\#(meta)}}"#)
-        XCTAssertEqual(first["result"]["tools"].arrayValue?.count, 4)
+        XCTAssertEqual(first["result"]["tools"].arrayValue?.count, 5)
         XCTAssertNil(first["result"].objectValue?["nextCursor"], "nothing follows the one page")
     }
 

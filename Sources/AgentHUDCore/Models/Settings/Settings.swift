@@ -112,7 +112,7 @@ public struct Settings: Hashable, Codable, Sendable {
     public var clientHooks: Bool = true
     /// Whether the application answers the MCP tools through which an agent reads and drafts the panel and the resting
     /// HUD (Settings → Experimental). Off until a person turns it on; while it is off a client's call is told so.
-    public var agentTools: Bool = false
+    public var hudTools: Bool = false
     /// How long a permission request waits on the HUD for an answer before it goes back to the client's own prompt.
     public var approvalWaitMinutes: Int = 10
     public static let approvalWaitChoices = [1, 3, 5, 10, 30, 60]
@@ -127,6 +127,12 @@ public struct Settings: Hashable, Codable, Sendable {
     /// `ScreenPlacement.default(hasNotch:)` for its hardware, so a newly attached display needs no setup.
     public var screens: [String: ScreenPlacement] = [:]
 
+    /// The order of the provider groups, recorded by a drag in Settings → Agents for every group the page lists, those
+    /// without quota windows included. The page, the Tokens page and the agent rows follow it, and through the rows the
+    /// HUD, the glow and the menu bar. Providers absent from the list keep their order after the ordered ones, and
+    /// entries that no longer exist are ignored. Until the first drag it is empty, and the groups follow the rows' order.
+    public private(set) var providerOrder: [String] = []
+
     /// This screen's placement, or the default its hardware deserves. The companion to `glow(on:)`: both
     /// resolve "what this display uses" in one place, so a caller cannot invent its own fallback.
     public func placement(on screen: String, hasNotch: Bool) -> ScreenPlacement {
@@ -140,8 +146,8 @@ public struct Settings: Hashable, Codable, Sendable {
         case glowStyle, glowGridPitch, glowGridSpread, glowGridCore, glowGridFade, glowGridDensity, glowEffect
         case requiresOptionToOpen, openImmediatelyAtTop, hoverDelayMs, collapseDelayMs, showResetCountdown
         case showIslandQuota, showIslandTokens, showIslandSessions, botLogos, hiddenAccountIDs
-        case liveStatusPreferences, disabledLiveStatusSources, readCopilotQuota, clientHooks, agentTools, approvalWaitMinutes
-        case launchAtLogin, showMenuBarIcon, appearance, appearanceFollowsScreen, language, screens, screenGlow
+        case liveStatusPreferences, disabledLiveStatusSources, readCopilotQuota, clientHooks, hudTools, approvalWaitMinutes
+        case launchAtLogin, showMenuBarIcon, appearance, appearanceFollowsScreen, language, screens, screenGlow, providerOrder
     }
 
     public init(from decoder: Decoder) throws {
@@ -189,7 +195,7 @@ public struct Settings: Hashable, Codable, Sendable {
         }
         readCopilotQuota = try c.decodeIfPresent(Bool.self, forKey: .readCopilotQuota) ?? d.readCopilotQuota
         clientHooks = try c.decodeIfPresent(Bool.self, forKey: .clientHooks) ?? d.clientHooks
-        agentTools = try c.decodeIfPresent(Bool.self, forKey: .agentTools) ?? d.agentTools
+        hudTools = try c.decodeIfPresent(Bool.self, forKey: .hudTools) ?? d.hudTools
         approvalWaitMinutes = (try c.decodeIfPresent(Int.self, forKey: .approvalWaitMinutes))
             .flatMap { Self.approvalWaitChoices.contains($0) ? $0 : nil } ?? d.approvalWaitMinutes
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? d.launchAtLogin
@@ -201,6 +207,7 @@ public struct Settings: Hashable, Codable, Sendable {
         language = try c.decodeIfPresent(AppLanguage.self, forKey: .language) ?? d.language
         screens = (try? c.decodeIfPresent([String: ScreenPlacement].self, forKey: .screens)) ?? d.screens
         screenGlow = (try? c.decodeIfPresent([String: GlowSettings].self, forKey: .screenGlow)) ?? d.screenGlow
+        providerOrder = (try? c.decodeIfPresent([String].self, forKey: .providerOrder)) ?? d.providerOrder
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -231,7 +238,7 @@ public struct Settings: Hashable, Codable, Sendable {
         try c.encode(liveStatusPreferences, forKey: .liveStatusPreferences)
         try c.encode(readCopilotQuota, forKey: .readCopilotQuota)
         try c.encode(clientHooks, forKey: .clientHooks)
-        try c.encode(agentTools, forKey: .agentTools)
+        try c.encode(hudTools, forKey: .hudTools)
         try c.encode(approvalWaitMinutes, forKey: .approvalWaitMinutes)
         try c.encode(launchAtLogin, forKey: .launchAtLogin)
         try c.encode(showMenuBarIcon, forKey: .showMenuBarIcon)
@@ -240,6 +247,7 @@ public struct Settings: Hashable, Codable, Sendable {
         try c.encode(language, forKey: .language)
         try c.encode(screens, forKey: .screens)
         try c.encode(screenGlow, forKey: .screenGlow)
+        try c.encode(providerOrder, forKey: .providerOrder)
     }
 
     private static func clampGlowSize(_ value: Double) -> Double {
@@ -269,6 +277,19 @@ public struct Settings: Hashable, Codable, Sendable {
     public mutating func setAccountVisibility(id: String, visible: Bool) {
         if visible { hiddenAccountIDs.remove(id) }
         else { hiddenAccountIDs.insert(id) }
+    }
+
+    /// Records a manual move of a provider group to the place of another, as a live drag moves it. Both must already
+    /// appear in the list the settings page shows, so `providerOrder` stays a permutation of known providers rather than
+    /// a growing stash.
+    public mutating func moveProvider(id: String, to targetID: String, known: [String]) {
+        var order = providerOrder.filter { known.contains($0) }
+        for provider in known where !order.contains(provider) { order.append(provider) }
+        guard let source = order.firstIndex(where: { $0 == id }),
+              let target = order.firstIndex(where: { $0 == targetID }) else { return }
+        let moved = order.remove(at: source)
+        order.insert(moved, at: target)
+        providerOrder = order
     }
 
     public func liveStatusEnabled(for vendor: String) -> Bool {

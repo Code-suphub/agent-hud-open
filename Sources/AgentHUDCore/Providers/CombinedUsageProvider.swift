@@ -126,7 +126,8 @@ public struct CombinedUsageProvider: UsageProvider {
         var notices: [String: String] = [:], quotaNotices: [String: String] = [:], issues: [String: ReadingIssue] = [:]
         for (index, report, error) in results {
             if let report {
-                notices.merge(report.sourceNotices, uniquingKeysWith: { _, new in new })
+                // Two sources can write one group's notice: a GLM plan only WorkBuddy carries files its read error there.
+                notices.merge(report.sourceNotices, uniquingKeysWith: { old, new in old == new ? new : old + " · " + new })
                 quotaNotices.merge(report.quotaNotices ?? report.sourceNotices, uniquingKeysWith: { _, new in new })
                 issues.merge(report.typedReadingIssues, uniquingKeysWith: { _, new in new })
             }
@@ -179,7 +180,9 @@ public struct CombinedUsageProvider: UsageProvider {
                                $0.merge($1, uniquingKeysWith: +)
                            },
                            forgottenAccountProviders: reports.compactMap(\.forgottenAccountProviders).reduce(nil) { ($0 ?? []).union($1) },
-                           sessionUsage: sessionUsage, periods: periods, recached: recached)
+                           sessionUsage: sessionUsage,
+                           sessionCredits: reports.compactMap(\.sessionCredits).reduce(into: [String: SessionCredits]()) { $0.merge($1) { _, new in new } },
+                           periods: periods, recached: recached)
     }
 
     /// Where each session's tokens went. A session is read again when its counts move or when the ledger has written any

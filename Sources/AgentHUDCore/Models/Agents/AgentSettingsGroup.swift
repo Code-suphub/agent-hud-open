@@ -61,15 +61,27 @@ public struct AgentSettingsGroup: Identifiable, Equatable, Sendable {
     }
     public var hasLiveStatus: Bool { SessionSource.agentVendors.contains(id) }
 
+    /// Whether the group's client is on this Mac. The page lists the groups that are not after the others, and keeps them
+    /// out of a drag.
+    public var isDetected: Bool { source?.state != .notDetected }
+
     /// One group per account provider, including sources not detected on this Mac, plus present rows and
-    /// reported services. Undetected sources follow other groups, preserving order within both sections. A source alone
-    /// creates no windows or accounts; existing windows keep their manual order.
-    public static func make(sources: [SourceStatus], agents: [AgentDescriptor], report: UsageReport? = nil) -> [Self] {
+    /// reported services, in the recorded provider order (`Settings.providerOrder`): the groups it names first, then the
+    /// others in the order of the rows and of discovery. Undetected sources follow other groups, preserving order within
+    /// both sections. A source alone creates no windows or accounts; existing windows keep their manual order.
+    public static func make(sources: [SourceStatus], agents: [AgentDescriptor], report: UsageReport? = nil, providerOrder: [String] = []) -> [Self] {
         let agents = agents.filter { ReportView.isPresent($0, in: report) }
         let existing = agents.agentGroups
         var ids = existing.map(\.id)
         for id in sources.map(\.provider) + agents.map(\.vendor) + (report?.services ?? []).map(\.client)
             where !ids.contains(id) { ids.append(id) }
+        // The rule the rows follow too (`groupedAgentOrder(following:)`), so the HUD lists the groups as the page does.
+        ids = ids.inProviderOrder(providerOrder) { $0 }
+        // A plan's account is shown in the group its windows are in. A GLM plan only WorkBuddy carries is filed under GLM,
+        // its provider, and shown in WorkBuddy's group.
+        let planGroups = Dictionary(agents.compactMap { agent in
+            agent.billingPool.flatMap { $0.product == .plan ? ($0.id, agent.vendor) : nil }
+        }, uniquingKeysWith: { first, _ in first })
         let groups = ids.map { id in
             let family = sources.filter { $0.provider == id }
             let source = family.first { $0.state != .notDetected } ?? family.first
@@ -77,7 +89,11 @@ public struct AgentSettingsGroup: Identifiable, Equatable, Sendable {
             let windows = existing.first { $0.id == id }?.agents ?? []
             let services = (report?.services ?? []).filter { $0.client == id }
             // Older restart copies include former accounts; only current identities have settings and quota rows.
-            let accountIDs = Set((report?.accounts?[id] ?? []).filter(\.isCurrent).map(\.account.id))
+            let filed = (report?.accounts?[id] ?? []).filter { $0.isCurrent && (planGroups[$0.account.id] ?? id) == id }
+            let shown = windows.compactMap(\.billingPool).filter { pool in
+                pool.provider != id && report?.accounts?[pool.provider]?.contains { $0.account.id == pool.id && $0.isCurrent } == true
+            }
+            let accountIDs = Set(filed.map(\.account.id) + shown.map(\.id))
             let accounts = accountIDs.compactMap { report?.observation(accountID: $0) }
                 .sorted { ($0.isCurrent ? 1 : 0, $0.observedAt) > ($1.isCurrent ? 1 : 0, $1.observedAt) }
             var plans = accounts.isEmpty ? source?.planLabel.map { [$0] } ?? [] : []
@@ -102,7 +118,7 @@ public struct AgentSettingsGroup: Identifiable, Equatable, Sendable {
                         apiProviders: Array(Set(api)).sorted(), accounts: accounts,
                         billingAccounts: (report?.billing ?? []).filter { ($0.billingPool?.provider ?? $0.vendor) == id })
         }
-        return groups.filter { $0.source?.state != .notDetected } + groups.filter { $0.source?.state == .notDetected }
+        return groups.filter(\.isDetected) + groups.filter { !$0.isDetected }
     }
 
 }

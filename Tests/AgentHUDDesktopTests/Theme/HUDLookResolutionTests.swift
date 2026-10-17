@@ -232,7 +232,8 @@ final class HUDLookResolutionTests: XCTestCase {
 
     /// A screen of glass gives its look the transparency it has saved, or its style draft's, as its glass draws it,
     /// three fifths of it for regular glass and all of it for the material, unless Reduce Transparency draws it solid
-    /// and opaque, and what its glass is made of, which a style draft leaves as it is: an agent cannot choose it.
+    /// and opaque, and what its glass is made of, which a style draft leaves as it is unless it sets a glass style of
+    /// its own.
     func testAScreensGlassTakesItsTransparencyAndItsDrafts() {
         let suite = "app.agenthud.tests.hud-look-resolution.\(UUID().uuidString)"
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
@@ -253,6 +254,11 @@ final class HUDLookResolutionTests: XCTestCase {
                        "the draft keeps the screen's glass")
         settings.panelLayout.discardStyle(key)
         XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.2 * 0.6)
+        settings.panelLayout.proposeStyle(HUDStyle(glassStyle: .material), for: key, hasNotch: false)
+        XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, reduces ? .clear : .material, "the draft's glass")
+        XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.2, "drawn as the material draws it")
+        settings.panelLayout.discardStyle(key)
+        XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, reduces ? .clear : .regular)
         settings.update { $0.screens[key]?.glassStyle = .material }
         XCTAssertEqual(settings.effectiveLook(on: key).glassStyle, reduces ? .clear : .material)
         XCTAssertEqual(settings.effectiveLook(on: key).transparency, reduces ? 0 : 0.2, "the material draws all of it")

@@ -2,16 +2,17 @@ import AppKit
 import AgentHUDCore
 import SwiftUI
 
-/// One screen's resting HUD drawn off screen for an agent that checks how a style looks, as `get_panel_image` returns
-/// it with show "hud": the island at the notch with its glow, a Dynamic dock's marks over their backdrop, or a Simple
-/// panel, as that screen draws it now with any style draft an agent proposed, on a dark backdrop. It is the Settings
-/// preview of that screen: a dock is laid along a top edge whichever edge it is parked on, and the island has the
-/// screen's own notch, or the bar that stands in for one.
+/// One screen's resting HUD drawn off screen for an agent that checks how a style looks, as `get_hud_screenshot`
+/// returns it with show "hud": the island at the notch with its glow, a Dynamic dock's marks over their backdrop, or a
+/// Simple panel, as that screen draws it now with any style draft an agent proposed, on a dark backdrop. It is the
+/// Settings preview of that screen: a dock is laid along a top edge whichever edge it is parked on, and the island has
+/// the screen's own notch, or the bar that stands in for one.
 ///
 /// Like the panel's picture it is views in a hosting view that is never put in a window: nothing opens, nothing shows
 /// on screen and no read starts. Nothing is behind it to show through glass, which is drawn as its stand-in, the look's
 /// tint over the backdrop. The glow is drawn as a still frame, the one the snapshots draw, which every build draws the
-/// same way. It shows marks and figures, and no account or session.
+/// same way. The marks of a dock and of a Simple panel follow Bot logos, as they do on screen. It shows marks and
+/// figures, and no account or session.
 @MainActor
 struct HUDPictureRenderer {
     let store: UsageStore
@@ -123,9 +124,15 @@ struct HUDPictureRenderer {
                    height: max(config.stripThickness, reach.height + reach.topOffset))
     }
 
+    /// The Simple panel as the picture lays it out, along a top edge, with its marks following Bot logos as the
+    /// dock's do (`LogoQueueConfig.bots`).
+    var simpleMeter: SimpleMeterConfig {
+        SimpleMeterConfig(items: agents.meterItems, placement: laidAlongTop, bots: settings.settings.botLogos)
+    }
+
     /// The Simple panel, with its own fill and hairline, as Settings previews it.
     private var simple: some View {
-        let config = SimpleMeterConfig(items: agents.meterItems, placement: laidAlongTop)
+        let config = simpleMeter
         return SimpleMeterView(config: config)
             .frame(width: config.stripSize.width, height: config.stripSize.height)
     }

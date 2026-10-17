@@ -9,6 +9,13 @@ enum TencentBuddySessions {
         let parent = folder.lastPathComponent == "subagents" ? folder.deletingLastPathComponent().lastPathComponent : nil
         let client = source == .codebuddy ? "CodeBuddy Code" : source.vendor
         var sessions: [String: ProviderSession] = [:], events: [String: [String: ProviderEvent]] = [:], incomplete = false
+        // Each session's models, read while its events are; WorkBuddy's credit attribution correlates them with the
+        // per-model entries its own metering records. `reached` collects the models whose calls name one of the app's
+        // own model entries (`custom-local:` routes), which marks them as reached over an API rather than built in.
+        var models: [String: Set<String>] = [:], reached: Set<String> = []
+        // Each session's latest successful call, its model and the model entry it went through, and the 429 ceilings it
+        // logged, again in pass order.
+        var lastCalls: [String: (model: String, route: String?)] = [:], hits: [ProviderLimitHit] = []
         // The latest title of each kind the engine appended, by its rank in `titleFields`.
         var named: [String: [Int: String]] = [:]
         try ProviderFiles.lines(url) { json, line in
@@ -29,11 +36,25 @@ enum TencentBuddySessions {
             }
             guard kind == "function_call" || (kind == "message" && json["role"].stringValue == "assistant"),
                   json["status"] == .null || json["status"].stringValue == "completed",
-                  let usage = [json["message"]["usage"], provider["usage"], provider["rawUsage"]].first(where: { $0.objectValue != nil }) else { return }
+                  let usage = [json["message"]["usage"], provider["usage"], provider["rawUsage"]].first(where: { $0.objectValue != nil }) else {
+                // A 429 answer carries no usage but names the ceiling it hit and when the vendor resets it; its session's
+                // latest successful call is the one it interrupted.
+                if let hit = WorkBuddyCeilings.hit(json, date: date, after: lastCalls[id]) { hits.append(hit) }
+                return
+            }
             let counted: (input: Int, output: Int, cache: Int, write: Int, reasoning: Int)?
             do { counted = try self.tokens(usage) } catch { incomplete = true; return }
             guard let tokens = counted else { return }
             guard let date else { incomplete = true; return }
+            // The models a session called, for credit attribution: every model whose calls the transcript priced.
+            if let name = model(json) {
+                models[id, default: []].insert(name)
+                let route = nonEmpty(provider["requestModelId"]).flatMap { request in
+                    request.hasPrefix("custom-local:") ? String(request.dropFirst("custom-local:".count)) : nil
+                }
+                if route != nil { reached.insert(name) }
+                lastCalls[id] = (name, route)
+            }
             // One response can be written on both its message and its function call line.
             let key = nonEmpty(provider["messageId"]).map { "message:\($0)" } ?? nonEmpty(provider["traceId"]).map { "trace:\($0)" }
                 ?? nonEmpty(json["id"]).map { "\(raw):item:\($0)" } ?? "\(raw):\(stem):line-\(line)"
@@ -47,7 +68,8 @@ enum TencentBuddySessions {
                 if let title = named[key]?.min(by: { $0.key < $1.key })?.value { item.title = title }
                 item.events = (events[key] ?? [:]).values.sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }; return item }
         }, notice: incomplete ? L10n.text("部分 \(source.vendor) 记录缺少时间或计数无法核对，未计入统计",
-                                          "Some \(source.vendor) records lack a time or have inconsistent counts and were excluded") : nil)
+                                          "Some \(source.vendor) records lack a time or have inconsistent counts and were excluded") : nil,
+                          models: models, apiReached: reached, limitHits: hits)
     }
 
     /// Title lines the engine appends to a session's transcript, in the order it prefers them: the name the user gave,
@@ -123,16 +145,23 @@ enum TencentBuddySessions {
         }
     }
 
-    private static func nonEmpty(_ value: ProviderJSON) -> String? {
+    static func nonEmpty(_ value: ProviderJSON) -> String? {
         value.stringValue.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
     }
 }
 
 enum CodeBuddySessions: LocalSessionLayout {
     static let installPaths = [".codebuddy/projects"]
-    /// CodeBuddy Code's configuration and data folder: `CODEBUDDY_CONFIG_DIR`, else `~/.codebuddy`.
+    /// CodeBuddy Code's configuration and data folder, where its transcripts are read and its approval and completion
+    /// hooks go: `CODEBUDDY_CONFIG_DIR`, else `~/.codebuddy`. A value that names WorkBuddy's own folder, where
+    /// `workbuddy.db` and `models.json` live, points CodeBuddy Code at WorkBuddy's installation, and what is written
+    /// there is WorkBuddy's: the WorkBuddy source reads its transcripts and its handlers answer there, so the same
+    /// transcripts are not counted twice under two vendors. This source then keeps `~/.codebuddy`, as without the
+    /// variable (`CodeBuddySharedHome`).
     static func home(_ home: URL, environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
-        ClientHome.variable("CODEBUDDY_CONFIG_DIR", in: environment).map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".codebuddy")
+        if let value = ClientHome.variable("CODEBUDDY_CONFIG_DIR", in: environment),
+           CodeBuddySharedHome.folder(home: home, environment: environment) == nil { return URL(fileURLWithPath: value) }
+        return home.appendingPathComponent(".codebuddy")
     }
     static func roots(home: URL, environment: [String: String]) -> [URL] { [self.home(home, environment: environment).appendingPathComponent("projects")] }
     static func accepts(_ url: URL) -> Bool { url.pathExtension == "jsonl" }
@@ -147,24 +176,18 @@ enum WorkBuddySessions: LocalSessionLayout {
     static func accepts(_ url: URL) -> Bool { url.pathExtension == "jsonl" }
     static func skips(_ url: URL) -> Bool { url.lastPathComponent == "tool-results" }
     static func read(_ url: URL) throws -> ProviderSessions { try TencentBuddySessions.read(url, source: .workbuddy) }
-    static func merge(_ sessions: [ProviderSession]) -> [ProviderSession] { names(TencentBuddySessions.merge(sessions)) }
+    static func merge(_ sessions: [ProviderSession]) -> [ProviderSession] { TencentBuddySessions.merge(sessions) }
 
-    /// The app keeps a session's name in `workbuddy.db` beside `projects`, where a rename from its sidebar goes: the
-    /// name the user gave, else the generated one. Read on every pass, so a rename shows without reparsing transcripts.
-    static func names(_ sessions: [ProviderSession]) -> [ProviderSession] {
-        guard let path = sessions.lazy.compactMap(\.path).first,
-              let projects = sequence(first: URL(fileURLWithPath: path).deletingLastPathComponent(), next: {
-                  $0.pathComponents.count > 1 ? $0.deletingLastPathComponent() : nil
-              }).first(where: { $0.lastPathComponent == "projects" }),
-              let database = try? ReadOnlySQLite(projects.deletingLastPathComponent().appendingPathComponent("workbuddy.db")) else { return sessions }
-        let prefix = "\(AdditionalSource.workbuddy.rawValue):"
-        let ids = sessions.map { String($0.id.dropFirst(prefix.count)) }
-        guard let list = try? JSONSerialization.data(withJSONObject: ids), let json = String(data: list, encoding: .utf8) else { return sessions }
-        var titles: [String: String] = [:]
-        try? database.rows("SELECT id, custom_title, title FROM sessions WHERE id IN (SELECT value FROM json_each(?))", strings: [json]) { row in
-            if let id = ReadOnlySQLite.text(row, 0),
-               let title = SessionTitle.named(ReadOnlySQLite.text(row, 1)) ?? SessionTitle.named(ReadOnlySQLite.text(row, 2)) { titles[prefix + id] = title }
-        }
-        return sessions.map { var item = $0; if let title = titles[item.id] { item.title = title }; return item }
+    /// A model's name on every surface, the catalog's where it names the model (`ModelCatalog.consumerName`): a model
+    /// the transcripts reached through one of the app's own model entries (a `custom-local:` route) reads as that name
+    /// alone; every other model the app served itself, so its name reads as "<model> (WorkBuddy)", or "<model> (WB)"
+    /// where the whole would not fit, in the interface language's own brackets. The route each call names is the
+    /// historical fact in the transcript, so a model reads the same even after its entry was deleted from the app's
+    /// model list.
+    static func displayName(_ model: String, apiReached: Set<String>) -> String {
+        let name = ModelCatalog.consumerName(of: "\(AdditionalSource.workbuddy.rawValue)-model:\(model)")
+        if apiReached.contains(model) { return name }
+        let mark = name.count + 12 > 32 ? "WB" : "WorkBuddy"
+        return L10n.text("\(name)（\(mark)）", "\(name) (\(mark))")
     }
 }

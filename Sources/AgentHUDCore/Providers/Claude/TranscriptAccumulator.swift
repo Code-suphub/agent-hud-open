@@ -134,6 +134,11 @@ public struct TranscriptAccumulator: Hashable, Sendable, Codable {
                         currentTurn?.state = .running
                         currentTurn?.outcome = nil
                     }
+                } else if event.endsTurn, currentTurn?.state == .running, event.timestamp >= currentTurn!.observedAt {
+                    // A tool that ends the turn, as the desktop app's next-step box does, leaves no answer and no Stop hook
+                    // summary after its result: the result is the turn's last line.
+                    currentTurn = Turn(startedAt: currentTurn?.startedAt, state: .completed, observedAt: event.timestamp,
+                                       message: currentTurn?.message, outcome: .completed)
                 } else if event.isStop, currentTurn?.state == .running, event.timestamp >= currentTurn!.observedAt {
                     // Claude Code ran the Stop hooks or timed the turn once the agent stopped: a turn no end_turn
                     // completed, such as one whose answer was cut off or failed, is over as well.
@@ -187,8 +192,8 @@ public struct TranscriptAccumulator: Hashable, Sendable, Codable {
     static func isInterruption(_ event: TranscriptEvent) -> Bool { event.text?.hasPrefix("[Request interrupted") == true }
 
     /// Takes a main-log line into what the turn is busy with: a prompt that starts a turn starts it afresh, a call opens
-    /// until its result comes back, and the line says what the conversation's newest line is. Only a retry's own line says
-    /// the client is retrying the API.
+    /// until its result comes back, along with what it asks the user in the client's own window, and the line says what the
+    /// conversation's newest line is. Only a retry's own line says the client is retrying the API.
     private mutating func note(_ event: TranscriptEvent) {
         var activity = self.activity ?? SessionActivity()
         if event.isPrompt {
@@ -196,11 +201,13 @@ public struct TranscriptAccumulator: Hashable, Sendable, Codable {
             activity.startTurn()
             activity.line = Self.isInterruption(event) ? .context : .prompt
         } else if let id = event.toolUseID {
-            activity.open(id, work: event.toolName.flatMap(SessionActivity.work(ofTool:)), at: event.timestamp)
+            activity.open(id, work: event.toolName.flatMap(SessionActivity.work(ofTool:)), at: event.timestamp,
+                          response: event.messageId, asking: event.ask)
             activity.line = .call
         } else if let id = event.toolResultID {
-            activity.close(id, at: event.timestamp)
-            activity.line = .result
+            activity.close(id, at: event.timestamp, failed: event.failed)
+            // A result that ends the turn leaves the model nothing to go on with, as an answer does.
+            activity.line = event.endsTurn ? .answer : .result
         } else if event.apiError != nil {
             activity.line = .error
         } else if event.role == .assistant, event.model != "<synthetic>" {

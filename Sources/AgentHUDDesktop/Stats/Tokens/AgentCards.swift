@@ -82,7 +82,8 @@ struct AgentCards: View {
         let used = Set(store.consumers.map(\.vendor))
         let configured = Set((store.report?.services ?? []).map(\.client))
         let groups = AgentSettingsGroup.make(sources: SourceDetector.resolve(sources, report: store.report),
-                                             agents: store.settings.agents, report: store.report)
+                                             agents: store.settings.agents, report: store.report,
+                                             providerOrder: store.settings.settings.providerOrder)
         let found = groups.flatMap { group -> [String] in
             let installed = group.source.map { source in
                 switch source.state {
@@ -117,7 +118,7 @@ struct AgentCards: View {
             }
             if store.pickedAgents != nil {
                 Button(L10n.text("恢复默认选择", "Back to default selection")) { pick(nil) }
-                    .buttonStyle(.link).font(.ui(11)).padding(.top, 2)
+                    .themedLink(theme).font(.ui(11)).padding(.top, 2)
             }
         }
         .font(.ui(12))

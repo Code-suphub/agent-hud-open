@@ -11,6 +11,9 @@ struct OpenAgentCredential: Sendable {
     var clients: Set<String> = []
     var expiresAt: Date? = nil
     func isUsable(at now: Date) -> Bool { expiresAt.map { $0 > now.addingTimeInterval(60) } ?? true }
+    /// The group the plan's windows, read error and detection belong to. A GLM plan only WorkBuddy carries is shown
+    /// inside WorkBuddy's group; every other plan, and its account in every case, stays with its provider.
+    var displayGroup: String { pool.provider == "GLM" && clients == ["WorkBuddy"] ? "WorkBuddy" : pool.provider }
     var endpoint: URL {
         switch service {
         case .kimi: URL(string: "https://api.kimi.com/coding/v1/usages")!
@@ -156,7 +159,36 @@ enum OpenAgentCredentials {
                 if value.isUsable(at: now) { found.append(value) }
             }
         }
+        // A key another client carries too joins that client's plan.
+        for entry in workBuddyPlanEntries(home: home) { add(entry.service, entry.key, "WorkBuddy") }
         return merge(found)
+    }
+
+    /// The GLM Coding Plan entries of WorkBuddy's model list, `~/.workbuddy/models.json`: an entry of that vendor whose
+    /// URL is one of Zhipu's own coding endpoints carries the plan's key. Any other URL, Kimi's and OpenCode Go's included,
+    /// is not read, and of such an entry only its `id`, `url` and `apiKey` are.
+    private static func workBuddyPlanEntries(home: URL) -> [(id: String?, service: OpenAgentCredential.Service, key: String)] {
+        (read(home.appendingPathComponent(".workbuddy/models.json")).arrayValue ?? []).compactMap { entry in
+            guard entry["vendor"].stringValue == "GLM Coding Plan",
+                  let service = service(provider: "", baseURL: entry["url"].stringValue),
+                  service == .glmChina || service == .glmGlobal,
+                  let key = entry["apiKey"].stringValue, !key.isEmpty else { return nil }
+            return (entry["id"].stringValue, service, key)
+        }
+    }
+
+    /// The plan each of WorkBuddy's GLM Coding Plan entries sends its calls to, by the entry's `id`, which a call that
+    /// went through it names in its `custom-local:<id>` route: the pool its key is, the same pool the key's quota reading
+    /// is filed under, whichever clients carry it. An id two entries with different keys share names neither.
+    static func workBuddyPlanRoutes(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [String: String] {
+        var routes: [String: String] = [:], ambiguous: Set<String> = []
+        for entry in workBuddyPlanEntries(home: home) {
+            guard let id = entry.id, !id.isEmpty else { continue }
+            let pool = credential(entry.service, token: entry.key, client: "WorkBuddy").pool.id
+            if let known = routes[id], known != pool { ambiguous.insert(id) }
+            routes[id] = pool
+        }
+        return routes.filter { !ambiguous.contains($0.key) }
     }
     static func kimiStorageName(_ service: OpenAgentCredential.Service) -> String {
         guard service == .kimiGlobal else { return "kimi-code" }

@@ -2,8 +2,8 @@ import AgentHUDSupport
 import XCTest
 @testable import AgentHUDCore
 
-/// A layout's sessions and tokens: their JSON, what reading them forgives, when two are the same, what an agent is told
-/// it cannot list, and the plan they resolve to.
+/// A layout's sessions and tokens, their period and their models among them: their JSON, what reading them forgives, when
+/// two are the same, what an agent is told it cannot list, and the plan they resolve to.
 final class PanelLayoutFiltersTests: XCTestCase {
     private func decode(_ json: String) throws -> PanelLayout {
         try JSONDecoder().decode(PanelLayout.self, from: Data(json.utf8))
@@ -104,6 +104,80 @@ final class PanelLayoutFiltersTests: XCTestCase {
         XCTAssertTrue(plan.tokens.keeps(codex))
         XCTAssertFalse(plan.tokens.keeps(claude))
         XCTAssertEqual(PanelSessionFilter(PanelLayout.Sessions(states: PanelSessionState.allCases)).states.count, 3)
+    }
+
+    // MARK: The sessions' period and the chart's models
+
+    func testThePeriodAndTheModelsReadAndWriteBack() throws {
+        let json = #"{"sessions":{"period":"7d"},"tokens":{"models":["claude-model:claude-opus-5-5","codex-model:gpt-6.1-sol"]}}"#
+        let layout = PanelLayout(sessions: PanelLayout.Sessions(period: .week),
+                                 tokens: PanelLayout.Tokens(models: ["claude-model:claude-opus-5-5", "codex-model:gpt-6.1-sol"]))
+        XCTAssertEqual(try decode(json), layout)
+        XCTAssertEqual(try encode(layout), json)
+        XCTAssertEqual(try encode(PanelLayout(sessions: PanelLayout.Sessions(period: .day))), "{}", "a day is the default view's")
+        XCTAssertEqual(try decode("{}").sessions.listedPeriod, .day)
+        XCTAssertEqual(try decode(#"{"sessions": {"period": "1h"}}"#).sessions.period, .hour)
+
+        // A stored layout from a newer build still loads.
+        let stored = try decode(#"{"sessions": {"period": "30d"}, "tokens": {"models": ["claude-model:a", 4, null]}}"#)
+        XCTAssertNil(stored.sessions.period, "a period this build does not know is not given")
+        XCTAssertEqual(stored.tokens.models, ["claude-model:a"], "an id that is not a string is left out")
+        XCTAssertTrue(try decode(#"{"tokens": {"models": "claude-model:a"}}"#).isDefault)
+    }
+
+    func testTheSameModelsAreTheSameLayout() {
+        let spelled = PanelLayout(tokens: PanelLayout.Tokens(models: ["codex-model:b", "claude-model:a", "codex-model:b", ""]))
+        XCTAssertEqual(spelled.normalized().tokens.models, ["claude-model:a", "codex-model:b"], "a filter has no order")
+        XCTAssertEqual(PanelLayout(tokens: PanelLayout.Tokens(models: [""])).normalized(), PanelLayout())
+        XCTAssertEqual(PanelLayout(sessions: PanelLayout.Sessions(period: .day)).normalized(), PanelLayout())
+    }
+
+    func testTheSessionPeriodsReachAsFarBackAsSessionsAreReported() {
+        XCTAssertEqual(PanelSessionPeriod.allCases.map(\.rawValue), ["1h", "2h", "6h", "12h", "24h", "3d", "7d"])
+        XCTAssertEqual(PanelSessionPeriod.allCases.map(\.duration), [1, 2, 6, 12, 24, 72, 168].map { Double($0) * 3600 })
+        XCTAssertEqual(PanelSessionPeriod.week.duration, SessionWindow.recency, "no older session is reported")
+        XCTAssertEqual(PanelSessionPeriod.day.duration, PanelTokenPeriod.day.duration)
+    }
+
+    /// A model the chart has no tokens of now is an issue, unless a layout holds it, and so is one of an agent the
+    /// layout's agents leave out, which the chart would not draw.
+    func testAModelTheChartCannotDrawIsAnIssueUnlessTheLayoutHoldsIt() {
+        let opus = AgentDescriptor(id: "claude-model:opus", vendor: "Claude", model: "Opus", source: "", enabled: true)
+        let gpt = AgentDescriptor(id: "codex-model:gpt", vendor: "Codex", model: "GPT", source: "", enabled: true)
+        let layout = PanelLayout(tokens: PanelLayout.Tokens(agents: ["Claude"],
+                                                            models: ["claude-model:opus", "codex-model:gpt", "gemini-model:pro", ""]))
+        let issues = layout.filterIssues(sessionAgents: [], tokenAgents: ["Claude", "Codex"], tokenModels: [opus, gpt])
+        XCTAssertEqual(issues.map(\.path), ["tokens.models[1]", "tokens.models[2]"])
+        XCTAssertEqual(issues.first?.message, "\"codex-model:gpt\" is Codex's, and tokens.agents leaves Codex out, so the chart "
+                       + "would not draw it. Name \"Codex\" in tokens.agents too, or name no agent.")
+        XCTAssertEqual(issues.last?.message, "\"gemini-model:pro\" is no model in the token chart now. Models in the chart now: "
+                       + "\"claude-model:opus\", \"codex-model:gpt\".")
+        XCTAssertEqual(PanelLayout(tokens: PanelLayout.Tokens(models: ["x"])).filterIssues(sessionAgents: [], tokenAgents: [])
+            .map(\.message), ["\"x\" is no model in the token chart now. The chart has no model's tokens now."])
+        XCTAssertTrue(PanelLayout(tokens: PanelLayout.Tokens(agents: ["ChatGPT"], models: ["codex-model:gpt"]))
+            .filterIssues(sessionAgents: [], tokenAgents: ["Codex"], tokenModels: [opus, gpt]).isEmpty, "matched by mark")
+
+        let held = PanelLayout(tokens: PanelLayout.Tokens(models: ["gemini-model:pro"]))
+        XCTAssertEqual(layout.filterIssues(sessionAgents: [], tokenAgents: ["Claude", "Codex"], tokenModels: [opus, gpt], holding: [held])
+            .map(\.path), ["tokens.models[1]"], "a model a layout holds may come back while it spends no tokens")
+    }
+
+    func testThePlanResolvesThePeriodAndTheModels() {
+        let opus = AgentDescriptor(id: "claude-model:opus", vendor: "Claude", model: "Opus", source: "", enabled: true)
+        let sonnet = AgentDescriptor(id: "claude-model:sonnet", vendor: "Claude", model: "Sonnet", source: "", enabled: true)
+        let gpt = AgentDescriptor(id: "codex-model:gpt", vendor: "Codex", model: "GPT", source: "", enabled: true)
+        XCTAssertEqual(PanelLayoutPlan(layout: PanelLayout(), blocks: []).sessions.period, .day)
+        let plan = PanelLayoutPlan(layout: PanelLayout(sessions: PanelLayout.Sessions(period: .hours6),
+                                                       tokens: PanelLayout.Tokens(models: ["claude-model:opus"])), blocks: [])
+        XCTAssertEqual(plan.sessions.period, .hours6)
+        XCTAssertTrue(plan.tokens.narrows)
+        XCTAssertTrue(plan.tokens.keeps(opus))
+        XCTAssertFalse(plan.tokens.keeps(sonnet))
+        let both = PanelTokenFilter(PanelLayout.Tokens(agents: ["Codex"], models: ["claude-model:opus", "codex-model:gpt"]))
+        XCTAssertFalse(both.keeps(opus), "the agents and the models both apply")
+        XCTAssertTrue(both.keeps(gpt))
+        XCTAssertNotEqual(PanelTokenFilter(PanelLayout.Tokens(models: ["claude-model:opus"])), PanelTokenFilter(),
+                          "another chart, whose picker starts again from the layout's period")
     }
 
     func testThePeriodsAreTheStatisticsRangesInTheirOwnColumns() {

@@ -49,12 +49,20 @@ struct ReorderDropDelegate: DropDelegate {
     let target: AgentOrderDrag
     @Binding var dragging: AgentOrderDrag?
     let settings: SettingsStore
+    /// Every group id the settings page lists, in the order it lists them. A group without quota windows is
+    /// draggable too, so the check cannot rely on `settings.agents` containing rows for both ends of a move; the
+    /// order matters as well, because a move rebuilds the recorded order from these ids, and a set's order would
+    /// reshuffle every group on the first drag.
+    var knownGroups: [String] = []
+    /// The groups of `knownGroups` a drag can move and land on: those detected on this Mac. The page lists the others after
+    /// them whatever the recorded order says, so a move into or out of that part would snap back.
+    var movableGroups: Set<String> = []
 
     func validateDrop(info: DropInfo) -> Bool {
         switch (dragging, target) {
         case let (.group(sourceID), .group(targetID)):
-            return settings.agents.contains { $0.displayVendor == sourceID }
-                && settings.agents.contains { $0.displayVendor == targetID }
+            // The dragged group's own row is a valid place to drop: the live reorder leaves it under the pointer.
+            return movableGroups.contains(sourceID) && movableGroups.contains(targetID)
         case let (.model(sourceID), .model(targetID)):
             guard let source = settings.agents.first(where: { $0.id == sourceID }),
                   let destination = settings.agents.first(where: { $0.id == targetID }) else { return false }
@@ -68,7 +76,7 @@ struct ReorderDropDelegate: DropDelegate {
         withAnimation(.easeOut(duration: 0.18)) {
             switch (dragging, target) {
             case let (.group(sourceID), .group(targetID)):
-                settings.moveAgentGroup(id: sourceID, to: targetID)
+                settings.moveProviderGroup(id: sourceID, to: targetID, known: knownGroups)
             case let (.model(sourceID), .model(targetID)):
                 settings.moveAccountWindow(id: sourceID, to: targetID)
             default: break

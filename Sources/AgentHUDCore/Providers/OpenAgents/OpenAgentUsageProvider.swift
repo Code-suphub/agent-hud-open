@@ -34,6 +34,9 @@ actor OpenAgentUsageProvider: UsageProvider, LedgerRecording {
     private let ledger: UsageLedger
     private let sessionLedger: SessionLedger
     static let source = "open-agents"
+    /// Every provider whose pools this source reads. A pool's account is always filed under its provider, even when its
+    /// windows are shown in another client's group, so these lists are all the account lists it writes.
+    static let poolProviders = ["Kimi", "GLM", "OpenCode Go"]
     init(credentials: @escaping @Sendable () -> [OpenAgentCredential],
          sessions: @escaping @Sendable (Date) async -> OpenAgentLocalStore.Result,
          fetchQuota: @escaping @Sendable (OpenAgentCredential, Date) async throws -> ProviderQuota,
@@ -170,7 +173,7 @@ actor OpenAgentUsageProvider: UsageProvider, LedgerRecording {
         }
         let quotas = (cached ?? [:]).values.sorted { $0.credential.pool.id < $1.credential.pool.id }
         // Empty sets explicitly retire expired, removed, rejected, or superseded pools.
-        var activePools: [String: Set<String>] = ["Kimi": [], "GLM": [], "OpenCode Go": []]
+        var activePools = Dictionary(uniqueKeysWithValues: Self.poolProviders.map { ($0, Set<String>()) })
         for result in quotas where result.isActive { activePools[result.credential.pool.provider, default: []].insert(result.credential.pool.id) }
         await record(local, since: readFrom)
         let events = local.sessions.flatMap(\.events)
@@ -206,15 +209,19 @@ actor OpenAgentUsageProvider: UsageProvider, LedgerRecording {
         var snapshots: [UsageSnapshot] = [], descriptors: [AgentDescriptor] = []
         var insights: [String: UsageInsights] = [:]
         var notices = local.notices, plans: [String: String] = [:], links: [String: Set<String>] = [:]
-        var accounts: [String: [AccountObservation]] = ["Kimi": [], "GLM": [], "OpenCode Go": []]
+        var accounts = Dictionary(uniqueKeysWithValues: Self.poolProviders.map { ($0, [AccountObservation]()) })
         var services = apiServices()
         for result in quotas {
             let pool = result.credential.pool
+            // A plan only WorkBuddy carries shows its windows and read error in WorkBuddy's group, its account named with its
+            // provider. The account, the services and the active pools stay under the provider: its prices, retirement and
+            // account list are the provider's, and WorkBuddy's own account list is WorkBuddy's.
+            let shownUnder = result.credential.displayGroup
+            let label = shownUnder == pool.provider ? pool.label : "\(pool.provider) · \(pool.label)"
             if let error = result.notice {
-                // Shown under its vendor. The pool's account holds back the pool's rows; the vendor's other pools were read
+                // Shown in the plan's group. The pool's account holds back the pool's rows; the vendor's other pools were read
                 // on their own.
-                let key = pool.provider
-                notices[key] = [notices[key], "\(pool.label): \(error)"].compactMap { $0 }.joined(separator: " · ")
+                notices[shownUnder] = [notices[shownUnder], "\(label): \(error)"].compactMap { $0 }.joined(separator: " · ")
             }
             if result.isActive {
                 services += result.credential.clients.sorted().map {
@@ -225,7 +232,7 @@ actor OpenAgentUsageProvider: UsageProvider, LedgerRecording {
             guard let quota = result.quota else {
                 // A reading that failed without a sign-out keeps the account current, at its last reading, with the reason.
                 if result.isActive {
-                    accounts[pool.provider, default: []].append(AccountObservation(account: ProviderAccount(pool: pool), label: pool.label,
+                    accounts[pool.provider, default: []].append(AccountObservation(account: ProviderAccount(pool: pool), label: label,
                         plan: result.plan, observedAt: result.readAt ?? result.at, quotaNotice: result.notice,
                         readingIssue: result.notice.map(ReadingIssue.readFailed)))
                 }
@@ -237,14 +244,15 @@ actor OpenAgentUsageProvider: UsageProvider, LedgerRecording {
             if result.isActive {
                 // A reading whose account the service could not confirm is not verified either.
                 // The pool's label names the account, where its windows are named by their periods.
-                accounts[pool.provider, default: []].append(AccountObservation(account: ProviderAccount(pool: pool), label: pool.label,
+                accounts[pool.provider, default: []].append(AccountObservation(account: ProviderAccount(pool: pool), label: label,
                     plan: quota.plan, observedAt: result.at, quotaNotice: result.notice, readingIssue: result.notice.map(ReadingIssue.unverified)))
             }
             for window in quota.windows {
                 let snapshot = UsageSnapshot(agentId: window.id, remainingPct: window.remaining, resetAt: window.reset,
                                              windowDuration: window.duration, updatedAt: result.at)
                 snapshots.append(snapshot)
-                descriptors.append(.init(id: window.id, vendor: pool.provider, model: window.label, shortModel: window.shortLabel ?? window.label,
+                descriptors.append(.init(id: window.id, vendor: shownUnder,
+                    model: window.label, shortModel: window.shortLabel ?? window.label,
                     source: result.credential.clients.sorted().joined(separator: ", "), enabled: true, billingPool: pool,
                     account: ProviderAccount(pool: pool), allModels: window.allModels))
                 // Historical records lacking a pool must not inherit the current credential's quota.

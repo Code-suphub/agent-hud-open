@@ -37,16 +37,13 @@ public final class SettingsStore {
     public init(defaults: UserDefaults = .standard, defaultAgents: [AgentDescriptor] = []) {
         self.defaults = defaults
         let decoder = JSONDecoder()
-        if let data = defaults.data(forKey: Keys.settings), let stored = try? decoder.decode(Settings.self, from: data) {
-            settings = stored
-        } else {
-            settings = Settings()
-        }
+        let preferences = defaults.data(forKey: Keys.settings).flatMap { try? decoder.decode(Settings.self, from: $0) } ?? Settings()
+        settings = preferences
         if let data = defaults.data(forKey: Keys.agents), let stored = try? decoder.decode([AgentDescriptor].self, from: data), !stored.isEmpty {
             // Only seeded placeholders are unconnected: a provider reports the rows it reads, connected.
-            agents = stored.filter(\.connected).groupedAgentOrder
+            agents = stored.filter(\.connected).groupedAgentOrder(following: preferences.providerOrder)
         } else {
-            agents = defaultAgents.groupedAgentOrder
+            agents = defaultAgents.groupedAgentOrder(following: preferences.providerOrder)
         }
         hasCompletedOnboarding = defaults.bool(forKey: Keys.onboarding)
         panelLayout = PanelLayoutStore(defaults: defaults)
@@ -61,6 +58,7 @@ public final class SettingsStore {
 
     public var enabledAgents: [AgentDescriptor] { agents.filter(\.enabled) }
 
+    /// A change of the recorded provider order moves the agent rows with it, both saved before observers hear of it.
     public func update(_ change: (inout Settings) -> Void) {
         let next = settings.with(change)
         guard next != settings else { return }
@@ -68,8 +66,13 @@ public final class SettingsStore {
         if next.language != settings.language {
             L10n.setLanguage(next.language)
         }
+        let rows = next.providerOrder == settings.providerOrder ? agents : agents.groupedAgentOrder(following: next.providerOrder)
         settings = next
         persist(next, key: Keys.settings)
+        if rows != agents {
+            agents = rows
+            persist(rows, key: Keys.agents)
+        }
         onChange?(.settings)
     }
 
@@ -77,8 +80,10 @@ public final class SettingsStore {
         saveAgents(transform(agents), change: .agents)
     }
 
+    /// Keeps every save in the recorded provider order, so a vendor whose rows first arrive, or a row that moves to another
+    /// vendor's group, takes the place Settings → Agents lists its group in.
     private func saveAgents(_ list: [AgentDescriptor], change: Change) {
-        let next = list.groupedAgentOrder
+        let next = list.groupedAgentOrder(following: settings.providerOrder)
         guard next != agents else { return }
         agents = next
         persist(next, key: Keys.agents)
@@ -114,14 +119,26 @@ public final class SettingsStore {
         updateAgents { $0.movingAccountWindow(id: id, to: targetID) }
     }
 
+    /// Moves a group of rows to the place of another, as `moveProviderGroup(id:to:known:)` does, among the groups the store
+    /// knows: those of the recorded order, then those of rows it does not cover.
     public func moveAgentGroup(id: String, to targetID: String) {
-        updateAgents { $0.movingGroup(id: id, to: targetID) }
+        let recorded = settings.providerOrder
+        moveProviderGroup(id: id, to: targetID, known: recorded + agents.agentGroups.map(\.id).filter { !recorded.contains($0) })
+    }
+
+    /// Moves a provider group of the settings page to the place of another in the recorded order, which covers every
+    /// group the page lists, those without quota windows included. `known` is that list, in the page's order. The rows
+    /// follow the recorded order (`update(_:)`), so the HUD, the glow and the menu bar move with the page.
+    public func moveProviderGroup(id: String, to targetID: String, known: [String]) {
+        guard id != targetID else { return }
+        update { $0.moveProvider(id: id, to: targetID, known: known) }
     }
 
     /// Adds rows a provider discovered (in the order given) and refreshes the names and flags of known rows.
     /// New rows for a vendor go right after that vendor's last existing row; vendors new to the list go to the top in
-    /// the order the providers gave them, switched off when the vendor catalog starts them hidden. The user's manual
-    /// order is preserved.
+    /// the order the providers gave them, switched off when the vendor catalog starts them hidden. Once a drag has
+    /// recorded the provider order, a vendor it names goes to its place there and one it does not after those it names,
+    /// as Settings → Agents lists them. The user's manual order is preserved.
     /// Account rows: the first identified account takes over an unscoped row's position and switch, a further account's
     /// window inherits the switch of the same window on another account, and rows that are no longer present, as
     /// `ReportView.isPresent(_:in:)` decides without the sighting times, are removed.
@@ -206,9 +223,12 @@ public final class SettingsStore {
                     let existing = list[index]
                     if existing.model != found.model || existing.shortModel != found.shortModel || existing.source != found.source
                         || existing.connected != found.connected || existing.billingPool != found.billingPool
-                        || existing.account != found.account || existing.allModels != found.allModels {
+                        || existing.account != found.account || existing.allModels != found.allModels || existing.vendor != found.vendor {
+                        // A same-id row follows its provider's current homing, keeping its switch: a GLM plan only
+                        // WorkBuddy carries shows inside WorkBuddy's group, and moves to GLM's once another client
+                        // carries its key.
                         list[index] = AgentDescriptor(
-                            id: existing.id, vendor: existing.vendor, model: found.model, shortModel: found.shortModel, source: found.source,
+                            id: existing.id, vendor: found.vendor, model: found.model, shortModel: found.shortModel, source: found.source,
                             enabled: existing.enabled, connected: found.connected, billingPool: found.billingPool, account: found.account,
                             allModels: found.allModels
                         )

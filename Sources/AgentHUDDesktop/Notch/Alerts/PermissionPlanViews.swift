@@ -67,7 +67,7 @@ struct PermissionPlanCard: View {
             }
             Spacer(minLength: 8)
             QuestionButton(title: L10n.text("批准并自动接受编辑", "Approve, accept edits"), symbol: "checkmark",
-                           identifier: "island-plan-approve-edits", fill: .clear, stroke: color.allow.opacity(0.4),
+                           identifier: "island-plan-approve-edits", fill: .clear, stroke: color.allowEdge.opacity(0.4),
                            foreground: color.allowText) {
                 onDecide(.approvePlan(acceptEdits: true))
             }

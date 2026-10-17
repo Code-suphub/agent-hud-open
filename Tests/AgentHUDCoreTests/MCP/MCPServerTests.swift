@@ -23,7 +23,8 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(result["serverInfo"], .object(["name": .string("agent-hud"), "title": .string("Agent HUD"), "version": .string("1.2.3")]))
         XCTAssertEqual(result["instructions"].stringValue, "Agent HUD shows AI coding agents' quota, usage and sessions at the Mac's notch. "
                        + "These tools read what its hover panel shows and rearrange it, for every screen or for one, "
-                       + "and restyle one screen's resting HUD. A change is a draft until the user presses Save in the panel.")
+                       + "and restyle one screen's resting HUD. A change is a draft until the user presses Save in the panel. "
+                       + "A layout edit holds the panel open for two minutes; call finish_hud_edit when you are done.")
         XCTAssertEqual(result.objectValue?.keys.sorted(), ["capabilities", "instructions", "protocolVersion", "serverInfo"],
                        "a handshake client gets the result its revision defines and nothing else")
     }
@@ -41,7 +42,7 @@ final class MCPServerTests: XCTestCase {
                      #"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1,"reason":"gave up"}}"#,
                      #"{"jsonrpc":"2.0","method":"notifications/roots/list_changed"}"#,
                      #"{"jsonrpc":"2.0","method":"somebody/elses","params":{"x":1}}"#,
-                     #"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_panel"}}"#] {
+                     #"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_hud"}}"#] {
             XCTAssertEqual(probe.server.lines(for: line), [], line)
         }
         XCTAssertTrue(probe.calls.isEmpty, "a tool call nobody waits on is not made")

@@ -155,6 +155,7 @@ public final class DesktopApplication {
         }, onChange: { [weak self] in
             self?.installObserversForNewClients()
             if let self { self.codexDesktopApprovals.updateSessions(self.store.report?.sessions ?? []) }
+            self?.showClaudeDesktopAsks()
         })
         trackChanges({ [weak self] in
             _ = self?.store.report
@@ -187,7 +188,7 @@ public final class DesktopApplication {
                                           look: self.store.settings.restingLook(on: key),
                                           metrics: ScreenMetrics(screen: display)).picture()
             }
-            let tools = PanelTools(store: store, screens: { [weak self] in self?.notch?.panelScreens ?? [] },
+            let tools = HUDTools(store: store, screens: { [weak self] in self?.notch?.panelScreens ?? [] },
                                    picture: { renderer($0)?.picture() }, fit: { renderer($0)?.fit() }, hud: hud)
             let channel = AgentToolsChannel(channel: MCPAppChannel { tools.answer($0) }, settings: settings, mode: options.toolChannel)
             toolChannel = channel
@@ -237,6 +238,13 @@ public final class DesktopApplication {
         } catch {
             NSLog("[AgentHUD] Recording to %@ could not start: %@", path, String(describing: error))
         }
+    }
+
+    /// The questions the Claude desktop app asks in its own window, which only its session logs record, among the requests
+    /// the user is asked about. The demo has none.
+    private func showClaudeDesktopAsks() {
+        guard !options.demo else { return }
+        ClaudeDesktopAsks.show(store.view.recentSessions.filter(\.liveStatus).map(\.session), now: Date())
     }
 
     /// Mirrors the requests waiting for the user onto the island: a new one is shown, and one the client took back

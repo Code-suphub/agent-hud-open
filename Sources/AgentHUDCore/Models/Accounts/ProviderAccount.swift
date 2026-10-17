@@ -173,10 +173,10 @@ public extension UsageReport {
             .max { ($0.isCurrent ? 1 : 0, $0.observedAt) < ($1.isCurrent ? 1 : 0, $1.observedAt) }
     }
 
-    /// Rows without an account (demo data, placeholders) count as current.
+    /// Rows without an account (demo data, placeholders) count as current. An account is looked up under its own
+    /// provider, also for a plan whose rows are shown in another client's group.
     func isCurrent(_ agent: AgentDescriptor) -> Bool {
-        guard let id = agent.account?.id, let observations = accounts?[agent.account!.provider] else { return true }
-        let matches = observations.filter { $0.account.id == id }
-        return matches.contains(where: \.isCurrent)
+        guard let account = agent.account, let observations = accounts?[account.provider] else { return true }
+        return observations.contains { $0.account.id == account.id && $0.isCurrent }
     }
 }

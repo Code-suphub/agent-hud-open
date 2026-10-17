@@ -20,7 +20,10 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
     nonisolated var seesLocalWork: Bool { source != .cursor }
     private let ledger: UsageLedger
     private let sessionLedger: SessionLedger
+    /// WorkBuddy's plan ceilings, from the 429s its transcripts logged; nil for every other source.
+    private var ceilings: WorkBuddyCeilings?
 
+    /// - ceilings: WorkBuddy's ceilings, kept in memory when not given.
     init(source: AdditionalSource, readQuota: @escaping @Sendable () async throws -> ProviderQuota,
          readSessions: @escaping @Sendable (Date) async -> ProviderSessions,
          history: QuotaHistoryStore,
@@ -29,6 +32,7 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
          botQuotaDirectory: URL? = nil,
          refreshSessions: @escaping @Sendable (Int) async -> Void = { _ in },
          watchedDirectories: [URL]? = nil, fileChanges: @escaping @Sendable (Set<String>?) async -> Void = { _ in },
+         ceilings: WorkBuddyCeilings? = nil,
          ledger: UsageLedger = .inMemory()) {
         self.source = source; self.readQuota = readQuota; self.readSessions = readSessions
         noteChanges = fileChanges
@@ -37,6 +41,7 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
         self.history = history; self.clock = clock
         self.botQuotaDirectory = botQuotaDirectory
         self.watchedDirectories = watchedDirectories
+        self.ceilings = source == .workbuddy ? ceilings ?? WorkBuddyCeilings() : nil
         self.ledger = ledger
         sessionLedger = SessionLedger(source: source.rawValue, ledger: ledger)
     }
@@ -72,7 +77,10 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
             }
         }, watchedDirectories: local.roots + (CompletionHooks.Source(rawValue: source.rawValue).map {
             [CompletionHooks.directory.appendingPathComponent($0.rawValue)]
-        } ?? []), fileChanges: { await local.fileChanges($0) }, ledger: ledger)
+        } ?? []), fileChanges: { await local.fileChanges($0) },
+        ceilings: source == .workbuddy
+            ? WorkBuddyCeilings(fileURL: persistHistory ? AppSupport.directory.appendingPathComponent("workbuddy-ceilings.json") : nil) : nil,
+        ledger: ledger)
     }
 
     func fileChanges(_ paths: Set<String>?) async {
@@ -122,6 +130,11 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
         let now = clock(), weekAgo = now.addingTimeInterval(-AlertPolicy.insightsLookback)
         let since = min(weekAgo, now.addingTimeInterval(-Double(historyHours) * 3600))
         var local = await readSessions(since)
+        // WorkBuddy keeps its own names for its sessions and meters them itself; both come from its database in one read.
+        let metering = source == .workbuddy ? WorkBuddyMetering.read(sessions: local.sessions, models: local.models) : nil
+        if let titles = metering?.titles, !titles.isEmpty {
+            for index in local.sessions.indices { if let title = titles[local.sessions[index].id] { local.sessions[index].title = title } }
+        }
         if source == .grok {
             let targets = GrokSessionOrigins.read(sessionIDs: Set(local.sessions.filter { $0.client == "Grok CLI" }.map(\.id)))
             for index in local.sessions.indices where local.sessions[index].client == "Grok CLI" {
@@ -158,13 +171,30 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
         if quota.forgetAccounts { lastAccount = nil }
         if quota.isSignedIn { lastAccount = account }
         let failed = if case .failure = lastQuota?.result { true } else { false }
-        let windows = quota.scopedWindows(source)
+        var windows = quota.scopedWindows(source)
+        var quotaWindowIDs = quota.quotaWindowIDs
+        // WorkBuddy's ceilings say what its account is: while one is shown, or one the app shows is left to retire, the
+        // account's windows are complete; with neither there is no account, rather than one no reading named.
+        var noAccount = false
+        if var ceilings {
+            let rows = ceilings.rows(logged: local.limitHits, indexing: local.indexing != nil, agents: agents,
+                                     apiReached: local.apiReached, account: account, now: now)
+            self.ceilings = ceilings
+            windows += rows.windows
+            switch rows.inventory {
+            case .pending: break
+            case .none: noAccount = true
+            case .complete(let ids): quotaWindowIDs = (quotaWindowIDs ?? Set(quota.windows.map(\.id))).union(ids)
+            }
+        }
         // Account-wide imports are the same on every machine signed into the account, so their totals are kept per account.
         let usageAccount = local.sessions.contains(where: \.accountWide)
             ? (quota.isSignedIn ? account.id : (failed ? lastAccount?.id : nil) ?? "provider:" + source.vendor.lowercased()) : nil
         await record(local, account: usageAccount, since: since, now: now)
         let consumers = Set(local.sessions.flatMap(\.events).map(\.model)).sorted().map {
-            AgentDescriptor(id: "\(source.rawValue)-model:\($0)", vendor: source.vendor, model: ModelCatalog.consumerName(of: "\(source.rawValue)-model:\($0)"),
+            AgentDescriptor(id: "\(source.rawValue)-model:\($0)", vendor: source.vendor,
+                            model: source == .workbuddy ? WorkBuddySessions.displayName($0, apiReached: local.apiReached)
+                                                         : ModelCatalog.consumerName(of: "\(source.rawValue)-model:\($0)"),
                             source: L10n.sourceAdditionalUsage, enabled: true)
         }
         let sessions = listed.compactMap { item -> LiveSession? in
@@ -200,15 +230,20 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
                             source: L10n.sourceAdditionalUsage, enabled: true, account: account, allModels: $0.allModels)
         }
         let consumerIDs = Set(consumers.map(\.id))
-        let quotaIDs = Set(windows.map(\.id) + agents.filter { $0.vendor == source.vendor }.map(\.id))
+        // A plan's rows shown in this group, such as a GLM plan only WorkBuddy carries, are linked by their own provider to
+        // the calls that went through the plan, never to every model this client used.
+        let quotaIDs = Set(windows.map(\.id) + agents.filter { $0.vendor == source.vendor && $0.billingPool == nil }.map(\.id))
         let accounts: [String: [AccountObservation]]?
-        if quota.isSignedIn {
+        // A declared inventory carries the account it belongs to even while the app's quota answer stays empty: the
+        // ceilings make a reading of their own, and an inventory nobody reports cannot retire the rows it leaves out.
+        if quota.isSignedIn || quotaWindowIDs != nil {
             accounts = [source.vendor: [AccountObservation(account: account, client: quota.client, label: quota.label,
                 plan: quota.plan, observedAt: observedAt, aliases: quota.accountAliases,
-                quotaWindowIDs: quota.quotaWindowIDs.map { Set($0.map(account.windowID)) },
+                quotaWindowIDs: quotaWindowIDs.map { Set($0.map(account.windowID)) },
                 wallets: quota.wallets.map { $0.observed(at: $0.observedAt ?? observedAt) }, sourceInfo: quota.sourceInfo)]]
-        } else if quota.signedOut, quotaNotice == nil {
-            // A successful signed-out/absent client read confirms that previously retained accounts are no longer current.
+        } else if quota.signedOut || noAccount, quotaNotice == nil {
+            // A successful signed-out/absent client read confirms that previously retained accounts are no longer current,
+            // and so does a WorkBuddy pass with no ceiling to show or retire.
             accounts = [source.vendor: []]
         } else { accounts = nil }
         return UsageReport(generatedAt: now, snapshots: snapshots, sessions: sessions,
@@ -219,6 +254,7 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
             consumerIdsByQuota: Dictionary(uniqueKeysWithValues: quotaIDs.map { ($0, consumerIDs) }),
             completions: listed.flatMap(\.completions) + hookCompletions, turns: listed.flatMap(\.turns),
             accounts: accounts,
-            forgottenAccountProviders: quota.forgetAccounts ? [source.vendor] : nil)
+            forgottenAccountProviders: quota.forgetAccounts ? [source.vendor] : nil,
+            sessionCredits: (metering?.credits.isEmpty ?? true) ? nil : metering?.credits)
     }
 }

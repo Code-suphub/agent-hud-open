@@ -6,7 +6,7 @@ import XCTest
 /// The defaults an agent proposes for one screen, apart as a person resets them: from "default" proposes the default
 /// layout alone, and hud.reset the screen's default style, a draft drawn over its settings that a person's Save keeps.
 /// No tool writes the settings.
-final class PanelToolsResetTests: PanelToolsCase {
+final class HUDToolsResetTests: HUDToolsCase {
     private let builtIn = PanelScreen(key: "BUILT-IN-UUID", name: "Built-in display", mode: .notch, edge: .top, hasNotch: true,
                                       agents: ["Claude", "Codex", "DeepSeek"],
                                       otherModes: [.logos: ["Claude", "Codex", "Cursor"], .simple: ["Claude", "Codex", "Kimi"]],
@@ -16,9 +16,9 @@ final class PanelToolsResetTests: PanelToolsCase {
                                      otherModes: [.logos: ["Claude", "Codex", "Cursor"]],
                                      systemIsLight: false, reducesTransparency: false)
 
-    private lazy var screenTools = PanelTools(store: store, launch: 0, screens: { [unowned self] in [builtIn, second] })
+    private lazy var screenTools = HUDTools(store: store, launch: 0, screens: { [unowned self] in [builtIn, second] })
 
-    private func call(_ arguments: [String: JSONValue], tool: String = MCPTools.setPanelLayout,
+    private func call(_ arguments: [String: JSONValue], tool: String = MCPTools.draftHUD,
                       line: UInt = #line) throws -> [String: JSONValue] {
         guard case .result(let result, _) = screenTools.answer(MCPToolRequest(tool: tool, arguments: arguments)) else {
             XCTFail("\(tool) was refused", line: line)
@@ -29,7 +29,7 @@ final class PanelToolsResetTests: PanelToolsCase {
 
     private func refused(_ arguments: [String: JSONValue], line: UInt = #line) throws -> String {
         let before = (layout.revision, settings.settings)
-        guard case .failure(let sentence) = screenTools.answer(MCPToolRequest(tool: MCPTools.setPanelLayout, arguments: arguments)) else {
+        guard case .failure(let sentence) = screenTools.answer(MCPToolRequest(tool: MCPTools.draftHUD, arguments: arguments)) else {
             XCTFail("the proposal was taken", line: line)
             throw CancellationError()
         }
@@ -124,6 +124,33 @@ final class PanelToolsResetTests: PanelToolsCase {
         XCTAssertEqual(settings.settings, saved, "Revert brings the style back")
     }
 
+    /// hud.reset brings back every field an agent reads, the glass style, the idle period and the grid among them: a
+    /// screen that differs from the defaults only there gets a draft listing them, which Save writes as the reset does.
+    func testHUDResetRestoresTheGlassStyleAndTheGlowsGrid() throws {
+        let key = "SECOND-UUID"
+        settings.update {
+            $0.screens[key] = ScreenPlacement(glassStyle: .regular)
+            var glow = GlowSettings()
+            glow.idleBreathSeconds = 12
+            glow.gridPitch = 6
+            glow.gridDensity = 1.25
+            $0.screenGlow[key] = glow
+        }
+        changes = 0
+        let panel = try call(["screen": .string(key), "hud": .object(["reset": .bool(true)])])
+        XCTAssertNotNil(layout.styleDraft(of: key))
+        XCTAssertEqual(panel["layout"]?["hud"], .object([
+            "glassStyle": .string("clear"),
+            "glow": .object(["idleSpeed": .number(7), "gridPitch": .number(10), "gridDensity": .number(1)]),
+        ]), "listed by the fields that differ")
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false), .default(hasNotch: false))
+        XCTAssertEqual(settings.effectiveGlow(on: key), settings.settings.glow)
+        layout.savePanel(on: key)
+        XCTAssertNil(settings.settings.screens[key])
+        XCTAssertNil(settings.settings.screenGlow[key])
+        XCTAssertEqual(changes, 1)
+    }
+
     /// hud.reset goes with a layout as any style does: the layout is the screen's draft and the default style its
     /// style draft, and the agents its list may name are those the default mode shows.
     func testHUDResetGoesWithALayout() throws {
@@ -136,6 +163,40 @@ final class PanelToolsResetTests: PanelToolsCase {
         XCTAssertEqual(layout.draft(of: "BUILT-IN-UUID"),
                        .own(PanelLayout(hiddenSections: [.tokens], hud: PanelLayout.HUD(agents: ["DeepSeek"]))))
         XCTAssertEqual(settings.effectivePlacement(on: "BUILT-IN-UUID", hasNotch: true), .default(hasNotch: true))
+    }
+
+    /// hud.reset of a screen that differs from the defaults only in what no style field names, here the transparency it
+    /// keeps for glass while its HUD is solid, is a draft as Reset to Default in Settings would change it: drawn as the
+    /// defaults, listing no field, with a note that says it brings back what no hud field sets. get_hud lists the
+    /// transparency it brings back; the draft read back, or the style listed, sent back keeps it, and Save writes it as
+    /// that reset does.
+    func testHUDResetBringsBackWhatNoStyleFieldNames() throws {
+        let key = "SECOND-UUID"
+        settings.update { $0.screens[key] = ScreenPlacement(glassTransparency: 0.9) }
+        changes = 0
+        let panel = try call(["screen": .string(key), "hud": .object(["reset": .bool(true)])])
+        XCTAssertEqual(layout.styleDraft(of: key), HUDStyle())
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false), .default(hasNotch: false))
+        XCTAssertEqual(panel["unsaved"], .bool(true))
+        XCTAssertEqual(try listing(key, in: panel)["styleUnsaved"], .bool(true))
+        XCTAssertEqual(try listing(key, in: panel)["hud"]?["glassTransparency"],
+                       .number(ScreenPlacement.standardGlassTransparency))
+        let note = try XCTUnwrap(panel["note"]?.stringValue)
+        XCTAssertTrue(note.contains("shows its style as an unsaved draft"), note)
+        XCTAssertTrue(note.contains(" Beside the fields its hud lists, the draft brings back what no hud field sets, such "
+                                    + "as the transparency kept for the material the HUD does not draw, and Save writes "
+                                    + "that too."), note)
+
+        let revision = layout.revision
+        var again = try XCTUnwrap(panel["layout"]?.objectValue)
+        again["screen"] = .string(key)
+        _ = try call(again)
+        _ = try call(["screen": .string(key), "hud": try XCTUnwrap(try listing(key, in: panel)["hud"])])
+        XCTAssertEqual(layout.revision, revision, "what was read back, and the style listed, sent back, keep the draft")
+        layout.savePanel(on: key)
+        XCTAssertNil(settings.settings.screens[key])
+        XCTAssertNil(settings.settings.screenGlow[key])
+        XCTAssertEqual(changes, 1)
     }
 
     /// A screen that already draws the defaults gets no style draft, and reset false asks nothing.

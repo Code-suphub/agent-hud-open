@@ -1,8 +1,8 @@
 import AgentHUDSupport
 import Foundation
 
-/// What `get_panel` tells an agent, and what every tool but `get_panel_image` answers with.
-extension PanelTools {
+/// What `get_hud` tells an agent, and what every tool but `get_hud_screenshot` answers with.
+extension HUDTools {
     // MARK: Reading
 
     /// The screen argument that names a scope.
@@ -21,7 +21,7 @@ extension PanelTools {
     /// hud, and the style it sets, its width among it, the panel's height on that display and whether it scrolls there,
     /// whether Settings shows reset countdowns, every section and every block the panel has, shown or hidden, with the
     /// span each takes there and the readings of its rows, the session rows and the token chart as the layout filters
-    /// them, and the attached screens.
+    /// them, the attached screens, and what the app is set to that a proposal is drawn under.
     /// - proposed: whether the note answers a proposal, after which it says which blocks the layout gives half a line
     ///   take the whole one there, and why.
     func panel(_ scope: PanelLayoutScope, among attached: [PanelScreen], note: String? = nil,
@@ -35,7 +35,8 @@ extension PanelTools {
         let sections = plan.sections + PanelSection.allCases.filter { !plan.sections.contains($0) }
         let shown = Set(plan.blocks.map(\.key))
         let drawn = plan.blocks + existing.filter { !shown.contains($0.key) }
-            .map { PanelBlockPlan($0, changed: effective.blocks[$0.key] ?? PanelLayout.Block()) }
+            .map { PanelBlockPlan($0, changed: effective.blocks[$0.key] ?? PanelLayout.Block(),
+                                  tokenPeriod: effective.tokens.chartPeriod) }
         let style: [String: JSONValue] = ["spacing": .string(plan.style.spacing.rawValue), "separators": .bool(plan.style.separators),
                                           "width": .integer(Int64(plan.style.panelWidth))]
         var result: [String: JSONValue] = [
@@ -52,8 +53,9 @@ extension PanelTools {
             }),
             "blocks": .array(drawn.map { block(of: $0, shown: shown.contains($0.key)) }),
             "sessions": sessions(plan.sessions, listing: effective.sessions.normalized().agents),
-            "tokens": tokens(plan.tokens, listing: effective.tokens.normalized().agents),
+            "tokens": tokens(plan.tokens, listing: effective.tokens.normalized()),
             "screens": .array(attached.map(listing)),
+            "app": app(),
         ]
         if case .screen(let key) = scope { result["usesSharedLayout"] = .bool(layout.usesShared(key)) }
         if let measured {
@@ -78,29 +80,56 @@ extension PanelTools {
     }
 
     /// One attached screen as an agent reads it: its key and role, how it presents the HUD, which layout its panel
-    /// draws, the panel's width there and whether the panel shows a draft, its resting HUD's style in effect, the look it
-    /// draws now and whether a style draft waits, the agents its resting HUD can show now, and those it shows under its
-    /// layout.
+    /// draws, the panel's width there and that of one agent's own panel on a dock that separates its agents, whether
+    /// the panel shows a draft, its resting HUD's style in effect, the look it draws now and whether a style draft
+    /// waits, the agents its resting HUD can show now, those it shows under its layout, and whether an agent's edit
+    /// holds its panel open (`holdListing(_:)`). The width of an agent's own panel is told whether or not the screen
+    /// separates its agents, so that a proposal that turns that on can be weighed first.
     private func listing(_ screen: PanelScreen) -> JSONValue {
         let drawn = layout.effective(for: screen.key)
         let order = HUDAgentOrder(listed: drawn.hud.agents, available: screen.agents)
-        return .object([
+        let listed: [String: JSONValue] = [
             "key": .string(screen.key), "name": .string(screen.name), "mode": .string(screen.modeName),
             "edge": .string(screen.edge.rawValue), "hasNotch": .bool(screen.hasNotch),
             "layout": .string(layout.usesShared(screen.key) ? "shared" : "own"),
             "width": .integer(Int64(drawn.style.panelWidth)),
+            "agentPanelWidth": .integer(Int64(drawn.style.agentPanelWidth)),
             "unsaved": .bool(layout.hasDraft(on: screen.key)),
             "hud": styleInEffect(of: screen),
             "look": lookInEffect(of: screen),
             "styleUnsaved": .bool(layout.hasStyleDraft(screen.key)),
             "agents": .array(screen.agents.map(JSONValue.string)),
             "shows": .array(order.arrange(screen.agents) { $0 }.map(JSONValue.string)),
+        ]
+        return .object(listed.merging(holdListing(screen.key)) { $1 })
+    }
+
+    /// What the whole app is set to that decides how a proposal is drawn, read only, as no tool changes a Settings
+    /// switch: the app's own Appearance and Match screen, under which each of the app's windows and the menu-bar menu
+    /// take the look of the HUD on the screen they are on, a style draft's included; Bot logos, whether marks turn into
+    /// bots on a dock, a Simple panel and reminders; the language chosen and the one the panel's names are written in;
+    /// and how hovering opens and closes the panel, its delays in milliseconds.
+    private func app() -> JSONValue {
+        let settings = store.settings.settings
+        let written: AppLanguage = L10n.resolved == .zhHans ? .zhHans : .en
+        return .object([
+            "appearance": .string(settings.appearance.rawValue),
+            "matchScreen": .bool(settings.appearanceFollowsScreen),
+            "botLogos": .bool(settings.botLogos),
+            "language": .string(settings.language.rawValue),
+            "writtenIn": .string(written.rawValue),
+            "hover": .object([
+                "pressOptionToOpen": .bool(settings.requiresOptionToOpen),
+                "openAtTopEdge": .bool(settings.openImmediatelyAtTop),
+                "delayMs": .integer(Int64(settings.hoverDelayMs)),
+                "collapseDelayMs": .integer(Int64(settings.collapseDelayMs)),
+            ]),
         ])
     }
 
-    /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns
-    /// and the ring size are told only where the block has them to set, and the columns and the span as the panel sets
-    /// the block in its line.
+    /// One block as an agent reads it: how it is drawn, what it offers, and its readings. The countdown, the columns,
+    /// the ring size and the period are told only where the block has them to set, and the columns and the span as the
+    /// panel sets the block in its line.
     private func block(of plan: PanelBlockPlan, shown: Bool) -> JSONValue {
         var block: [String: JSONValue] = [
             "key": .string(plan.key), "kind": .string(plan.kind.rawValue), "shown": .bool(shown),
@@ -114,6 +143,7 @@ extension PanelTools {
         }
         if plan.kind.takesColumns(under: plan.widget) { block["columns"] = .integer(Int64(plan.columns)) }
         if plan.kind.takesRingSize(under: plan.widget) { block["ringSize"] = .string(plan.ringSize.rawValue) }
+        if plan.kind.takesPeriod(under: plan.widget) { block["period"] = .string(plan.period.rawValue) }
         block["span"] = .string(plan.span.rawValue)
         switch plan.kind {
         case .quota:
@@ -136,14 +166,16 @@ extension PanelTools {
         return .object(block)
     }
 
-    /// The session rows as an agent reads them: the limit, the agents and the states in effect, the agents that have
-    /// sessions now, how many rows are shown and how many more the filter lists, and how many sessions of the last day
-    /// each state has before the filter. Counts and names of agents only: no title, prompt, project, path or session id.
+    /// The session rows as an agent reads them: the limit, the period, the agents and the states in effect, the agents
+    /// that have sessions now, how many rows are shown and how many more the filter lists, and how many sessions of the
+    /// period each state has before the agents and states. Counts and names of agents only: no title, prompt, project,
+    /// path or session id.
     private func sessions(_ filter: PanelSessionFilter, listing agents: [String]) -> JSONValue {
         let view = store.view, rows = view.panelSessions(filter)
         let states = filter.states.isEmpty ? PanelSessionState.allCases : PanelSessionState.allCases.filter(filter.states.contains)
         return .object([
             "limit": .integer(Int64(filter.limit)),
+            "period": .string(filter.period.rawValue),
             "agents": .array(agents.map(JSONValue.string)),
             "states": .array(states.map { .string($0.rawValue) }),
             "offeredAgents": .array(view.panelSessionAgents.map(JSONValue.string)),
@@ -155,14 +187,20 @@ extension PanelTools {
         ])
     }
 
-    /// The token chart as an agent reads it: the period it opens with, the agents in effect, the agents whose models it
-    /// can draw now, and the tokens it counts over that period.
-    private func tokens(_ filter: PanelTokenFilter, listing agents: [String]) -> JSONValue {
+    /// The token chart as an agent reads it: the period it opens with, the agents and the models in effect, the agents
+    /// and the models it can draw now, each model by its id with its name and its agent, and the tokens it counts over
+    /// that period. A model is told from the report the store holds; nothing is read for it.
+    private func tokens(_ filter: PanelTokenFilter, listing listed: PanelLayout.Tokens) -> JSONValue {
         let columns = store.hudTokenColumns(consumerIDs: store.panelTokenConsumers(filter), period: filter.period)
+        let view = store.view
         return .object([
             "period": .string(filter.period.rawValue),
-            "agents": .array(agents.map(JSONValue.string)),
-            "offeredAgents": .array(store.view.panelTokenAgents.map(JSONValue.string)),
+            "agents": .array(listed.agents.map(JSONValue.string)),
+            "models": .array(listed.models.map(JSONValue.string)),
+            "offeredAgents": .array(view.panelTokenAgents.map(JSONValue.string)),
+            "offeredModels": .array(view.panelTokenModels.map { model in
+                .object(["id": .string(model.id), "name": .string(model.name), "agent": .string(model.displayVendor)])
+            }),
             "total": .integer(Int64(columns.reduce(0) { $0 + $1.total })),
         ])
     }

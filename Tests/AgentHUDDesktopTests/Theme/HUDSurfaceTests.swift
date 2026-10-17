@@ -101,6 +101,25 @@ final class HUDSurfaceTests: XCTestCase {
         }
     }
 
+    /// Clear and regular glass are Liquid Glass where glass is, and not as their stand-in; solid and the material never
+    /// are. Checked with glass both Liquid Glass and frosted, whatever this Mac and its build draw.
+    func testOnlyClearAndRegularGlassDrawLiquidGlassWhereGlassIsLiquid() {
+        for liquid in [true, false] {
+            for appearance in [HUDLook.Appearance.dark, .light] {
+                for style in [HUDGlassStyle.clear, .regular] {
+                    let glass = HUDLook(appearance: appearance, material: .glass, glassStyle: style)
+                    XCTAssertEqual(glass.drawsLiquidGlass(standIn: false, liquid: liquid), liquid, "\(appearance) \(style)")
+                    XCTAssertFalse(glass.drawsLiquidGlass(standIn: true, liquid: liquid), "\(appearance) \(style)")
+                }
+                let material = HUDLook(appearance: appearance, material: .glass, glassStyle: .material)
+                XCTAssertFalse(material.drawsLiquidGlass(standIn: false, liquid: liquid), "\(appearance)")
+                XCTAssertFalse(HUDLook(appearance: appearance).drawsLiquidGlass(standIn: false, liquid: liquid))
+            }
+        }
+        let glass = HUDLook(appearance: .dark, material: .glass)
+        XCTAssertEqual(glass.drawsLiquidGlass(standIn: false), HUDGlass.isLiquid)
+    }
+
     /// Beneath glass lies a dimming layer, as Apple asks of clear glass to keep what is on it legible: the look's own
     /// colour, which the theme gives opaque, black beneath dark glass and near-white beneath light glass, at what the
     /// transparency drawn leaves of it: all of it at 0, 0.7 at the standard glass's 0.3, 0.4 at Liquid Glass's top of
@@ -209,24 +228,31 @@ final class HUDSurfaceTests: XCTestCase {
     /// At the standard Transparency, 50 %, which clear glass draws at 0.3, the stand-in holds the look's text over the
     /// backdrop the HUD's pictures have as on a page, measured on the picture as drawn: about 18.6:1 on dark glass and
     /// 11.4:1 on light glass, and the secondary text, labels, captions and reset times, about 7.0:1 and 5.0:1. The floors
-    /// leave room for a drawing that blends as sRGB does, where light glass's secondary text holds 4.8:1. Light glass's
-    /// secondary ink is a grade darker than the solid light HUD's, whose grey holds about 3.4:1 there. What the glass holds on screen is the
+    /// leave room for a drawing that blends as sRGB does, where light glass's secondary text holds 4.8:1. The greys are
+    /// tints of the ink on glass (`Theme.under(_:)`), so they are read laid over the glass as drawn; light glass's
+    /// secondary is a grade darker than the solid light HUD's at the same transparency. What the glass holds on screen is the
     /// system's to say: it turns light over a light desktop and dark over a dark one, less so the more of the dimming
     /// layer the Transparency leaves, and the HUD's fixed ink reads less well over a desktop of the other shade, which
     /// nothing here asks it to hold.
     func testTheStandInHoldsItsTextOverThePicturesBackdrop() throws {
         let dark = try drawn(Self.darkGlass), light = try drawn(Self.lightGlass)
-        func ink(_ color: Color) throws -> CGFloat { try sRGB(color).red }
-        XCTAssertGreaterThan(contrast(try ink(Self.darkGlass.theme.text), dark), 18, "dark glass")
-        XCTAssertGreaterThan(contrast(try ink(Self.lightGlass.theme.text), light), 10.5, "light glass")
-        XCTAssertGreaterThan(contrast(try ink(Self.darkGlass.theme.secondary), dark), 6.5, "dark glass's secondary")
-        XCTAssertGreaterThan(contrast(try ink(Self.lightGlass.theme.secondary), light), 4.5, "light glass's secondary")
-        XCTAssertGreaterThan(contrast(try ink(Theme.lightGlass.secondary), light),
-                             contrast(try ink(Theme.lightIsland.secondary), light) + 1, "a grade darker than solid's")
+        // An ink laid over the ground it is drawn on, as a tint is.
+        func ink(_ color: Color, over ground: CGFloat) throws -> CGFloat {
+            let c = try sRGB(color)
+            return c.red * c.alpha + ground * (1 - c.alpha)
+        }
+        XCTAssertGreaterThan(contrast(try ink(Self.darkGlass.theme.text, over: dark), dark), 18, "dark glass")
+        XCTAssertGreaterThan(contrast(try ink(Self.lightGlass.theme.text, over: light), light), 10.5, "light glass")
+        XCTAssertGreaterThan(contrast(try ink(Self.darkGlass.theme.secondary, over: dark), dark), 6.5, "dark glass's secondary")
+        XCTAssertGreaterThan(contrast(try ink(Self.lightGlass.theme.secondary, over: light), light), 4.5,
+                             "light glass's secondary")
+        let solid = HUDLook(appearance: .light, transparency: Self.lightGlass.transparency).theme
+        XCTAssertGreaterThan(contrast(try ink(Self.lightGlass.theme.secondary, over: light), light),
+                             contrast(try ink(solid.secondary, over: light), light) + 0.5, "a grade darker than solid's")
         // Light glass's request card lets the glass show through, as dark glass's does, 0.76 of it at the standard
         // transparency (`Theme.under(_:)`); the light tokens themselves, and the opaque light HUD's card, are white.
         XCTAssertEqual(try sRGB(Self.lightGlass.theme.card).alpha, 0.76, accuracy: 0.002)
-        XCTAssertEqual(try sRGB(Theme.lightGlass.card).alpha, 1)
+        XCTAssertEqual(try sRGB(Theme.lightIsland.card).alpha, 1)
         XCTAssertEqual(try sRGB(HUDLook(appearance: .light).theme.card).alpha, 1)
     }
 
