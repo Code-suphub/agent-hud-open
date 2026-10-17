@@ -8,6 +8,7 @@ struct StatsView: View {
     var scrollable = true
     var onIdealHeightChange: ((CGFloat) -> Void)?
     @Environment(\.colorScheme) private var scheme
+    @Environment(WindowSurface.self) private var surface: WindowSurface?
     @State private var sessionSource: SessionSource?
     @State private var sessionProject: SessionProject?
     @State private var sessionSearch: String
@@ -24,7 +25,7 @@ struct StatsView: View {
     }
 
     var body: some View {
-        let theme = Theme.forScheme(scheme)
+        let theme = Theme.forScheme(scheme).under(surface?.look)
         VStack(spacing: 0) {
             header(theme)
                 .background(GeometryReader { proxy in
@@ -52,7 +53,7 @@ struct StatsView: View {
                 content(theme)
             }
         }
-        .background(theme.windowBackground)
+        .background(WindowGround(color: theme.windowBackground))
         .foregroundStyle(theme.text)
         .font(.ui(13))
         .id(store.settings.settings.language)
@@ -117,7 +118,7 @@ struct StatsView: View {
             }
         }
         .padding(EdgeInsets(top: 4, leading: 22, bottom: 10, trailing: 22))
-        .background(theme.windowBackground)
+        // On the window's ground, which runs behind it; the pages scroll below it, never under it.
         .overlay(alignment: .bottom) { Rectangle().fill(theme.divider).frame(height: 1) }
     }
 

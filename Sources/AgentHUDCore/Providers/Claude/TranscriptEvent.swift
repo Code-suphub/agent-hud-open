@@ -41,6 +41,28 @@ public struct TranscriptEvent: Hashable, Sendable {
     /// An assistant line calling `StructuredOutput`: the result a workflow agent hands back, after which its log ends
     /// without an `end_turn`.
     public let returnsStructuredOutput: Bool
+    /// The tool an assistant line calls and the call's id, from its `tool_use` block; nil for any other line.
+    public let toolName: String?
+    public let toolUseID: String?
+    /// The call a user line carries the result of, from its `tool_result` block's `tool_use_id`.
+    public let toolResultID: String?
+    /// What a call asks the user in the client's own window, from the input of the only calls that do so
+    /// (`ClaudeDesktopAsks`); nil for every other line.
+    public let ask: SessionActivity.Ask?
+    /// A call's result that ends the turn, as the Claude desktop app's next-step box does (`claude/endTurn`): no answer
+    /// and no Stop hook summary follow it.
+    public let endsTurn: Bool
+    /// A call's result the client marked as an error (`is_error`), such as a next-step box the app refused to draw.
+    public let failed: Bool
+    /// An assistant line holding a thinking block. Claude Code writes the block once it is finished.
+    public let isThinking: Bool
+    /// The `error` of the message Claude Code writes in the model's place when the API failed the turn (`isApiErrorMessage`),
+    /// such as "rate_limit", "billing_error" or "server_error"; nil for every other line.
+    public let apiError: String?
+    /// When the usage limit behind such a message lifts, from its `quotaLimits.resetsAt`.
+    public let limitResetsAt: Date?
+    /// The attempt of a `system` line saying Claude Code retries a failed API request (`api_error` with `retryAttempt`).
+    public let retryAttempt: Int?
     /// Where the line begins in its log, when it was read from a known place in one.
     public var offset: Int?
 
@@ -48,7 +70,10 @@ public struct TranscriptEvent: Hashable, Sendable {
         timestamp: Date, role: Role, model: String?, inputTokens: Int, cacheCreationTokens: Int, cacheReadTokens: Int,
         outputTokens: Int, thinkingTokens: Int = 0, text: String?, sessionId: String?, cwd: String?, messageId: String? = nil,
         requestId: String? = nil, stopReason: String? = nil, isSidechain: Bool = false, isPrompt: Bool = false,
-        isCompaction: Bool = false, isStop: Bool = false, entrypoint: String? = nil, returnsStructuredOutput: Bool = false
+        isCompaction: Bool = false, isStop: Bool = false, entrypoint: String? = nil, returnsStructuredOutput: Bool = false,
+        toolName: String? = nil, toolUseID: String? = nil, toolResultID: String? = nil, ask: SessionActivity.Ask? = nil,
+        endsTurn: Bool = false, failed: Bool = false, isThinking: Bool = false, apiError: String? = nil, limitResetsAt: Date? = nil,
+        retryAttempt: Int? = nil
     ) {
         self.timestamp = timestamp
         self.role = role
@@ -70,6 +95,16 @@ public struct TranscriptEvent: Hashable, Sendable {
         self.isStop = isStop
         self.entrypoint = entrypoint
         self.returnsStructuredOutput = returnsStructuredOutput
+        self.toolName = toolName
+        self.toolUseID = toolUseID
+        self.toolResultID = toolResultID
+        self.ask = ask
+        self.endsTurn = endsTurn
+        self.failed = failed
+        self.isThinking = isThinking
+        self.apiError = apiError
+        self.limitResetsAt = limitResetsAt
+        self.retryAttempt = retryAttempt
     }
 
     /// Key used to count each API response once.

@@ -10,6 +10,10 @@ struct APIBillingCard: View {
     let store: UsageStore
     let theme: Theme
     var compact = false
+    /// What the estimated cost covers in the hover panel: its block's period (`PanelBlockPlan.period`), over the span the
+    /// panel's token chart draws for it, which the statistics window's range never changes. Nil on the statistics
+    /// window, where it covers that window's range.
+    var period: PanelTokenPeriod? = nil
     @Environment(\.panelSpacing) private var panelSpacing
     @Environment(\.panelHalf) private var half
 
@@ -110,9 +114,9 @@ struct APIBillingCard: View {
 
     private func cost(currency: String) -> some View {
         VStack(alignment: compact ? .leading : .trailing, spacing: 3) {
-            Text(L10n.text("费用估算 · ", "Est. cost · ") + store.statsRange.recentLabel)
+            Text(L10n.text("费用估算 · ", "Est. cost · ") + (period?.range ?? store.statsRange).recentLabel)
                 .font(.ui(11)).foregroundStyle(theme.secondary)
-            Text(billing.estimatedCost(currency: currency, during: store.statsInterval)
+            Text(billing.estimatedCost(currency: currency, during: period.map { store.hudTokenInterval($0) } ?? store.statsInterval)
                 .map { MoneyFormat.amount($0, currency: currency, estimated: true) } ?? L10n.text("暂无价格", "Unpriced"))
                 .font(.tabular(compact ? 15 : 20, .semibold))
                 .foregroundStyle(theme.text)

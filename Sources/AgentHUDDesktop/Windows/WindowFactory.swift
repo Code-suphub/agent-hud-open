@@ -74,7 +74,17 @@ class HostedWindowController: NSWindowController, NSWindowDelegate {
         if window.appearance?.name != look?.appearanceName {
             window.appearance = look.flatMap { NSAppearance(named: $0.appearanceName) }
         }
-        if surface.look != look { surface.look = look }
+        // Under a look the desktop shows through, glass or a thinned solid, the window is cleared; its grounds then draw
+        // all of it, and its shadow is made again from what they draw.
+        let clear = look?.seeThrough == true
+        if window.isOpaque == clear {
+            window.isOpaque = !clear
+            window.backgroundColor = clear ? .clear : .windowBackgroundColor
+        }
+        if surface.look != look {
+            surface.look = look
+            DispatchQueue.main.async { [weak window] in window?.invalidateShadow() }
+        }
     }
 
     func windowDidChangeScreen(_ notification: Notification) {

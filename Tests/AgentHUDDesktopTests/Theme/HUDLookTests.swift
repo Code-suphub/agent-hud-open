@@ -25,18 +25,52 @@ final class HUDLookTests: XCTestCase {
         XCTAssertEqual(light.theme.islandFill, Theme.light.islandFill)
     }
 
-    /// A light HUD draws with the HUD's own light tokens, and light glass with its darker ink; dark glass keeps the dark
-    /// island's.
+    /// A light HUD draws with the HUD's own light tokens, opaque as they are; on glass, light or dark, the greys are
+    /// tints of the ink (`Theme.under(_:)`), a grade darker on light glass, and dark glass keeps the island's cards.
     func testEachLookDrawsWithItsOwnTokens() {
         XCTAssertEqual(HUDLook(appearance: .light).theme.cardBorder, Theme.lightIsland.cardBorder)
         XCTAssertEqual(HUDLook(appearance: .light).theme.secondary, Theme.light.secondary)
         let lightGlass = HUDLook(appearance: .light, material: .glass).theme
-        XCTAssertEqual(lightGlass.secondary, Theme.lightGlass.secondary)
-        XCTAssertEqual(lightGlass.tertiary, Theme.lightGlass.tertiary)
-        XCTAssertNotEqual(lightGlass.secondary, Theme.light.secondary)
+        XCTAssertEqual(lightGlass.secondary, Color.black.opacity(0.65))
+        XCTAssertEqual(lightGlass.tertiary, Color.black.opacity(0.53))
+        XCTAssertEqual(lightGlass.cardBorder, Theme.lightIsland.cardBorder)
         let darkGlass = HUDLook(appearance: .dark, material: .glass).theme
-        XCTAssertEqual(darkGlass.secondary, Theme.island.secondary)
+        XCTAssertEqual(darkGlass.secondary, Color.white.opacity(0.60), "the island's grey on black")
         XCTAssertEqual(darkGlass.card, Theme.island.card)
+    }
+
+    /// A box raised over content is drawn nearly opaque: solid at nine tenths at the least, and glass's stand-in at 0.85
+    /// at the least, so that what lies beneath never shows through its text; on an opaque look it is whole.
+    func testARaisedBoxHasAFloor() throws {
+        XCTAssertEqual(HUDLook.standard.raisedCoverOpacity, 1)
+        XCTAssertEqual(HUDLook(appearance: .light).raisedCoverOpacity, 1)
+        XCTAssertEqual(HUDLook(appearance: .dark, transparency: 0.6).raisedCoverOpacity, 0.9, accuracy: 0.0001)
+        XCTAssertEqual(HUDLook(appearance: .dark, transparency: 0.05).raisedCoverOpacity, 0.95, accuracy: 0.0001)
+        for (transparency, alpha) in [(0.0, 1.0), (0.6, 0.91), (1, 0.85)] {
+            let look = HUDLook(appearance: .light, material: .glass, transparency: transparency)
+            let standIn = try XCTUnwrap(NSColor(look.raisedStandIn).usingColorSpace(.sRGB))
+            XCTAssertEqual(standIn.alphaComponent, alpha, accuracy: 0.002, "\(transparency)")
+        }
+    }
+
+    /// A heatmap's empty cell is a tint of the ink, so that the grid holds on any ground; a busy cell is the green ramp on
+    /// an opaque ground and the theme's green over a see-through one, thicker as the value rises.
+    func testAHeatmapCellFollowsItsGround() throws {
+        // Compared by their sRGB components: two equal colours can be built in different spaces, which `Color`'s own
+        // equality tells apart though they print the same.
+        func same(_ a: Color, _ b: Color, _ what: String, line: UInt = #line) throws {
+            let x = try XCTUnwrap(NSColor(a).usingColorSpace(.sRGB)), y = try XCTUnwrap(NSColor(b).usingColorSpace(.sRGB))
+            for (p, q) in [(x.redComponent, y.redComponent), (x.greenComponent, y.greenComponent),
+                           (x.blueComponent, y.blueComponent), (x.alphaComponent, y.alphaComponent)] {
+                XCTAssertEqual(p, q, accuracy: 0.002, what, line: line)
+            }
+        }
+        try same(HeatmapCard.color(for: 0, theme: .dark), Color.white.opacity(0.06), "an empty cell on dark")
+        try same(HeatmapCard.color(for: 0, theme: .light), Color.black.opacity(0.075), "an empty cell on light")
+        let glass = HUDLook(appearance: .dark, material: .glass, transparency: 0.3).theme
+        try same(HeatmapCard.color(for: 1, theme: glass), glass.status(.ok).opacity(1), "the busiest cell on glass")
+        try same(HeatmapCard.color(for: 0.25, theme: glass), glass.status(.ok).opacity(0.6), "a quarter on glass")
+        XCTAssertNotEqual(HeatmapCard.color(for: 1, theme: .dark), Theme.dark.status(.ok), "the ramp, opaque")
     }
 
     /// A screen whose settings choose no look gives its HUD the standard one (`HUDLookResolutionTests`).
@@ -52,7 +86,6 @@ final class HUDLookTests: XCTestCase {
     func testTheIslandsTokensAreTheColoursTheHUDDrewWith() {
         let island = Theme.island
         XCTAssertEqual(island.islandFill, Color.black)
-        XCTAssertEqual(island.restingFillOpacity, 0.82)
         XCTAssertEqual(island.islandOutline, Color.white.opacity(0.14))
         XCTAssertEqual(island.desktopOutline, Color.white.opacity(0.18))
         XCTAssertEqual(island.meterTrack, Color.white.opacity(0.14))

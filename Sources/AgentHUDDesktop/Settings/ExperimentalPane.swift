@@ -64,7 +64,8 @@ struct ExperimentalPane: View {
                     if setup.commandLine != nil {
                         Button(L10n.text("拷贝命令", "Copy command")) { setup.copyCommand() }
                             .buttonStyle(.plain)
-                            .foregroundStyle(controls.copyCommand ? Color.accentColor : theme.secondary.opacity(0.5))
+                            .foregroundStyle(controls.copyCommand ? theme.accentText : theme.secondary.opacity(0.5))
+                            .underline(controls.copyCommand && theme.isSeeThrough)
                             .disabled(!controls.copyCommand)
                             .help(setup.commandLine ?? "")
                             .accessibilityIdentifier("experimental-agent-tools-copy")

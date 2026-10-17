@@ -161,7 +161,7 @@ struct IslandRootView: View {
     var panelWidth = IslandController.expandedWidth
     var agentPanelWidth = IslandController.agentPanelWidth
 
-    private var detached: Bool { focusVendor != nil }
+    var detached: Bool { focusVendor != nil }
 
     /// The tokens the silhouette and the detached card are filled and outlined with: the look's. Taken from the look
     /// itself, because the environment this view sets reaches what it holds and not the view.
@@ -169,7 +169,7 @@ struct IslandRootView: View {
 
     /// A card comes out of the dock and goes back into it: scaled from the side that faces the dock. The Simple
     /// line on a side edge only lengthens, as the panel growing an arm would.
-    private func cardTransition(_ frame: CGRect, in bounds: CGSize, line: Bool) -> AnyTransition {
+    func cardTransition(_ frame: CGRect, in bounds: CGSize, line: Bool) -> AnyTransition {
         guard !reduceMotion, bounds.width > 0, bounds.height > 0 else { return .opacity }
         let point: CGPoint = switch edge {
         case .top: CGPoint(x: frame.midX, y: frame.minY)
@@ -192,9 +192,12 @@ struct IslandRootView: View {
         var outline: Double
         let hairline: Color
         /// The card's surface, drawn in the card's own shape as it moves and widens: the look's, filled with `fill`
-        /// where it is solid.
+        /// where it is solid. None while the line's glass is drawn with the panel's (`joinedGlass`).
         let look: HUDLook
         let fill: Color
+        var drawsSurface = true
+        /// How the surface comes and goes on a change of look, with the panel's and the joined glass.
+        let lookAnimation: Animation?
 
         var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>,
                                            AnimatablePair<CGFloat, Double>> {
@@ -212,7 +215,17 @@ struct IslandRootView: View {
             content
                 .frame(width: max(0, frame.width), height: max(0, frame.height))
                 .clipShape(card)
-                .background { HUDSurface(card, look: look, fill: fill, contact: nil) }
+                .background {
+                    // The surface takes over from the line's joined glass, and hands back to it, at once, as `CardPiece`
+                    // does: cross-faded, two half-strength dimmings would lighten the card meanwhile, and Liquid Glass
+                    // faded by opacity loses its blur. Only its coming and going is made at once: the card's frame
+                    // still interpolates here, and the surface still fades to a new look on its own (`HUDSurface`).
+                    // A change of look that brings or takes the joined glass fades it in or out with that glass and
+                    // with the panel's surface, so the line and the panel change as one.
+                    Group { if drawsSurface { HUDSurface(card, look: look, fill: fill, contact: nil) } }
+                        .animation(lookAnimation, value: look)
+                        .transaction { $0.animation = nil }
+                }
                 .overlay { card.strokeBorder(hairline.opacity(outline), lineWidth: 1) }
                 .position(x: frame.midX, y: frame.midY)
         }
@@ -225,23 +238,6 @@ struct IslandRootView: View {
         }
     }
 
-    /// The card on show is the Simple panel's one-line peek.
-    private var growsFromPanel: Bool {
-        isOpen && !pinned && alert == nil && peek?.style == .line && simpleMeter != nil && !showsAlertDetails
-    }
-
-    /// The Simple panel's own shape inside the window: its strip without the margin on the parked side.
-    private var simplePanelPath: Path? {
-        guard let simpleMeter, var panel = logoQueueFrame else { return nil }
-        let margin = SimpleMeterConfig.edgeMargin
-        switch edge {
-        case .top: panel.origin.y += margin; panel.size.height -= margin
-        case .bottom: panel.size.height -= margin
-        case .left: panel.origin.x += margin; panel.size.width -= margin
-        case .right: panel.size.width -= margin
-        }
-        return Path(roundedRect: panel, cornerRadius: simpleMeter.cornerRadius, style: .continuous)
-    }
     static let detachedInsets = EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 18)
 
     /// How far below the camera housing what the island holds starts on a light look at a hardware notch: past the black
@@ -262,7 +258,7 @@ struct IslandRootView: View {
 
     /// A full card keeps a card's corner; a peek or a compact reminder is as round as its height allows. The shadow a
     /// light or glass card casts takes the same corner (`ScreenHUD.detachedRadius(height:full:bubble:)`).
-    private func detachedRadius(height: CGFloat) -> CGFloat {
+    func detachedRadius(height: CGFloat) -> CGFloat {
         ScreenHUD.detachedRadius(height: height, full: isOpen && (pinned || showsAlertDetails),
                                  bubble: peek?.style == .bubble && alert == nil)
     }
@@ -332,13 +328,16 @@ struct IslandRootView: View {
 
     /// A picture of the island, or the island while it is recorded, draws glass as its stand-in.
     @Environment(\.drawsGlassStandIn) private var drawnAsPicture
-    private var standsInForGlass: Bool { drawsGlassStandIn || drawnAsPicture }
+    var standsInForGlass: Bool { drawsGlassStandIn || drawnAsPicture }
 
     /// The hairline `color` round the silhouette or a card, unless Liquid Glass lights a rim of its own there.
     private func outline(_ color: Color) -> Color { look.outline(color, standIn: standsInForGlass) }
 
     /// How what the island holds moves to a new look's colours.
-    private var lookAnimation: Animation? { reduceMotion ? nil : IslandAnimation.curve }
+    var lookAnimation: Animation? { reduceMotion ? nil : IslandAnimation.curve }
+
+    /// How a detached card moves, and grows out of its dock and back into it: at once under Reduce Motion.
+    var cardMotion: Animation? { reduceMotion ? nil : IslandAnimation.curve }
 
     private var surfaces: some View {
         GeometryReader { proxy in
@@ -365,7 +364,7 @@ struct IslandRootView: View {
             let surface = ZStack(alignment: surfaceAlignment) {
                 // Keep one shape alive through collapse so it can shrink before becoming transparent. A silhouette that
                 // grows out of the screen edge stands on it; a floating one stands on nothing.
-                HUDSurface(shape, look: look, fill: theme.islandFill.opacity(floats && !visible ? theme.restingFillOpacity : 1),
+                HUDSurface(shape, look: look, fill: theme.islandFill,
                            contact: floats ? nil : shape.edge)
                     .overlay {
                         if inksNotch {
@@ -394,7 +393,17 @@ struct IslandRootView: View {
                     .animation(lookAnimation, value: look)
                     .mask(alignment: surfaceAlignment) { shape.frame(width: size.width, height: size.height) }
                 }
+            let joinsGlass = joinsPanelGlass(standIn: standsInForGlass)
             ZStack(alignment: .topLeading) {
+                // Beneath the card and the panel's figures, which draw no surface of their own meanwhile.
+                Group {
+                    if joinsGlass, let simpleMeter, let panel = simplePanelRect {
+                        joinedGlass(panel: panel, radius: simpleMeter.cornerRadius,
+                                    card: visible && detached ? presentationFrame : nil, bounds: bounds)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(lookAnimation, value: look)
                 // The card's place in the view outlives the card: one that arrives with its own container has
                 // nothing to grow out of.
                 if separatesAgents, detached || !visible {
@@ -405,7 +414,7 @@ struct IslandRootView: View {
                         // The Simple line is the panel growing: the panel's own fill, no outline of its own, and
                         // nothing drawn where the panel already is, so the two never darken each other.
                         let grows = growsFromPanel
-                        let motion: Animation? = reduceMotion ? nil : IslandAnimation.curve
+                        let motion = cardMotion
                         content
                             .environment(\.islandTyping, onTyping)
                             .animation(lookAnimation, value: look)
@@ -413,7 +422,9 @@ struct IslandRootView: View {
                                                     radius: detachedRadius(height: presentationFrame.height),
                                                     outline: grows ? 0 : 1, hairline: outline(theme.islandOutline),
                                                     look: look,
-                                                    fill: theme.islandFill.opacity(grows ? theme.restingFillOpacity : 1)))
+                                                    fill: theme.islandFill,
+                                                    drawsSurface: !cardJoinsPanel(standIn: standsInForGlass),
+                                                    lookAnimation: lookAnimation))
                         // Keyed to the card's place on screen. Its place in the window also changes whenever the
                         // window around it is resized, and that must never move the card.
                         .animation(motion, value: cardScreenFrame)
@@ -421,17 +432,8 @@ struct IslandRootView: View {
                     }
                     }
                     .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
-                    .mask {
-                        // A full card never reaches the panel, so the cut can stay while a line is on its way out.
-                        if separatesAgents, let panel = simplePanelPath {
-                            Path { path in
-                                path.addRect(CGRect(origin: .zero, size: bounds))
-                                path.addPath(panel)
-                            }.fill(style: FillStyle(eoFill: true))
-                        } else {
-                            Rectangle()
-                        }
-                    }
+                    // A full card never reaches the panel, so the cut can stay while a line is on its way out.
+                    .mask { outsidePanel(bounds) }
                 } else if let presentationFrame {
                     // The native canvas changes immediately. Only the card's size and its position
                     // along the parked edge interpolate; the contact edge stays on that canvas.
@@ -478,7 +480,7 @@ struct IslandRootView: View {
                     let strip = logoQueueFrame ?? CGRect(x: 0, y: logoQueueInset, width: size.width, height: logoQueueHeight)
                     // The figures stay put as the island moves, and move to a new look's colours with the panel
                     // behind them.
-                    SimpleMeterView(config: simpleMeter, onIsland: !separatesAgents)
+                    SimpleMeterView(config: simpleMeter, onIsland: !separatesAgents, glassJoined: joinsGlass)
                         .animation(lookAnimation, value: look)
                         .frame(width: strip.width, height: strip.height)
                         .position(x: strip.midX, y: strip.midY)

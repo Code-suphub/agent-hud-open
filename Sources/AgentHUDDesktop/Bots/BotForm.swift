@@ -29,6 +29,11 @@ final class BotForm {
     /// The last outline drawn, and the moment of the morph it was drawn for. A bot that does not spin asks
     /// for the same one every frame once it has turned into its bot.
     private var lastOutline: (eased: CGFloat, turn: CGFloat, path: CGPath)?
+    /// How high the finished bot reaches, as a share of the side down from the mark's top edge: what a sign over its
+    /// head stands clear of. A mark that keeps its artwork reaches as high as the artwork.
+    private(set) lazy var top: CGFloat = spec.ownEyes == nil ? highest(bodyReach) + spec.settle : logoTop
+    /// How high the logo reaches, the same way.
+    private(set) lazy var logoTop: CGFloat = highest(logoReach)
 
     /// Which way each sample points from the centre, as a step of one.
     private static let directions: [CGPoint] = (0..<samples).map { index in
@@ -52,9 +57,9 @@ final class BotForm {
         return form
     }
 
-    /// Reads a mark afresh, without the cache.
-    static func read(_ vendor: String, ground: HUDLook.Appearance) -> BotForm? {
-        BotSpec.spec(for: vendor, ground: ground).flatMap { BotForm(vendor: vendor, ground: ground, spec: $0) }
+    /// Reads a mark afresh, without the cache, as `spec` draws it when one is given.
+    static func read(_ vendor: String, ground: HUDLook.Appearance, spec: BotSpec? = nil) -> BotForm? {
+        (spec ?? BotSpec.spec(for: vendor, ground: ground)).flatMap { BotForm(vendor: vendor, ground: ground, spec: $0) }
     }
 
     private init?(vendor: String, ground: HUDLook.Appearance, spec: BotSpec) {
@@ -128,6 +133,10 @@ final class BotForm {
 
     // MARK: Outlines
 
+    private func highest(_ reach: [CGFloat]) -> CGFloat {
+        reach.indices.reduce(CGFloat.infinity) { min($0, spec.center.y + Self.directions[$1].y * reach[$1]) }
+    }
+
     /// The outline at one moment of the morph: the logo's reach blended, angle by angle, with the body's.
     func outline(eased: CGFloat, turn: CGFloat) -> CGPath {
         if let last = lastOutline, last.eased == eased, last.turn == turn { return last.path }
@@ -195,13 +204,6 @@ final class BotForm {
         case .outline(let keep, let smooth):
             let soft = smoothed(logo, over: smooth), mean = soft.reduce(0, +) / CGFloat(soft.count)
             return soft.map { max(radius * 0.55, radius * (1 + keep * ($0 / mean - 1))) }
-        case .star(let points, let depth, let puff):
-            return (0..<samples).map { index in
-                let turn = CGFloat(points) * CGFloat(index) * 2 * .pi / CGFloat(samples)
-                // A smooth wave is a thin star. Broad round heads with a crease between them read as plump.
-                let wave = puff < 1 ? 2 * pow(abs(cos(turn / 2)), puff) - 1 : cos(turn)
-                return radius * (1 + depth * wave)
-            }
         case .polygon(let sides, let rotation, let round):
             let corners = (0..<sides).map { index -> CGPoint in
                 let angle = (rotation + CGFloat(index) * 360 / CGFloat(sides)) * .pi / 180

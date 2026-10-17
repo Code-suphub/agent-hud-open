@@ -124,6 +124,33 @@ final class PanelToolsResetTests: PanelToolsCase {
         XCTAssertEqual(settings.settings, saved, "Revert brings the style back")
     }
 
+    /// hud.reset brings back every field an agent reads, the glass style, the idle period and the grid among them: a
+    /// screen that differs from the defaults only there gets a draft listing them, which Save writes as the reset does.
+    func testHUDResetRestoresTheGlassStyleAndTheGlowsGrid() throws {
+        let key = "SECOND-UUID"
+        settings.update {
+            $0.screens[key] = ScreenPlacement(glassStyle: .regular)
+            var glow = GlowSettings()
+            glow.idleBreathSeconds = 12
+            glow.gridPitch = 6
+            glow.gridDensity = 1.25
+            $0.screenGlow[key] = glow
+        }
+        changes = 0
+        let panel = try call(["screen": .string(key), "hud": .object(["reset": .bool(true)])])
+        XCTAssertNotNil(layout.styleDraft(of: key))
+        XCTAssertEqual(panel["layout"]?["hud"], .object([
+            "glassStyle": .string("clear"),
+            "glow": .object(["idleSpeed": .number(7), "gridPitch": .number(10), "gridDensity": .number(1)]),
+        ]), "listed by the fields that differ")
+        XCTAssertEqual(settings.effectivePlacement(on: key, hasNotch: false), .default(hasNotch: false))
+        XCTAssertEqual(settings.effectiveGlow(on: key), settings.settings.glow)
+        layout.savePanel(on: key)
+        XCTAssertNil(settings.settings.screens[key])
+        XCTAssertNil(settings.settings.screenGlow[key])
+        XCTAssertEqual(changes, 1)
+    }
+
     /// hud.reset goes with a layout as any style does: the layout is the screen's draft and the default style its
     /// style draft, and the agents its list may name are those the default mode shows.
     func testHUDResetGoesWithALayout() throws {

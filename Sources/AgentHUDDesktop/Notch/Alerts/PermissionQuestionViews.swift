@@ -236,6 +236,52 @@ struct PermissionQuestionCard: View {
     }
 }
 
+/// A question the client asks in its own window and takes no answer to from here, such as the Claude desktop app's
+/// next-step box: what it asks, and the answers its window offers, listed to be given there. Putting the card away answers
+/// nothing.
+struct ClientQuestionCard: View {
+    let request: PermissionRequest
+    let onDecide: (PermissionDecision) -> Void
+    @Environment(\.permissionColor) private var color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let recap = request.detail {
+                Text(recap).font(.ui(11)).foregroundStyle(color.secondary)
+                    .lineLimit(4).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(Array(request.questions.enumerated()), id: \.offset) { _, question in
+                VStack(alignment: .leading, spacing: 6) {
+                    if let header = question.header {
+                        Text(header).font(.ui(10, .semibold)).foregroundStyle(color.tertiary)
+                    }
+                    Text(question.question).font(.ui(12, .semibold)).foregroundStyle(color.text)
+                        .lineLimit(5).fixedSize(horizontal: false, vertical: true)
+                    // A list rather than buttons: the window that asked takes the click.
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(question.options.enumerated()), id: \.offset) { _, option in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Image(systemName: "arrow.turn.down.right").font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(color.tertiary)
+                                Text(option.label).font(.ui(11, .medium)).foregroundStyle(color.secondary)
+                                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                            }
+                            .help(option.description ?? option.label)
+                        }
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                Text(L10n.text("请到 \(request.vendor) 里回答", "Answer in \(request.vendor)"))
+                    .font(.ui(11)).foregroundStyle(color.secondary).lineLimit(1)
+                Spacer(minLength: 8)
+                QuestionButton(title: L10n.text("知道了", "Dismiss"), symbol: nil, identifier: "island-permission-dismiss",
+                               fill: .clear, stroke: color.border, foreground: color.secondary) { onDecide(.leave) }
+            }
+        }
+    }
+}
+
 struct QuestionButton: View {
     let title: String
     let symbol: String?

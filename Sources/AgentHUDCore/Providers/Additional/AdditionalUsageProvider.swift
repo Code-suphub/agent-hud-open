@@ -211,7 +211,8 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
                                client: item.client, transcriptPath: item.path,
                                cacheReadTokens: item.events.reduce(0) { $0 + $1.cacheRead }, accountWide: item.accountWide,
                                observedAt: evidence.newest,
-                               workingDirectory: item.workspace, lastActivityAt: end, navigationTarget: item.navigationTarget)
+                               workingDirectory: item.workspace, lastActivityAt: end, navigationTarget: item.navigationTarget,
+                               activity: item.activity)
         }
         let snapshots = windows.map {
             UsageSnapshot(agentId: $0.id, remainingPct: $0.remaining, resetAt: $0.reset, windowDuration: $0.duration,
@@ -230,7 +231,9 @@ actor AdditionalUsageProvider: UsageProvider, LedgerRecording {
                             source: L10n.sourceAdditionalUsage, enabled: true, account: account, allModels: $0.allModels)
         }
         let consumerIDs = Set(consumers.map(\.id))
-        let quotaIDs = Set(windows.map(\.id) + agents.filter { $0.vendor == source.vendor }.map(\.id))
+        // A plan's rows shown in this group, such as a GLM plan only WorkBuddy carries, are linked by their own provider to
+        // the calls that went through the plan, never to every model this client used.
+        let quotaIDs = Set(windows.map(\.id) + agents.filter { $0.vendor == source.vendor && $0.billingPool == nil }.map(\.id))
         let accounts: [String: [AccountObservation]]?
         // A declared inventory carries the account it belongs to even while the app's quota answer stays empty: the
         // ceilings make a reading of their own, and an inventory nobody reports cannot retire the rows it leaves out.

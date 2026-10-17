@@ -5,10 +5,11 @@ import AgentHUDCore
 /// questions and its usage.
 extension HoverPanelView {
     /// What is waiting, running and recently ended: the sessions with work in flight first — those waiting for the
-    /// user ahead of those still running — then those last active in the past day, up to the layout's limit, five by
-    /// default, of the agents and states it lists. The remaining count includes every other session the filter keeps in
-    /// that summary, and a filter that keeps none says so in one line under the header. The statistics window's range
-    /// never applies here — that range belongs to the session card, which answers a different question. The header
+    /// user ahead of those still running — then those last active in the layout's period, the past day by default, up
+    /// to the layout's limit, five by default, of the agents and states it lists. The remaining count includes every
+    /// other session the filter keeps in that summary, and a filter that keeps none says so in one line under the
+    /// header. The statistics window's range never applies here — that range belongs to the session card, which
+    /// answers a different question. The header
     /// opens the session list; each row's title returns to its agent, or opens its session page where the client names
     /// no destination, and its token count opens usage. Its gaps follow the layout's spacing, and its divider the
     /// layout's separators. On the panel's picture for an agent a row is named by its place in the list, with no title
@@ -131,10 +132,11 @@ extension HoverPanelView {
         }
         return AnyView(
             ZStack(alignment: .bottomTrailing) {
+                // The ring round the dot is cut out of the mark, so that whatever ground the row stands on shows in it.
                 AgentLogo(vendor: vendor, size: 14)
+                    .clipShape(SessionMarkCut(), style: FillStyle(eoFill: true))
                 Circle().fill(color)
                     .frame(width: 6, height: 6)
-                    .overlay(Circle().stroke(theme.windowBackground, lineWidth: 1.5))
                     .offset(x: 2, y: 2)
             }
             .frame(width: 14, height: 14)
@@ -218,10 +220,11 @@ extension HoverPanelView {
         onOpenStats()
     }
 
-    /// The island's summary: local work in flight and sessions last active in the past day, with waiting before
-    /// running, newest created first, then the most recently ended, of the agents and states `filter` keeps and as
-    /// many as it allows (`ReportView.panelSessions(_:vendor:)`). The full session list holds any hidden rows.
-    /// `vendor` keeps only the sessions of the agents drawn with that vendor's mark, and the filter applies among them.
+    /// The island's summary: local work in flight and sessions last active in the filter's period, the past day by
+    /// default, with waiting before running, newest created first, then the most recently ended, of the agents and
+    /// states `filter` keeps and as many as it allows (`ReportView.panelSessions(_:vendor:)`). The full session list
+    /// holds any hidden rows. `vendor` keeps only the sessions of the agents drawn with that vendor's mark, and the
+    /// filter applies among them.
     static func sessionRows(_ store: UsageStore, vendor: String? = nil,
                             filter: PanelSessionFilter = PanelSessionFilter()) -> PanelSessionRows {
         store.view.panelSessions(filter, vendor: vendor)
@@ -252,9 +255,10 @@ extension HoverPanelView {
         }?.id
     }
 
-    /// The questions this session is waiting on: only a question put to this exact session reaches its row.
+    /// The questions this session is waiting on that can be answered here: only a question put to this exact session
+    /// reaches its row.
     static func questionRequests(for session: LiveSession, waiting: [PermissionRequest]) -> [PermissionRequest] {
-        waiting.filter { $0.sessionID == session.id && $0.isQuestion }
+        waiting.filter { $0.sessionID == session.id && $0.answersQuestion }
     }
 
     /// A running session wears its agent's colour, one blocked on the user the warning colour, and an ended one grey.
@@ -280,5 +284,20 @@ extension HoverPanelView {
         let words = task.split(separator: " ")
         if words.count > 3 { return words.prefix(3).joined(separator: " ") }
         return String(task.prefix(14))
+    }
+}
+
+/// The agent's mark in a session row with the ring round its state dot taken out (`HoverPanelView.sessionMark`), so that
+/// whatever ground the row stands on shows in it: the mark, filled even-odd with a disc round the dot's centre, a point
+/// in from the mark's corner where the dot hangs off it, 1.5 points wider than the dot all round. A clip, where a disc
+/// blended out of the mark in a compositing group was not kept to the mark by the software renderer the HUD's pictures
+/// are drawn with: it cut through the panel beneath too, leaving a ring of holes beside each title, and text
+/// recognition then read "iOS" beside it as "iOs".
+private struct SessionMarkCut: Shape {
+    func path(in rect: CGRect) -> Path {
+        // Room round the mark for the disc, which reaches past its corner.
+        var path = Path(rect.insetBy(dx: -4, dy: -4))
+        path.addEllipse(in: CGRect(x: rect.maxX - 5.5, y: rect.maxY - 5.5, width: 9, height: 9))
+        return path
     }
 }
