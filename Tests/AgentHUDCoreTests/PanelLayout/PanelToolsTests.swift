@@ -15,7 +15,7 @@ final class PanelToolsTests: PanelToolsCase {
         XCTAssertEqual(panel["hasPrevious"], .bool(false))
         XCTAssertEqual(panel["layout"], .object([:]))
         XCTAssertEqual(panel["style"], .object(["spacing": .string("regular"), "separators": .bool(true), "width": .integer(540)]))
-        XCTAssertEqual(panel["countdownOnInSettings"], .bool(true))
+        XCTAssertEqual(panel["countdown"], .bool(true))
         XCTAssertNil(panel["note"])
         XCTAssertEqual(blocks(panel).map { $0["key"] }, [.string("Claude"), .string("Codex"), .string("api:DeepSeek")])
         XCTAssertEqual(panel["sections"]?.arrayValue?.compactMap { $0.objectValue?["key"]?.stringValue }, ["blocks", "tokens", "sessions"])
@@ -43,9 +43,9 @@ final class PanelToolsTests: PanelToolsCase {
 
         let deepseek = try block("api:DeepSeek", in: panel)
         XCTAssertEqual(deepseek["kind"], .string("billing"))
-        XCTAssertEqual(deepseek["widgets"], .array([.string("number")]))
-        XCTAssertEqual(deepseek["measures"], .array([.string("quota")]))
-        XCTAssertEqual(deepseek["offeredMeasures"], .array([.string("quota")]))
+        XCTAssertEqual(deepseek["widgets"], .array([.string("number"), .string("chart")]))
+        XCTAssertEqual(deepseek["measures"], .array(["quota", "burn", "cost"].map(JSONValue.string)))
+        XCTAssertEqual(deepseek["offeredMeasures"], .array(["quota", "burn", "cost"].map(JSONValue.string)))
         for property in ["countdown", "columns", "ringSize"] {
             XCTAssertNil(deepseek[property], "a balance has no \(property) to set")
         }
@@ -56,37 +56,50 @@ final class PanelToolsTests: PanelToolsCase {
         XCTAssertEqual(balance["level"], .string("warning"))
     }
 
-    /// An agent's model is another vendor's service: it is told numbers and window names, never whose account it is.
-    func testWhatIsReadNamesNoAccount() throws {
-        let text = String(decoding: try RecordCoding.encoder().encode(JSONValue.object(try result(MCPTools.getPanel))), as: UTF8.self)
-        let labels = (store.report?.accounts ?? [:]).values.flatMap { $0 }.flatMap { [$0.displayName, $0.account.id] }
-        XCTAssertFalse(labels.isEmpty)
-        for label in labels { XCTAssertFalse(text.contains(label), label) }
-        XCTAssertFalse(text.contains("@"))
+    /// The app and the agent it answers are the person's own, so a block names its accounts: by the id a layout names
+    /// one by, with the email or name the panel writes and its plan, and each row says whose it is.
+    func testABlockNamesItsAccountsAndEachRowItsAccount() throws {
+        let claude = try block("Claude", in: try result(MCPTools.getPanel))
+        XCTAssertEqual(claude["accounts"], .array([.object([
+            "id": .string(DemoData.claudeAccount.id), "name": .string("Personal"), "plan": .string("Max x20"),
+            "current": .bool(true), "shown": .bool(true),
+        ])]))
+        let rows = (claude["rows"]?.arrayValue ?? []).compactMap(\.objectValue)
+        XCTAssertEqual(rows.map { $0["account"]?.stringValue }, Array(repeating: DemoData.claudeAccount.id, count: 3))
+        let deepseek = try block("api:DeepSeek", in: try result(MCPTools.getPanel))
+        XCTAssertEqual(deepseek["accounts"], .array([.object([
+            "id": .string("DeepSeek"), "name": .string("DeepSeek · API"), "shown": .bool(true),
+        ])]))
+        XCTAssertEqual(deepseek["balances"]?.arrayValue?.first?.objectValue?["account"], .string("DeepSeek"))
     }
 
-    func testASectionSwitchedOffInSettingsIsToldAsSuch() throws {
-        settings.update { $0.showIslandTokens = false }
-        let sections = (try result(MCPTools.getPanel)["sections"]?.arrayValue ?? []).compactMap(\.objectValue)
-        let tokens = try XCTUnwrap(sections.first { $0["key"] == .string("tokens") })
-        XCTAssertEqual(tokens["shown"], .bool(true), "the layout does not hide it")
-        XCTAssertEqual(tokens["onInSettings"], .bool(false))
+    /// Settings' Token usage switch is the shared layout's tokens section, so a section switched off there is one the
+    /// layout hides, read as such, and nothing says it apart.
+    func testASectionSwitchedOffInSettingsIsOneTheLayoutHides() throws {
+        settings.panelLayout.setSwitches { $0.tokenUsage = false }
+        let panel = try result(MCPTools.getPanel)
+        let sections = (panel["sections"]?.arrayValue ?? []).compactMap(\.objectValue)
+        XCTAssertEqual(try XCTUnwrap(sections.first { $0["key"] == .string("tokens") }), ["key": .string("tokens"), "shown": .bool(false)])
+        XCTAssertEqual(panel["layout"], .object(["hiddenSections": .array([.string("tokens")])]))
+        XCTAssertEqual(panel["unsaved"], .bool(false), "a person's switch is saved at once")
     }
 
     /// What the whole app is set to is read with the panel as Settings has it, the language its names are written in
-    /// beside the one chosen, and every tool's answer carries it; none changes it, and a call that tries is refused.
-    func testTheAppsSettingsAreReadAndNoToolChangesThem() throws {
+    /// beside the one chosen, and every tool's answer carries it; a proposal that leaves the app out changes none of it.
+    func testTheAppsSettingsAreReadAndALayoutLeavesThem() throws {
         XCTAssertEqual(try result(MCPTools.getPanel)["app"], .object([
             "appearance": .string("system"), "matchScreen": .bool(false), "botLogos": .bool(true),
-            "language": .string("system"), "writtenIn": .string("en"),
+            "showMenuBarIcon": .bool(true), "language": .string("system"), "writtenIn": .string("en"),
             "hover": .object(["pressOptionToOpen": .bool(false), "openAtTopEdge": .bool(false),
                               "delayMs": .integer(400), "collapseDelayMs": .integer(200)]),
         ]), "the defaults, with the names in English as the tests write them")
+        XCTAssertEqual(try result(MCPTools.getPanel)["appUnsaved"], .bool(false))
 
         settings.update {
             $0.appearance = .light
             $0.appearanceFollowsScreen = true
             $0.botLogos = false
+            $0.showMenuBarIcon = false
             $0.language = .zhHans
             $0.requiresOptionToOpen = true
             $0.openImmediatelyAtTop = true
@@ -97,18 +110,17 @@ final class PanelToolsTests: PanelToolsCase {
         let saved = settings.settings
         let app: JSONValue = .object([
             "appearance": .string("light"), "matchScreen": .bool(true), "botLogos": .bool(false),
-            "language": .string("zh-Hans"), "writtenIn": .string("zh-Hans"),
+            "showMenuBarIcon": .bool(false), "language": .string("zh-Hans"), "writtenIn": .string("zh-Hans"),
             "hover": .object(["pressOptionToOpen": .bool(true), "openAtTopEdge": .bool(true),
                               "delayMs": .integer(650), "collapseDelayMs": .integer(0)]),
         ])
         XCTAssertEqual(try result(MCPTools.getPanel)["app"], app)
         XCTAssertEqual(try result(MCPTools.setPanelLayout, ["hiddenSections": .array([.string("tokens")])])["app"], app,
                        "a proposal answers with the panel as get_panel reads it")
+        XCTAssertNil(layout.appDraft, "a layout leaves the app's settings")
         XCTAssertEqual(try result(MCPTools.discardPanelDraft)["app"], app)
-        let refused = try refusal(["app": .object(["botLogos": .bool(true)])])
-        XCTAssertTrue(refused.contains("Unknown: \"app\"."), refused)
         XCTAssertEqual(settings.settings, saved)
-        XCTAssertEqual(changes, 0, "no tool changes a Settings switch")
+        XCTAssertEqual(changes, 0, "no tool writes the settings")
     }
 
     /// A window's name is how the person who looks at the panel calls the row, so it follows the application's
@@ -172,13 +184,14 @@ final class PanelToolsTests: PanelToolsCase {
     }
 
     /// An agent reads every block's widget and measure and may send them all back. Spelled out, the saved layout is
-    /// still the saved layout: nothing waits to be saved, and a default view that is saved is the default layout.
+    /// still the saved layout: nothing waits to be saved, and a default view that is saved is the default layout. A
+    /// block's own countdown is no such spelling: it holds whichever way the layout's is turned later, so it is kept.
     func testAProposalThatDrawsWhatIsSavedLeavesNoDraft() throws {
         let everyKey = JSONValue.array(["Claude", "Codex", "api:DeepSeek"].map(JSONValue.string))
         let spelled = try result(MCPTools.setPanelLayout, [
             "order": everyKey,
             "blocks": .object(["Claude": .object(["widget": .string("bar"), "measures": .array(["quota", "burn", "tokens", "cost"].map(JSONValue.string)),
-                                                  "hidden": .bool(false), "countdown": .bool(true)]),
+                                                  "hidden": .bool(false)]),
                                "api:DeepSeek": .object(["widget": .string("number")])]),
             "style": .object(["spacing": .string("regular"), "separators": .bool(true)]),
         ])
@@ -186,6 +199,9 @@ final class PanelToolsTests: PanelToolsCase {
         XCTAssertTrue(spelled["note"]?.stringValue?.contains("already saved") == true)
         XCTAssertFalse(layout.hasDraft)
         XCTAssertEqual(layout.revision, 0)
+        _ = try result(MCPTools.setPanelLayout, ["blocks": .object(["Claude": .object(["countdown": .bool(true)])])])
+        XCTAssertEqual(layout.draft, PanelLayout(blocks: ["Claude": PanelLayout.Block(countdown: true)]))
+        layout.discard()
 
         _ = try result(MCPTools.setPanelLayout, ["blocks": .object(["Codex": .object(["widget": .string("ring")])]),
                                                  "order": .array([.string("Codex"), .string("Claude")])])
@@ -310,7 +326,7 @@ final class PanelToolsTests: PanelToolsCase {
         for part in ["blocks.Claude.widget is one of \"bar\", \"ring\", \"number\", \"chart\"",
                      "blocks.Claude.measures[0]: \"speed\" is not one of \"quota\", \"burn\", \"tokens\", \"cost\"",
                      "blocks.Claude.measures[1] is a string", "blocks.Claude has no property \"hide\"",
-                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, countdown, columns, ringSize, span and period.",
+                     "blocks.Claude has no property \"measure\"; a block takes widget, measures, hidden, hiddenRows, rows, accounts, countdown, columns, ringSize, span and period.",
                      "blocks.Claude.hidden is true or false", "sections[0]: \"weather\" is not one of", "order is a list"] {
             XCTAssertTrue(names.contains(part), "\(part) — \(names)")
         }
@@ -323,7 +339,7 @@ final class PanelToolsTests: PanelToolsCase {
         }
         // Both kinds in one answer: a name that would be forgiven, and what the rest asks that the panel cannot do.
         let both = try refusal(["blocks": .object(["Claude": .object(["widget": .string("gauge")]),
-                                                   "api:DeepSeek": .object(["measures": .array([.string("cost")])])]),
+                                                   "api:DeepSeek": .object(["measures": .array([.string("tokens")])])]),
                                 "order": .array([.string("Zed")])])
         for part in ["blocks.Claude.widget is one of", "blocks.api:DeepSeek.measures[0]:", "order[0]: No block has the key \"Zed\""] {
             XCTAssertTrue(both.contains(part), "\(part) — \(both)")

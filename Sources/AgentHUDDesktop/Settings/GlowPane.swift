@@ -219,7 +219,7 @@ struct LogoQueuePreview: View {
     var body: some View {
         let agents = agents
         let items = marks ?? agents.queueItems
-        let config = LogoQueueConfig(items: items, placement: samplePlacement, settings: settings.settings)
+        let config = LogoQueueConfig(items: items, placement: samplePlacement, settings: settings.effectiveSettings)
         let strip = config.stripThickness
         let margin = GlowWindowController.logoEdgeMargin(stripThickness: strip)
         // The lip is run past the marks by the same amount the real backdrop uses, so the preview's field

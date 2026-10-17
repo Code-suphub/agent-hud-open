@@ -221,10 +221,8 @@ final class DockDraggingTests: XCTestCase {
         let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.everyAgent)
         settings.update {
             $0.screens[key] = ScreenPlacement(mode: .logos, edge: .right)
-            $0.showIslandQuota = false
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
         }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = false }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
         store.replace(report: DemoUsageProvider.report(agents: settings.agents, historyHours: UsageStore.historyHours, now: Date()))
         let hud = ScreenHUD(key: key, screen: screen, store: store, settings: settings)

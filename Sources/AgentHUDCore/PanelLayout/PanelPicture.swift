@@ -22,8 +22,9 @@ public struct PanelFit: Equatable, Sendable {
 }
 
 /// The hover panel drawn for an agent that checks how a layout looks: a screen's whole panel as the layout in effect
-/// there draws it, on the island's card in that screen's look, glass drawn as a stand-in, as PNG data. It shows no
-/// account name and no session title (`IdentityMask`).
+/// there draws it, on the island's card in that screen's look, or one agent's own panel on the card its mark opens on a
+/// dock that separates its agents, glass drawn as a stand-in, as PNG data. It shows no account name and no session title
+/// (`IdentityMask`).
 public struct PanelPicture: Equatable, Sendable {
     /// The pixels a point the picture is drawn at, unless that would make it taller than `pixelLimit`.
     public static let pointScale: Double = 2
@@ -32,7 +33,7 @@ public struct PanelPicture: Equatable, Sendable {
 
     /// The picture as PNG data.
     public let png: Data
-    /// The panel's width in points.
+    /// The panel's width in points: the whole panel's, or an agent's own (`PanelStyle.agentPanelWidth`).
     public let width: Double
     /// The panel's height, which the picture shows whole, and whether it scrolls on the main display.
     public let fit: PanelFit

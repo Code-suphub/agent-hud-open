@@ -105,7 +105,7 @@ final class HoverPreparationLifecycleTests: XCTestCase {
         fixture.enter()
         try await waitUntilAsync("the first hover starts its raster") { await gate.count == 1 }
         fixture.leave()
-        fixture.settings.update { $0.showIslandQuota = false }
+        fixture.settings.panelLayout.setSwitches { $0.quotaDetails = false }
         fixture.hud.apply(animated: false)
         fixture.enter()
         try await waitUntilAsync("the next hover starts its own raster") { await gate.count == 2 }
@@ -200,7 +200,7 @@ final class HoverPreparationLifecycleTests: XCTestCase {
         let original = fixture.expectedHeight()
         fixture.enter()
 
-        fixture.settings.update { $0.showIslandQuota = false }
+        fixture.settings.panelLayout.setSwitches { $0.quotaDetails = false }
         // The coordinator applies settings observations to every ScreenHUD through this entry point.
         fixture.hud.apply(animated: false)
         let expected = fixture.expectedHeight()
@@ -346,10 +346,8 @@ private final class HoverPreparationFixture {
             $0.openImmediatelyAtTop = false
             $0.hoverDelayMs = 1500
             $0.collapseDelayMs = 0
-            $0.showIslandQuota = true
-            $0.showIslandTokens = showsTokens
-            $0.showIslandSessions = showsSessions
         }
+        settings.panelLayout.setSwitches { $0.quotaDetails = true; $0.tokenUsage = showsTokens; $0.sessionList = showsSessions }
         // Opening still requests an account refresh; keep the explicitly installed report authoritative.
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
         let outside = CGPoint(x: screen.frame.minX + 20, y: screen.frame.minY + 20)

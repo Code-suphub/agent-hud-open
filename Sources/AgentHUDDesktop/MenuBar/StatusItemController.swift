@@ -10,8 +10,42 @@ struct MenuActions {
 
 /// Menu bar item (notch silhouette + highest % used) and its menu, a panel the app draws in the look of the screen the
 /// menu bar is on (`StatusMenuPanel`).
+///
+/// Both follow the agents a HUD shows at rest under its layout's list (`ScreenAgents`), a draft included, as the HUD
+/// draws it now. The item has one figure and one set of colours for every menu bar, so they follow the HUD of the main
+/// display, the first the system lists, which has the only menu bar while Displays have separate Spaces is off. The
+/// menu follows the HUD of the screen whose menu bar it opens from, as its look does, and reads it as it opens.
 @MainActor
 final class StatusItemController: NSObject {
+    /// A display as the menu bar follows its HUD: its key, under which its placement and its own layout are kept, and
+    /// whether it has a notch, which gives the placement its HUD draws while it keeps none of its own.
+    struct Screen: Equatable {
+        let key: String
+        let hasNotch: Bool
+
+        init(key: String, hasNotch: Bool) {
+            self.key = key
+            self.hasNotch = hasNotch
+        }
+
+        @MainActor
+        init(_ screen: NSScreen) {
+            self.init(key: ScreenIdentity.key(for: screen), hasNotch: ScreenIdentity.hasNotch(screen))
+        }
+
+        /// The main display, the first the system lists, whose HUD the item's figure and colours follow; nil while no
+        /// display is attached.
+        @MainActor
+        static var primary: Screen? { NSScreen.screens.first.map(Screen.init) }
+    }
+
+    /// What the item shows: the colours of a HUD's glow, from the levels of its parts, and its figure, the most used
+    /// window among the agents it shows whose readings show a level.
+    struct Figure: Equatable {
+        let levels: [StatusLevel]
+        let usedPct: Double?
+    }
+
     private let item: NSStatusItem
     private let store: UsageStore
     private let settings: SettingsStore
@@ -31,6 +65,8 @@ final class StatusItemController: NSObject {
     private var previousSelection: NSRange?
     /// The event that closed the menu last, so the click on the status item that closed it does not open it again.
     private var dismissingEvent: TimeInterval?
+    /// What reads the item's figure again when the displays change, which can make another display the main one.
+    private var displayObserver: NSObjectProtocol?
 
     init(store: UsageStore, settings: SettingsStore, additionalMenuItems: @escaping () -> [NSMenuItem] = { [] }) {
         self.store = store
@@ -51,27 +87,61 @@ final class StatusItemController: NSObject {
             _ = self.store.rows
             _ = self.store.pausedUntil
             _ = self.store.isAccessAllowed
-            _ = self.settings.settings.showMenuBarIcon
+            _ = self.settings.effectiveSettings.showMenuBarIcon
             _ = self.settings.settings.language
+            // The main display's layout and mode, a draft of either included, and what its HUD shows of them.
+            _ = self.figure(on: .primary)
         }, onChange: { [weak self] in
             self?.refreshButton()
         })
+        // A turn later, so that the HUDs have taken the change first and every display is known by its key again.
+        let displaysChanged: @Sendable (Notification) -> Void = { [weak self] _ in
+            Task { @MainActor in self?.refreshButton() }
+        }
+        displayObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main, using: displaysChanged)
     }
 
     // MARK: Button
 
+    /// Whether the item is in the menu bar now.
+    var showsItem: Bool { item.isVisible }
+
+    /// What the item writes beside its icon now, as `refreshButton()` last wrote it: its figure, with a space before it.
+    var title: String? { item.button?.attributedTitle.string }
+
+    /// Shows or hides the item as the app draws its settings, an agent's unsaved draft of them included: a draft that hides
+    /// it leaves its Save and Discard in the HUD's panel (`PanelLayoutStore.hasDraft(on:)`).
     func refreshButton() {
-        item.isVisible = !store.isAccessAllowed || settings.settings.showMenuBarIcon
+        item.isVisible = !store.isAccessAllowed || settings.effectiveSettings.showMenuBarIcon
         if !item.isVisible { closeMenu() }
         guard let button = item.button else { return }
-        let stops = store.isPaused || !store.isAccessAllowed ? GlowGradient.idleStops : GlowGradient.stops(levels: store.levels, light: SystemAppearance.isLight)
+        let figure = figure(on: .primary)
+        let stops = store.isPaused || !store.isAccessAllowed ? GlowGradient.idleStops
+            : GlowGradient.stops(levels: figure.levels, light: SystemAppearance.isLight)
         button.image = StatusIconRenderer.image(stops: stops)
-        let title = store.isAccessAllowed ? (store.maxUsedPct.map { " \(TokenFormat.percent($0))" } ?? " —") : " —"
+        let title = store.isAccessAllowed ? (figure.usedPct.map { " \(TokenFormat.percent($0))" } ?? " —") : " —"
         button.attributedTitle = NSAttributedString(string: title, attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular),
             .baselineOffset: 0,
         ])
         button.toolTip = AppResources.applicationName + L10n.text(" · 最高已用额度", " · highest usage")
+    }
+
+    /// What the HUD of `screen` shows of the agents at rest: the agents the layout it draws now lists, a draft included,
+    /// resolved against what it would show in the mode it draws now, a style draft included (`ScreenAgents`). Every
+    /// agent for no display.
+    func agents(on screen: Screen?) -> ScreenAgents {
+        guard let screen else { return ScreenAgents(store: store, listed: [], mode: .notch) }
+        return ScreenAgents(store: store, listed: settings.panelLayout.effective(for: screen.key).hud.agents,
+                            mode: settings.effectivePlacement(on: screen.key, hasNotch: screen.hasNotch).mode)
+    }
+
+    /// What the item shows for the HUD of `screen`: its glow's colours, as that HUD draws them at rest, and the most used
+    /// window of the agents it shows.
+    func figure(on screen: Screen?) -> Figure {
+        let agents = agents(on: screen)
+        return Figure(levels: agents.glowSegments.map(\.level), usedPct: store.view.maxUsedPct(shownBy: agents.order))
     }
 
     // MARK: Opening and closing
@@ -99,7 +169,8 @@ final class StatusItemController: NSObject {
         return event.timestamp == timestamp && event.windowNumber == buttonWindow.windowNumber
     }
 
-    /// Opens the menu under the status item, on the screen of its menu bar, in that screen's look.
+    /// Opens the menu under the status item, on the screen of its menu bar, in that screen's look and with the agents
+    /// that screen's HUD shows.
     func openMenu() {
         guard !isMenuOpen else { return }
         Task { await store.refreshAccounts() }
@@ -107,7 +178,7 @@ final class StatusItemController: NSObject {
         let look = Self.menuLook(on: screen)
         let panel = self.panel ?? makePanel(look: look)
         panel.apply(look: look)
-        let entries = menuEntries()
+        let entries = menuEntries(on: screen.map(Screen.init))
         let size = StatusMenuLayout.size(for: entries)
         let visible = screen?.visibleFrame ?? CGRect(origin: .zero, size: size)
         let anchor = item.button?.window?.frame ?? CGRect(x: visible.maxX - size.width, y: visible.maxY, width: 0, height: 0)
@@ -264,11 +335,18 @@ final class StatusItemController: NSObject {
 
     // MARK: Entries
 
-    /// The menu's lines, top to bottom: each vendor's quota rows under its name when there are several, each account's
-    /// under its header, then the balances, then the actions, the host's own between Settings and Quit.
-    func menuEntries() -> [StatusMenuEntry] {
+    /// The menu's lines on `screen`, top to bottom: each vendor's quota rows under its name when there are several, each
+    /// account's under its header, then the balances, then the actions, the host's own between Settings and Quit. The
+    /// vendors and the balances are those the screen's HUD shows at rest, in the order its layout lists them
+    /// (`agents(on:)`), a balance by its vendor as the Simple panel's items take it, and a balance's tooltip says its
+    /// estimated cost over the period its card in that screen's panel covers (`PanelLayout.costPeriod(of:)`). For no
+    /// display, every vendor and balance, and the shared layout's periods.
+    func menuEntries(on screen: Screen? = nil) -> [StatusMenuEntry] {
         var entries: [StatusMenuEntry] = []
-        let groups = store.rowGroups
+        let shown = agents(on: screen).order
+        let layout = settings.panelLayout.effective(for: screen?.key)
+        let groups = shown.arrange(store.rowGroups) { $0.vendor }
+        let balances = shown.arrange(store.enabledBilling, vendor: \.vendor)
         for (index, group) in groups.enumerated() {
             if index > 0 { entries.append(.separator) }
             if groups.count > 1 || group.rows.count > 1 {
@@ -287,18 +365,21 @@ final class StatusItemController: NSObject {
                 }
             }
         }
-        for (index, billing) in store.enabledBilling.enumerated() {
+        for (index, billing) in balances.enumerated() {
             if !groups.isEmpty || index > 0 { entries.append(.separator) }
             let balance = billing.balances.map { MoneyFormat.amount($0.total, currency: $0.currency) }.joined(separator: " / ")
             let title = (billing.billingPool == nil ? billing.vendor : billing.displayName) + L10n.text(" · 余额", " · Balance")
-            let cost = billing.estimatedCost(currency: billing.currency, during: store.statsInterval)
+            // Over the span the panel's token chart draws for the period, as the card in the panel says it; the
+            // statistics window's range never changes it.
+            let period = layout.costPeriod(of: billing)
+            let cost = billing.estimatedCost(currency: billing.currency, during: store.hudTokenInterval(period))
                 .map { MoneyFormat.amount($0, currency: billing.currency, estimated: true) } ?? "—"
             entries.append(StatusMenuEntry(
                 title: title, value: balance.isEmpty ? "—" : balance, icon: .artwork(vendor: billing.vendor),
                 weight: .agent, valueInk: Self.valueInk(store.view.level(of: billing)),
                 // A balance whose read failed says why before its cost.
                 toolTip: [store.view.assessment(of: billing).status.reason,
-                          L10n.text("费用估算 · ", "Est. cost · ") + store.statsRange.recentLabel + ": " + cost]
+                          L10n.text("费用估算 · ", "Est. cost · ") + period.range.recentLabel + ": " + cost]
                     .compactMap { $0 }.joined(separator: "\n"),
                 perform: { [weak self] in self?.actions.openStats() }))
         }

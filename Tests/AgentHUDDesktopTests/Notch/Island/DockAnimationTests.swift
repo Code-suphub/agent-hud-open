@@ -15,11 +15,9 @@ final class DockAnimationTests: XCTestCase {
             let settings = SettingsStore(defaults: defaults, defaultAgents: DemoData.agents)
             settings.update {
                 $0.screens[ScreenIdentity.key(for: screen)] = ScreenPlacement(mode: .logos, edge: edge, offset: 0.98)
-                $0.showIslandQuota = true
-                $0.showIslandTokens = false
-                $0.showIslandSessions = false
                 $0.collapseDelayMs = 5000
             }
+            settings.panelLayout.setSwitches { $0.quotaDetails = true; $0.tokenUsage = false; $0.sessionList = false }
             let store = UsageStore(provider: DemoUsageProvider(), settings: settings, accessAllowed: { false })
             store.replace(report: DemoUsageProvider.report(agents: settings.agents,
                 historyHours: UsageStore.historyHours, now: Date()))
@@ -57,7 +55,7 @@ final class DockAnimationTests: XCTestCase {
             await settle()
             assertFrame(hud.island.panel.frame, equals: opened, message: "\(edge): reopening cancels cleanup")
             try checkPositions()
-            settings.update { $0.showIslandQuota = false }
+            settings.panelLayout.setSwitches { $0.quotaDetails = false }
             hud.apply(animated: true)
             if animates {
                 assertFrame(hud.island.panel.frame, equals: opened,

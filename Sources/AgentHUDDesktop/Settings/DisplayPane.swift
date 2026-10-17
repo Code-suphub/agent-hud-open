@@ -44,8 +44,8 @@ struct DisplayPane: View {
                          metrics: ScreenMetrics(screen: selection), screen: screen,
                          look: settings.restingLook(on: screen))
             }
-            // The samples show the panel in the selected screen's look.
-            IslandPane(settings: settings, theme: theme, look: look)
+            // The samples show the panel in the selected screen's look, and the switches set its saved layout.
+            IslandPane(settings: settings, theme: theme, look: look, screen: screen)
             SettingsSection(title: L10n.text("菜单栏", "Menu bar"), theme: theme) {
                 SettingsToggleRow(
                     label: L10n.text("显示菜单栏图标", "Show menu bar icon"),

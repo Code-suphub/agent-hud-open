@@ -4,11 +4,11 @@ import XCTest
 @testable import AgentHUDCore
 
 /// The session rows and the token chart under a layout's filters, over the sample: two sessions running (Claude's and
-/// Codex's), six ended in the last day (three Claude, two Codex, one DeepSeek) and one Codex session ended before that;
-/// and what the tools read and take of them.
+/// Codex's), six ended in the last day (three Claude, two Codex, one DeepSeek) and one Codex session ended before that,
+/// or over sessions of their own where the order or the projects need them; and what the tools read and take of them.
 final class PanelToolsFiltersTests: PanelToolsCase {
     private func rows(_ sessions: PanelLayout.Sessions = PanelLayout.Sessions(), vendor: String? = nil) -> PanelSessionRows {
-        store.view.panelSessions(PanelSessionFilter(sessions), vendor: vendor)
+        store.panelSessions(PanelSessionFilter(sessions), vendor: vendor)
     }
 
     private func ids(_ rows: PanelSessionRows) -> [String] { rows.shown.map(\.id) }
@@ -109,10 +109,15 @@ final class PanelToolsFiltersTests: PanelToolsCase {
 
     func testThePanelIsReadWithItsSessionsAndTokens() throws {
         let panel = try result(MCPTools.getPanel)
+        // The sample's folders are in the home folder, written with ~; which of them are one project depends on the Git
+        // repositories this Mac keeps there, so the projects are those the sessions resolve to here.
+        let projects = SessionProject.ordered(Set(store.view.sessions.map { SessionProject($0.session) }))
+        XCTAssertFalse(projects.isEmpty)
         XCTAssertEqual(panel["sessions"], .object([
-            "limit": .integer(5), "period": .string("24h"), "agents": .array([]),
-            "states": .array(["waiting", "running", "ended"].map(JSONValue.string)),
+            "limit": .integer(5), "period": .string("day"), "sort": .string("active"), "agents": .array([]),
+            "projects": .array([]), "states": .array(["waiting", "running", "ended"].map(JSONValue.string)),
             "offeredAgents": .array(["Claude", "Codex", "DeepSeek"].map(JSONValue.string)),
+            "offeredProjects": .array(projects.map { .object(["id": .string($0.id), "name": .string($0.title)]) }),
             "shown": .integer(5), "more": .integer(3),
             "byState": .object(["waiting": .integer(0), "running": .integer(2), "ended": .integer(6)]),
         ]))
@@ -130,14 +135,16 @@ final class PanelToolsFiltersTests: PanelToolsCase {
                                                "agent": .string("Claude")])), "an id, the name the panel writes, and its agent")
     }
 
-    /// Counts and agents' names only: a session's title, project, path and id never reach an agent.
-    func testWhatIsReadOfSessionsNamesNoTitleProjectOrPath() throws {
+    /// Counts, agents' names and projects only: a session's title and id never reach an agent, and its folder only as
+    /// its project's, written with ~.
+    func testWhatIsReadOfSessionsNamesNoTitleOrIdAndFoldersOnlyAsProjects() throws {
         let text = String(decoding: try RecordCoding.encoder().encode(JSONValue.object(try result(MCPTools.getPanel))), as: UTF8.self)
         for session in store.view.sessions.map(\.session) {
-            for written in [session.task, session.terminal, session.workingDirectory].compactMap({ $0 }) {
-                XCTAssertFalse(text.contains(written), written)
-            }
+            XCTAssertFalse(text.contains(session.task), session.task)
             XCTAssertFalse(text.contains("\"\(session.id)\""), session.id)
+            let folder = try XCTUnwrap(session.workingDirectory)
+            XCTAssertFalse(text.contains(folder), "\(folder) is written with ~")
+            XCTAssertTrue(text.contains("\"\(SessionProject(session).id)\""), folder)
         }
     }
 
@@ -183,7 +190,7 @@ final class PanelToolsFiltersTests: PanelToolsCase {
         for part in ["sessions.limit is a whole number from 1 to 10.",
                      "sessions.states[0]: \"idle\" is not one of \"waiting\", \"running\", \"ended\".",
                      "sessions.states[1] is a string.", "sessions.agents is a list.",
-                     "sessions has no property \"project\"; sessions take limit, period, agents and states.",
+                     "sessions has no property \"project\"; sessions take limit, period, sort, agents, projects and states.",
                      "tokens.period is one of \"day\", \"week\", \"month\".",
                      "tokens.agents[0] is an agent's name from get_panel's tokens.offeredAgents.",
                      "tokens has no property \"model\"; tokens take period, agents and models."] {
@@ -193,6 +200,13 @@ final class PanelToolsFiltersTests: PanelToolsCase {
             XCTAssertTrue(try refusal(["sessions": .object(["limit": limit])]).contains("sessions.limit is a whole number from 1 to 10."),
                           "\(limit)")
         }
+        let named = try refusal(["sessions": .object(["sort": .string("title"), "projects": .array([.integer(1), .string("")])])])
+        for part in ["sessions.sort is one of \"active\", \"date\".", "sessions.projects[0] is a string.",
+                     "sessions.projects[1] is a project's id from get_panel's sessions.offeredProjects, or a path inside one."] {
+            XCTAssertTrue(named.contains(part), "\(part) — \(named)")
+        }
+        XCTAssertTrue(try refusal(["sessions": .object(["projects": .string("~/work/agent-hud")])])
+            .contains("sessions.projects is a list."))
         XCTAssertTrue(try refusal(["sessions": .integer(3)]).contains("sessions is an object."))
         XCTAssertTrue(try refusal(["tokens": .string("week")]).contains("tokens is an object."))
     }
@@ -219,53 +233,192 @@ final class PanelToolsFiltersTests: PanelToolsCase {
     // MARK: Periods
 
     func testThePeriodSetsHowFarBackEndedSessionsAreListed() {
-        let hour = rows(PanelLayout.Sessions(limit: 10, period: .hour))
-        XCTAssertEqual(ids(hour), ["s1", "s2", "s4", "s7", "s8", "s3"], "those running, and those ended in the last hour")
-        XCTAssertEqual(hour.counts, [.running: 2, .ended: 4], "the counts are the period's")
-        XCTAssertEqual(ids(rows(PanelLayout.Sessions(limit: 10, period: .hours2))).last, "s5")
-        XCTAssertEqual(ids(rows(PanelLayout.Sessions(limit: 10, period: .week))),
-                       ["s1", "s2", "s4", "s7", "s8", "s3", "s5", "s6", "s9"])
+        let day = rows(PanelLayout.Sessions(limit: 10))
+        XCTAssertEqual(ids(day), ["s1", "s2", "s4", "s7", "s8", "s3", "s5", "s6"], "those running, and those ended in the day")
+        let week = rows(PanelLayout.Sessions(limit: 10, period: .week))
+        XCTAssertEqual(ids(week), ["s1", "s2", "s4", "s7", "s8", "s3", "s5", "s6", "s9"])
+        XCTAssertEqual(week.counts, [.running: 2, .ended: 7], "the counts are the period's")
         XCTAssertEqual(rows(PanelLayout.Sessions(period: .week)).more, 4, "five rows of nine")
-        XCTAssertEqual(ids(rows(PanelLayout.Sessions(period: .days3, agents: ["Codex"], states: [.ended]))), ["s4", "s7", "s9"])
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(period: .week, agents: ["Codex"], states: [.ended]))), ["s4", "s7", "s9"])
     }
 
-    /// A period shorter than a day that keeps none of the day's sessions leaves them out, as a filter does; one that has
-    /// no session to leave out says there are none, as the default view does.
-    func testAPeriodThatKeepsNoneOfTheDaysSessionsSaysNoneMatch() throws {
+    /// A week whose sessions the filter leaves out says none match; a day that has no session says there are none, as
+    /// the default view does.
+    func testAWeekWhoseSessionsTheFilterLeavesOutSaysNoneMatch() throws {
         let sample = try XCTUnwrap(store.report)
-        func keep(_ kept: Set<String>) {
-            store.replace(report: UsageReport(generatedAt: sample.generatedAt, snapshots: sample.snapshots,
-                                              sessions: sample.sessions.filter { kept.contains($0.id) },
-                                              consumers: sample.consumers, usage: sample.usage))
-        }
-        keep(["s6", "s9"])
-        let hour = rows(PanelLayout.Sessions(period: .hour))
-        XCTAssertTrue(hour.shown.isEmpty)
-        XCTAssertTrue(hour.noneMatch, "s6 ended two hours ago")
-        XCTAssertEqual(ids(rows(PanelLayout.Sessions(period: .hours6))), ["s6"])
-        keep(["s9"])
-        XCTAssertFalse(rows(PanelLayout.Sessions(period: .hour)).noneMatch, "the day has no session")
-        XCTAssertFalse(rows().noneMatch)
+        store.replace(report: UsageReport(generatedAt: sample.generatedAt, snapshots: sample.snapshots,
+                                          sessions: sample.sessions.filter { $0.id == "s9" },
+                                          consumers: sample.consumers, usage: sample.usage))
+        XCTAssertTrue(rows().shown.isEmpty)
+        XCTAssertFalse(rows().noneMatch, "the day has no session")
         XCTAssertEqual(ids(rows(PanelLayout.Sessions(period: .week))), ["s9"])
         XCTAssertTrue(rows(PanelLayout.Sessions(period: .week, agents: ["Claude"])).noneMatch, "the week's session is Codex's")
     }
 
     func testThePeriodIsProposedAndToldBack() throws {
-        let panel = try result(MCPTools.setPanelLayout, ["sessions": .object(["period": .string("7d"), "limit": .integer(10)])])
+        let panel = try result(MCPTools.setPanelLayout, ["sessions": .object(["period": .string("week"), "limit": .integer(10)])])
         XCTAssertEqual(layout.draft, PanelLayout(sessions: PanelLayout.Sessions(limit: 10, period: .week)))
         let sessions = try XCTUnwrap(panel["sessions"]?.objectValue)
-        XCTAssertEqual(sessions["period"], .string("7d"))
+        XCTAssertEqual(sessions["period"], .string("week"))
         XCTAssertEqual(sessions["shown"], .integer(9))
         XCTAssertEqual(sessions["byState"], .object(["waiting": .integer(0), "running": .integer(2), "ended": .integer(7)]))
-        XCTAssertEqual(try result(MCPTools.getPanel)["layout"], .object(["sessions": .object(["limit": .integer(10), "period": .string("7d")])]))
-        for period in ["30d", "week", "1d"] {
+        XCTAssertEqual(try result(MCPTools.getPanel)["layout"],
+                       .object(["sessions": .object(["limit": .integer(10), "period": .string("week")])]))
+        // The build before's names are read from a stored layout, but a proposal of one is told the names there are.
+        for period in ["7d", "3d", "24h", "1h", "30d", "month"] {
             let sentence = try refusal(["sessions": .object(["period": .string(period)])])
-            XCTAssertTrue(sentence.contains(#"sessions.period is one of "1h", "2h", "6h", "12h", "24h", "3d", "7d"."#), sentence)
+            XCTAssertTrue(sentence.contains(#"sessions.period is one of "day", "week"."#), sentence)
         }
 
         layout.discard()
-        _ = try result(MCPTools.setPanelLayout, ["sessions": .object(["period": .string("24h")])])
+        _ = try result(MCPTools.setPanelLayout, ["sessions": .object(["period": .string("day")])])
         XCTAssertFalse(layout.hasDraft, "a day is the default view's")
+    }
+
+    // MARK: Order and projects
+
+    /// Five sessions of the sample's agents, in folders of their own: two running, one of them quiet for 20 minutes,
+    /// two ended in the day and one two days ago.
+    private func keepOwnSessions() throws {
+        let sample = try XCTUnwrap(store.report), now = DemoClock.now
+        func session(_ id: String, _ agent: String, minutesAgo: Double, running: Bool = false, in folder: String?) -> LiveSession {
+            let last = now.addingTimeInterval(-minutesAgo * 60)
+            return LiveSession(id: id, agentId: agent, task: "Task \(id)", terminal: nil, startedAt: last.addingTimeInterval(-600),
+                               endedAt: running ? nil : last, pctOfWindow: nil, tokensIn: 1, tokensOut: 1,
+                               observedAt: running ? now.addingTimeInterval(-60) : last, workingDirectory: folder,
+                               lastActivityAt: last)
+        }
+        let claude = DemoData.consumerID("Claude", "claude-opus-5-5"), codex = DemoData.consumerID("Codex", "gpt-6.1-sol")
+        store.replace(report: UsageReport(generatedAt: now, snapshots: sample.snapshots, sessions: [
+            session("r1", claude, minutesAgo: 20, running: true, in: "/agent-hud-tests/alpha"),
+            session("r2", codex, minutesAgo: 1, running: true, in: "/agent-hud-tests/beta"),
+            session("e1", claude, minutesAgo: 5, in: "/agent-hud-tests/alpha"),
+            session("e2", codex, minutesAgo: 40, in: nil),
+            session("old", codex, minutesAgo: 2 * 24 * 60, in: "/agent-hud-tests/beta"),
+        ], consumers: sample.consumers, usage: sample.usage))
+    }
+
+    func testTheDateOrderListsEverySessionByItsLastEventWhateverItsState() throws {
+        try keepOwnSessions()
+        let active = rows()
+        XCTAssertEqual(ids(active), ["r2", "r1", "e1", "e2"], "in flight first, the newest started first")
+        let date = rows(PanelLayout.Sessions(sort: .date))
+        XCTAssertEqual(ids(date), ["r2", "e1", "r1", "e2"], "by the last event, whatever the state")
+        XCTAssertEqual(date.counts, active.counts)
+        XCTAssertEqual(date.counts, [.running: 2, .ended: 2])
+
+        let two = rows(PanelLayout.Sessions(limit: 2, sort: .date))
+        XCTAssertEqual(ids(two), ["r2", "e1"])
+        XCTAssertEqual(two.more, 2, "+2 more counts r1 and e2")
+        XCTAssertEqual(two.running.map(\.id), ["r2", "r1"], "the header counts every running session the filter keeps")
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(limit: 2))), ["r2", "r1"])
+        XCTAssertEqual(rows(PanelLayout.Sessions(limit: 2)).more, 2)
+
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(sort: .date, states: [.ended]))), ["e1", "e2"])
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(limit: 10, period: .week, sort: .date))), ["r2", "e1", "r1", "e2", "old"])
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(sort: .date), vendor: "Claude")), ["e1", "r1"])
+    }
+
+    func testProjectsChooseTheRowsInTheSameOrderAndTheCountsAreBeforeThem() throws {
+        try keepOwnSessions()
+        let alpha = rows(PanelLayout.Sessions(projects: ["/agent-hud-tests/alpha"]))
+        XCTAssertEqual(ids(alpha), ["r1", "e1"])
+        XCTAssertEqual(alpha.running.map(\.id), ["r1"])
+        XCTAssertEqual(alpha.counts, [.running: 2, .ended: 2], "the counts are before the projects")
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(sort: .date, projects: ["/agent-hud-tests/alpha"]))), ["e1", "r1"])
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(projects: ["unassigned"]))), ["e2"], "the sessions of no folder")
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(projects: ["/agent-hud-tests/beta"]))), ["r2"])
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(period: .week, projects: ["/agent-hud-tests/beta"]))), ["r2", "old"])
+        let both = rows(PanelLayout.Sessions(limit: 1, projects: ["/agent-hud-tests/beta", "unassigned"]))
+        XCTAssertEqual(ids(both), ["r2"])
+        XCTAssertEqual(both.more, 1)
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(agents: ["Codex"], projects: ["/agent-hud-tests/alpha"]))), [])
+
+        let away = rows(PanelLayout.Sessions(projects: ["/agent-hud-tests/gamma"]))
+        XCTAssertTrue(away.shown.isEmpty)
+        XCTAssertTrue(away.noneMatch, "a project that has no session now matches nothing")
+        XCTAssertEqual(ids(rows(PanelLayout.Sessions(projects: ["/agent-hud-tests/alpha"]), vendor: "Claude")), ["r1", "e1"])
+        XCTAssertTrue(rows(PanelLayout.Sessions(projects: ["/agent-hud-tests/alpha"]), vendor: "Codex").noneMatch)
+    }
+
+    /// A session's project is found once for each folder a report names, and found again for the next report: a folder
+    /// that becomes a Git checkout counts as one from the report after.
+    func testAProjectIsFoundOnceAReport() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("HUD Project Cache \(UUID().uuidString)")
+            .resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let inside = folder.appendingPathComponent("Sources")
+        try FileManager.default.createDirectory(at: inside, withIntermediateDirectories: true)
+        let session = LiveSession(id: "x", agentId: DemoData.consumerID("Claude", "claude-opus-5-5"), task: "Task",
+                                  terminal: nil, startedAt: DemoClock.now, pctOfWindow: nil, tokensIn: 0, tokensOut: 0,
+                                  workingDirectory: inside.path)
+        let report = UsageReport(generatedAt: DemoClock.now, snapshots: [], sessions: [session], usage: [])
+        store.replace(report: report)
+        XCTAssertEqual(store.sessionProject(session), .directory(inside.path))
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        XCTAssertEqual(store.sessionProject(session), .directory(inside.path), "kept for the report")
+        XCTAssertEqual(store.panelSessionProjects, [.directory(inside.path)])
+        store.replace(report: report)
+        XCTAssertEqual(store.sessionProject(session), .directory(folder.path), "found again for the next")
+        XCTAssertEqual(store.sessionProject(LiveSession(id: "y", agentId: "a", task: "", terminal: nil, startedAt: DemoClock.now,
+                                                        pctOfWindow: nil, tokensIn: 0, tokensOut: 0)), .unassigned)
+    }
+
+    func testTheOrderAndTheProjectsAreReadProposedAndToldBack() throws {
+        try keepOwnSessions()
+        let read = try XCTUnwrap(try result(MCPTools.getPanel)["sessions"]?.objectValue)
+        XCTAssertEqual(read["offeredProjects"], .array([
+            .object(["id": .string("/agent-hud-tests/alpha"), "name": .string("alpha")]),
+            .object(["id": .string("/agent-hud-tests/beta"), "name": .string("beta")]),
+            .object(["id": .string("unassigned"), "name": .string("Unassigned project")]),
+        ]))
+
+        // A path inside a project names it, and the layout lists it by its id.
+        let panel = try result(MCPTools.setPanelLayout, ["sessions": .object([
+            "sort": .string("date"), "projects": .array([.string("unassigned"), .string("/agent-hud-tests/alpha/Sources/App")]),
+        ])])
+        XCTAssertEqual(layout.draft, PanelLayout(sessions: PanelLayout.Sessions(sort: .date, projects: ["/agent-hud-tests/alpha",
+                                                                                                         "unassigned"])))
+        let sessions = try XCTUnwrap(panel["sessions"]?.objectValue)
+        XCTAssertEqual(sessions["sort"], .string("date"))
+        XCTAssertEqual(sessions["projects"], .array([.string("/agent-hud-tests/alpha"), .string("unassigned")]))
+        XCTAssertEqual(sessions["shown"], .integer(3), "e1, r1 and e2")
+        XCTAssertEqual(sessions["more"], .integer(0))
+        let note = try XCTUnwrap(panel["note"]?.stringValue)
+        XCTAssertTrue(note.contains("\"/agent-hud-tests/alpha/Sources/App\" names the project \"/agent-hud-tests/alpha\", which "
+                                    + "sessions.projects lists by that id."), note)
+        XCTAssertEqual(changes, 0, "a proposal writes no setting")
+
+        // What get_panel returned, sent back, changes nothing; the default spelled out is the default layout.
+        let revision = layout.revision
+        let arguments = try XCTUnwrap(try result(MCPTools.getPanel)["layout"]?.objectValue)
+        XCTAssertEqual(arguments["sessions"], .object(["sort": .string("date"),
+                                                      "projects": .array([.string("/agent-hud-tests/alpha"), .string("unassigned")])]))
+        _ = try result(MCPTools.setPanelLayout, arguments)
+        XCTAssertEqual(layout.draft?.sessions, PanelLayout.Sessions(sort: .date, projects: ["/agent-hud-tests/alpha", "unassigned"]))
+        XCTAssertEqual(layout.revision, revision, "the layout that was read, sent back, keeps the draft as it is")
+        layout.discard()
+        _ = try result(MCPTools.setPanelLayout, ["sessions": .object(["sort": .string("active"), "projects": .array([])])])
+        XCTAssertFalse(layout.hasDraft)
+    }
+
+    func testAProjectWithNoSessionsIsRefusedUnlessTheLayoutHoldsIt() throws {
+        try keepOwnSessions()
+        let sentence = try refusal(["sessions": .object(["projects": .array([.string("/agent-hud-tests/gamma"), .string("beta")])])])
+        XCTAssertTrue(sentence.contains("sessions.projects[0]: \"/agent-hud-tests/gamma\" is no project's id from get_panel's "
+                                        + "sessions.offeredProjects, nor a path inside one. Projects with sessions now: "
+                                        + "\"/agent-hud-tests/alpha\", \"/agent-hud-tests/beta\", \"unassigned\"."), sentence)
+        XCTAssertTrue(sentence.contains("sessions.projects[1]: \"beta\" is a project's name, not its id. Name it by its id: "
+                                        + "\"/agent-hud-tests/beta\"."), sentence)
+
+        // Saved while it had sessions; the layout that was read can be sent back with it.
+        layout.propose(PanelLayout(sessions: PanelLayout.Sessions(projects: ["/agent-hud-tests/gamma", "/agent-hud-tests/alpha"])))
+        layout.save()
+        var arguments = try XCTUnwrap(try result(MCPTools.getPanel)["layout"]?.objectValue)
+        arguments["tokens"] = .object(["period": .string("month")])
+        _ = try result(MCPTools.setPanelLayout, arguments)
+        XCTAssertEqual(layout.draft?.sessions.projects, ["/agent-hud-tests/alpha", "/agent-hud-tests/gamma"])
+        XCTAssertEqual(layout.draft?.tokens.period, .month)
     }
 
     // MARK: Models
@@ -331,7 +484,7 @@ final class PanelToolsFiltersTests: PanelToolsCase {
             "Claude": .object(["widget": .string("chart"), "period": .string("year")]),
         ])])
         for part in [#"blocks.Codex.period: The "ring" widget of "Codex" draws no chart. period applies to the "chart" widget, "#
-                        + #"whose bars cover it, and to API balances, whose estimated cost covers it."#,
+                        + #"whose bars cover it, and to API balances, whose estimated cost, burn rate and chart cover it."#,
                      #"blocks.Claude.period is one of "day", "week", "month"."#] {
             XCTAssertTrue(refused.contains(part), "\(part) — \(refused)")
         }

@@ -22,7 +22,7 @@ final class IslandHoverTests: XCTestCase {
             AgentDescriptor(id: "codex", vendor: "Codex", model: L10n.windowWeekly, source: "Test", enabled: true),
         ]
         settings.updateAgents { _ in agents }
-        settings.update { $0.showIslandQuota = true; $0.showIslandTokens = false; $0.showIslandSessions = false; $0.showResetCountdown = true }
+        settings.panelLayout.setSwitches { $0.quotaDetails = true; $0.tokenUsage = false; $0.sessionList = false; $0.resetCountdown = true }
         let snapshots = agents.enumerated().map { index, agent in
             UsageSnapshot(agentId: agent.id, remainingPct: [67, 80, 60, 0][index],
                           resetAt: now.addingTimeInterval(index == 0 ? 5 * 3600 : 24 * 3600),

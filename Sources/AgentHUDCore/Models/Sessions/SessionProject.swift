@@ -23,8 +23,32 @@ public enum SessionProject: Hashable, Sendable {
         path.map { ($0 as NSString).abbreviatingWithTildeInPath } ?? L10n.text("未归属项目", "Unassigned project")
     }
 
+    /// The id of the sessions of no folder, which no folder written with ~ or from the root is.
+    static let unassignedID = "unassigned"
+
+    /// How the hover panel's layout names the project (`PanelLayout.Sessions.projects`) and `get_panel` gives it: its
+    /// folder written with ~, as `label` writes it, the same in every language; `unassigned` for the sessions of none.
+    public var id: String {
+        path.map { ($0 as NSString).abbreviatingWithTildeInPath } ?? Self.unassignedID
+    }
+
+    /// The project an id names: the folder it writes, with ~ expanded, or the sessions of none for `unassigned`.
+    public init(id: String) {
+        self = id == Self.unassignedID ? .unassigned : .directory((id as NSString).expandingTildeInPath)
+    }
+
+    /// Projects in the order the statistics window's Sessions page and the hover panel's layout offer them: by label,
+    /// as Finder orders names, and the sessions of no folder last.
+    public static func ordered(_ projects: some Sequence<SessionProject>) -> [SessionProject] {
+        projects.sorted {
+            if $0 == .unassigned { return false }
+            if $1 == .unassigned { return true }
+            return $0.label.localizedStandardCompare($1.label) == .orderedAscending
+        }
+    }
+
     /// Read Git's own pointers instead of inferring a repository from a folder name or a worktree location.
-    private static func directory(for path: String) -> String {
+    static func directory(for path: String) -> String {
         var directory = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
         while true {
             let marker = directory.appendingPathComponent(".git")

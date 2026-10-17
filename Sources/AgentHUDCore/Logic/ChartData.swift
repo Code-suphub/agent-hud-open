@@ -90,6 +90,19 @@ public struct TokenColumn: Hashable, Sendable, Identifiable {
     public var total: Int { tokens.reduce(0, +) }
 }
 
+/// One bar of an API account's estimated cost in one currency, at its position on the shared time axis.
+public struct CostColumn: Hashable, Sendable, Identifiable {
+    public let interval: DateInterval
+    /// The estimated cost of the requests recorded in the column; nil where one of them had no price in the currency.
+    public let amount: Decimal?
+    public var id: Date { interval.start }
+
+    public init(interval: DateInterval, amount: Decimal?) {
+        self.interval = interval
+        self.amount = amount
+    }
+}
+
 /// Pure transforms from usage buckets to drawable series.
 public enum ChartData {
     /// Sums 15-minute buckets into local quarter-hour, hour or day columns. A bucket counts when it overlaps the range,
@@ -117,6 +130,30 @@ public enum ChartData {
         return values.enumerated().map { index, tokens in
             TokenColumn(interval: periods[index], tokens: tokens)
         }
+    }
+
+    /// Sums an API account's 15-minute costs in `currency` into the columns `tokenBars` lays the same interval out in,
+    /// counting a bucket that overlaps the interval in the column its start falls in, as the token chart counts tokens,
+    /// so the columns add up to `APIBilling.estimatedCost(currency:during:)`. A column holding a bucket without a price
+    /// in the currency has no amount; an empty one keeps its place at zero.
+    public static func costBars(costs: [CostBucket], currency: String, interval: DateInterval, bucketSize: TokenBucketSize,
+                                calendar: Calendar = .current) -> [CostColumn] {
+        let periods = periods(interval: interval, bucketSize: bucketSize, calendar: calendar)
+        let dayIndices = bucketSize == .day1
+            ? Dictionary(uniqueKeysWithValues: periods.enumerated().map { ($0.element.start, $0.offset) }) : [:]
+        var amounts: [Decimal?] = Array(repeating: 0, count: periods.count)
+        for bucket in costs where bucket.overlaps(interval) {
+            guard let first = periods.first else { continue }
+            let start = max(bucket.start, first.start)
+            let column = bucketSize == .day1 ? dayIndices[calendar.startOfDay(for: start)] ?? 0
+                : min(periods.count - 1, Int(start.timeIntervalSince(first.start) / bucketSize.duration))
+            guard let amount = bucket.amounts[currency] else {
+                amounts[column] = nil
+                continue
+            }
+            amounts[column] = amounts[column].map { $0 + amount }
+        }
+        return zip(periods, amounts).map { CostColumn(interval: $0, amount: $1) }
     }
 
     private static func periods(interval: DateInterval, bucketSize: TokenBucketSize, calendar: Calendar) -> [DateInterval] {

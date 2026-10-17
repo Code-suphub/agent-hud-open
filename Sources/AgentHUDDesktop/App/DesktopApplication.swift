@@ -93,15 +93,18 @@ public final class DesktopApplication {
         HotKeyCenter.shared.register(id: 1, keyCode: HotKeyCenter.keyH, modifiers: HotKeyCenter.commandOption) { [weak self] in
             self?.toggleGlow()
         }
+        // The app's Appearance, an agent's unsaved draft of it included, reaches every window that does not match its
+        // screen.
         trackChanges({ [weak self] in
-            self?.settings.settings.appearance
+            self?.settings.effectiveSettings.appearance
         }, onChange: { [weak self] in self?.applyAppearance() })
         // Under Match screen a screen's new look, its style draft's included, reaches the windows on that screen. The
-        // settings and the style drafts (any one of them read reads them all) are read apart from the displays as well,
-        // so the watch is armed with no display attached too; a window whose look has not changed is left as it is.
+        // settings with the app's draft and the style drafts (any one of them read reads them all) are read apart from
+        // the displays as well, so the watch is armed with no display attached too; a window whose look has not changed
+        // is left as it is.
         trackChanges({ [weak self] in
             guard let self else { return }
-            _ = self.settings.settings
+            _ = self.settings.effectiveSettings
             _ = self.settings.panelLayout.styleDraft(of: "")
             _ = NSScreen.screens.map { self.settings.windowLook(on: $0) }
         }, onChange: { [weak self] in self?.refreshLooks() })
@@ -174,11 +177,12 @@ public final class DesktopApplication {
         if options.toolChannel != .never {
             // A demo shares the data directory with the real copy, so it takes the tool calls only when asked to; any
             // other launch takes them while the switch in Settings → Experimental is on. A screen's panel is drawn and
-            // measured as that display's island draws it, off screen; the shared layout as the main display's.
-            let renderer = { @MainActor [weak self] (scope: PanelLayoutScope) -> PanelPictureRenderer? in
+            // measured as that display's island draws it, off screen; the shared layout as the main display's. One agent's
+            // own panel is drawn as the card its mark opens on that display's dock, in its look.
+            let renderer = { @MainActor [weak self] (scope: PanelLayoutScope, agent: String?) -> PanelPictureRenderer? in
                 guard let self else { return nil }
                 return PanelPictureRenderer(store: self.store, display: self.notch?.panelDisplay(for: scope.screenKey) ?? .main,
-                                            screen: scope.screenKey)
+                                            screen: scope.screenKey, agent: agent)
             }
             // A screen's resting HUD is drawn as Settings previews it, off screen, with that display's notch.
             let hud = { @MainActor [weak self] (key: String) -> HUDPicture? in
@@ -189,7 +193,8 @@ public final class DesktopApplication {
                                           metrics: ScreenMetrics(screen: display)).picture()
             }
             let tools = PanelTools(store: store, screens: { [weak self] in self?.notch?.panelScreens ?? [] },
-                                   picture: { renderer($0)?.picture() }, fit: { renderer($0)?.fit() }, hud: hud)
+                                   picture: { renderer($0, nil)?.picture() }, fit: { renderer($0, nil)?.fit() }, hud: hud,
+                                   agentPicture: { renderer(.screen($0), $1)?.picture() })
             let channel = AgentToolsChannel(channel: MCPAppChannel { tools.answer($0) }, settings: settings, mode: options.toolChannel)
             toolChannel = channel
             channel.start()
@@ -320,7 +325,7 @@ public final class DesktopApplication {
 
     private func applyAppearance() {
         // With Match screen on, each window and the menu take their screen's over this (`WindowLook`).
-        switch settings.settings.appearance {
+        switch settings.effectiveSettings.appearance {
         case .system: NSApp.appearance = nil
         case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
         case .light: NSApp.appearance = NSAppearance(named: .aqua)

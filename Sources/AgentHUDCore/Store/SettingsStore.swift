@@ -10,9 +10,10 @@ public final class SettingsStore {
     public private(set) var agents: [AgentDescriptor]
     public private(set) var hasCompletedOnboarding: Bool
     /// The hover panel's layouts, the shared one and each screen's own, kept in the same defaults under their own key,
-    /// and each screen's style draft. They change apart from the settings and the agent list: `onChange` hears nothing
-    /// of them, so a layout change never wakes collection. Only a person's Save, revert or reset of a screen's version
-    /// writes its style into the settings, as one settings change.
+    /// each screen's style draft and the app's draft of its own settings. They change apart from the settings and the
+    /// agent list: `onChange` hears nothing of them, so a layout change never wakes collection. Only a person's Save,
+    /// revert or reset of a screen's version writes its style into the settings, as one settings change, and only a
+    /// person's Save writes the app's draft.
     public let panelLayout: PanelLayoutStore
 
     public enum Change { case settings, agents, discovery }
@@ -37,7 +38,9 @@ public final class SettingsStore {
     public init(defaults: UserDefaults = .standard, defaultAgents: [AgentDescriptor] = []) {
         self.defaults = defaults
         let decoder = JSONDecoder()
-        let preferences = defaults.data(forKey: Keys.settings).flatMap { try? decoder.decode(Settings.self, from: $0) } ?? Settings()
+        let stored = defaults.data(forKey: Keys.settings)
+        let decoded = stored.flatMap { try? decoder.decode(Settings.self, from: $0) }
+        let preferences = decoded ?? Settings()
         settings = preferences
         if let data = defaults.data(forKey: Keys.agents), let stored = try? decoder.decode([AgentDescriptor].self, from: data), !stored.isEmpty {
             // Only seeded placeholders are unconnected: a provider reports the rows it reads, connected.
@@ -49,6 +52,18 @@ public final class SettingsStore {
         panelLayout = PanelLayoutStore(defaults: defaults)
         // A screen's style draft is drawn over these settings, and a person's Save writes it into them.
         panelLayout.owner = self
+        // The Expanded panel's switches were settings until they joined the panel's layouts. Those an earlier version
+        // kept are carried into every saved layout once, and the settings are written again without them: read whole,
+        // as this version writes them; otherwise with every other field as it was written, which a person's own change
+        // replaces, as before.
+        if let switches = PanelSwitches.stored(in: stored) {
+            panelLayout.carry(switches)
+            if decoded != nil {
+                persist(preferences, key: Keys.settings)
+            } else if let rest = PanelSwitches.leftOut(of: stored) {
+                defaults.set(rest, forKey: Keys.settings)
+            }
+        }
         let normalized = applyingAccountVisibility(to: agents)
         if normalized != agents {
             agents = normalized

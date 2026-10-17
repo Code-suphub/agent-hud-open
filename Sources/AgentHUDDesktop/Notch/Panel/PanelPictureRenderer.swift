@@ -27,7 +27,9 @@ private struct PictureRedaction: ViewModifier {
 /// The hover panel drawn off screen for an agent that checks how a layout looks, and measured the same way for
 /// `get_panel`: one screen's whole panel as the layout in effect there draws it, a draft included, at the width the
 /// island gives it and with that display's insets and look, on the island's card with its rounded corners. The shared
-/// layout is drawn with the main display's insets and look.
+/// layout is drawn with the main display's insets and look. Given an agent, it draws that agent's own panel instead,
+/// the card a click on the agent's mark opens beside it on a dock that separates its agents: at the layout's
+/// `agentPanelWidth`, with the insets of a card that keeps no strip clear and its corners, in the display's look.
 ///
 /// It is the panel's own view in a hosting view that is never put in a window, measured the way the island measures
 /// it before opening: nothing opens, nothing shows on screen and no read starts. It draws the panel's content alone,
@@ -53,21 +55,31 @@ struct PanelPictureRenderer {
     let display: Display
     /// The key of the screen whose layout is drawn; nil draws the shared layout.
     var screen: String? = nil
+    /// The vendor whose own panel is drawn, as a dock that separates its agents opens it beside the agent's mark; nil
+    /// draws the whole panel.
+    var agent: String? = nil
     /// The tallest picture drawn, in pixels.
     var pixelLimit = PanelPicture.pixelLimit
 
-    /// The whole panel's width, which the island gives it: the width of the layout drawn (`PanelStyle.panelWidth`), or on
-    /// a side dock the width that keeps the content at its narrowest (`HoverPanelView.width(_:insets:)`).
+    /// The panel's width, which the island gives it: the width of the layout drawn (`PanelStyle.panelWidth`), or on a
+    /// side dock the width that keeps the content at its narrowest (`HoverPanelView.width(_:insets:)`); an agent's own
+    /// panel's, 100 points narrower and never below 440 (`PanelStyle.agentPanelWidth`), as the card beside a mark is.
     var width: CGFloat {
-        HoverPanelView.width(CGFloat(store.settings.panelLayout.effective(for: screen).style.panelWidth), insets: display.insets)
+        let style = store.settings.panelLayout.effective(for: screen).style
+        guard agent == nil else { return CGFloat(style.agentPanelWidth) }
+        return HoverPanelView.width(CGFloat(style.panelWidth), insets: insets)
     }
+
+    /// The room the content keeps from the card's edges: the display's, or on an agent's own card, which floats beside
+    /// its mark and covers no strip, a detached card's (`IslandRootView.detachedInsets`).
+    var insets: EdgeInsets { agent == nil ? display.insets : IslandRootView.detachedInsets }
 
     /// The panel's height as the island opens it, at least 80 points, the tallest the display lets it open, and the
     /// width its content is laid out in there.
     func fit() -> PanelFit {
         let natural = IslandWindowController.naturalHeight(of: panel(masked: false))
         return PanelFit(height: Double(max(80, natural.rounded())), maximumHeight: Double(display.maximumHeight),
-                        contentWidth: Double(width - display.insets.leading - display.insets.trailing))
+                        contentWidth: Double(width - insets.leading - insets.trailing))
     }
 
     /// The whole panel as a PNG, at `PanelPicture.pointScale` pixels a point or at the scale that keeps it within
@@ -101,20 +113,24 @@ struct PanelPictureRenderer {
         return PanelPicture(png: png, width: Double(size.width), fit: fit, scale: scale)
     }
 
-    /// The panel's own view as the island draws the whole of it, in the display's look, without an alert or a refresh
-    /// error.
+    /// The panel's own view as the island draws the whole of it, or the agent's own, in the display's look, without an
+    /// alert or a refresh error.
     func panel(masked: Bool) -> some View {
-        HoverPanelView(store: store, onOpenStats: {}, insets: display.insets, showsRefreshError: false, screen: screen)
+        HoverPanelView(store: store, onOpenStats: {}, insets: insets, focusVendor: agent, showsRefreshError: false,
+                       screen: screen)
             .frame(width: width, alignment: .top)
             .environment(\.masksIdentity, masked)
             .hudLook(display.look)
     }
 
-    /// The panel on the island's card: the look's surface, rounded on every corner as the open island is at its foot.
-    /// Nothing is behind a picture to show through glass, so glass is drawn as its stand-in, the look's tint, over the
-    /// backdrop the HUD's own pictures have (`HUDPictureRenderer.backdrop`).
+    /// The panel on the island's card: the look's surface, rounded on every corner as the open island is at its foot,
+    /// or as an agent's whole card is beside its mark (`ScreenHUD.detachedRadius(height:full:bubble:)`). Nothing is
+    /// behind a picture to show through glass, so glass is drawn as its stand-in, the look's tint, over the backdrop the
+    /// HUD's own pictures have (`HUDPictureRenderer.backdrop`).
     func card(masked: Bool, height: CGFloat) -> some View {
-        let shape = RoundedRectangle(cornerRadius: IslandController.expandedRadius, style: .continuous)
+        let radius = agent == nil ? IslandController.expandedRadius
+            : ScreenHUD.detachedRadius(height: height, full: true, bubble: false)
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         let look = display.look
         return panel(masked: masked)
             .frame(height: height, alignment: .top)

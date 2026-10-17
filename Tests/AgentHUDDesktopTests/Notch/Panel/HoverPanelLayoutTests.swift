@@ -16,11 +16,9 @@ final class HoverPanelLayoutTests: XCTestCase {
         let settings = SettingsStore(defaults: defaults, defaultAgents: [agent])
         settings.update {
             $0.screens[ScreenIdentity.key(for: screen)] = ScreenPlacement(mode: .notch)
-            $0.showIslandQuota = false
-            $0.showIslandTokens = false
-            $0.showIslandSessions = true
             $0.collapseDelayMs = 5000
         }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = true }
         let now = Date()
         let session = LiveSession(id: "question-height-session", agentId: agent.id, task: "Pick a destination", terminal: "proj",
                                   startedAt: now, pctOfWindow: nil, tokensIn: 100, tokensOut: 20, observedAt: now)
@@ -101,11 +99,7 @@ final class HoverPanelLayoutTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: domain) }
         let agent = AgentDescriptor(id: "panel-model", vendor: "Codex", model: "Test", source: "Test", enabled: true)
         let settings = SettingsStore(defaults: defaults, defaultAgents: [agent])
-        settings.update {
-            $0.showIslandQuota = false
-            $0.showIslandTokens = false
-            $0.showIslandSessions = true
-        }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false; $0.tokenUsage = false; $0.sessionList = true }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings), now = Date()
         let available = LiveSession(id: "available-session", agentId: agent.id, task: "Short task", terminal: "proj",
                                     startedAt: now.addingTimeInterval(-60), pctOfWindow: nil, tokensIn: 1_000, tokensOut: 500,
@@ -192,11 +186,7 @@ final class HoverPanelLayoutTests: XCTestCase {
             AgentDescriptor(id: "quota-\($0)", vendor: "Claude", model: "Quota \($0)", source: "Test", enabled: true)
         }
         let settings = SettingsStore(defaults: defaults, defaultAgents: agents)
-        settings.update {
-            $0.showIslandQuota = true
-            $0.showIslandTokens = false
-            $0.showIslandSessions = false
-        }
+        settings.panelLayout.setSwitches { $0.quotaDetails = true; $0.tokenUsage = false; $0.sessionList = false }
         let store = UsageStore(provider: DemoUsageProvider(), settings: settings)
         let now = Date()
         store.replace(report: UsageReport(generatedAt: now, snapshots: agents.map {
@@ -253,7 +243,7 @@ final class HoverPanelLayoutTests: XCTestCase {
 
         // SwiftUI updates the content while the window remains capped. Its preference must still report the
         // shorter natural height, so the owner can shrink the window instead of retaining an empty viewport.
-        settings.update { $0.showIslandQuota = false }
+        settings.panelLayout.setSwitches { $0.quotaDetails = false }
         try await waitUntil("shorter content reports a height below the cap", hosting: hosting) {
             observation.value > 0 && observation.value < cap - 100
         }

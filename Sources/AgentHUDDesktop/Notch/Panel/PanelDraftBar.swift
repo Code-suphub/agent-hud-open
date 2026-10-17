@@ -1,11 +1,13 @@
 import SwiftUI
 import AgentHUDCore
 
-/// Says that the panel shows a layout an agent proposed and nobody has saved, or that its screen's resting HUD shows a
-/// style an agent proposed, and lets a person keep it or drop it. It sits above the footer, outside the scrolling
-/// content, for as long as the draft waits. It acts on the document the panel draws (`PanelLayoutStore.draftScope(on:)`),
-/// its screen's own draft or the shared draft, which shows its bar on every screen that uses it, and on the screen's
-/// style draft, so one Save keeps both as one version.
+/// Says that the panel shows a layout an agent proposed and nobody has saved, that its screen's resting HUD shows a style
+/// an agent proposed, or that the app draws its own settings as an agent proposed them, and lets a person keep it or drop
+/// it. It sits above the footer, outside the scrolling content, for as long as the draft waits. It acts on the document
+/// the panel draws (`PanelLayoutStore.draftScope(on:)`), its screen's own draft or the shared draft, which shows its bar
+/// on every screen that uses it, on the screen's style draft, so one Save keeps both as one version, and on the app's
+/// draft, which shows the bar on every screen, so that a draft that hides the menu-bar icon still has its Save and
+/// Discard on the HUD.
 struct PanelDraftBar: View {
     let layout: PanelLayoutStore
     /// The key of the screen whose panel this is; nil for the shared layout's.
@@ -13,10 +15,12 @@ struct PanelDraftBar: View {
     @Environment(\.hudTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// What waits: a layout, with or without a style, or a style alone.
+    /// What waits: a layout, with or without a style, a style alone, or the app's settings alone; the note says when the
+    /// app's settings wait beside a layout or a style.
     private var title: String {
-        layout.draftScope(on: screen) == nil ? L10n.text("HUD 样式未保存", "Unsaved HUD style")
-            : L10n.text("布局未保存", "Unsaved layout")
+        if layout.draftScope(on: screen) != nil { return L10n.text("布局未保存", "Unsaved layout") }
+        if layout.hasStyleDraft(screen) { return L10n.text("HUD 样式未保存", "Unsaved HUD style") }
+        return L10n.text("应用设置未保存", "Unsaved app settings")
     }
 
     var body: some View {
@@ -62,12 +66,17 @@ struct PanelDraftBar: View {
         .accessibilityLabel(title)
     }
 
-    /// When the draft goes, and for a screen's own draft or a style alone that it is this display's alone; `short` where
-    /// `full` does not fit on one line.
+    /// When the draft goes, and for a screen's own draft or a style alone that it is this display's alone, or that the
+    /// app's settings, every display's, wait beside it; `short` where `full` does not fit on one line.
     private var note: (full: String, short: String) {
+        let restart = L10n.text("重启后丢弃", "Dropped on restart")
+        if layout.appDraft != nil {
+            guard layout.draftScope(on: screen) != nil || layout.hasStyleDraft(screen) else { return (restart, restart) }
+            return (L10n.text("含应用设置，重启后丢弃", "With app settings, dropped on restart"),
+                    L10n.text("含应用设置", "With app settings"))
+        }
         switch layout.draftScope(on: screen) {
         case .shared?:
-            let restart = L10n.text("重启后丢弃", "Dropped on restart")
             return (restart, restart)
         case .screen?, nil:
             return (L10n.text("仅此显示器，重启后丢弃", "This display only, dropped on restart"),

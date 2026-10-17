@@ -301,6 +301,70 @@ final class PanelPictureRendererTests: XCTestCase {
         XCTAssertEqual(rep.size.height, CGFloat(height), accuracy: 0.5, "still the panel's size in points")
     }
 
+    // MARK: One agent's own panel
+
+    /// One agent's own panel is drawn as the card a click on its mark opens beside it on a dock that separates its agents:
+    /// measured as the island measures that card before it opens, at the layout's `agentPanelWidth` inside a detached
+    /// card's insets, whatever the display's dock keeps clear, on a card with the rounded corners of an agent's card,
+    /// and showing that agent alone, its account's name masked.
+    func testAnAgentsOwnPanelIsDrawnAsTheCardItsMarkOpens() throws {
+        var claude = renderer
+        claude.agent = "Claude"
+        XCTAssertEqual(claude.width, 440)
+        XCTAssertEqual(claude.insets, IslandRootView.detachedInsets)
+        let fit = claude.fit()
+        // The island's own measure of Claude's whole card on a dock that separates its agents, after a click on its mark.
+        var root = IslandRootView(store: store, isOpen: true, collapsedSize: CGSize(width: 120, height: 36), collapsedTopRadius: 0,
+                                  collapsedBottomRadius: 0, look: .standard, lightBorder: false, onOpenStats: {})
+        root.hidesSilhouette = true
+        root.separatesAgents = true
+        root.focusVendor = "Claude"
+        root.pinned = true
+        let island = IslandWindowController(frame: CGRect(x: -20_000, y: -20_000, width: 600, height: 400), rootView: root)
+        XCTAssertEqual(fit.height, Double(max(80, island.contentHeight(for: root).rounded())),
+                       "measured as the island measures an agent's card before it opens")
+        XCTAssertEqual(fit.contentWidth, Double(HoverPanelView.narrowestContentWidth))
+        XCTAssertEqual(fit.maximumHeight, 2_000)
+        XCTAssertLessThan(fit.height, renderer.fit().height - 20, "Claude's own panel is shorter than every agent's")
+        let side = PanelPictureRenderer(store: store, display: .init(insets: EdgeInsets(top: 14, leading: 155, bottom: 14, trailing: 18),
+                                                                     maximumHeight: 2_000, look: .standard), agent: "Claude")
+        XCTAssertEqual(side.width, 440, "the card floats beside the mark and keeps no strip clear")
+        XCTAssertEqual(side.fit(), fit)
+
+        let picture = try XCTUnwrap(claude.picture())
+        XCTAssertEqual(picture.width, 440)
+        XCTAssertEqual(picture.fit, fit)
+        let rep = try bitmap(picture)
+        XCTAssertEqual(rep.pixelsWide, 880)
+        XCTAssertEqual(rep.pixelsHigh, Int(fit.height * 2))
+        XCTAssertEqual(rep.colorAt(x: 0, y: 0)?.alphaComponent ?? 1, 0, accuracy: 0.01, "the card's corner is round")
+        XCTAssertEqual(rep.colorAt(x: rep.pixelsWide - 1, y: rep.pixelsHigh - 1)?.alphaComponent ?? 1, 0, accuracy: 0.01)
+        let read = try text(of: picture)
+        XCTAssertTrue(read.contains("Claude"), read)
+        XCTAssertFalse(read.contains("Spark"), "nothing of Codex:\n\(read)")
+        XCTAssertFalse(read.contains("Personal"), "Claude's account is masked:\n\(read)")
+        XCTAssertTrue(try text(of: try XCTUnwrap(claude.draw(masked: false))).contains("Personal"), "and named unmasked")
+    }
+
+    /// An agent's own panel takes the width the layout drawn gives it, the screen's own or the shared one, a draft
+    /// included, and shows that layout's draft with its bar, which says This display only for a screen's own.
+    func testAnAgentsOwnPanelIsDrawnInTheLayoutAndWidthOfItsScreen() throws {
+        let layout = store.settings.panelLayout
+        layout.propose(PanelLayout(style: PanelStyle(width: 700)))
+        var claude = renderer
+        claude.agent = "Claude"
+        XCTAssertEqual(claude.width, 600, "the draft's width less 100")
+        XCTAssertEqual(try bitmap(try XCTUnwrap(claude.picture())).pixelsWide, 1_200)
+
+        layout.propose(.own(PanelLayout(blocks: ["Claude": PanelLayout.Block(widget: .ring)], style: PanelStyle(width: 480))),
+                       for: "screen-b")
+        claude.screen = "screen-b"
+        XCTAssertEqual(claude.width, 440, "never below 440")
+        let read = try text(of: try XCTUnwrap(claude.picture()))
+        XCTAssertTrue(read.contains("This display only"), "with the bar of the screen's own draft:\n\(read)")
+        XCTAssertFalse(read.contains("Spark"), read)
+    }
+
     // MARK: In a look
 
     /// The picture is drawn in the display's look. In the light one the card is the light surface where the standard
