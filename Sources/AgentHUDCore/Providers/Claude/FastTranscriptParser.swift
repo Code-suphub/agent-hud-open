@@ -4,16 +4,20 @@ import Foundation
 /// line as JSON it extracts only the fields the accumulator needs with `memchr`/`memmem` searches. The small
 /// `usage` object is the only piece handed to `JSONSerialization`.
 ///
-/// Claude Code puts `message.role`/`message.id`/`model` at the start of a line and `stop_reason`, `usage`,
+/// Claude Code puts `message.role`/`message.id` at the start of a line and `stop_reason`, `usage`,
 /// `requestId`, `timestamp` at the end, with the (possibly huge) message content in between. Early keys are
 /// searched in a bounded prefix and late keys backwards, so a 500 KB tool result costs almost nothing.
 /// Current builds write `type`, `cwd` and `sessionId` after the message; older builds wrote them first.
+/// A message that writes its content before its own fields keeps `role` and `model` after the content, out of the
+/// line's prefix; the usage object, which follows them, is what the search is anchored on.
 public enum FastTranscriptParser {
     private static let prefixLength = 2048
     /// How much of an assistant message is kept. Readers truncate further; this only bounds the work of reading it.
     static let messageLength = 2048
     /// Current builds write `entrypoint`, `cwd`, `sessionId` and `version` after the message, close to the end.
     private static let tailLength = 2048
+    /// How far back from the usage object the message's own `role` and `model` keys are looked for.
+    private static let messageFieldSearchLength = 8 * 1024
 
     private static let timestampKey = Array("\"timestamp\":\"".utf8)
     private static let assistantRoleMarker = Array("\"role\":\"assistant\"".utf8)
@@ -29,6 +33,7 @@ public enum FastTranscriptParser {
     private static let stopReasonKey = Array("\"stop_reason\":".utf8)
     private static let usageKey = Array("\"usage\":{".utf8)
     private static let modelKey = Array("\"model\":\"".utf8)
+    private static let roleKey = Array("\"role\":\"".utf8)
     private static let messageIdKey = Array("\"message\":{\"id\":\"".utf8)
     private static let fallbackIdKey = Array("\"id\":\"msg_".utf8)
     private static let requestIdKey = Array("\"requestId\":\"".utf8)
@@ -145,6 +150,10 @@ public enum FastTranscriptParser {
             role = .assistant
         } else if find(userRoleMarker, in: head) != nil || find(userMarker, in: head) != nil {
             role = .user
+        } else if let roleInMessage = roleName(in: line) {
+            // A message that writes its content before its own fields keeps the role after the content, out of
+            // the line's prefix; the usage object, which the role precedes, is what the search is anchored on.
+            role = roleInMessage
         } else {
             role = .other
         }
@@ -161,7 +170,7 @@ public enum FastTranscriptParser {
                 output = count(usage["output_tokens"])
                 thinking = count((usage["output_tokens_details"] as? [String: Any])?["thinking_tokens"])
             }
-            model = value(after: modelKey, in: head)
+            model = modelName(in: line) ?? value(after: modelKey, in: head)
             messageId = value(after: messageIdKey, in: head) ?? value(after: fallbackIdKey, in: head).map { "msg_" + $0 }
             requestId = value(after: requestIdKey, in: line, backwards: true)
             // The message-level reason follows the content, so the last occurrence is the real one.
@@ -360,6 +369,34 @@ public enum FastTranscriptParser {
         return (try? JSONSerialization.jsonObject(with: wrapped) as? [String])?.first
     }
 
+    /// The message's `model`, read from the fields that follow the content blocks. Claude Code writes the key
+    /// after the content, so a message with a long thinking block or a long answer keeps it out of the line's
+    /// prefix; the key then sits just before `stop_reason` and the usage object, which anchor the search.
+    private static func modelName(in line: UnsafeRawBufferPointer) -> String? {
+        guard let keyOffset = lastKey(beforeUsageIn: line, of: modelKey) else { return nil }
+        return string(from: keyOffset + modelKey.count, in: line)
+    }
+
+    /// The role of a message that writes its content before its own fields, which keeps the role out of the
+    /// line's prefix. The message's own fields follow the content and precede the usage object, so the last role
+    /// key before it is the message's own.
+    private static func roleName(in line: UnsafeRawBufferPointer) -> TranscriptEvent.Role? {
+        guard let keyOffset = lastKey(beforeUsageIn: line, of: roleKey),
+              let value = string(from: keyOffset + roleKey.count, in: line) else { return nil }
+        if value == "assistant" { return .assistant }
+        if value == "user" { return .user }
+        return nil
+    }
+
+    /// The last occurrence of `key` before the line's usage object, which the message's own fields precede. The
+    /// content can carry a key of its own, and the message's key is the one closest to the usage object.
+    private static func lastKey(beforeUsageIn line: UnsafeRawBufferPointer, of key: [UInt8]) -> Int? {
+        guard let usageOffset = find(usageKey, in: line, backwards: true) else { return nil }
+        let start = max(0, usageOffset - messageFieldSearchLength)
+        let window = UnsafeRawBufferPointer(rebasing: line[start..<usageOffset])
+        guard let offset = find(key, in: window, backwards: true) else { return nil }
+        return start + offset
+    }
     /// The `usage` object as a dictionary. The real usage object is the last one on the line, after the message content.
     private static func usageObject(in line: UnsafeRawBufferPointer) -> [String: Any]? {
         guard let keyOffset = find(usageKey, in: line, backwards: true) else { return nil }

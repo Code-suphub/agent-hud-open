@@ -153,6 +153,47 @@ final class ClaudeTranscriptTests: XCTestCase {
         XCTAssertEqual(fast.map(\.model), slow.map(\.model))
     }
 
+    func testFastParserReadsTheModelWrittenAfterLongContent() throws {
+        // Claude Code writes the model's key after the content blocks, so a long thinking block pushes it past the
+        // line's prefix. The tokens are then counted under the model that made them, not under an unknown one.
+        let body = String(repeating: "x", count: 5000)
+        let assistant = #"{"parentUuid":"p","isSidechain":false,"message":{"id":"msg_after","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"\#(body)","signature":"sig"}],"model":"minimax/minimax-m3.1-flash:free","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"cache_read_input_tokens":9000,"output_tokens":9}},"requestId":"req_after","type":"assistant","uuid":"u1","timestamp":"2026-09-07T05:50:00.000Z","cwd":"/p","sessionId":"s-after"}"#
+        let lines = assistant + "\n"
+        let fast = FastTranscriptParser.parse(Data(lines.utf8))
+        let slow = ClaudeTranscriptParser.parse(lines)
+        XCTAssertEqual(fast.map(\.model), ["minimax/minimax-m3.1-flash:free"])
+        XCTAssertEqual(fast.map(\.model), slow.map(\.model))
+        var accumulator = TranscriptAccumulator(path: "/p/s-after.jsonl", isSubagent: false)
+        let events = accumulator.ingest(fast)
+        XCTAssertEqual(events.map(\.agentId), ["claude-model:minimax/minimax-m3.1-flash:free"])
+    }
+
+    func testTheMessageModelWinsOverAModelKeyInItsContent() throws {
+        // A tool call can carry a `model` of its own; the message's own key is the one that counts.
+        let assistant = #"{"parentUuid":"p","isSidechain":false,"message":{"id":"msg_inner","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"echo hi","model":"not-the-model"}}],"model":"claude-fable-5-1","stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":9}},"requestId":"req_inner","type":"assistant","uuid":"u1","timestamp":"2026-09-07T05:50:00.000Z","cwd":"/p","sessionId":"s-inner"}"#
+        let lines = assistant + "\n"
+        let fast = FastTranscriptParser.parse(Data(lines.utf8))
+        XCTAssertEqual(fast.map(\.model), ["claude-fable-5-1"])
+        XCTAssertEqual(fast.map(\.model), ClaudeTranscriptParser.parse(lines).map(\.model))
+    }
+
+    func testFastParserReadsARoleWrittenAfterLongContent() throws {
+        // A message that writes its content before its own fields keeps the role after the content, out of the
+        // line's prefix. The usage of such a message is counted under the model that answered it.
+        let body = String(repeating: "x", count: 5000)
+        let assistant = #"{"parentUuid":"p","isSidechain":false,"message":{"content":[{"type":"thinking","thinking":"\#(body)","signature":"sig"}],"id":"msg_late","role":"assistant","model":"claude-fable-5-1","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"cache_read_input_tokens":9000,"output_tokens":9}},"type":"assistant","uuid":"u1","timestamp":"2026-09-07T05:50:00.000Z","cwd":"/p","sessionId":"s-late"}"#
+        let lines = assistant + "\n"
+        let fast = FastTranscriptParser.parse(Data(lines.utf8))
+        let slow = ClaudeTranscriptParser.parse(lines)
+        XCTAssertEqual(fast.map(\.role), [.assistant])
+        XCTAssertEqual(fast.map(\.role), slow.map(\.role))
+        XCTAssertEqual(fast.map(\.model), ["claude-fable-5-1"])
+        XCTAssertEqual(fast.map(\.outputTokens), [9])
+        var accumulator = TranscriptAccumulator(path: "/p/s-late.jsonl", isSubagent: false)
+        let events = accumulator.ingest(fast)
+        XCTAssertEqual(events.map(\.agentId), ["claude-model:claude-fable-5-1"])
+    }
+
     func testTurnStateEndsSessionsAtEndTurnOrInterruptionAndKeepsTheQuietLogFallback() throws {
         let base = DateParsing.iso8601("2026-09-07T06:00:00Z")!
         let iso = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
