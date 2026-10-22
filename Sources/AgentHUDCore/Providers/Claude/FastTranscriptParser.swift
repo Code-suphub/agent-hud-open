@@ -397,6 +397,7 @@ public enum FastTranscriptParser {
         guard let offset = find(key, in: window, backwards: true) else { return nil }
         return start + offset
     }
+
     /// The `usage` object as a dictionary. The real usage object is the last one on the line, after the message content.
     private static func usageObject(in line: UnsafeRawBufferPointer) -> [String: Any]? {
         guard let keyOffset = find(usageKey, in: line, backwards: true) else { return nil }
