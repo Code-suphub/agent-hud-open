@@ -6,18 +6,42 @@ extension EnvironmentValues {
     /// Whether glass is drawn as its stand-in, the look's tint alone over whatever is behind it: in a picture, a snapshot,
     /// a Settings preview and a recording of the HUD, which are drawn where no glass or blur can be, off screen, in this
     /// process, or over a desktop painted inside a window. Off on the HUD itself.
-    @Entry var drawsGlassStandIn = false
+    var drawsGlassStandIn: Bool {
+        get { self[DrawsGlassStandInKey.self] }
+        set { self[DrawsGlassStandInKey.self] = newValue }
+    }
     /// Whether a material stands in too, where Liquid Glass would not: in a Settings preview, whose wallpaper is painted
     /// inside the window, which a material, a blur of what is behind the window, does not take in.
-    @Entry var drawsMaterialStandIn = false
+    var drawsMaterialStandIn: Bool {
+        get { self[DrawsMaterialStandInKey.self] }
+        set { self[DrawsMaterialStandInKey.self] = newValue }
+    }
     /// Whether the surface is a box raised over content, a chart's or a row's hover details, which a solid look and
     /// glass's stand-in draw nearly opaque (`HUDLook.raisedCoverOpacity`, `raisedStandIn`), so that what lies beneath it
     /// never shows through its text. Real glass and a material keep their blur.
-    @Entry var drawsRaisedBox = false
+    var drawsRaisedBox: Bool {
+        get { self[DrawsRaisedBoxKey.self] }
+        set { self[DrawsRaisedBoxKey.self] = newValue }
+    }
     /// Whether the surface is one piece on its own, the menu-bar menu, where Regular is the regular Liquid Glass as in a
     /// window; the HUD's pieces, side by side, draw Regular as the clear glass.
-    @Entry var drawsRegularGlass = false
+    var drawsRegularGlass: Bool {
+        get { self[DrawsRegularGlassKey.self] }
+        set { self[DrawsRegularGlassKey.self] = newValue }
+    }
 }
+
+/// The key `EnvironmentValues.drawsGlassStandIn` is read and written through.
+private struct DrawsGlassStandInKey: EnvironmentKey { static let defaultValue = false }
+
+/// The key `EnvironmentValues.drawsMaterialStandIn` is read and written through.
+private struct DrawsMaterialStandInKey: EnvironmentKey { static let defaultValue = false }
+
+/// The key `EnvironmentValues.drawsRaisedBox` is read and written through.
+private struct DrawsRaisedBoxKey: EnvironmentKey { static let defaultValue = false }
+
+/// The key `EnvironmentValues.drawsRegularGlass` is read and written through.
+private struct DrawsRegularGlassKey: EnvironmentKey { static let defaultValue = false }
 
 /// Where glass is Liquid Glass and where it is frosted.
 enum HUDGlass {

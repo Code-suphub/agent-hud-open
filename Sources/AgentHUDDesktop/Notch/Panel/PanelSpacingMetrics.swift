@@ -57,5 +57,11 @@ struct PanelSpacingMetrics: Equatable, Sendable {
 extension EnvironmentValues {
     /// The gaps of the hover panel a view is drawn in, which the panel sets from its layout's spacing; regular
     /// anywhere else.
-    @Entry var panelSpacing: PanelSpacingMetrics = PanelSpacingMetrics(.regular)
+    var panelSpacing: PanelSpacingMetrics {
+        get { self[PanelSpacingKey.self] }
+        set { self[PanelSpacingKey.self] = newValue }
+    }
 }
+
+/// The key `EnvironmentValues.panelSpacing` is read and written through.
+private struct PanelSpacingKey: EnvironmentKey { static let defaultValue = PanelSpacingMetrics(.regular) }

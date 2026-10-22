@@ -209,11 +209,17 @@ extension SettingsStore {
 
 extension EnvironmentValues {
     /// The look of the HUD a view is drawn in, which the island and `hudLook(_:)` set; the standard look anywhere else.
-    @Entry var hudLook: HUDLook = .standard
+    var hudLook: HUDLook {
+        get { self[HUDLookKey.self] }
+        set { self[HUDLookKey.self] = newValue }
+    }
 
     /// The tokens of the HUD a view is drawn in: its look's theme.
     var hudTheme: Theme { hudLook.theme }
 }
+
+/// The key `EnvironmentValues.hudLook` is read and written through.
+private struct HUDLookKey: EnvironmentKey { static let defaultValue = HUDLook.standard }
 
 extension View {
     /// Draws the view with `look`: the HUD's own colours from its theme, and everything SwiftUI chooses itself from its

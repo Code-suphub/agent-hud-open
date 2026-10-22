@@ -6,8 +6,14 @@ extension EnvironmentValues {
     /// keeps the logo, the name and the picker, an account's "Current account" gives way before its label shortens
     /// from the middle, and a row laid out in the whole line's columns sets its parts by their own widths, stacking them
     /// where they do not fit side by side. Off for a block across the whole line, which is drawn as it always was.
-    @Entry var panelHalf = false
+    var panelHalf: Bool {
+        get { self[PanelHalfKey.self] }
+        set { self[PanelHalfKey.self] = newValue }
+    }
 }
+
+/// The key `EnvironmentValues.panelHalf` is read and written through.
+private struct PanelHalfKey: EnvironmentKey { static let defaultValue = false }
 
 /// Two half blocks on one line of the hover panel, or a balance's two columns in half a line: each as wide as half of
 /// what the gap between them leaves, both from the line's top, and the line as tall as the taller of them. Unproposed,

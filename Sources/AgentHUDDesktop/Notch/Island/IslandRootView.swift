@@ -4,15 +4,27 @@ import AgentHUDCore
 extension EnvironmentValues {
     /// The scale of the dock a view belongs to (`IslandRootView.dockScale`); 1 anywhere else. What a dock grows
     /// out of itself reads it; cards do not.
-    @Entry var stripScale: CGFloat = 1
+    var stripScale: CGFloat {
+        get { self[StripScaleKey.self] }
+        set { self[StripScaleKey.self] = newValue }
+    }
     /// The widths of a compact reminder's two halves on a dock; nil beside the notch, where they are its wings.
-    @Entry var compactWings: CompactWings? = nil
+    var compactWings: CompactWings? {
+        get { self[CompactWingsKey.self] }
+        set { self[CompactWingsKey.self] = newValue }
+    }
 }
+
+/// The key `EnvironmentValues.stripScale` is read and written through.
+private struct StripScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
+
+/// The key `EnvironmentValues.compactWings` is read and written through.
+private struct CompactWingsKey: EnvironmentKey { static let defaultValue: CompactWings? = nil }
 
 /// A compact reminder says who on one side and what on the other. Beside the notch the two are wings of one fixed
 /// width with the camera between them. On a dock nothing stands between them, so each is as wide as its words and
 /// the pill is as long as what it says: the dock growing an arm, as the Simple panel's hover line is.
-struct CompactWings: Equatable {
+struct CompactWings: Equatable, Sendable {
     var leading: CGFloat
     var trailing: CGFloat
     /// Between the two halves.

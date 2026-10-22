@@ -6,8 +6,14 @@ extension EnvironmentValues {
     /// Whether the hover panel is drawn as a picture for an agent: account names masked and session titles left out,
     /// as `IdentityMask` writes them, and text a provider or a client wrote drawn as placeholder bars. Off everywhere
     /// else, so the panel a person sees names them and says it.
-    @Entry var masksIdentity = false
+    var masksIdentity: Bool {
+        get { self[MasksIdentityKey.self] }
+        set { self[MasksIdentityKey.self] = newValue }
+    }
 }
+
+/// The key `EnvironmentValues.masksIdentity` is read and written through.
+private struct MasksIdentityKey: EnvironmentKey { static let defaultValue = false }
 
 extension View {
     /// Text a provider or a client wrote, such as a reading's reason or a client's notice, which can quote a path, an
