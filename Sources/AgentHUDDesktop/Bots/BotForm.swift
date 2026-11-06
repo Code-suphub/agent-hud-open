@@ -48,6 +48,7 @@ final class BotForm {
     }
 
     private static var cache: [Key: BotForm?] = [:]
+    static func invalidate() { cache.removeAll(keepingCapacity: true) }
 
     static func form(for vendor: String, ground: HUDLook.Appearance) -> BotForm? {
         let key = Key(mark: AgentArtwork.markKey(vendor), light: ground == .light)

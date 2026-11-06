@@ -153,7 +153,11 @@ struct BotSpec: Sendable {
     /// a light HUD's surface, a bot in light ink would vanish, so it wears dark ink there instead (`lightGroundInk`), and
     /// a body that is now dark has its eyes cut in the ground's own colour (`lightCut`): a single-colour mark's, whose
     /// body is its own stencil, and every bot whose paint turned dark.
-    static func spec(for vendor: String, ground: HUDLook.Appearance) -> BotSpec? {
+    @MainActor static func spec(for vendor: String, ground: HUDLook.Appearance) -> BotSpec? {
+        if let avatar = CustomAvatarRegistry.shared.avatars[vendor] {
+            // Keep custom artwork intact; the existing motion still supplies hops, breathing and attention poses.
+            return avatar.animated ? BotSpec(ownEyes: []) : nil
+        }
         let key = AgentArtwork.markKey(vendor).replacingOccurrences(of: "-dark", with: "")
         guard let spec = table[key] else { return nil }
         guard ground == .light else { return spec }

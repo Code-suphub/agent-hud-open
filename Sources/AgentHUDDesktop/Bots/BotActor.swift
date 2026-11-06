@@ -397,6 +397,7 @@ struct BotMark: View {
     var body: some View {
         if botLogos, !reduceMotion, BotForm.form(for: vendor, ground: look.appearance) != nil {
             BotStage(vendor: vendor, size: size, state: state, cue: cue, staysBot: staysBot, ground: look.appearance)
+                .id(CustomAvatarRegistry.shared.revision)
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
         } else {

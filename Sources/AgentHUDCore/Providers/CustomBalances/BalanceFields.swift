@@ -36,7 +36,7 @@ public enum BalanceFields {
     }
 }
 
-/// Non-secret settings. The HTTP request, including URL, headers and body, lives in Keychain.
+/// Non-secret settings. HTTP requests live separately in the application's private local data directory.
 public struct CustomBalanceProfile: Hashable, Codable, Sendable, Identifiable {
     public enum ValueKind: String, Hashable, Codable, Sendable { case remaining, used }
     public var id: String
@@ -49,6 +49,7 @@ public struct CustomBalanceProfile: Hashable, Codable, Sendable, Identifiable {
     public var valueKind: ValueKind
     /// Bumped after verified credential renewal, independently of the balance's unit/mapping identity.
     public var credentialRevision: Int?
+    public var avatar: CustomBalanceAvatar?
 
     public init(id: String = UUID().uuidString, name: String, currency: String, balancePath: String,
                 totalPath: String? = nil, divisor: Decimal = 1, enabled: Bool = true, valueKind: ValueKind = .remaining) {

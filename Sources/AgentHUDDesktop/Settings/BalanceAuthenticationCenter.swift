@@ -158,7 +158,7 @@ struct BalanceAuthenticationForm: View {
         .padding(24).padding(.top, 12).foregroundStyle(theme.text).background(theme.windowBackground)
         .task {
             guard original == nil else { return }
-            do { original = try BalanceRequestVault.load(id: profile.id) }
+            do { original = try BalanceRequestStore.load(id: profile.id) }
             catch { self.error = error.localizedDescription }
         }
         .onDisappear { task?.cancel() }
@@ -174,10 +174,10 @@ struct BalanceAuthenticationForm: View {
                 let fields = try await BalanceRequestClient.fetch(updated)
                 try Task.checkCancellation()
                 _ = try profile.amounts(in: fields)
-                guard store.settings.settings.customBalances.contains(profile), try BalanceRequestVault.load(id: profile.id) == original else {
+                guard store.settings.settings.customBalances.contains(profile), try BalanceRequestStore.load(id: profile.id) == original else {
                     throw UsageProviderError(L10n.text("配置已变化，请关闭后重新打开", "Configuration changed; close and reopen this window"))
                 }
-                try BalanceRequestVault.save(updated, id: profile.id)
+                try BalanceRequestStore.save(updated, id: profile.id)
                 store.settings.update { preferences in
                     if let index = preferences.customBalances.firstIndex(where: { $0.id == profile.id }) {
                         preferences.customBalances[index].credentialRevision = (profile.credentialRevision ?? 0) + 1

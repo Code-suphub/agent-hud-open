@@ -11,7 +11,7 @@ public actor CustomBalanceUsageProvider: UsageProvider {
 
     public init(profiles: @escaping @Sendable () async -> [CustomBalanceProfile], ledger: UsageLedger = .inMemory(),
                 read: @escaping @Sendable (CustomBalanceProfile) async throws -> [BalanceField] = {
-                    try await BalanceRequestClient.fetch(BalanceRequestVault.load(id: $0.id))
+                    try await BalanceRequestClient.fetch(BalanceRequestStore.load(id: $0.id))
                 }, clock: @escaping @Sendable () -> Date = { Date() }) {
         self.profiles = profiles; self.ledger = ledger; self.read = read; self.clock = clock
     }
@@ -25,7 +25,7 @@ public actor CustomBalanceUsageProvider: UsageProvider {
         for profile in active {
             guard !Task.isCancelled else { return }
             // Failed authentication is not retried in the background until the user replaces the credentials.
-            if let previous = readings[profile.id], previous.profile == profile, previous.authentication { continue }
+            if let previous = readings[profile.id], Self.sameRequest(previous.profile, profile), previous.authentication { continue }
             let now = clock()
             do {
                 let fields = try await read(profile)
@@ -57,7 +57,7 @@ public actor CustomBalanceUsageProvider: UsageProvider {
                 source: L10n.text("自定义余额接口", "Custom balance endpoint"), enabled: true, billingPool: Self.pool(profile))
         }
         let billing = active.map { profile in
-            let reading = readings[profile.id].flatMap { $0.profile == profile ? $0 : nil }
+            let reading = readings[profile.id].flatMap { Self.sameRequest($0.profile, profile) ? $0 : nil }
             return APIBilling(vendor: profile.name, balances: reading?.value.map { [$0] } ?? [],
                 isAvailable: reading?.value.map { $0.total > 0 }, updatedAt: reading?.at,
                 notice: reading?.notice, readingIssue: reading?.notice.map(ReadingIssue.readFailed), billingPool: Self.pool(profile),
@@ -70,6 +70,10 @@ public actor CustomBalanceUsageProvider: UsageProvider {
         BillingPool(provider: profile.name, realm: "custom-balance", product: .api, scope: profile.id,
             evidence: .account, entitlement: RecordCoding.hash([profile.currency, profile.balancePath, profile.totalPath ?? "",
                 NSDecimalNumber(decimal: profile.divisor).stringValue, profile.valueKind.rawValue]))
+    }
+
+    private static func sameRequest(_ left: CustomBalanceProfile, _ right: CustomBalanceProfile) -> Bool {
+        pool(left) == pool(right) && left.credentialRevision == right.credentialRevision
     }
 }
 
