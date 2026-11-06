@@ -17,7 +17,7 @@ extension UsageLedger {
     /// Match raw calls in (start, end] to the quota readings. Keeps the HUD's base-rate cost convention.
     public func quotaCapacityEstimate(snapshot: UsageSnapshot, observation: QuotaObservation?, consumers: Set<String>,
                                       regions: PriceRegions, now: Date) throws -> QuotaCapacityEstimate? {
-        guard let observation, observation.start >= now.addingTimeInterval(-Self.retention),
+        guard let observation,
               let consumed = QuotaMath.capacityConsumed(snapshot: snapshot, observation: observation, consumers: consumers, now: now) else { return nil }
         let revision = ModelPriceFeed.sourceInfo.revision
         if quotaCapacityRead?.mark != writeMark || quotaCapacityRead?.generation != generation || quotaCapacityRead?.priceRevision != revision {
@@ -25,11 +25,6 @@ extension UsageLedger {
         }
         let key = QuotaCapacityLedgerKey(observation: observation, consumers: consumers, regions: regions)
         if let cached = quotaCapacityRead?.values[key] { return cached }
-        // Keep the report reader's coverage guard: an interval before the retained ledger cannot be projected.
-        var covered = false
-        try storage.connection.query("SELECT 1 FROM usage_bucket WHERE start_ms <= ? LIMIT 1",
-            [.integer(RecordCoding.milliseconds(observation.start))]) { _ in covered = true }
-        guard covered else { return nil }
         let ids = String(decoding: try JSONEncoder().encode(consumers.sorted()), as: UTF8.self)
         let listings = Dictionary(uniqueKeysWithValues: consumers.compactMap { id in
             ModelCatalog.listing(for: id, in: regions.region(for: id)).map { (id, $0) }

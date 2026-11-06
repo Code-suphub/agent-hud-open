@@ -191,7 +191,7 @@ struct QuotaCycleHistoryView: View {
     private func tokenCell(_ record: QuotaCycleRecord) -> some View {
         let projected = record.estimatedTokenCapacity
         let predictedText = projected.map { $0.formatted() + " Token" }
-            ?? L10n.text("样本不足或读数有间断", "Insufficient or interrupted readings")
+            ?? L10n.text("样本不足或调用记录尚不可用", "Insufficient samples or unavailable calls")
         let help = L10n.text("已用：", "Used: ") + record.usage.tokens.formatted() +
             L10n.text(" Token\n预计整轮：", " tokens\nEstimated full cycle: ") + predictedText
         return pair(TokenFormat.short(record.usage.tokens), projected.map { TokenFormat.short($0) }).help(help)
@@ -233,9 +233,7 @@ struct QuotaCycleHistoryView: View {
 
     private func unavailableReason(_ record: QuotaCycleRecord) -> String {
         if record.hasUnassignedUsage && record.localUsageOnly != true { return L10n.text("归属待确认", "Uncertain attribution") }
-        if record.hasObservationGap { return L10n.text("观测有缺口", "Observation gap") }
         if record.usageUnavailable { return L10n.text("记录不完整", "Incomplete calls") }
-        if record.observedUsage.unpricedTokens > 0 { return L10n.text("部分缺价", "Missing prices") }
         if record.observedUsage.amounts.count > 1 { return L10n.text("多币种", "Separate currencies") }
         if record.observedUsage.baseAmounts == nil { return L10n.text("参考价待回填", "Reference needs backfill") }
         return L10n.text("等待样本", "More samples needed")

@@ -51,7 +51,22 @@ final class QuotaCapacityLedgerTests: XCTestCase, @unchecked Sendable {
         try await ledger.write { try $0.upsert(source: "codex", contribution: "events", events: [self.event("old", 500), self.event("inside", 650, model: unknown)]) }
         let value = try await estimate(ledger, consumers: [unknown])
         XCTAssertEqual(value?.tokens, 10_000)
-        XCTAssertNil(value?.amounts)
+        XCTAssertEqual(value?.amounts, ["USD": 0])
+        XCTAssertTrue(value?.hasUnpricedUsage == true)
+    }
+    func testMissingPrefixAndUnpricedCallsKeepTheKnownCostProjection() async throws {
+        let ledger = UsageLedger.inMemory()
+        let unknown = "codex-model:no-price-test-model"
+        try await ledger.write { try $0.upsert(source: "codex", contribution: "partial", events: [
+            self.event("known", 650), self.event("unpriced", 660, model: unknown)]) }
+        let interval = QuotaObservation(start: base.addingTimeInterval(-1800), end: observation.end, remainingAtStart: 80, remainingAtEnd: 70)
+        let snapshot = UsageSnapshot(agentId: "q", remainingPct: 70, resetAt: base.addingTimeInterval(3600),
+            windowDuration: 7200, updatedAt: observation.end)
+        let value = try await ledger.quotaCapacityEstimate(snapshot: snapshot, observation: interval,
+            consumers: [model, unknown], regions: PriceRegions(report: nil), now: base.addingTimeInterval(710))
+        let cost = try XCTUnwrap(ModelCatalog.cost(agentId: model, summed: TokenKinds(input: 1_000)))
+        XCTAssertEqual(value?.tokens, 20_000)
+        XCTAssertEqual(value?.amounts?[cost.currency], cost.amount * 10)
         XCTAssertTrue(value?.hasUnpricedUsage == true)
     }
     func testReportUsesExactProjectionButHidesItWhileIndexingOrAfterReset() {
