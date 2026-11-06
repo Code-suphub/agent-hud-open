@@ -68,6 +68,12 @@ struct APIBillingCard: View {
                     .redactedOnPicture()
                     .padding(.leading, compact ? IslandRowLayout.textInset : 0)
             }
+            if billing.isCustomBalance, billing.requiresAuthentication == true, let id = billing.billingPool?.scope {
+                Button { BalanceAuthenticationCenter.shared.show(profileID: id) } label: {
+                    Label(L10n.text("更新认证", "Update credentials"), systemImage: "key.horizontal")
+                }
+                .font(.ui(11)).padding(.leading, compact ? IslandRowLayout.textInset : 0)
+            }
             ForEach(lines) { line in
                 if billing.isCustomBalance {
                     CustomBalanceFigures(balance: line.balance, currency: line.currency, theme: theme,

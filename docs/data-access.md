@@ -1,6 +1,6 @@
 # Data access
 
-**Custom balance sources:** only explicitly saved HTTPS queries are sent, approximately every five minutes. Full request definitions (including URL, headers, cookies and body) stay in the local Keychain; settings hold field mappings and units. Responses are reduced to configured numeric readings before reporting or ledger storage. Login expiry requires reimporting credentials. No browser session is imported automatically. See [configuration and request limits](custom-balances.md).
+**Custom balance sources:** only explicitly saved HTTPS queries are sent, approximately every five minutes. Only selected headers/cookies are retained. Full request definitions (including URL, headers, cookies and body) stay in the local Keychain; settings hold field mappings and units. Responses are reduced to configured numeric readings before reporting or ledger storage. Authentication failures pause retries and offer secure credential renewal; verified replacements remain in Keychain. No browser session is imported automatically. See [configuration and request limits](custom-balances.md).
 
 ## Overview
 

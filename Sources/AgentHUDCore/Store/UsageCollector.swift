@@ -212,6 +212,7 @@ final class UsageCollector {
     private func settingsChanged(_ change: SettingsStore.Change) {
         if change != .discovery, customBalanceProfiles != settings.settings.customBalances {
             customBalanceProfiles = settings.settings.customBalances
+            accountRunAt.removeValue(forKey: "Custom balances")
             needsFetch = true
             forcesAccounts = true
             wake?.yield()

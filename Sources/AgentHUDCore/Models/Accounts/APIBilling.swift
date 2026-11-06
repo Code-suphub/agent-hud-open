@@ -33,6 +33,8 @@ public struct APIBilling: Hashable, Codable, Sendable, Identifiable {
     public let notice: String?
     /// A failed balance read keeps the last balance and its time.
     public let readingIssue: ReadingIssue?
+    /// Typed independently of notice text, so network and schema errors never request credential renewal.
+    public let requiresAuthentication: Bool?
     public var billingPool: BillingPool? = nil
     public var id: String { billingPool?.id ?? vendor }
     public var displayName: String { (billingPool?.provider ?? vendor) + " · API" }
@@ -40,10 +42,11 @@ public struct APIBilling: Hashable, Codable, Sendable, Identifiable {
 
     public init(vendor: String, balances: [AccountBalance], isAvailable: Bool?, updatedAt: Date?, costs: [CostBucket] = [],
                 sessionCosts: [String: [String: Decimal]] = [:], notice: String?, readingIssue: ReadingIssue? = nil,
-                billingPool: BillingPool? = nil) {
+                billingPool: BillingPool? = nil, requiresAuthentication: Bool? = nil) {
         self.vendor = vendor; self.balances = balances; self.isAvailable = isAvailable
         self.updatedAt = updatedAt; self.costs = costs; self.sessionCosts = sessionCosts; self.notice = notice
         self.readingIssue = readingIssue; self.billingPool = billingPool
+        self.requiresAuthentication = requiresAuthentication
     }
 
     /// The sum over periods overlapping `interval`; unknown when any of them lacks a price in `currency`.

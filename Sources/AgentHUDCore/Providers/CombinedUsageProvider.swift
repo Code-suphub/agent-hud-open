@@ -291,7 +291,8 @@ public struct CombinedUsageProvider: UsageProvider {
                 .first { !$0.costs.isEmpty || !$0.sessionCosts.isEmpty } ?? latest
             return APIBilling(vendor: latest.billingPool?.provider ?? latest.vendor, balances: latest.balances, isAvailable: latest.isAvailable,
                 updatedAt: latest.updatedAt, costs: costs.costs, sessionCosts: costs.sessionCosts,
-                notice: latest.notice, readingIssue: latest.readingIssue, billingPool: latest.billingPool)
+                notice: latest.notice, readingIssue: latest.readingIssue, billingPool: latest.billingPool,
+                requiresAuthentication: latest.requiresAuthentication)
         }.sorted { $0.id < $1.id }
     }
 

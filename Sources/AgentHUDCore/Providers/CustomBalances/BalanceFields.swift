@@ -47,6 +47,8 @@ public struct CustomBalanceProfile: Hashable, Codable, Sendable, Identifiable {
     public var divisor: Decimal
     public var enabled: Bool
     public var valueKind: ValueKind
+    /// Bumped after verified credential renewal, independently of the balance's unit/mapping identity.
+    public var credentialRevision: Int?
 
     public init(id: String = UUID().uuidString, name: String, currency: String, balancePath: String,
                 totalPath: String? = nil, divisor: Decimal = 1, enabled: Bool = true, valueKind: ValueKind = .remaining) {

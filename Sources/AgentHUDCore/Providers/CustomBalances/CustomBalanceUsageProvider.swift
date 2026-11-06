@@ -7,7 +7,7 @@ public actor CustomBalanceUsageProvider: UsageProvider {
     private let read: @Sendable (CustomBalanceProfile) async throws -> [BalanceField]
     private let clock: @Sendable () -> Date
     private let ledger: UsageLedger
-    private var readings: [String: (profile: CustomBalanceProfile, value: AccountBalance?, at: Date?, notice: String?)] = [:]
+    private var readings: [String: (profile: CustomBalanceProfile, value: AccountBalance?, at: Date?, notice: String?, authentication: Bool)] = [:]
 
     public init(profiles: @escaping @Sendable () async -> [CustomBalanceProfile], ledger: UsageLedger = .inMemory(),
                 read: @escaping @Sendable (CustomBalanceProfile) async throws -> [BalanceField] = {
@@ -24,6 +24,8 @@ public actor CustomBalanceUsageProvider: UsageProvider {
         readings = readings.filter { id, _ in active.contains { $0.id == id } }
         for profile in active {
             guard !Task.isCancelled else { return }
+            // Failed authentication is not retried in the background until the user replaces the credentials.
+            if let previous = readings[profile.id], previous.profile == profile, previous.authentication { continue }
             let now = clock()
             do {
                 let fields = try await read(profile)
@@ -36,13 +38,14 @@ public actor CustomBalanceUsageProvider: UsageProvider {
                     since: now.addingTimeInterval(-BalanceTrend.lookback))) ?? []
                 let balance = AccountBalance(currency: profile.currency, total: amounts.balance, granted: 0, toppedUp: 0,
                                          runsOutAt: BalanceTrend.runsOutAt(samples, at: now), limit: amounts.total)
-                readings[profile.id] = (profile, balance, now, nil)
+                readings[profile.id] = (profile, balance, now, nil, false)
             } catch {
                 if Task.isCancelled { return }
                 // A changed unit or mapping invalidates the former figure; a transient read failure does not.
-                let old = readings[profile.id].flatMap { $0.profile == profile ? $0 : nil }
+                let old = readings[profile.id].flatMap { Self.pool($0.profile) == Self.pool(profile) ? $0 : nil }
                 readings[profile.id] = (profile, old?.value, old?.at,
-                    (error as? UsageProviderError)?.message ?? L10n.text("余额查询失败", "Balance query failed"))
+                    (error as? BalanceRequestFailure)?.localizedDescription ?? (error as? UsageProviderError)?.message ??
+                        L10n.text("余额查询失败", "Balance query failed"), error is BalanceRequestFailure)
             }
         }
     }
@@ -57,7 +60,8 @@ public actor CustomBalanceUsageProvider: UsageProvider {
             let reading = readings[profile.id].flatMap { $0.profile == profile ? $0 : nil }
             return APIBilling(vendor: profile.name, balances: reading?.value.map { [$0] } ?? [],
                 isAvailable: reading?.value.map { $0.total > 0 }, updatedAt: reading?.at,
-                notice: reading?.notice, readingIssue: reading?.notice.map(ReadingIssue.readFailed), billingPool: Self.pool(profile))
+                notice: reading?.notice, readingIssue: reading?.notice.map(ReadingIssue.readFailed), billingPool: Self.pool(profile),
+                requiresAuthentication: reading?.authentication)
         }
         return UsageReport(generatedAt: clock(), snapshots: [], sessions: [], discoveredAgents: descriptors, usage: [], billing: billing)
     }
