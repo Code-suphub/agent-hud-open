@@ -115,7 +115,7 @@ final class ExperimentalPaneTests: XCTestCase {
                                 clientSetup: MCPClientSetup(environment: mac.environment))
         XCTAssertTrue(view.additionalPages.isEmpty, "no second Experimental page in the sidebar")
         XCTAssertEqual(view.experimentalSections.map(\.id), ["phone", "experimental"], "its rows go on the built-in page instead")
-        XCTAssertEqual(SettingsTab.leading, [.general, .sources, .display])
+        XCTAssertEqual(SettingsTab.leading, [.general, .sources, .balances, .display])
         XCTAssertEqual(SettingsTab.allCases.last, .experimental, "Experimental comes after the host's pages")
     }
 }

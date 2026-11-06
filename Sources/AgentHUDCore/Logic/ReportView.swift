@@ -92,7 +92,10 @@ public struct ReportView: Sendable {
         }
         let vendors = Set(shown.map(\.vendor))
         let billing = (report?.billing ?? []).filter { billing in
-            settings.accountVisible(billing.id)
+            if billing.isCustomBalance, !settings.customBalances.contains(where: {
+                $0.enabled && CustomBalanceUsageProvider.pool($0).id == billing.billingPool?.id
+            }) { return false }
+            return settings.accountVisible(billing.id)
                 && (billing.billingPool.map { pool in shown.contains { $0.billingPool?.id == pool.id } } ?? vendors.contains(billing.vendor))
         }
         let quota = Dictionary(uniqueKeysWithValues: rows.compactMap { row in row.level.map { (row.id, $0) } })

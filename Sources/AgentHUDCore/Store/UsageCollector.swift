@@ -54,6 +54,7 @@ final class UsageCollector {
     private var accountSpread: [String: TimeInterval] = [:]
     /// Consent to read GitHub Copilot's quota, and a look at the numbers, read accounts at once instead of when work moves them.
     private var sweptWithCopilotQuota: Bool?
+    private var customBalanceProfiles: [CustomBalanceProfile] = []
     private var forcesAccounts = false
     /// The read of every local source that stands in for a file event the watch missed.
     private var fallbackReadAt: Date?
@@ -209,6 +210,12 @@ final class UsageCollector {
     /// Copilot's quota and every other account the request spacing allows. It wakes the next pass, serial like any other.
     /// Rows a pass merged from its own report ask for nothing.
     private func settingsChanged(_ change: SettingsStore.Change) {
+        if change != .discovery, customBalanceProfiles != settings.settings.customBalances {
+            customBalanceProfiles = settings.settings.customBalances
+            needsFetch = true
+            forcesAccounts = true
+            wake?.yield()
+        }
         guard change != .discovery,
               settings.agents != fetchedAgents || settings.settings.readCopilotQuota != sweptWithCopilotQuota else { return }
         wake?.yield()

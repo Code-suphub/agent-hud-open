@@ -46,7 +46,7 @@ struct APIBillingCard: View {
                     .fixedSize(horizontal: half, vertical: false)
                     .layoutPriority(1)
                 Spacer()
-                if let picker {
+                if let picker, !billing.isCustomBalance {
                     // The picker stands over the heading's padding rather than making its line taller, so the card is as
                     // tall with it as the card was before it had measures, and the default view is the panel as it was.
                     IslandQuotaMetricPicker(selection: picker, measures: measures, kind: .billing, theme: theme)
@@ -69,7 +69,12 @@ struct APIBillingCard: View {
                     .padding(.leading, compact ? IslandRowLayout.textInset : 0)
             }
             ForEach(lines) { line in
-                if compact && widget == .chart {
+                if billing.isCustomBalance {
+                    CustomBalanceFigures(balance: line.balance, currency: line.currency, theme: theme,
+                                         isCurrent: store.view.assessment(of: billing).showsLevel)
+                        .padding(.leading, compact ? IslandRowLayout.textInset : 0)
+                        .padding(.trailing, compact ? IslandRowLayout.inset : 0)
+                } else if compact && widget == .chart {
                     chartLine(currency: line.currency, balance: line.balance)
                 } else {
                     balanceLine(currency: line.currency, balance: line.balance)
@@ -80,7 +85,7 @@ struct APIBillingCard: View {
                     }
                 }
             }
-            if !compact {
+            if !compact && !billing.isCustomBalance {
                 HStack(alignment: .top) {
                     Text(L10n.text("费用仅估算本机 Harness 已记录的请求，包含缓存和峰谷价格。", "Costs estimate requests recorded by local Harness, including cache and peak pricing."))
                         .fixedSize(horizontal: false, vertical: true)
