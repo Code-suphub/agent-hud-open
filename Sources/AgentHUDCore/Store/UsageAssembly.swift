@@ -25,7 +25,10 @@ public enum UsageAssembly {
         let store = ledger == nil ? UsageStore(provider: retained, settings: settings, hooks: hooks, clock: { DemoClock.now })
             : UsageStore(provider: retained, settings: settings, hooks: hooks, updatesModelPrices: true)
         store.ledger = ledger
-        if ledger == nil { store.sampleTurnCalls = { DemoData.turnCalls(session: $0.id, turn: $1) } }
+        if ledger == nil {
+            store.sampleTurnCalls = { DemoData.turnCalls(session: $0.id, turn: $1) }
+            store.quotaCycles = DemoData.quotaCycles
+        }
         if let report = retained.initialReport { store.replace(report: report) }
         return store
     }

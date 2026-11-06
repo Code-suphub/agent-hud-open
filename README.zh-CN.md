@@ -57,7 +57,7 @@
 
 ## Token 花在了哪里
 
-统计窗口在这台 Mac 上保留 30 天的 Token 历史。
+统计窗口在这台 Mac 上保留 30 天的 Token 历史。新增的 **额度周期** 页还会持续保存已确认的重置周期，显示按 API 价折算的调用用量、额度消耗，以及条件满足时的满额等值估算。可筛选账户与窗口，展开一行查看观测范围和重置原因。[周期与估算的记录规则](docs/usage-semantics.md#quota-cycle-history)。
 
 <p align="center">
   <a href="docs/screenshots/usage-statistics.webp"><img src="docs/screenshots/usage-statistics.webp" alt="统计窗口的 Token 页：堆叠的 Token 图表，带总量与按 API 价折合的费用；每个 agent 一张卡片，列出各类 Token 与费用；近期用量给出今天、近 7 天、近 30 天的费用与缓存命中率；最后是使用时段热图" width="468"></a> <a href="docs/screenshots/mac-session.webp"><img src="docs/screenshots/mac-session.webp" alt="一个 Claude Code 会话的页面：5200 万 Token，其中 600 万来自子 agent，按 API 价约 24.72 美元，26 轮、217 次调用，上下文 66%，缓存命中 99%；每轮 Token 图表中子 agent 的部分以淡色显示，第 22 轮已展开为逐次调用" width="330"></a><br>

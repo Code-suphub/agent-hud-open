@@ -684,3 +684,8 @@ Releases of Agent HUD Open. A version is a git tag `vX.Y.Z` or `vX.Y.Z-beta.N` o
 
 - `AgentHUDSupport`: `JSONValue` (integer-preserving JSON) and `RecordCoding` (deterministic encoding, millisecond dates, hashed identities).
 - Apache-2.0 license and the roadmap.
+
+### Local development — quota cycle history
+
+- Added a Quota cycles statistics page with account/window filtering, reset boundaries, recorded API-equivalent usage, quota consumption, observed-interval capacity estimates and expandable coverage details.
+- Persisted cycle summaries across restarts and raw history retention; withheld estimates for uncertain account attribution, missing prices and observation gaps.

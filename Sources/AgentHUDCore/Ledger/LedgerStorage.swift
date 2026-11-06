@@ -92,6 +92,14 @@ final class LedgerStorage {
                     """)
             }
         }
+        if version < 5 {
+            try connection.execute("""
+                CREATE TABLE IF NOT EXISTS quota_cycle (
+                    id TEXT PRIMARY KEY, window_id TEXT NOT NULL, observed_at REAL NOT NULL, record BLOB NOT NULL);
+                CREATE INDEX IF NOT EXISTS quota_cycle_window ON quota_cycle(window_id, observed_at);
+                PRAGMA user_version = 5;
+                """)
+        }
         try connection.query("SELECT id, name FROM agent") { row in
             let id = row.int(0), name = row.text(1) ?? ""
             agents[name] = id

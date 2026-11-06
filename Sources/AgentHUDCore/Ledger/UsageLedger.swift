@@ -77,7 +77,7 @@ public actor UsageLedger {
         public init(_ kind: Kind, at timestamp: Date) { self.kind = kind; self.timestamp = timestamp }
     }
 
-    private let storage: LedgerStorage
+    let storage: LedgerStorage
     private var passOpen = false
     private var expiredAt: Date?
     /// What `recachedBuckets(since:)` last read, by log, and the write mark and generation it was read at.
