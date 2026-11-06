@@ -57,7 +57,7 @@ When an agent needs you, its request waits on the HUD with the command, file, ed
 
 ## Where the tokens go
 
-The statistics window keeps 30 days of token history on your Mac.
+The statistics window keeps 30 days of token history on your Mac. Its **Quota cycles** page also keeps confirmed reset cycles, recorded usage at API-equivalent prices, quota consumption and conditional capacity estimates. Select an account/window and expand a row for observation coverage and reset details. [How cycles and estimates are recorded](docs/usage-semantics.md#quota-cycle-history).
 
 <p align="center">
   <a href="docs/screenshots/usage-statistics.webp"><img src="docs/screenshots/usage-statistics.webp" alt="The Tokens page of the statistics window: a stacked token chart with its total and cost at API prices, one card per agent with tokens by kind and cost, Recent usage with cost and cache hits for today, 7 days and 30 days, and an activity heatmap" width="468"></a> <a href="docs/screenshots/mac-session.webp"><img src="docs/screenshots/mac-session.webp" alt="A Claude Code session's page: 52M tokens with 6.0M from sub-agents, cost ≈$24.72 at API prices, 26 turns and 217 calls, context 66%, cache hits 99%, a tokens-per-turn chart with sub-agent parts faded, and turn 22 opened call by call" width="330"></a><br>

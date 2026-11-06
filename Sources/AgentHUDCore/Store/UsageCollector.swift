@@ -104,6 +104,7 @@ final class UsageCollector {
         let directories = sources.compactMap(\.directories).flatMap { $0 }
         changes = directories.isEmpty ? nil : FileChangeMonitor(directories: directories, onChange: { continuation.yield() })
         pollTask = Task { [weak self] in
+            await self?.store?.loadQuotaCycles()
             var wakes = stream.makeAsyncIterator()
             while !Task.isCancelled {
                 guard let pause = await self?.collect(force: false) else { return }
@@ -454,6 +455,7 @@ final class UsageCollector {
             // This pass consumed its captured input and its own discoveries, but not an edit made while it awaited.
             fetchedAgents = agentsUnchanged ? settings.agents : agents
             local = report
+            await store.collectQuotaCycles(report)
             store.collected(report)
             fetchedAt = date
             await hooks.afterPass?(covered)

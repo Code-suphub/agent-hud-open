@@ -20,6 +20,51 @@ public final class UsageStore {
     public var statsTab: StatsTab = .tokens
     /// Active list-price source; a change invalidates the collector's priced report.
     public internal(set) var modelPriceSource = ModelPriceFeed.sourceInfo
+    public internal(set) var quotaCycles: [QuotaCycleRecord] = []
+    public internal(set) var quotaCyclesError: String?
+    @ObservationIgnored private var quotaHistoryRevision = 0
+
+    func loadQuotaCycles() async {
+        guard let ledger else { return }
+        let revision = quotaHistoryRevision
+        do {
+            let saved = try await ledger.quotaCycleRecords()
+            guard revision == quotaHistoryRevision else { return }
+            quotaCycles = saved
+            quotaCyclesError = nil
+        } catch { quotaCyclesError = error.localizedDescription }
+    }
+
+    /// Runs serially in collection, never from a view's body. A history failure leaves collection usable.
+    func collectQuotaCycles(_ report: UsageReport) async {
+        guard let ledger else { return }
+        quotaHistoryRevision += 1
+        let revision = quotaHistoryRevision
+        do {
+            let records = try await ledger.recordQuotaCycles(report: report, agents: settings.agents, localUsageOnly: true)
+            guard revision == quotaHistoryRevision else { return }
+            quotaCycles = records
+            quotaCyclesError = nil
+        } catch {
+            quotaCyclesError = error.localizedDescription
+        }
+    }
+
+    public func setQuotaCapacityIncrease(recordID: String, change: QuotaCapacityChange) async throws {
+        guard let ledger else { throw UsageLedger.QuotaCapacityAdjustmentError.historicalCycleNotFound }
+        quotaHistoryRevision += 1
+        _ = try await ledger.confirmQuotaCapacityIncrease(recordID: recordID, observedAfter: change.observedAfter,
+            observedAt: change.observedAt, multiplier: change.multiplier, note: change.note ?? "")
+        await loadQuotaCycles()
+    }
+
+    public func removeQuotaCapacityIncrease(recordID: String, observedAt: Date) async throws {
+        guard let ledger else { throw UsageLedger.QuotaCapacityAdjustmentError.historicalCycleNotFound }
+        quotaHistoryRevision += 1
+        try await ledger.removeQuotaCapacityIncrease(recordID: recordID, observedAt: observedAt)
+        await loadQuotaCycles()
+    }
+
     /// The quota window the statistics window points out, set by whatever opened it.
     public var selectedQuotaId: String? { didSet { if selectedQuotaId != nil { statsTab = .tokens } } }
     /// The session the Sessions page shows in place of its list; nil shows the list.

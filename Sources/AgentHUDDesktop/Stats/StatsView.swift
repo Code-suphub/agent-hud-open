@@ -2,13 +2,14 @@ import AppKit
 import SwiftUI
 import AgentHUDCore
 
-/// Usage statistics that fill the available window width, on two pages: token charts, and sessions.
+/// Usage statistics that fill the available window width, on token, session and quota-cycle pages.
 struct StatsView: View {
     let store: UsageStore
     var scrollable = true
     var onIdealHeightChange: ((CGFloat) -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(WindowSurface.self) private var surface: WindowSurface?
+    @State private var quotaWindowID = ""
     @State private var sessionSource: SessionSource?
     @State private var sessionProject: SessionProject?
     @State private var sessionSearch: String
@@ -48,6 +49,7 @@ struct StatsView: View {
                         .onChange(of: store.statsTab) { _, _ in
                             if store.selectedQuotaId == nil { proxy.scrollTo(Self.top, anchor: .top) }
                         }
+                        .onChange(of: quotaWindowID) { _, _ in proxy.scrollTo(Self.top, anchor: .top) }
                 }
             } else {
                 content(theme)
@@ -73,6 +75,8 @@ struct StatsView: View {
                     .textSelection(.enabled)
             }
             switch store.statsTab {
+            case .quotaCycles:
+                QuotaCycleHistoryView(store: store, theme: theme, windowID: $quotaWindowID)
             case .tokens:
                 tokens(theme)
             case .sessions:
@@ -105,7 +109,7 @@ struct StatsView: View {
     private func header(_ theme: Theme) -> some View {
         VStack(spacing: 12) {
             Picker(L10n.text("页面", "Page"), selection: Binding(get: { store.statsTab }, set: { store.statsTab = $0 })) {
-                ForEach([StatsTab.tokens, .sessions], id: \.self) { Text($0.label).tag($0) }
+                ForEach([StatsTab.tokens, .sessions, .quotaCycles], id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -125,6 +129,16 @@ struct StatsView: View {
     private func controls(_ theme: Theme) -> some View {
         HStack(spacing: 12) {
             switch store.statsTab {
+            case .quotaCycles:
+                Text(L10n.text("按重置周期记录", "Recorded by reset cycle")).font(.ui(12)).foregroundStyle(theme.secondary)
+                Spacer(minLength: 12)
+                SelectionMenu(
+                    title: L10n.text("账户与窗口", "Account and window"),
+                    options: [SegmentOption(value: "", label: L10n.text("全部账户与窗口", "All accounts and windows"))]
+                        + quotaWindows.map { SegmentOption(value: $0.windowID, label: "\($0.vendor) · \($0.accountLabel) · \($0.window)") },
+                    selection: $quotaWindowID, theme: theme, width: 260
+                )
+                .accessibilityIdentifier("quota-cycle-filter")
             case .tokens:
                 dimensions
                 Spacer(minLength: 12)
@@ -180,6 +194,11 @@ struct StatsView: View {
                 .accessibilityIdentifier("session-source-filter")
             }
         }
+    }
+
+    private var quotaWindows: [QuotaCycleRecord] {
+        var seen = Set<String>()
+        return store.quotaCycles.filter { seen.insert($0.windowID).inserted }
     }
 
     private var sessionSources: [SessionSource] {
@@ -381,6 +400,7 @@ private extension StatsTab {
     /// The page's name in the window's picker.
     var label: String {
         switch self {
+        case .quotaCycles: L10n.text("额度周期", "Quota cycles")
         case .tokens: L10n.text("Token", "Tokens")
         case .sessions: L10n.text("会话", "Sessions")
         }
