@@ -35,6 +35,8 @@ struct CustomBalancesPane: View {
                                 }
                             }
                         })).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                        Button { BalanceAuthenticationCenter.shared.show(profileID: profile.id) } label: { Image(systemName: "key.horizontal") }
+                            .help(L10n.text("更新认证凭据", "Update credentials"))
                         Button(L10n.text("编辑", "Edit")) { editing = profile }
                         Button(role: .destructive) { remove(profile) } label: { Image(systemName: "trash") }
                             .help(L10n.text("删除来源及其请求凭据", "Remove this source and its request credentials"))
@@ -51,8 +53,8 @@ struct CustomBalancesPane: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 12)
             }
-            Text(L10n.text("在浏览器开发者工具的“网络”中，复制只读余额查询为 cURL。请求保存在本机钥匙串，约每 5 分钟刷新；登录过期后重新导入。仅支持 HTTPS JSON 查询。",
-                           "Copy the read-only balance query as cURL from your browser’s Network tools. Requests stay in this Mac’s Keychain and refresh about every 5 minutes. Import fresh credentials after sign-in expires. HTTPS JSON queries only."))
+            Text(L10n.text("从浏览器复制只读余额查询为 cURL，选择要保留的请求项。约每 5 分钟刷新；认证过期可直接更新 Cookie 或 Token，凭据保存在本机钥匙串。",
+                           "Copy a read-only query as cURL and select the request items to keep. Refreshes about every 5 minutes; update Cookie or token values when authentication expires. Credentials stay in this Mac’s Keychain."))
                 .font(.ui(11)).foregroundStyle(theme.secondary).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).font(.ui(12)).foregroundStyle(theme.statusText(.warning)) }
         }
@@ -92,6 +94,7 @@ private struct CustomBalanceEditor: View {
     @State private var totalPath: String
     @State private var curl = ""
     @State private var request: BalanceRequest?
+    @State private var selection: BalanceRequestSelection?
     @State private var fields: [BalanceField] = []
     @State private var isTesting = false
     @State private var error: String?
@@ -110,6 +113,23 @@ private struct CustomBalanceEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            ScrollView {
+                editorContent
+            }.frame(maxHeight: 570)
+            HStack {
+                Spacer()
+                Button(L10n.text("取消", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L10n.text("保存", "Save")) { save() }.keyboardShortcut(.defaultAction)
+                    .disabled(request == nil || preview == nil || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || currency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(24).frame(width: 650)
+        .onDisappear { testTask?.cancel() }
+        .task { if profile != nil { prepare() } }
+    }
+
+    private var editorContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
             Text(profile == nil ? L10n.text("添加余额来源", "Add balance source") : L10n.text("编辑余额来源", "Edit balance source"))
                 .font(.ui(20, .semibold))
             HStack(spacing: 12) {
@@ -123,15 +143,24 @@ private struct CustomBalanceEditor: View {
                     .frame(height: 110).padding(5).background(theme.text.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
                     .autocorrectionDisabled()
                     .onChange(of: curl) { _, _ in
-                        testTask?.cancel(); requestRevision += 1; request = nil; fields = []; isTesting = false; error = nil
+                        invalidate(); selection = nil
                     }
                 Text(profile == nil ? L10n.text("粘贴查询余额的请求，不会执行 Shell 命令。", "Paste a balance query. Shell commands are never executed.")
                      : L10n.text("留空可使用已保存的请求；粘贴新 curl 可更新登录凭据。", "Leave blank to use the saved request, or paste new cURL to update credentials."))
                     .font(.ui(11)).foregroundStyle(theme.secondary)
             }
             HStack {
+                Button(L10n.text("解析 curl", "Parse cURL")) { prepare() }
+                    .disabled(curl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && profile == nil)
+                Spacer()
+            }
+            if selection != nil {
+                BalanceRequestSelectionView(selection: Binding(get: { selection! }, set: { selection = $0 }), theme: theme,
+                    onChange: { invalidate() })
+            }
+            HStack {
                 Button { test() } label: { Label(L10n.text("请求并读取字段", "Request and inspect fields"), systemImage: "arrow.triangle.2.circlepath") }
-                    .disabled(isTesting || (curl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && profile == nil))
+                    .disabled(isTesting || selection == nil)
                 if isTesting { ProgressView().controlSize(.small) }
                 Spacer()
                 if !fields.isEmpty { Text(L10n.text("读取到 \(fields.count) 个数值字段", "Found \(fields.count) numeric fields")).font(.ui(11)).foregroundStyle(theme.secondary) }
@@ -162,15 +191,20 @@ private struct CustomBalanceEditor: View {
                 }
             }
             if let error { Text(error).font(.ui(12)).foregroundStyle(theme.statusText(.warning)).fixedSize(horizontal: false, vertical: true) }
-            HStack {
-                Spacer()
-                Button(L10n.text("取消", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(L10n.text("保存", "Save")) { save() }.keyboardShortcut(.defaultAction)
-                    .disabled(request == nil || preview == nil || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || currency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
         }
-        .padding(24).frame(width: 650)
-        .onDisappear { testTask?.cancel() }
+    }
+
+    private func invalidate() {
+        testTask?.cancel(); requestRevision += 1; request = nil; fields = []; isTesting = false; error = nil
+    }
+
+    private func prepare() {
+        invalidate()
+        do {
+            let saved = curl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let definition = try saved ? BalanceRequestVault.load(id: profile!.id) : BalanceRequest.parse(curl: curl, forSelection: true)
+            selection = BalanceRequestSelection(definition, preserveSavedSelection: saved)
+        } catch { selection = nil; self.error = error.localizedDescription }
     }
 
     private func fieldPicker(_ selection: Binding<String>, optional: Bool) -> some View {
@@ -196,8 +230,7 @@ private struct CustomBalanceEditor: View {
         testTask = Task {
             defer { if requestRevision == revision { isTesting = false } }
             do {
-                let definition = try curl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? BalanceRequestVault.load(id: profile!.id) : BalanceRequest.parse(curl: curl)
+                guard let definition = selection?.request() else { return }
                 let result = try await BalanceRequestClient.fetch(definition)
                 try Task.checkCancellation()
                 guard requestRevision == revision else { return }
@@ -211,7 +244,8 @@ private struct CustomBalanceEditor: View {
 
     private func save() {
         do {
-            let value = draft()
+            var value = draft()
+            value.credentialRevision = (profile?.credentialRevision ?? 0) + 1
             _ = try value.amounts(in: fields)
             guard let request else { return }
             try BalanceRequestVault.save(request, id: value.id)

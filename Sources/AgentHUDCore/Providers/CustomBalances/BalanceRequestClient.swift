@@ -25,6 +25,12 @@ public enum BalanceRequestClient {
         do {
             let (bytes, response) = try await session.bytes(for: request)
             guard let response = response as? HTTPURLResponse else { throw UsageProviderError(L10n.text("无效的 HTTP 响应", "Invalid HTTP response")) }
+            if [401, 403].contains(response.statusCode) { throw BalanceRequestFailure.authentication(status: response.statusCode) }
+            if (300...399).contains(response.statusCode), let location = response.value(forHTTPHeaderField: "Location"),
+               let target = URL(string: location, relativeTo: definition.url),
+               ["login", "signin", "sign-in", "sso", "oauth", "authorize"].contains(where: { target.path.lowercased().contains($0) }) {
+                throw BalanceRequestFailure.authentication(status: response.statusCode)
+            }
             guard (200...299).contains(response.statusCode) else {
                 // Neither the response body nor URL enters a report: either can contain credentials.
                 throw UsageProviderError(L10n.text("余额查询返回 HTTP \(response.statusCode)，请检查登录凭据", "Balance query returned HTTP \(response.statusCode); check credentials"))
@@ -34,8 +40,10 @@ public enum BalanceRequestClient {
                 guard data.count < 2_097_152 else { throw UsageProviderError(L10n.text("响应超过 2 MB", "Response exceeds 2 MB")) }
                 data.append(byte)
             }
+            if let status = BalanceRequestFailure.applicationAuthenticationStatus(data) { throw BalanceRequestFailure.authentication(status: status) }
             return try BalanceFields.parse(data)
-        } catch let error as UsageProviderError { throw error }
+        } catch let error as BalanceRequestFailure { throw error }
+        catch let error as UsageProviderError { throw error }
         catch {
             if Task.isCancelled { throw CancellationError() }
             throw UsageProviderError(L10n.text("余额请求失败，请检查网络或重新导入登录凭据", "Balance request failed; check the connection or import fresh credentials"))

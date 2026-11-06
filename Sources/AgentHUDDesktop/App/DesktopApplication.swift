@@ -82,6 +82,14 @@ public final class DesktopApplication {
         notch.onOpenStats = { [weak self] in self?.showStats() }
         notch.onOpenSettings = { [weak self] in self?.showSettings() }
         self.notch = notch
+        if !options.demo {
+            BalanceAuthenticationCenter.shared.configure(store: store, openSettings: { [weak self] in self?.showSettings(pageID: "balances") })
+            trackChanges({ [weak self] in
+                _ = self?.store.report
+                _ = self?.settings.settings.customBalances
+                _ = self?.store.pausedUntil
+            }, onChange: { BalanceAuthenticationCenter.shared.sync() })
+        }
         let statusItem = StatusItemController(store: store, settings: settings, additionalMenuItems: additionalMenuItems)
         statusItem.actions = MenuActions(
             toggleGlow: { [weak self] in self?.toggleGlow() },

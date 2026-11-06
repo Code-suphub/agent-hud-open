@@ -124,7 +124,7 @@ extension UsageReport {
             guard value.updatedAt == nil, let old = previous.billing.first(where: { $0.id == value.id }) else { return value }
             return APIBilling(vendor: value.vendor, balances: old.balances, isAvailable: old.isAvailable,
                 updatedAt: old.updatedAt, costs: value.costs, sessionCosts: value.sessionCosts, notice: value.notice,
-                readingIssue: value.readingIssue, billingPool: value.billingPool)
+                readingIssue: value.readingIssue, billingPool: value.billingPool, requiresAuthentication: value.requiresAuthentication)
         } + previous.billing.filter { !billingIDs.contains($0.id) }
         let knownAgents = UsageAggregation.consumersUnion([discoveredAgents, consumers, previous.discoveredAgents, previous.consumers])
         // A source whose read or quota reading failed keeps its last sessions; a notice about its local logs or hooks does not.

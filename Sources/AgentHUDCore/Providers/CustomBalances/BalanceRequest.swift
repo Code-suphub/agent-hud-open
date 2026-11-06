@@ -6,12 +6,14 @@ public struct BalanceRequest: Codable, Hashable, Sendable {
     public var method: String
     public var headers: [String: String]
     public var body: String?
+    /// Headers selected for future credential renewal. Nil infers common names for older saved requests.
+    public var authenticationHeaders: Set<String>?
 
     public init(url: URL, method: String = "GET", headers: [String: String] = [:], body: String? = nil) {
         self.url = url; self.method = method; self.headers = headers; self.body = body
     }
 
-    public static func parse(curl: String) throws -> Self {
+    public static func parse(curl: String, forSelection: Bool = false) throws -> Self {
         let words = try tokenize(curl)
         guard words.first == "curl" else { throw invalid("请粘贴以 curl 开头的请求", "Paste a request starting with curl") }
         var url: URL?, method: String?, headers: [String: String] = [:], body: String?
@@ -30,14 +32,15 @@ public struct BalanceRequest: Codable, Hashable, Sendable {
                 guard let colon = header.firstIndex(of: ":") else { throw invalid("请求头格式无效", "Invalid header") }
                 let key = String(header[..<colon]).trimmingCharacters(in: .whitespaces)
                 let val = String(header[header.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-                guard !key.isEmpty, !header.contains("\n"), !header.contains("\r") else { throw invalid("请求头格式无效", "Invalid header") }
+                guard !key.isEmpty, !header.utf8.contains(10), !header.utf8.contains(13) else { throw invalid("请求头格式无效", "Invalid header") }
                 if let old = headers.keys.first(where: { $0.caseInsensitiveCompare(key) == .orderedSame }) { headers.removeValue(forKey: old) }
                 headers[key] = val
             case "-b", "--cookie":
                 let cookie = try value()
-                guard cookie.contains("="), !cookie.contains("\n"), !cookie.contains("\r") else {
+                guard cookie.contains("="), !cookie.utf8.contains(10), !cookie.utf8.contains(13) else {
                     throw invalid("请使用 Cookie 文本，不能读取文件", "Use literal cookies, not a cookie file")
                 }
+                if let old = headers.keys.first(where: { $0.lowercased() == "cookie" }) { headers.removeValue(forKey: old) }
                 headers["Cookie"] = cookie
             case "-d", "--data", "--data-raw", "--data-binary":
                 let data = try value()
@@ -59,19 +62,23 @@ public struct BalanceRequest: Codable, Hashable, Sendable {
         }
         guard let url else { throw invalid("缺少请求地址", "Missing request URL") }
         let request = Self(url: url, method: method ?? (body == nil ? "GET" : "POST"), headers: headers, body: body)
-        try request.validate()
+        try request.validate(allowManagedHeaders: forSelection)
         return request
     }
 
     public func validate() throws {
+        try validate(allowManagedHeaders: false)
+    }
+
+    private func validate(allowManagedHeaders: Bool) throws {
         guard url.scheme?.lowercased() == "https", url.host != nil, url.user == nil, url.password == nil,
               url.fragment == nil, ["GET", "POST"].contains(method), !(method == "GET" && body != nil) else {
             throw Self.invalid("仅支持 HTTPS 的 GET / POST 查询请求", "Use an HTTPS GET or POST query")
         }
         for (key, value) in headers {
             guard !key.isEmpty, key.utf8.allSatisfy({ (33...126).contains($0) && $0 != 58 }),
-                  !value.contains("\r"), !value.contains("\n"),
-                  !["host", "content-length", "connection", "transfer-encoding"].contains(key.lowercased()) else {
+                  !value.utf8.contains(where: { ($0 < 32 && $0 != 9) || $0 == 127 }),
+                  allowManagedHeaders || !["host", "content-length", "connection", "transfer-encoding"].contains(key.lowercased()) else {
                 throw Self.invalid("包含无效或由客户端管理的请求头", "Invalid or client-managed header")
             }
         }
