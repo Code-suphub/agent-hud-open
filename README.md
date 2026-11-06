@@ -144,6 +144,8 @@ Also: the **GLM Coding Plan** quota, and approvals for the **Qoder** builds. Cod
 
 See also [data access](docs/data-access.md).
 
+Custom HTTPS JSON balance queries can be added in **Settings → Balance sources** by importing cURL and selecting remaining/total fields. [Configuration guide](docs/custom-balances.md).
+
 ## Build from source
 
 **Requirements:** macOS 14+ and Xcode or the Xcode Command Line Tools with a Swift 6 toolchain.

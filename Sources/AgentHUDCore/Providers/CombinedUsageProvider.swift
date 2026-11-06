@@ -76,7 +76,8 @@ public struct CombinedUsageProvider: UsageProvider {
         ] + AdditionalSource.allCases.map {
             Source($0.vendor, AdditionalUsageProvider.standard($0, settings: settings, ledger: ledger, persistHistory: persistent,
                                                                grokBotRoutineRuns: $0 == .cursor ? routineRuns : nil))
-        } + [Source("Open agents", OpenAgentUsageProvider.standard(ledger: ledger, persistHistory: persistent))],
+        } + [Source("Open agents", OpenAgentUsageProvider.standard(ledger: ledger, persistHistory: persistent)),
+             Source("Custom balances", CustomBalanceUsageProvider(profiles: { await MainActor.run { settings.settings.customBalances } }, ledger: ledger))],
             ledger: ledger, grokBotRoutineRuns: routineRuns)
     }
 

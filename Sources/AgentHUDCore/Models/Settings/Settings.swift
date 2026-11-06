@@ -109,6 +109,8 @@ public struct Settings: Hashable, Codable, Sendable {
     }
     /// Querying GitHub Copilot quota reads the GitHub CLI sign-in, so it stays off until the user agrees.
     public var readCopilotQuota: Bool = false
+    /// Field mappings only; imported HTTP requests are stored separately in Keychain.
+    public var customBalances: [CustomBalanceProfile] = []
     /// Whether Agent HUD keeps its handlers in the clients' own settings: approvals, Claude Code's notification
     /// hook, the stop hooks and Pi's observer. Off, they are removed and never added back.
     public var clientHooks: Bool = true
@@ -148,6 +150,7 @@ public struct Settings: Hashable, Codable, Sendable {
         case glowStyle, glowGridPitch, glowGridSpread, glowGridCore, glowGridFade, glowGridDensity, glowEffect
         case requiresOptionToOpen, openImmediatelyAtTop, hoverDelayMs, collapseDelayMs, botLogos, hiddenAccountIDs
         case liveStatusPreferences, disabledLiveStatusSources, readCopilotQuota, clientHooks, hudTools, approvalWaitMinutes
+        case customBalances
         case launchAtLogin, showMenuBarIcon, appearance, appearanceFollowsScreen, language, screens, screenGlow, providerOrder
     }
 
@@ -191,6 +194,7 @@ public struct Settings: Hashable, Codable, Sendable {
             liveStatusPreferences["grok cli"] = legacy
         }
         readCopilotQuota = try c.decodeIfPresent(Bool.self, forKey: .readCopilotQuota) ?? d.readCopilotQuota
+        customBalances = try c.decodeIfPresent([CustomBalanceProfile].self, forKey: .customBalances) ?? []
         clientHooks = try c.decodeIfPresent(Bool.self, forKey: .clientHooks) ?? d.clientHooks
         hudTools = try c.decodeIfPresent(Bool.self, forKey: .hudTools) ?? d.hudTools
         approvalWaitMinutes = (try c.decodeIfPresent(Int.self, forKey: .approvalWaitMinutes))
@@ -230,6 +234,7 @@ public struct Settings: Hashable, Codable, Sendable {
         try c.encode(hiddenAccountIDs.sorted(), forKey: .hiddenAccountIDs)
         try c.encode(liveStatusPreferences, forKey: .liveStatusPreferences)
         try c.encode(readCopilotQuota, forKey: .readCopilotQuota)
+        if !customBalances.isEmpty { try c.encode(customBalances, forKey: .customBalances) }
         try c.encode(clientHooks, forKey: .clientHooks)
         try c.encode(hudTools, forKey: .hudTools)
         try c.encode(approvalWaitMinutes, forKey: .approvalWaitMinutes)

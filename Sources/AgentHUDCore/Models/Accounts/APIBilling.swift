@@ -8,10 +8,13 @@ public struct AccountBalance: Hashable, Codable, Sendable, Identifiable {
     /// When the balance runs out at the pace it fell over the day before its reading (`BalanceTrend`); nil without an
     /// estimate.
     public let runsOutAt: Date?
+    /// An explicitly configured endpoint's reported ceiling; nil for balance-only services.
+    public let limit: Decimal?
     public var id: String { currency }
 
-    public init(currency: String, total: Decimal, granted: Decimal, toppedUp: Decimal, runsOutAt: Date? = nil) {
+    public init(currency: String, total: Decimal, granted: Decimal, toppedUp: Decimal, runsOutAt: Date? = nil, limit: Decimal? = nil) {
         self.currency = currency; self.total = total; self.granted = granted; self.toppedUp = toppedUp; self.runsOutAt = runsOutAt
+        self.limit = limit
     }
 }
 

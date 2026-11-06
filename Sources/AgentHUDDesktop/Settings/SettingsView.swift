@@ -10,10 +10,10 @@ final class SettingsNavigation {
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, sources, display, experimental
+    case general, sources, balances, display, experimental
 
     /// The pages before a host's own; Experimental comes after them.
-    static let leading: [SettingsTab] = [.general, .sources, .display]
+    static let leading: [SettingsTab] = [.general, .sources, .balances, .display]
 
     var id: String { rawValue }
     var slug: String { rawValue }
@@ -22,6 +22,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: return L10n.text("通用", "General")
         case .sources: return L10n.text("智能体", "Agents")
+        case .balances: return L10n.text("余额来源", "Balance sources")
         case .display: return L10n.text("显示", "Display")
         case .experimental: return L10n.text("实验选项", "Experimental")
         }
@@ -31,6 +32,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: return L10n.text("设置外观、语言、启动方式和客户端回调。", "Appearance, language, startup and client hook preferences.")
         case .sources: return L10n.text("管理实时状态、套餐与显示窗口。", "Manage live status, plans and visible windows.")
+        case .balances: return L10n.text("配置自定义接口，读取余额与总量。", "Read balances and totals from custom endpoints.")
         case .display: return L10n.text("自定义灵动岛光晕与面板内容，更改自动生效。", "Customize your notch and panel. Changes apply automatically.")
         case .experimental: return L10n.text("仍在验证的功能，以后可能会变。", "Features still being tested. They may change.")
         }
@@ -40,6 +42,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape.fill"
         case .sources: return "puzzlepiece.extension.fill"
+        case .balances: return "creditcard.fill"
         case .display: return "display"
         case .experimental: return "flask.fill"
         }
@@ -49,6 +52,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: return Color(hex: 0x8e8e93)
         case .sources: return Color(hex: 0x30b0c7)
+        case .balances: return Color(hex: 0x30b0c7)
         case .display: return Color(hex: 0x7c65e8)
         case .experimental: return Color(hex: 0xff9500)
         }
@@ -153,6 +157,7 @@ struct SettingsView: View {
         if let tab {
             switch tab {
             case .general: GeneralPane(settings: settings, theme: theme)
+            case .balances: CustomBalancesPane(settings: settings, store: store, theme: theme)
             case .sources: SourcesPane(settings: settings, store: store, theme: theme, sources: sourceStatuses,
                                        initialProviderID: initialProviderID)
             case .display: DisplayPane(settings: settings, store: store, theme: theme)

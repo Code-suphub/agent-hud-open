@@ -1,5 +1,7 @@
 # Data access
 
+**Custom balance sources:** only explicitly saved HTTPS queries are sent, approximately every five minutes. Full request definitions (including URL, headers, cookies and body) stay in the local Keychain; settings hold field mappings and units. Responses are reduced to configured numeric readings before reporting or ledger storage. Login expiry requires reimporting credentials. No browser session is imported automatically. See [configuration and request limits](custom-balances.md).
+
 ## Overview
 
 Agent HUD Open reads agent activity and usage metadata on your Mac. It has no Agent HUD account, cloud synchronization or push service. Building it requires no developer account, product credential, provisioning profile or signing certificate; local builds use ad-hoc signing.

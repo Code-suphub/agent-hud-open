@@ -144,6 +144,8 @@ Devin 的每日与每周额度来自 CLI 的本机缓存；需在 CLI 中刷新�
 
 另见[数据访问](docs/data-access.md)。
 
+自定义 HTTPS JSON 余额接口可在**设置 → 余额来源**导入 curl，并选择余额、总量字段。[配置说明](docs/custom-balances.md)。
+
 ## 从源码构建
 
 **环境要求：** macOS 14+，以及包含 Swift 6 工具链的 Xcode 或 Xcode 命令行工具。
