@@ -1,6 +1,6 @@
 # Data access
 
-**Custom balance sources:** only explicitly saved HTTPS queries are sent, approximately every five minutes. Only selected headers/cookies are retained. Full request definitions (including URL, headers, cookies and body) stay in the local Keychain; settings hold field mappings and units. Responses are reduced to configured numeric readings before reporting or ledger storage. Authentication failures pause retries and offer secure credential renewal; verified replacements remain in Keychain. No browser session is imported automatically. See [configuration and request limits](custom-balances.md).
+**Custom balance sources:** only explicitly saved HTTPS queries are sent, approximately every five minutes. Only selected headers/cookies are retained. Full request definitions (including URL, headers, cookies and body) stay in owner-only local JSON files in the app data directory; settings hold field mappings, units and optional local avatar images. Responses are reduced to configured numeric readings before reporting or ledger storage. Authentication failures pause retries and offer credential renewal; verified replacements are written atomically to the same local store. Custom balance authentication does not use Keychain. No browser session is imported automatically. See [configuration and request limits](custom-balances.md).
 
 ## Overview
 

@@ -39,6 +39,7 @@ enum AgentArtwork {
     ///   else is the same artwork either way.
     @MainActor
     static func original(for vendor: String, light: Bool = false) -> NSImage? {
+        if let custom = CustomAvatarRegistry.shared.image(for: vendor) { return custom }
         let vendor = canonical(vendor, light: light)
         guard let name = fileNames[vendor],
               let url = AppResources.bundle.url(forResource: name, withExtension: "png"),
@@ -96,11 +97,13 @@ enum AgentArtwork {
 
     @MainActor
     static func image(for vendor: String, dark: Bool? = nil) -> NSImage? {
+        if let custom = CustomAvatarRegistry.shared.image(for: vendor) { return custom }
         let isDark = dark ?? (NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
         return images[canonical(vendor, light: !isDark)]
     }
 
     @MainActor private static var accents: [String: NSColor?] = [:]
+    @MainActor static func invalidateAccents() { accents.removeAll(keepingCapacity: true) }
 
     /// The colour a vendor's mark is mostly drawn in: the average of its commonest saturated hue, so a many-coloured
     /// mark gives one of its colours rather than a blend of them. nil for monochrome marks and vendors without one.

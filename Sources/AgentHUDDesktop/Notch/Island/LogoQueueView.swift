@@ -91,6 +91,7 @@ struct LogoQueueConfig: Equatable {
     var workingSeconds: Double
     /// Working agents stay bots; idle agents occasionally become bots for a few seconds.
     var bots: Bool
+    var customAvatars: [CustomBalanceAvatar]
 
     init(items: [LogoQueueItem], placement: ScreenPlacement, settings: AgentHUDCore.Settings) {
         self.items = items
@@ -100,6 +101,7 @@ struct LogoQueueConfig: Equatable {
         gap = logo * placement.gapScale
         workingSeconds = settings.breathSeconds
         bots = settings.botLogos
+        customAvatars = settings.customBalances.compactMap(\.avatar)
     }
 
     /// The strip touches the screen edge; centring the marks within it keeps their edge at the requested distance.
@@ -197,6 +199,7 @@ final class LogoQueueLayerView: NSView {
             || applied?.scale != scale
             || applied?.config.logo != config.logo
             || applied?.config.bots != config.bots || applied?.config.workingSeconds != config.workingSeconds
+            || applied?.config.customAvatars != config.customAvatars
         let regrounded = applied.map { $0.light != light } ?? false
         // Bots built again while bots were out pick up where they were.
         let botsWereOut = applied.map { $0.config.bots && $0.animates } ?? false

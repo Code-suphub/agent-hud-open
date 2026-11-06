@@ -4,6 +4,13 @@ public enum MoneyFormat {
     /// A balance or an estimate, with the currency's symbol in the app's language: "$12.99", or up to six decimals for
     /// an estimate.
     public static func amount(_ amount: Decimal, currency: String, estimated: Bool = false) -> String {
+        // ICU's currency formatter can ignore precision for non-ISO units such as CREDITS.
+        if !Locale.commonISOCurrencyCodes.contains(currency) {
+            let format = Decimal.FormatStyle(locale: L10n.dateLocale).precision(.fractionLength(2...(estimated ? 6 : 2)))
+            let minimum = Decimal(string: "0.000001")!
+            let value = estimated && amount > 0 && amount < minimum ? "<" + minimum.formatted(format) : amount.formatted(format)
+            return value + " " + currency
+        }
         let format = Decimal.FormatStyle.Currency(code: currency)
             .presentation(.narrow)
             .locale(Locale(identifier: L10n.resolved == .zhHans ? "zh_CN" : "en_US"))
@@ -19,6 +26,9 @@ public enum MoneyFormat {
     /// The amount is rounded to the cent first, as the format itself rounds, so one that rounds to a hundred is written
     /// "$100"; an amount above zero that rounds to none is written "<$0.01", and zero "$0.00".
     public static func short(_ amount: Decimal, currency: String) -> String {
+        if !Locale.commonISOCurrencyCodes.contains(currency) {
+            return Self.amount(amount, currency: currency)
+        }
         let format = Decimal.FormatStyle.Currency(code: currency)
             .presentation(.narrow)
             .locale(Locale(identifier: L10n.resolved == .zhHans ? "zh_CN" : "en_US"))

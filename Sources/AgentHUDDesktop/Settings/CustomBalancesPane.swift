@@ -7,6 +7,7 @@ struct CustomBalancesPane: View {
     let theme: Theme
     @State private var editing: CustomBalanceProfile?
     @State private var adding = false
+    @State private var avatarEditing: CustomBalanceProfile?
     @State private var error: String?
 
     var body: some View {
@@ -20,7 +21,10 @@ struct CustomBalancesPane: View {
                 }
                 ForEach(settings.settings.customBalances) { profile in
                     HStack(spacing: 12) {
-                        Image(systemName: "creditcard").foregroundStyle(theme.secondary)
+                        Button { avatarEditing = profile } label: { AgentLogo(vendor: profile.name, size: 28) }
+                            .buttonStyle(.plain)
+                            .disabled(AgentArtwork.fileNames[AgentArtwork.markKey(profile.name)] != nil)
+                            .help(L10n.text("设置头像与跳动动画；内置智能体保留原头像", "Customize avatar and motion; built-in agents retain their artwork"))
                         VStack(alignment: .leading, spacing: 4) {
                             Text(profile.name).font(.ui(13, .medium))
                             Text(status(profile)).font(.ui(11)).foregroundStyle(theme.secondary).lineLimit(2)
@@ -53,13 +57,14 @@ struct CustomBalancesPane: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 12)
             }
-            Text(L10n.text("从浏览器复制只读余额查询为 cURL，选择要保留的请求项。约每 5 分钟刷新；认证过期可直接更新 Cookie 或 Token，凭据保存在本机钥匙串。",
-                           "Copy a read-only query as cURL and select the request items to keep. Refreshes about every 5 minutes; update Cookie or token values when authentication expires. Credentials stay in this Mac’s Keychain."))
+            Text(L10n.text("从浏览器复制只读余额查询为 cURL，选择要保留的请求项。约每 5 分钟刷新；认证过期可直接更新 Cookie 或 Token，凭据保存在本机配置目录。",
+                           "Copy a read-only query as cURL and select the request items to keep. Refreshes about every 5 minutes; update Cookie or token values when authentication expires. Credentials stay in this Mac’s local configuration directory."))
                 .font(.ui(11)).foregroundStyle(theme.secondary).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).font(.ui(12)).foregroundStyle(theme.statusText(.warning)) }
         }
         .sheet(isPresented: $adding) { CustomBalanceEditor(settings: settings, store: store, theme: theme) }
         .sheet(item: $editing) { profile in CustomBalanceEditor(settings: settings, store: store, theme: theme, profile: profile) }
+        .sheet(item: $avatarEditing) { profile in CustomAvatarEditor(profile: profile, settings: settings, theme: theme) }
     }
 
     private func status(_ profile: CustomBalanceProfile) -> String {
@@ -74,7 +79,7 @@ struct CustomBalancesPane: View {
 
     private func remove(_ profile: CustomBalanceProfile) {
         do {
-            try BalanceRequestVault.remove(id: profile.id)
+            try BalanceRequestStore.remove(id: profile.id)
             settings.update { $0.customBalances.removeAll { $0.id == profile.id } }
         } catch { self.error = error.localizedDescription }
     }
@@ -134,7 +139,17 @@ private struct CustomBalanceEditor: View {
                 .font(.ui(20, .semibold))
             HStack(spacing: 12) {
                 TextField(L10n.text("名称，如 Bitto", "Name, e.g. Bitto"), text: $name)
-                TextField(L10n.text("币种 / 单位", "Currency / unit"), text: $currency).frame(width: 120)
+                HStack(spacing: 4) {
+                    TextField(L10n.text("币种 / 单位", "Currency / unit"), text: $currency).frame(width: 98)
+                    Menu {
+                        Button(L10n.text("人民币（CNY）", "Yuan (CNY)")) { currency = "CNY" }
+                        Button(L10n.text("美元（USD）", "US dollar (USD)")) { currency = "USD" }
+                        Button(L10n.text("欧元（EUR）", "Euro (EUR)")) { currency = "EUR" }
+                        Button(L10n.text("额度（CREDITS）", "Credits (CREDITS)")) { currency = "CREDITS" }
+                    } label: { Image(systemName: "chevron.down") }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .help(L10n.text("选择常用币种，也可直接输入自定义单位", "Choose a currency or type a custom unit"))
+                }
             }
             .textFieldStyle(.roundedBorder)
             VStack(alignment: .leading, spacing: 6) {
@@ -202,7 +217,7 @@ private struct CustomBalanceEditor: View {
         invalidate()
         do {
             let saved = curl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let definition = try saved ? BalanceRequestVault.load(id: profile!.id) : BalanceRequest.parse(curl: curl, forSelection: true)
+            let definition = try saved ? BalanceRequestStore.load(id: profile!.id) : BalanceRequest.parse(curl: curl, forSelection: true)
             selection = BalanceRequestSelection(definition, preserveSavedSelection: saved)
         } catch { selection = nil; self.error = error.localizedDescription }
     }
@@ -217,10 +232,12 @@ private struct CustomBalanceEditor: View {
     }
 
     private func draft() -> CustomBalanceProfile {
-        CustomBalanceProfile(id: profile?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+        var value = CustomBalanceProfile(id: profile?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             currency: currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), balancePath: balancePath,
             totalPath: totalPath.isEmpty ? nil : totalPath, divisor: Decimal(string: divisor, locale: Locale(identifier: "en_US_POSIX")) ?? 0,
             enabled: profile?.enabled ?? true, valueKind: valueKind)
+        value.avatar = profile?.avatar
+        return value
     }
     private var preview: (balance: Decimal, total: Decimal?)? { try? draft().amounts(in: fields) }
 
@@ -248,7 +265,7 @@ private struct CustomBalanceEditor: View {
             value.credentialRevision = (profile?.credentialRevision ?? 0) + 1
             _ = try value.amounts(in: fields)
             guard let request else { return }
-            try BalanceRequestVault.save(request, id: value.id)
+            try BalanceRequestStore.save(request, id: value.id)
             settings.update { preferences in
                 if let index = preferences.customBalances.firstIndex(where: { $0.id == value.id }) { preferences.customBalances[index] = value }
                 else { preferences.customBalances.append(value) }

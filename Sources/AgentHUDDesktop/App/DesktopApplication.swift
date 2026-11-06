@@ -70,6 +70,11 @@ public final class DesktopApplication {
     }
 
     public func start() {
+        CustomAvatarRegistry.shared.sync(settings.settings.customBalances)
+        trackChanges({ [weak self] in _ = self?.settings.settings.customBalances }, onChange: { [weak self] in
+            guard let self else { return }
+            CustomAvatarRegistry.shared.sync(self.settings.settings.customBalances)
+        })
         let sources = options.demo ? DemoData.sources : SourceDetector.resolve(SourceDetector.detect(), report: store.report)
         settings.update { $0.applyLiveStatusDefaults(sources: sources) }
         WindowLook.source = { [weak self] screen in self?.settings.windowLook(on: screen) }
