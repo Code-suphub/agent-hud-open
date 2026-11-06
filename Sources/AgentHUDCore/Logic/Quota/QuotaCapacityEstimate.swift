@@ -12,7 +12,7 @@ public struct QuotaObservation: Hashable, Codable, Sendable {
 }
 
 /// Full-window projections from local usage and quota consumption over exactly the same observed interval.
-public struct QuotaCapacityEstimate: Hashable, Sendable {
+public struct QuotaCapacityEstimate: Hashable, Codable, Sendable {
     public let tokens: Int
     public let amounts: [String: Decimal]?
     public let hasUnpricedUsage: Bool
@@ -40,19 +40,22 @@ extension UsageAnalytics {
 }
 
 extension QuotaMath {
-    /// Quarter-hour buckets cannot be split by a quota reading's timestamp. If either edge cuts nonempty usage,
-    /// wait for a clean interval instead of attributing a whole bucket or inventing a time-proportional split.
-    public static func capacityEstimate(snapshot: UsageSnapshot, observation: QuotaObservation?, consumers: Set<String>,
-                                        usage: [UsageBucket], regions: PriceRegions, now: Date) -> QuotaCapacityEstimate? {
+    static func capacityConsumed(snapshot: UsageSnapshot, observation: QuotaObservation?, consumers: Set<String>, now: Date) -> Double? {
         guard let observation, let cycle = snapshot.cycle, !consumers.isEmpty,
               observation.start >= cycle.start, observation.start < observation.end,
               observation.end <= snapshot.updatedAt, snapshot.updatedAt <= now, now < cycle.resetAt,
               let remaining = snapshot.remainingPct, abs(remaining - observation.remainingAtEnd) < 0.000001,
               observation.remainingAtStart.isFinite, observation.remainingAtEnd.isFinite,
-              (0...100).contains(observation.remainingAtStart), (0...100).contains(observation.remainingAtEnd),
-              let oldest = usage.map(\.start).min(), oldest <= observation.start else { return nil }
+              (0...100).contains(observation.remainingAtStart), (0...100).contains(observation.remainingAtEnd) else { return nil }
         let consumed = observation.remainingAtStart - observation.remainingAtEnd
-        guard (5...100).contains(consumed) else { return nil }
+        return (5...100).contains(consumed) ? consumed : nil
+    }
+    /// Quarter-hour buckets cannot be split by a quota reading's timestamp. If either edge cuts nonempty usage,
+    /// wait for a clean interval instead of attributing a whole bucket or inventing a time-proportional split.
+    public static func capacityEstimate(snapshot: UsageSnapshot, observation: QuotaObservation?, consumers: Set<String>,
+                                        usage: [UsageBucket], regions: PriceRegions, now: Date) -> QuotaCapacityEstimate? {
+        guard let observation, let consumed = capacityConsumed(snapshot: snapshot, observation: observation, consumers: consumers, now: now),
+              let oldest = usage.map(\.start).min(), oldest <= observation.start else { return nil }
         var tokens = 0, amounts: [String: Decimal] = [:], unpriced = false
         for bucket in usage where consumers.contains(bucket.agentId) && bucket.start < observation.end && bucket.end > observation.start {
             let (fresh, freshOverflow) = bucket.tokensIn.addingReportingOverflow(bucket.tokensOut)
