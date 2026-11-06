@@ -247,6 +247,10 @@ public enum SnapshotRunner {
         settings.update { $0.glowOutwardOnly = Settings().glowOutwardOnly }
         save("onboarding-dark", OnboardingView(settings: settings, store: store, sources: DemoData.sources, onFinish: {}), folder: folder, scheme: .dark)
         save("onboarding-light", OnboardingView(settings: settings, store: store, sources: DemoData.sources, onFinish: {}), folder: folder, scheme: .light)
+        let cyclesStore = UsageAssembly.store(settings: settings, ledger: nil)
+        cyclesStore.statsTab = .quotaCycles
+        save("stats-quota-cycles-dark", StatsView(store: cyclesStore, scrollable: false).frame(width: 1100), folder: folder, scheme: .dark)
+        save("stats-quota-cycles-light", StatsView(store: cyclesStore, scrollable: false).frame(width: 1100), folder: folder, scheme: .light)
         save("stats-dark", StatsView(store: store, scrollable: false).frame(width: 760), folder: folder, scheme: .dark)
         save("stats-light", StatsView(store: store, scrollable: false).frame(width: 760), folder: folder, scheme: .light)
         saveTokenCharts(settings: settings, folder: folder)

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import AgentHUDCore
 
-/// Usage statistics that fill the available window width, on two pages: token charts, and sessions.
+/// Usage statistics that fill the available window width, on token, session and quota-cycle pages.
 struct StatsView: View {
     let store: UsageStore
     var scrollable = true
@@ -73,6 +73,8 @@ struct StatsView: View {
                     .textSelection(.enabled)
             }
             switch store.statsTab {
+            case .quotaCycles:
+                QuotaCycleHistoryView(store: store, theme: theme)
             case .tokens:
                 tokens(theme)
             case .sessions:
@@ -105,7 +107,7 @@ struct StatsView: View {
     private func header(_ theme: Theme) -> some View {
         VStack(spacing: 12) {
             Picker(L10n.text("页面", "Page"), selection: Binding(get: { store.statsTab }, set: { store.statsTab = $0 })) {
-                ForEach([StatsTab.tokens, .sessions], id: \.self) { Text($0.label).tag($0) }
+                ForEach([StatsTab.tokens, .sessions, .quotaCycles], id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -125,6 +127,9 @@ struct StatsView: View {
     private func controls(_ theme: Theme) -> some View {
         HStack(spacing: 12) {
             switch store.statsTab {
+            case .quotaCycles:
+                Text(L10n.text("账户额度历史", "Account quota history")).foregroundStyle(theme.secondary)
+                Spacer()
             case .tokens:
                 dimensions
                 Spacer(minLength: 12)
@@ -381,6 +386,7 @@ private extension StatsTab {
     /// The page's name in the window's picker.
     var label: String {
         switch self {
+        case .quotaCycles: L10n.text("额度周期", "Quota cycles")
         case .tokens: L10n.text("Token", "Tokens")
         case .sessions: L10n.text("会话", "Sessions")
         }

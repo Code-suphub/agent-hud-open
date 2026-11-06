@@ -72,3 +72,5 @@ Per-client fields, endpoints and stored data: [providers](providers.md). Token c
 ## Related
 
 [providers.md](providers.md) per-client details · [usage-semantics.md](usage-semantics.md) counting and retention · [session-lifecycle.md](session-lifecycle.md) turn evidence · [../THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt) provider protocol references and licenses
+
+- Quota-cycle history stores account/window identifiers, display labels, plan names, reset and observation times, percentages, integer token totals and API-price equivalent amounts in the local ledger (`quota_cycle`, schema version 5). Summaries remain after raw-event expiry; explicitly forgetting a provider removes its cycle summaries too. No credentials or message bodies are retained.

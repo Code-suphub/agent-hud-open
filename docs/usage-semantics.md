@@ -138,3 +138,13 @@ Reads never run in parallel: the usage store runs one pass of source reads or on
 ## Related
 
 [providers.md](providers.md) per-client fields and request intervals · [session-lifecycle.md](session-lifecycle.md) running and terminal turns · [architecture.md](architecture.md) design invariants
+
+### Quota cycle history
+
+The statistics window's **Quota cycles** page records confirmed account/window occurrences in the local ledger. A new deadline after the previous deadline, an early restoration to 100% by at least five percentage points, or a confirmed plan change closes an occurrence. Receiving reset credits does not. An elapsed deadline alone never closes one. Early restoration times are observation times, not exact service-provided manual reset times. Missing cycles are never fabricated from old percentage-only samples.
+
+Each row shows public API price equivalents and integer token counts of recorded calls, quota consumed, an optional full-capacity estimate, and observation coverage. The estimate divides the API-equivalent cost of calls strictly after the first reading and through the last reading by the quota percentage consumed over exactly that interval. It needs at least five percentage points, known prices in one currency, attributable calls, completed indexing and no observation gap over six hours or unexplained percentage restoration. It is a local observation estimate, never an official subscription dollar limit. Other devices' unrecorded activity remains outside its coverage.
+
+Unassigned local calls may be displayed only when one current account of that provider is known; they prevent a capacity estimate. Other accounts' attributed calls are excluded. Midcycle first readings are marked partial. A reset preserves the last actually observed remaining percentage rather than assuming exhaustion. API currencies remain separate.
+
+Cycle summaries are stored independently of the 31-day raw-event and 30-day sample retention and remain across restarts. Daily partitions are recomputed while their raw events remain available, preserving corrections without double counting; older partitions and sealed cycles are retained. Collection updates history serially; opening this page triggers no extra provider polling. Explicitly forgetting a provider also removes its cycle records. A failure to save history is shown on the page without failing normal usage collection.

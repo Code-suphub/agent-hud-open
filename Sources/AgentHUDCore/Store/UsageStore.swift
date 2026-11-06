@@ -18,6 +18,33 @@ public final class UsageStore {
     public static var historyHours: Int { StatsRange.days7.hours + 1 }
     /// The statistics window's page. Pointing out a quota window turns to Tokens, focusing a session to Sessions.
     public var statsTab: StatsTab = .tokens
+    public internal(set) var quotaCycles: [QuotaCycleRecord] = []
+    public internal(set) var quotaCyclesError: String?
+    @ObservationIgnored private var quotaHistoryRevision = 0
+
+    func loadQuotaCycles() async {
+        guard let ledger else { return }
+        let revision = quotaHistoryRevision
+        do {
+            let saved = try await ledger.quotaCycleRecords()
+            guard revision == quotaHistoryRevision else { return }
+            quotaCycles = saved
+            quotaCyclesError = nil
+        } catch { quotaCyclesError = error.localizedDescription }
+    }
+
+    /// Runs serially in collection, never from a view's body. A history failure leaves collection usable.
+    func collectQuotaCycles(_ report: UsageReport) async {
+        guard let ledger else { return }
+        quotaHistoryRevision += 1
+        do {
+            quotaCycles = try await ledger.recordQuotaCycles(report: report, agents: settings.agents)
+            quotaCyclesError = nil
+        } catch {
+            quotaCyclesError = error.localizedDescription
+        }
+    }
+
     /// The quota window the statistics window points out, set by whatever opened it.
     public var selectedQuotaId: String? { didSet { if selectedQuotaId != nil { statsTab = .tokens } } }
     /// The session the Sessions page shows in place of its list; nil shows the list.
