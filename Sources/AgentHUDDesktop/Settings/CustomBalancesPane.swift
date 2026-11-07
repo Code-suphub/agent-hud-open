@@ -181,26 +181,7 @@ private struct CustomBalanceEditor: View {
                         .font(.ui(11)).foregroundStyle(theme.statusText(.warning))
                 }
             }
-            if let profile {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.text("已保存的字段映射", "Saved field mapping")).font(.ui(12, .semibold))
-                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
-                        GridRow {
-                            Text(profile.valueKind == .remaining ? L10n.text("余额字段", "Balance field") : L10n.text("已用字段", "Used field"))
-                            Text(profile.balancePath.isEmpty ? "/" : profile.balancePath).monospaced().textSelection(.enabled)
-                        }
-                        GridRow {
-                            Text(L10n.text("总量字段", "Total field"))
-                            Text(profile.totalPath.map { $0.isEmpty ? "/" : $0 } ?? L10n.text("不设置", "Not set"))
-                                .monospaced().textSelection(.enabled)
-                        }
-                    }.font(.ui(12))
-                    Text(L10n.text("点「请求并读取字段」后可重新选择映射。", "Use Request and inspect fields to change the mapping."))
-                        .font(.ui(11)).foregroundStyle(theme.secondary)
-                }
-                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(theme.text.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-            }
+            if profile != nil { fieldMapping }
             VStack(alignment: .leading, spacing: 6) {
                 Text("cURL").font(.ui(12, .medium))
                 TextEditor(text: $curl).font(.system(size: 11, design: .monospaced))
@@ -221,6 +202,27 @@ private struct CustomBalanceEditor: View {
             if selection != nil {
                 BalanceRequestSelectionView(selection: Binding(get: { selection! }, set: { selection = $0; invalidate() }), theme: theme)
             }
+            if profile == nil { fieldMapping }
+        }
+    }
+
+    private var fieldMapping: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.text("余额字段映射", "Balance field mapping")).font(.ui(12, .semibold))
+            if let profile {
+                Text(L10n.text("已保存", "Saved")).font(.ui(11)).foregroundStyle(theme.secondary)
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
+                    GridRow {
+                        Text(profile.valueKind == .remaining ? L10n.text("余额字段", "Balance field") : L10n.text("已用字段", "Used field"))
+                        Text(profile.balancePath.isEmpty ? "/" : profile.balancePath).monospaced().textSelection(.enabled)
+                    }
+                    GridRow {
+                        Text(L10n.text("总量字段", "Total field"))
+                        Text(profile.totalPath.map { $0.isEmpty ? "/" : $0 } ?? L10n.text("不设置", "Not set"))
+                            .monospaced().textSelection(.enabled)
+                    }
+                }.font(.ui(12))
+            }
             HStack {
                 Button { test() } label: { Label(L10n.text("请求并读取字段", "Request and inspect fields"), systemImage: "arrow.triangle.2.circlepath") }
                     .disabled(isTesting || selection == nil)
@@ -239,7 +241,6 @@ private struct CustomBalanceEditor: View {
                     Text(L10n.text("第 \(probeAttempts) 组请求成功，已应用推荐勾选。", "Combination \(probeAttempts) worked and its selection is now applied."))
                         .font(.ui(11)).foregroundStyle(theme.secondary)
                 }
-                Text(L10n.text("设置字段映射", "Set field mapping")).font(.ui(12, .semibold))
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
                     GridRow {
                         Text(L10n.text("字段含义", "Value means"))
@@ -266,6 +267,8 @@ private struct CustomBalanceEditor: View {
             }
             if let error { Text(error).font(.ui(12)).foregroundStyle(theme.statusText(.warning)).fixedSize(horizontal: false, vertical: true) }
         }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.text.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func invalidate() {
