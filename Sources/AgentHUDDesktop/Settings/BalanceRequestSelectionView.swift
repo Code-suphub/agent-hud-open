@@ -4,7 +4,6 @@ import AgentHUDCore
 struct BalanceRequestSelectionView: View {
     @Binding var selection: BalanceRequestSelection
     let theme: Theme
-    var onChange: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -36,6 +35,5 @@ struct BalanceRequestSelectionView: View {
             }
         }
         .padding(12).background(theme.text.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-        .onChange(of: selection.parts) { _, _ in onChange() }
     }
 }

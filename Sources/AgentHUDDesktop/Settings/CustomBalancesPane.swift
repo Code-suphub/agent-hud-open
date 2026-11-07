@@ -119,6 +119,7 @@ private struct CustomBalanceEditor: View {
     @State private var savedParts: [BalanceRequestPart]?
     @State private var fields: [BalanceField] = []
     @State private var isTesting = false
+    @State private var probeAttempts: Int?
     @State private var error: String?
     @State private var testTask: Task<Void, Never>?
     @State private var requestRevision = 0
@@ -180,6 +181,26 @@ private struct CustomBalanceEditor: View {
                         .font(.ui(11)).foregroundStyle(theme.statusText(.warning))
                 }
             }
+            if let profile {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.text("已保存的字段映射", "Saved field mapping")).font(.ui(12, .semibold))
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
+                        GridRow {
+                            Text(profile.valueKind == .remaining ? L10n.text("余额字段", "Balance field") : L10n.text("已用字段", "Used field"))
+                            Text(profile.balancePath.isEmpty ? "/" : profile.balancePath).monospaced().textSelection(.enabled)
+                        }
+                        GridRow {
+                            Text(L10n.text("总量字段", "Total field"))
+                            Text(profile.totalPath.map { $0.isEmpty ? "/" : $0 } ?? L10n.text("不设置", "Not set"))
+                                .monospaced().textSelection(.enabled)
+                        }
+                    }.font(.ui(12))
+                    Text(L10n.text("点「请求并读取字段」后可重新选择映射。", "Use Request and inspect fields to change the mapping."))
+                        .font(.ui(11)).foregroundStyle(theme.secondary)
+                }
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(theme.text.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Text("cURL").font(.ui(12, .medium))
                 TextEditor(text: $curl).font(.system(size: 11, design: .monospaced))
@@ -198,17 +219,27 @@ private struct CustomBalanceEditor: View {
                 Spacer()
             }
             if selection != nil {
-                BalanceRequestSelectionView(selection: Binding(get: { selection! }, set: { selection = $0 }), theme: theme,
-                    onChange: { invalidate() })
+                BalanceRequestSelectionView(selection: Binding(get: { selection! }, set: { selection = $0; invalidate() }), theme: theme)
             }
             HStack {
                 Button { test() } label: { Label(L10n.text("请求并读取字段", "Request and inspect fields"), systemImage: "arrow.triangle.2.circlepath") }
                     .disabled(isTesting || selection == nil)
+                if savedParts == nil, selection?.canProbe == true {
+                    Button(L10n.text("智能测试", "Smart test")) { test(smart: true) }
+                        .disabled(isTesting)
+                        .help(L10n.text("最多尝试三组。失败时可补上原 cURL 中的 Cookie、CSRF、Origin 或 Referer。",
+                                        "Try up to three combinations, adding cookies, CSRF, Origin or Referer from the original cURL."))
+                }
                 if isTesting { ProgressView().controlSize(.small) }
                 Spacer()
                 if !fields.isEmpty { Text(L10n.text("读取到 \(fields.count) 个数值字段", "Found \(fields.count) numeric fields")).font(.ui(11)).foregroundStyle(theme.secondary) }
             }
             if !fields.isEmpty {
+                if let probeAttempts {
+                    Text(L10n.text("第 \(probeAttempts) 组请求成功，已应用推荐勾选。", "Combination \(probeAttempts) worked and its selection is now applied."))
+                        .font(.ui(11)).foregroundStyle(theme.secondary)
+                }
+                Text(L10n.text("设置字段映射", "Set field mapping")).font(.ui(12, .semibold))
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
                     GridRow {
                         Text(L10n.text("字段含义", "Value means"))
@@ -238,7 +269,7 @@ private struct CustomBalanceEditor: View {
     }
 
     private func invalidate() {
-        testTask?.cancel(); requestRevision += 1; request = nil; fields = []; isTesting = false; error = nil
+        testTask?.cancel(); requestRevision += 1; request = nil; fields = []; isTesting = false; error = nil; probeAttempts = nil
     }
 
     private func prepare() {
@@ -255,6 +286,9 @@ private struct CustomBalanceEditor: View {
     private func fieldPicker(_ selection: Binding<String>, optional: Bool) -> some View {
         Picker("", selection: selection) {
             Text(optional ? L10n.text("不设置", "Not set") : L10n.text("请选择", "Select a field")).tag("")
+            if !selection.wrappedValue.isEmpty, !fields.contains(where: { $0.path == selection.wrappedValue }) {
+                Text(selection.wrappedValue + L10n.text("（响应未找到）", " (not in response)")).tag(selection.wrappedValue)
+            }
             ForEach(fields) { field in
                 Text((field.path.isEmpty ? "/" : field.path) + " = " + field.value.formatted(.number.precision(.fractionLength(0...2)))).tag(field.path)
             }
@@ -274,20 +308,28 @@ private struct CustomBalanceEditor: View {
     }
     private var preview: (balance: Decimal, total: Decimal?)? { try? draft().amounts(in: fields) }
 
-    private func test() {
-        error = nil; fields = []; request = nil; isTesting = true
+    private func test(smart: Bool = false) {
+        guard let selection, !isTesting else { return }
+        error = nil; fields = []; request = nil; probeAttempts = nil; isTesting = true
         let revision = requestRevision
+        let requiredPaths = profile.map { Set([$0.balancePath] + ($0.totalPath.map { [$0] } ?? [])) } ?? []
         testTask = Task {
             defer { if requestRevision == revision { isTesting = false } }
             do {
-                guard let definition = selection?.request() else { return }
-                let result = try await BalanceRequestClient.fetch(definition)
+                let testedSelection: BalanceRequestSelection
+                let result: [BalanceField]
+                let attempts: Int?
+                if smart {
+                    let match = try await selection.probe(requiredPaths: requiredPaths)
+                    (testedSelection, result, attempts) = (match.selection, match.fields, match.attempts)
+                } else {
+                    (testedSelection, result, attempts) = (selection, try await BalanceRequestClient.fetch(selection.request()), nil)
+                }
                 try Task.checkCancellation()
                 guard requestRevision == revision else { return }
                 guard !result.isEmpty else { throw UsageProviderError(L10n.text("响应中没有可选的数值字段", "No numeric fields in the response")) }
-                fields = result; request = definition
-                if !result.contains(where: { $0.path == balancePath }) { balancePath = "" }
-                if !result.contains(where: { $0.path == totalPath }) { totalPath = "" }
+                self.selection = testedSelection
+                fields = result; request = testedSelection.request(); probeAttempts = attempts
             } catch { if !Task.isCancelled, requestRevision == revision { self.error = error.localizedDescription } }
         }
     }

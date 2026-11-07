@@ -34,6 +34,53 @@ public struct BalanceRequestSelection: Sendable {
         }
     }
 
+    public var canProbe: Bool {
+        original.method == "GET" && parts == Self(original).parts
+    }
+
+    /// Try only a freshly imported GET and leave manual selections to the exact-request test.
+    public func probe(requiredPaths: Set<String> = [],
+                      fetch: (BalanceRequest) async throws -> [BalanceField] = { try await BalanceRequestClient.fetch($0) })
+        async throws -> (selection: Self, fields: [BalanceField], attempts: Int) {
+        guard canProbe else {
+            throw UsageProviderError(L10n.text("智能测试需要新导入且未手动调整的 GET 请求", "Smart test requires a newly imported GET with its suggested selection"))
+        }
+        func isCookieContext(_ part: BalanceRequestPart) -> Bool {
+            let name = part.name.lowercased()
+            return part.isCookie || name.contains("csrf") || name.contains("xsrf")
+        }
+        var candidates: [Self] = []
+        if parts.contains(where: { $0.keep && $0.isAuthentication && !isCookieContext($0) }) {
+            var tokenOnly = self
+            for index in parts.indices where isCookieContext(parts[index]) { tokenOnly.parts[index].keep = false }
+            if tokenOnly.parts != parts { candidates.append(tokenOnly) }
+        }
+        candidates.append(self)
+        var withOrigin = self
+        for index in parts.indices where !parts[index].isCookie && ["origin", "referer"].contains(parts[index].name.lowercased()) {
+            withOrigin.parts[index].keep = true
+        }
+        if withOrigin.parts != parts { candidates.append(withOrigin) }
+
+        for (index, candidate) in candidates.enumerated() {
+            try Task.checkCancellation()
+            let fields: [BalanceField]
+            do {
+                fields = try await fetch(candidate.request())
+            } catch is BalanceRequestFailure where index < candidates.count - 1 {
+                continue
+            }
+            try Task.checkCancellation()
+            let paths = Set(fields.map(\.path))
+            let hasValues = !requiredPaths.isEmpty
+                ? requiredPaths.isSubset(of: paths)
+                : paths.contains { !["/code", "/status", "/status_code", "/error"].contains($0) && !$0.hasPrefix("/error/") }
+            if hasValues { return (candidate, fields, index + 1) }
+        }
+        throw UsageProviderError(L10n.text("未读取到预期字段，请检查响应或手动测试请求",
+                                            "Expected fields were not found. Inspect the response or test the request manually."))
+    }
+
     public func request() -> BalanceRequest {
         var result = original
         result.headers = [:]

@@ -17,6 +17,56 @@ final class BalanceAuthenticationTests: XCTestCase, @unchecked Sendable {
         try request.validate()
     }
 
+    func testSmartProbeUsesTokenThenCookieThenOriginAndChecksMappedFields() async throws {
+        let request = try BalanceRequest.parse(curl: #"curl 'https://example.com/balance' -H 'Accept: application/json' -H 'X-Token: example' -H 'X-CSRF-Token: sample' -H 'Origin: https://example.com' -H 'User-Agent: browser' -b 'session=example'"#)
+        var sent: [BalanceRequest] = []
+        let result = try await BalanceRequestSelection(request).probe(requiredPaths: ["/left", "/total"]) { attempt in
+            sent.append(attempt)
+            if sent.count == 1 { throw BalanceRequestFailure.authentication(status: 403) }
+            if sent.count == 2 { return try BalanceFields.parse(Data(#"{"left":10}"#.utf8)) }
+            return try BalanceFields.parse(Data(#"{"left":10,"total":20}"#.utf8))
+        }
+        XCTAssertEqual(result.attempts, 3)
+        XCTAssertEqual(sent.map { Set($0.headers.keys) }, [
+            ["Accept", "X-Token"],
+            ["Accept", "X-Token", "X-CSRF-Token", "Cookie"],
+            ["Accept", "X-Token", "X-CSRF-Token", "Cookie", "Origin"],
+        ])
+        XCTAssertEqual(result.selection.request(), sent.last)
+        XCTAssertFalse(result.selection.request().credentialHeaderNames.contains("Origin"))
+        XCTAssertEqual(sent.map(\.url), [request.url, request.url, request.url])
+    }
+
+    func testSmartProbeStopsAtWorkingTokenOnlyCombination() async throws {
+        let request = try BalanceRequest.parse(curl: #"curl https://example.com -H 'X-Token: example' -b 'session=example'"#)
+        let result = try await BalanceRequestSelection(request).probe { attempt in
+            XCTAssertNil(attempt.headers["Cookie"])
+            return try BalanceFields.parse(Data(#"{"left":12}"#.utf8))
+        }
+        XCTAssertEqual(result.attempts, 1)
+        XCTAssertEqual(result.selection.request().credentialHeaderNames, ["X-Token"])
+    }
+
+    func testSmartProbeDoesNotReplayPostOrExpandManualSelectionsOrRetryNetworkErrors() async throws {
+        let request = try BalanceRequest.parse(curl: #"curl https://example.com -H 'X-Token: example' -b 'session=example'"#)
+        var manual = BalanceRequestSelection(request)
+        if let index = manual.parts.firstIndex(where: \.isCookie) { manual.parts[index].keep = false }
+        var post = request
+        post.method = "POST"
+        var attempts = 0
+        for selection in [manual, BalanceRequestSelection(post), BalanceRequestSelection(request)] {
+            var failed = false
+            do {
+                _ = try await selection.probe { _ in
+                    attempts += 1
+                    throw URLError(.networkConnectionLost)
+                }
+            } catch { failed = true }
+            XCTAssertTrue(failed)
+        }
+        XCTAssertEqual(attempts, 1, "Only the untouched GET is sent, and its network failure ends probing")
+    }
+
     func testCSRFOriginAndCustomAuthenticationCanBeExplicitlyKept() throws {
         let original = try BalanceRequest.parse(curl: #"curl https://example.com -H 'Origin: https://example.com' -H 'X-Business: opaque'"#)
         var selection = BalanceRequestSelection(original)
