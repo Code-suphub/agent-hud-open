@@ -84,7 +84,7 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(records.first { $0.endedAt != nil }?.endedBy, .naturalReset)
     }
 
-    func testUnattributedCallsAndUnknownModelsSuppressEstimate() async throws {
+    func testUnattributedCallsStillRequireAttributionWithUnpricedModels() async throws {
         let ledger = UsageLedger.inMemory()
         _ = try await feed(ledger, 0, remaining: 100)
         try await ledger.write { try $0.upsert(source: "codex", contribution: "local", events: [self.event("local", at: 10)]) }
@@ -102,7 +102,27 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
                            consumerIdsByQuota: [agent.id: [consumer, unknown]], accounts: next.accounts)
         let records = try await ledger.recordQuotaCycles(report: next, agents: [agent])
         XCTAssertEqual(records.first?.usage.unpricedTokens, 1_000_000)
-        XCTAssertNil(records.first?.estimatedCapacity)
+        XCTAssertNil(records.first?.estimatedCapacity, "the original unattributed calls still need account attribution")
+    }
+
+    func testAttributedCallsWithMissingPricesProjectKnownCostAndCountAllTokens() async throws {
+        let ledger = UsageLedger.inMemory()
+        _ = try await feed(ledger, 0, remaining: 100)
+        let id = account.id, unknown = "codex-model:no-price-test-model"
+        try await ledger.write { try $0.upsert(source: "codex", contribution: "mixed", account: id, events: [
+            self.event("known", at: 10), self.event("unknown", at: 20, model: unknown)]) }
+        let next = report(120, remaining: 80)
+        let mixed = UsageReport(generatedAt: next.generatedAt, snapshots: next.snapshots, sessions: [], discoveredAgents: [agent],
+            consumerIdsByQuota: [agent.id: [consumer, unknown]], accounts: next.accounts)
+        let records = try await ledger.recordQuotaCycles(report: mixed, agents: [agent])
+        let record = try XCTUnwrap(records.first)
+        XCTAssertEqual(record.observedUsage.tokens, 2_000_000)
+        XCTAssertEqual(record.observedUsage.unpricedTokens, 1_000_000)
+        XCTAssertEqual(record.estimatedTokenCapacity, 10_000_000)
+        let baseCost = try XCTUnwrap(record.observedUsage.baseAmounts?["USD"])
+        XCTAssertGreaterThan(baseCost, 0)
+        XCTAssertEqual(record.estimatedReferenceCapacity?["USD"], baseCost * 5)
+        XCTAssertEqual(record.estimatedCapacity?["USD"], (record.observedUsage.amounts["USD"] ?? 0) * 5)
     }
 
     func testFailedAndOtherAccountsCannotChangeBaselineOrContributeCalls() async throws {
@@ -241,7 +261,7 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(record.estimatedCapacity?["USD"], amount * 10)
     }
 
-    func testLegacyRecoveryWithObservationGapStillShowsCostButDoesNotEstimate() async throws {
+    func testLegacyRecoveryWithObservationGapUsesAvailableCallsForEstimates() async throws {
         let ledger = UsageLedger.inMemory()
         let samples = [(0.0, 100.0), (30_000, 10), (30_100, 100)].map {
             QuotaSample(agentId: agent.id, timestamp: base.addingTimeInterval($0.0), remainingPct: $0.1)
@@ -255,7 +275,7 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(old.hasObservationGap)
         XCTAssertEqual(old.usage.tokens, 1_000_000)
         XCTAssertNotNil(old.usage.amounts["USD"])
-        XCTAssertNil(old.estimatedCapacity)
+        XCTAssertNotNil(old.estimatedCapacity)
     }
 
     func testLegacyHistoryDoesNotInventResetFromSmallRisesOrElapsedWeeks() async throws {
@@ -303,7 +323,7 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
         let result = try await ledger.recordQuotaCycles(report: report(500, remaining: 90), agents: [agent], localUsageOnly: true)
         let old = try XCTUnwrap(result.first { $0.endedAt != nil })
         XCTAssertTrue(old.hasObservationGap)
-        XCTAssertNil(old.estimatedCapacity)
+        XCTAssertNotNil(old.estimatedCapacity)
         let candidates = try await ledger.quotaCapacityCandidates(recordID: old.id)
         XCTAssertEqual(candidates.count, 1)
         XCTAssertEqual(candidates.first?.suggestedMultiplier, 2)
@@ -323,12 +343,12 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
         try await ledger.removeQuotaCapacityIncrease(recordID: old.id, observedAt: base.addingTimeInterval(200))
         let removed = try await ledger.quotaCycleRecords()
         XCTAssertTrue(removed.first { $0.id == old.id }?.hasObservationGap == true)
-        XCTAssertNil(removed.first { $0.id == old.id }?.estimatedCapacity)
+        XCTAssertNotNil(removed.first { $0.id == old.id }?.estimatedCapacity)
         let original = try await ledger.samples(scope: "codex", windowID: agent.id, since: base)
         XCTAssertEqual(original, samples)
     }
 
-    func testConfirmedCapacityChangeDoesNotHideAnUnrelatedObservationGap() async throws {
+    func testConfirmedCapacityChangeRetainsGapFlagAndStillProjects() async throws {
         let ledger = UsageLedger.inMemory()
         let samples = [(0.0, 100.0), (30_000, 0), (30_100, 50), (30_200, 0), (30_300, 100)].map {
             QuotaSample(agentId: agent.id, timestamp: base.addingTimeInterval($0.0), remainingPct: $0.1)
@@ -338,7 +358,8 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
         let old = try XCTUnwrap(result.first { $0.endedAt != nil })
         let changed = try await ledger.confirmQuotaCapacityIncrease(recordID: old.id,
             observedAfter: base.addingTimeInterval(30_000), observedAt: base.addingTimeInterval(30_100), multiplier: 2)
-        XCTAssertTrue(changed.hasObservationGap, "the separate 8-hour outage still matters")
+        XCTAssertTrue(changed.hasObservationGap, "the separate 8-hour outage remains marked")
+        // A gap is a quality warning, not a reason to discard available usage.
         var rejected = false
         do {
             _ = try await ledger.confirmQuotaCapacityIncrease(recordID: old.id,
@@ -394,7 +415,7 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(decoded.estimatedReferenceCapacity)
     }
 
-    func testTokenProjectionNeedsCoverageButDoesNotNeedModelPrices() throws {
+    func testMissingPricesAndObservationGapsKeepTokenAndZeroCostProjections() throws {
         var record = try XCTUnwrap(DemoData.quotaCycles.first)
         var observed = QuotaCycleUsage()
         observed.tokens = 1_000
@@ -402,7 +423,9 @@ final class QuotaCycleLedgerTests: XCTestCase, @unchecked Sendable {
         record.observedDays = ["sample": observed]
         XCTAssertNotNil(record.estimatedTokenCapacity, "missing prices must not hide known tokens")
         record.hasObservationGap = true
-        XCTAssertNil(record.estimatedTokenCapacity)
+        XCTAssertNotNil(record.estimatedTokenCapacity)
+        XCTAssertEqual(record.estimatedCapacity, ["USD": 0])
+        XCTAssertEqual(record.estimatedReferenceCapacity, ["USD": 0])
         record.hasObservationGap = false
         record.remaining = 99
         XCTAssertNil(record.estimatedTokenCapacity, "one percent is too little evidence")

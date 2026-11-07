@@ -108,9 +108,15 @@ struct QuotaCycleDetailsView: View {
         return L10n.text("仅统计两次额度读数之间的本机调用。", "Only calls recorded on this Mac between the quota readings are included.")
     }
     private var notice: String? {
-        if record.hasObservationGap { return L10n.text("额度读数有间断，暂不估算整轮用量。", "Quota readings have gaps; the full-cycle estimate is unavailable.") }
         if record.usageUnavailable { return L10n.text("调用记录尚未完整。", "Call records are incomplete.") }
-        if record.observedUsage.unpricedTokens > 0 { return L10n.text("部分模型暂无价格，费用未计全。", "Some models have no price; the cost is incomplete.") }
+        var notes: [String] = []
+        if record.hasObservationGap {
+            notes.append(L10n.text("观测有缺口，按现有记录预估。", "Readings have gaps; estimates use available calls."))
+        }
+        if record.observedUsage.unpricedTokens > 0 {
+            notes.append(L10n.text("缺价调用按 0 计费。", "Calls without prices count as zero."))
+        }
+        if !notes.isEmpty { return notes.joined(separator: " ") }
         if record.observedUsage.baseAmounts == nil { return L10n.text("参考费用尚未回填。", "Reference costs have not been recovered.") }
         if record.initialRemaining < 99 { return L10n.text("从周期中途开始记录。", "Recording began partway through the cycle.") }
         return nil

@@ -53,7 +53,7 @@ public struct QuotaCycleRecord: Identifiable, Hashable, Codable, Sendable {
             (hasUnassignedUsage && localUsageOnly != true) || usageUnavailable || usage.unpricedTokens > 0
     }
     /// An observed-interval estimate, not the service's official quota. At least five percentage points and two
-    /// readings are needed; unpriced or unattributed calls, indexing and gaps suppress the estimate.
+    /// readings are needed. Missing calls and sampling gaps are tolerated; unpriced calls cost zero.
     public var estimatedCapacity: [String: Decimal]? {
         estimate(observedUsage.amounts)
     }
@@ -69,14 +69,15 @@ public struct QuotaCycleRecord: Identifiable, Hashable, Codable, Sendable {
         return Int(value.rounded())
     }
     private var canEstimateObservedInterval: Bool {
-        observedPercent >= 5 && lastObserved > firstObserved && !hasObservationGap &&
+        observedPercent >= 5 && lastObserved > firstObserved &&
             (!hasUnassignedUsage || localUsageOnly == true) && !usageUnavailable && observedUsage.tokens > 0
     }
     private func estimate(_ amounts: [String: Decimal]?) -> [String: Decimal]? {
         let observed = observedUsage
-        guard canEstimateObservedInterval, observed.unpricedTokens == 0,
-              let amounts, amounts.count == 1, amounts.values.allSatisfy({ $0 > 0 }) else { return nil }
-        return amounts.mapValues { $0 * 100 / Decimal(observedPercent) }
+        guard canEstimateObservedInterval, let amounts else { return nil }
+        let known = amounts.isEmpty && observed.unpricedTokens > 0 ? ["USD": Decimal.zero] : amounts
+        guard known.count == 1, known.values.allSatisfy({ !$0.isNaN && $0 >= 0 }) else { return nil }
+        return known.mapValues { $0 * 100 / Decimal(observedPercent) }
     }
 }
 
