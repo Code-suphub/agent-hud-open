@@ -7,6 +7,7 @@ struct CustomBalancesPane: View {
     let theme: Theme
     @State private var editing: CustomBalanceProfile?
     @State private var adding = false
+    @State private var isManuallyRefreshing = false
     @State private var avatarEditing: CustomBalanceProfile?
     @State private var error: String?
 
@@ -57,8 +58,8 @@ struct CustomBalancesPane: View {
                 HStack {
                     Button { adding = true } label: { Label(L10n.text("添加来源", "Add source"), systemImage: "plus") }
                     Spacer()
-                    Button(L10n.text("立即刷新", "Refresh now")) { Task { await store.refreshAccounts() } }
-                        .disabled(store.isRefreshing || settings.settings.customBalances.isEmpty)
+                    Button(L10n.text("立即刷新", "Refresh now"), action: refreshManually)
+                        .disabled(isManuallyRefreshing || !settings.settings.customBalances.contains(where: \.enabled))
                 }
                 .padding(.horizontal, 16).padding(.vertical, 12)
             }
@@ -70,6 +71,15 @@ struct CustomBalancesPane: View {
         .sheet(isPresented: $adding) { CustomBalanceEditor(settings: settings, store: store, theme: theme) }
         .sheet(item: $editing) { profile in CustomBalanceEditor(settings: settings, store: store, theme: theme, profile: profile) }
         .sheet(item: $avatarEditing) { profile in CustomAvatarEditor(profile: profile, settings: settings, theme: theme) }
+    }
+
+    private func refreshManually() {
+        guard !isManuallyRefreshing else { return }
+        isManuallyRefreshing = true
+        Task {
+            defer { isManuallyRefreshing = false }
+            await store.refreshAccounts()
+        }
     }
 
     private func status(_ profile: CustomBalanceProfile) -> String {

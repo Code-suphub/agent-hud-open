@@ -58,7 +58,7 @@ private final class BalanceAuthenticationWindow: NSWindowController, NSWindowDel
     init(profile: CustomBalanceProfile, store: UsageStore, automatic: Bool, openSettings: @escaping () -> Void,
          onClose: @escaping () -> Void) {
         self.automatic = automatic; self.onClose = onClose
-        let panel = BalanceAuthPanel(contentRect: NSRect(x: 0, y: 0, width: 490, height: 420),
+        let panel = BalanceAuthPanel(contentRect: NSRect(x: 0, y: 0, width: BalanceAuthenticationForm.width, height: 1),
             styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = L10n.text("更新余额认证", "Update balance credentials")
         panel.titlebarAppearsTransparent = true
@@ -71,11 +71,27 @@ private final class BalanceAuthenticationWindow: NSWindowController, NSWindowDel
         panel.delegate = self
         let content = BalanceAuthenticationForm(profile: profile, store: store, automatic: automatic,
             onClose: { [weak self] in self?.close() }, openSettings: { [weak self] in self?.close(); openSettings() })
-        panel.contentView = NSHostingView(rootView: content)
+        let hosting = NSHostingView(rootView: content.ignoresSafeArea().onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { [weak self] height in
+            Task { @MainActor in self?.resize(to: height) }
+        })
+        let fittingHeight = hosting.fittingSize.height
+        hosting.sizingOptions = []
+        panel.contentView = hosting
+        resize(to: fittingHeight)
         if let screen = NSScreen.main {
             let bounds = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: bounds.midX - 245, y: bounds.maxY - panel.frame.height - 55))
+            panel.setFrameOrigin(NSPoint(x: bounds.midX - panel.frame.width / 2, y: bounds.maxY - panel.frame.height - 55))
         }
+    }
+
+    private func resize(to height: CGFloat) {
+        guard let window, height.isFinite, height > 0 else { return }
+        let content = NSRect(x: 0, y: 0, width: BalanceAuthenticationForm.width, height: ceil(height))
+        let size = window.frameRect(forContentRect: content).size
+        let current = window.frame
+        guard current.size != size else { return }
+        window.setFrame(NSRect(x: current.minX, y: current.maxY - size.height, width: size.width, height: size.height),
+                        display: window.isVisible)
     }
 
     @available(*, unavailable)
@@ -92,13 +108,14 @@ private final class BalanceAuthPanel: NSPanel {
 }
 
 struct BalanceAuthenticationForm: View {
+    static let width: CGFloat = 490
     let profile: CustomBalanceProfile
     let store: UsageStore
     var automatic = true
     var onClose: () -> Void = {}
     var openSettings: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
-    @State private var original: BalanceRequest?
+    private let original: BalanceRequest?
     @State private var values: [String: String] = [:]
     @State private var error: String?
     @State private var saving = false
@@ -108,7 +125,12 @@ struct BalanceAuthenticationForm: View {
          openSettings: @escaping () -> Void = {}, initialRequest: BalanceRequest? = nil) {
         self.profile = profile; self.store = store; self.automatic = automatic
         self.onClose = onClose; self.openSettings = openSettings
-        _original = State(initialValue: initialRequest)
+        do {
+            original = try initialRequest ?? BalanceRequestStore.load(id: profile.id)
+        } catch {
+            original = nil
+            _error = State(initialValue: error.localizedDescription)
+        }
     }
 
     var body: some View {
@@ -132,17 +154,11 @@ struct BalanceAuthenticationForm: View {
             if let original, !original.credentialHeaderNames.isEmpty {
                 Text(L10n.text("填写新的 Cookie 或 Token。留空的项目会保留，验证成功后自动恢复监控。", "Update the Cookie or token that changed; blank fields are kept. Monitoring resumes after verification."))
                     .font(.ui(12)).foregroundStyle(theme.secondary).fixedSize(horizontal: false, vertical: true)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(original.credentialHeaderNames, id: \.self) { name in
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(name).font(.ui(11, .medium))
-                                SecureField(name.lowercased() == "cookie" ? "session=…; token=…" : L10n.text("输入新的值", "Enter a new value"),
-                                    text: Binding(get: { values[name] ?? "" }, set: { values[name] = $0 }))
-                                    .textFieldStyle(.roundedBorder).disabled(saving)
-                            }
-                        }
-                    }
+                let names = original.credentialHeaderNames
+                if names.count > 4 {
+                    ScrollView { credentialFields(names) }.frame(height: 200)
+                } else {
+                    credentialFields(names)
                 }
                 if let host = original.url.host {
                     Text(L10n.text("仅发送到：", "Sent only to: ") + host).font(.ui(11)).foregroundStyle(theme.secondary)
@@ -150,7 +166,6 @@ struct BalanceAuthenticationForm: View {
             } else if original != nil {
                 Text(L10n.text("这个请求没有标记认证字段。请在设置中重新导入 curl，并选择需要更新的认证项。", "This request has no renewable fields. Import cURL in Settings and mark its authentication fields."))
                     .font(.ui(12)).foregroundStyle(theme.secondary).fixedSize(horizontal: false, vertical: true)
-                Spacer()
             }
             if let error { Text(error).font(.ui(11)).foregroundStyle(theme.statusText(.warning)).fixedSize(horizontal: false, vertical: true) }
             HStack {
@@ -162,13 +177,23 @@ struct BalanceAuthenticationForm: View {
                     .disabled(saving || !values.values.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }))
             }
         }
-        .padding(24).padding(.top, 12).foregroundStyle(theme.text).background(theme.windowBackground)
-        .task {
-            guard original == nil else { return }
-            do { original = try BalanceRequestStore.load(id: profile.id) }
-            catch { self.error = error.localizedDescription }
-        }
+        .padding(24).padding(.top, 12)
+        .frame(width: Self.width).fixedSize(horizontal: false, vertical: true)
+        .foregroundStyle(theme.text).background(theme.windowBackground)
         .onDisappear { task?.cancel() }
+    }
+
+    private func credentialFields(_ names: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(names, id: \.self) { name in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(name).font(.ui(11, .medium)).lineLimit(1)
+                    SecureField(name.lowercased() == "cookie" ? "session=…; token=…" : L10n.text("输入新的值", "Enter a new value"),
+                        text: Binding(get: { values[name] ?? "" }, set: { values[name] = $0 }))
+                        .textFieldStyle(.roundedBorder).disabled(saving)
+                }
+            }
+        }
     }
 
     private func renew() {
