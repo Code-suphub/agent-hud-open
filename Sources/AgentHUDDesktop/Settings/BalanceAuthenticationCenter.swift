@@ -35,7 +35,9 @@ final class BalanceAuthenticationCenter {
     }
 
     func show(profileID: String, automatic: Bool = false) {
-        let screen = ScreenIdentity.underPointer()
+        // A button or keyboard action belongs to its source window. Background prompts have no source window.
+        let sourceScreen = automatic ? nil : (NSApp.currentEvent?.window?.screen ?? NSApp.keyWindow?.screen)
+        let screen = sourceScreen ?? ScreenIdentity.underPointer()
         if let window = windows[profileID] {
             window.reveal(activate: !automatic, on: automatic ? nil : screen)
             return
