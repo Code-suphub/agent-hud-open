@@ -35,7 +35,11 @@ final class BalanceAuthenticationCenter {
     }
 
     func show(profileID: String, automatic: Bool = false) {
-        if let window = windows[profileID] { window.reveal(activate: !automatic); return }
+        let screen = ScreenIdentity.underPointer()
+        if let window = windows[profileID] {
+            window.reveal(activate: !automatic, on: automatic ? nil : screen)
+            return
+        }
         guard let store, let profile = store.settings.settings.customBalances.first(where: { $0.id == profileID && ($0.enabled || !automatic) }) else { return }
         let controller = BalanceAuthenticationWindow(profile: profile, store: store, automatic: automatic, openSettings: { [weak self] in
             self?.openSettings()
@@ -46,7 +50,7 @@ final class BalanceAuthenticationCenter {
             Task { @MainActor [weak self] in self?.sync() }
         })
         windows[profileID] = controller
-        controller.reveal(activate: !automatic)
+        controller.reveal(activate: !automatic, on: screen)
     }
 }
 
@@ -78,10 +82,6 @@ private final class BalanceAuthenticationWindow: NSWindowController, NSWindowDel
         hosting.sizingOptions = []
         panel.contentView = hosting
         resize(to: fittingHeight)
-        if let screen = NSScreen.main {
-            let bounds = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: bounds.midX - panel.frame.width / 2, y: bounds.maxY - panel.frame.height - 55))
-        }
     }
 
     private func resize(to height: CGFloat) {
@@ -90,16 +90,29 @@ private final class BalanceAuthenticationWindow: NSWindowController, NSWindowDel
         let size = window.frameRect(forContentRect: content).size
         let current = window.frame
         guard current.size != size else { return }
-        window.setFrame(NSRect(x: current.minX, y: current.maxY - size.height, width: size.width, height: size.height),
-                        display: window.isVisible)
+        let frame = NSRect(x: current.minX, y: current.maxY - size.height, width: size.width, height: size.height)
+        let visible = window.isVisible
+        window.setFrame(visible ? window.constrainFrameRect(frame, to: window.screen) : frame, display: visible)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
     func windowWillClose(_ notification: Notification) { onClose() }
-    func reveal(activate: Bool) {
-        if activate { NSApp.activate(ignoringOtherApps: true); window?.makeKeyAndOrderFront(nil) }
-        else { window?.orderFrontRegardless() }
+    func reveal(activate: Bool, on screen: NSScreen?) {
+        guard let window else { return }
+        if let screen, !window.isVisible || window.screen.map(ScreenIdentity.key(for:)) != ScreenIdentity.key(for: screen) {
+            let bounds = screen.visibleFrame
+            let size = window.frame.size
+            let frame = NSRect(x: bounds.midX - size.width / 2, y: bounds.maxY - size.height - 55,
+                               width: size.width, height: size.height)
+            window.setFrame(window.constrainFrameRect(frame, to: screen), display: window.isVisible)
+        }
+        if activate {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            window.orderFrontRegardless()
+        }
     }
 }
 
