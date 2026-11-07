@@ -121,9 +121,16 @@ struct BalanceAuthenticationForm: View {
                     Text(automatic ? L10n.text("认证已失效或权限不足", "Authentication expired or access denied") : L10n.text("更新认证凭据", "Update credentials"))
                         .font(.ui(12)).foregroundStyle(theme.secondary)
                 }
+                Spacer()
+                if let website = profile.websiteURL {
+                    Link(destination: website) {
+                        Label(L10n.text("打开官网", "Open website"), systemImage: "arrow.up.right.square")
+                    }
+                    .font(.ui(12)).help(website.absoluteString)
+                }
             }
             if let original, !original.credentialHeaderNames.isEmpty {
-                Text(L10n.text("填写需要替换的 Cookie 或 Token；留空的项目会保留。验证成功后自动恢复监控。", "Update the Cookie or token that changed; blank fields are kept. Monitoring resumes after verification."))
+                Text(L10n.text("填写新的 Cookie 或 Token。留空的项目会保留，验证成功后自动恢复监控。", "Update the Cookie or token that changed; blank fields are kept. Monitoring resumes after verification."))
                     .font(.ui(12)).foregroundStyle(theme.secondary).fixedSize(horizontal: false, vertical: true)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {

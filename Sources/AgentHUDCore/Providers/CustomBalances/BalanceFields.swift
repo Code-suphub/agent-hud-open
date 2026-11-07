@@ -50,6 +50,14 @@ public struct CustomBalanceProfile: Hashable, Codable, Sendable, Identifiable {
     /// Bumped after verified credential renewal, independently of the balance's unit/mapping identity.
     public var credentialRevision: Int?
     public var avatar: CustomBalanceAvatar?
+    public var website: String?
+
+    /// A browser destination supplied by the user, separate from the saved balance request.
+    public var websiteURL: URL? {
+        guard let website, let url = URL(string: website), url.scheme?.lowercased() == "https",
+              let host = url.host, !host.isEmpty, url.user == nil, url.password == nil else { return nil }
+        return url
+    }
 
     public init(id: String = UUID().uuidString, name: String, currency: String, balancePath: String,
                 totalPath: String? = nil, divisor: Decimal = 1, enabled: Bool = true, valueKind: ValueKind = .remaining) {

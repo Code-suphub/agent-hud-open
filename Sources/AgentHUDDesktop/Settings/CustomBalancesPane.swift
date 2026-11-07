@@ -39,6 +39,11 @@ struct CustomBalancesPane: View {
                                 }
                             }
                         })).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                        if let website = profile.websiteURL {
+                            Link(destination: website) { Image(systemName: "safari") }
+                                .accessibilityLabel(L10n.text("打开官网", "Open website"))
+                                .help(website.absoluteString)
+                        }
                         Button { BalanceAuthenticationCenter.shared.show(profileID: profile.id) } label: { Image(systemName: "key.horizontal") }
                             .help(L10n.text("更新认证凭据", "Update credentials"))
                         Button(L10n.text("编辑", "Edit")) { editing = profile }
@@ -93,6 +98,7 @@ private struct CustomBalanceEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var currency: String
+    @State private var website: String
     @State private var divisor: String
     @State private var valueKind: CustomBalanceProfile.ValueKind
     @State private var balancePath: String
@@ -100,6 +106,7 @@ private struct CustomBalanceEditor: View {
     @State private var curl = ""
     @State private var request: BalanceRequest?
     @State private var selection: BalanceRequestSelection?
+    @State private var savedParts: [BalanceRequestPart]?
     @State private var fields: [BalanceField] = []
     @State private var isTesting = false
     @State private var error: String?
@@ -110,6 +117,7 @@ private struct CustomBalanceEditor: View {
         self.settings = settings; self.store = store; self.theme = theme; self.profile = profile
         _name = State(initialValue: profile?.name ?? "")
         _currency = State(initialValue: profile?.currency ?? "CNY")
+        _website = State(initialValue: profile?.website ?? "")
         _divisor = State(initialValue: profile.map { NSDecimalNumber(decimal: $0.divisor).stringValue } ?? "1")
         _valueKind = State(initialValue: profile?.valueKind ?? .remaining)
         _balancePath = State(initialValue: profile?.balancePath ?? "")
@@ -125,10 +133,10 @@ private struct CustomBalanceEditor: View {
                 Spacer()
                 Button(L10n.text("取消", "Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(L10n.text("保存", "Save")) { save() }.keyboardShortcut(.defaultAction)
-                    .disabled(request == nil || preview == nil || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || currency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!canSave)
             }
         }
-        .padding(24).frame(width: 650)
+        .padding(24).frame(width: 650).foregroundStyle(theme.text).background(theme.windowBackground)
         .onDisappear { testTask?.cancel() }
         .task { if profile != nil { prepare() } }
     }
@@ -153,12 +161,22 @@ private struct CustomBalanceEditor: View {
             }
             .textFieldStyle(.roundedBorder)
             VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.text("官网或登录页（可选）", "Website or sign-in page (optional)")).font(.ui(12, .medium))
+                TextField("https://example.com/account", text: $website)
+                    .textFieldStyle(.roundedBorder).autocorrectionDisabled()
+                    .accessibilityLabel(L10n.text("官网或登录页", "Website or sign-in page"))
+                if !validWebsite {
+                    Text(L10n.text("请输入有效的 HTTPS 网址。", "Enter a valid HTTPS URL."))
+                        .font(.ui(11)).foregroundStyle(theme.statusText(.warning))
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
                 Text("cURL").font(.ui(12, .medium))
                 TextEditor(text: $curl).font(.system(size: 11, design: .monospaced))
                     .frame(height: 110).padding(5).background(theme.text.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
                     .autocorrectionDisabled()
                     .onChange(of: curl) { _, _ in
-                        invalidate(); selection = nil
+                        invalidate(); selection = nil; savedParts = nil
                     }
                 Text(profile == nil ? L10n.text("粘贴查询余额的请求，不会执行 Shell 命令。", "Paste a balance query. Shell commands are never executed.")
                      : L10n.text("留空可使用已保存的请求；粘贴新 curl 可更新登录凭据。", "Leave blank to use the saved request, or paste new cURL to update credentials."))
@@ -199,8 +217,8 @@ private struct CustomBalanceEditor: View {
                 }.font(.ui(12))
                 if let preview {
                     HStack(spacing: 20) {
-                        Text(L10n.text("余额 ", "Balance ") + CustomBalanceProfile.format(preview.balance, unit: currency.uppercased()))
-                        if let total = preview.total { Text(L10n.text("总量 ", "Total ") + CustomBalanceProfile.format(total, unit: currency.uppercased())) }
+                        Text(L10n.text("余额 ", "Balance ") + CustomBalanceProfile.format(preview.balance, unit: currencyCode))
+                        if let total = preview.total { Text(L10n.text("总量 ", "Total ") + CustomBalanceProfile.format(total, unit: currencyCode)) }
                     }.font(.tabular(14, .semibold)).padding(12).frame(maxWidth: .infinity, alignment: .leading)
                         .background(theme.text.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
                 }
@@ -218,25 +236,30 @@ private struct CustomBalanceEditor: View {
         do {
             let saved = curl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let definition = try saved ? BalanceRequestStore.load(id: profile!.id) : BalanceRequest.parse(curl: curl, forSelection: true)
-            selection = BalanceRequestSelection(definition, preserveSavedSelection: saved)
-        } catch { selection = nil; self.error = error.localizedDescription }
+            let parsed = BalanceRequestSelection(definition, preserveSavedSelection: saved)
+            selection = parsed
+            savedParts = saved ? parsed.parts : nil
+        } catch { selection = nil; savedParts = nil; self.error = error.localizedDescription }
     }
 
     private func fieldPicker(_ selection: Binding<String>, optional: Bool) -> some View {
         Picker("", selection: selection) {
             Text(optional ? L10n.text("不设置", "Not set") : L10n.text("请选择", "Select a field")).tag("")
             ForEach(fields) { field in
-                Text((field.path.isEmpty ? "/" : field.path) + " = " + NSDecimalNumber(decimal: field.value).stringValue).tag(field.path)
+                Text((field.path.isEmpty ? "/" : field.path) + " = " + field.value.formatted(.number.precision(.fractionLength(0...2)))).tag(field.path)
             }
         }.labelsHidden().frame(maxWidth: .infinity)
     }
 
     private func draft() -> CustomBalanceProfile {
         var value = CustomBalanceProfile(id: profile?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            currency: currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), balancePath: balancePath,
+            currency: currencyCode, balancePath: balancePath,
             totalPath: totalPath.isEmpty ? nil : totalPath, divisor: Decimal(string: divisor, locale: Locale(identifier: "en_US_POSIX")) ?? 0,
             enabled: profile?.enabled ?? true, valueKind: valueKind)
         value.avatar = profile?.avatar
+        value.credentialRevision = profile?.credentialRevision
+        let address = website.trimmingCharacters(in: .whitespacesAndNewlines)
+        value.website = address.isEmpty ? nil : address
         return value
     }
     private var preview: (balance: Decimal, total: Decimal?)? { try? draft().amounts(in: fields) }
@@ -259,13 +282,40 @@ private struct CustomBalanceEditor: View {
         }
     }
 
+    private var currencyCode: String { currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+
+    private var validWebsite: Bool {
+        let value = draft()
+        return value.website == nil || value.websiteURL != nil
+    }
+
+    /// An existing source's display details can be edited even when its credentials have expired.
+    private var canSaveDetails: Bool {
+        guard let profile, curl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              selection?.parts == savedParts else { return false }
+        let value = draft()
+        return value.balancePath == profile.balancePath && value.totalPath == profile.totalPath &&
+            value.divisor == profile.divisor && value.valueKind == profile.valueKind
+    }
+
+    private var canSave: Bool {
+        !isTesting && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !currencyCode.isEmpty &&
+            validWebsite && (canSaveDetails || (request != nil && preview != nil))
+    }
+
     private func save() {
+        guard canSave else { return }
         do {
+            if let profile, !settings.settings.customBalances.contains(profile) {
+                throw UsageProviderError(L10n.text("配置已变化，请关闭后重新打开", "Configuration changed; close and reopen this window"))
+            }
             var value = draft()
-            value.credentialRevision = (profile?.credentialRevision ?? 0) + 1
-            _ = try value.amounts(in: fields)
-            guard let request else { return }
-            try BalanceRequestStore.save(request, id: value.id)
+            if !canSaveDetails {
+                _ = try value.amounts(in: fields)
+                guard let request else { return }
+                try BalanceRequestStore.save(request, id: value.id)
+                value.credentialRevision = (profile?.credentialRevision ?? 0) + 1
+            }
             settings.update { preferences in
                 if let index = preferences.customBalances.firstIndex(where: { $0.id == value.id }) { preferences.customBalances[index] = value }
                 else { preferences.customBalances.append(value) }

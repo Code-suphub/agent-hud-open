@@ -11,6 +11,23 @@ final class LocalBalanceSettingsTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(CustomBalanceProfile.format(value, unit: "CREDITS"), "123.46 CREDITS")
         XCTAssertEqual(MoneyFormat.amount(0, currency: "CREDITS"), "0.00 CREDITS")
         XCTAssertEqual(MoneyFormat.amount(value, currency: "USD"), "$123.46")
+        XCTAssertTrue(CustomBalanceProfile.format(value, unit: "CNY").hasSuffix("123.46"))
+        XCTAssertEqual(CustomBalanceProfile.format(value, unit: "POINTS"), "123.46 POINTS")
+    }
+
+    func testWebsiteIsOptionalAndOnlyOpensAnHTTPSDestinationWithoutUserInfo() throws {
+        var profile = CustomBalanceProfile(id: "sample", name: "Sample", currency: "CNY", balancePath: "/left")
+        let pool = CustomBalanceUsageProvider.pool(profile)
+        let old = try JSONDecoder().decode(CustomBalanceProfile.self, from: JSONEncoder().encode(profile))
+        XCTAssertNil(old.websiteURL)
+        profile.website = "https://example.com/sign-in"
+        let restored = try JSONDecoder().decode(CustomBalanceProfile.self, from: JSONEncoder().encode(profile))
+        XCTAssertEqual(restored.websiteURL?.absoluteString, "https://example.com/sign-in")
+        XCTAssertEqual(CustomBalanceUsageProvider.pool(restored), pool)
+        for address in ["file:///tmp/demo", "http://example.com", "javascript:alert(1)", "https://user:secret@example.com"] {
+            profile.website = address
+            XCTAssertNil(profile.websiteURL)
+        }
     }
 
     func testLocalStoreRoundTripsAtomicReplacementAndPrivatePermissions() throws {
